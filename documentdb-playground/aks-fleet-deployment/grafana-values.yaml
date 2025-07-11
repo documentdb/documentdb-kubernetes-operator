@@ -1,0 +1,106 @@
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-server.documentdb-preview-ns.svc.cluster.local
+      access: proxy
+      isDefault: true
+      
+adminPassword: admin123
+
+service:
+  type: LoadBalancer
+  port: 3000
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  size: 1Gi
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    documentdb-overview:
+      json: |
+        {
+          "dashboard": {
+            "id": null,
+            "title": "DocumentDB Overview",
+            "tags": ["documentdb"],
+            "timezone": "browser",
+            "panels": [
+              {
+                "id": 1,
+                "title": "CPU Usage",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "rate(container_cpu_usage_seconds_total{tenant=\"documentdb-preview\",container!=\"POD\",container!=\"\",name!=\"\"}[5m]) * 100",
+                    "legendFormat": "{{pod}} - {{container}}"
+                  }
+                ],
+                "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+                "yAxes": [{"unit": "percent"}]
+              },
+              {
+                "id": 2, 
+                "title": "Memory Usage",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "container_memory_usage_bytes{tenant=\"documentdb-preview\",container!=\"POD\",container!=\"\",name!=\"\"} / 1024 / 1024",
+                    "legendFormat": "{{pod}} - {{container}}"
+                  }
+                ],
+                "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+                "yAxes": [{"unit": "bytes"}]
+              },
+              {
+                "id": 3,
+                "title": "Pod Status",
+                "type": "stat",
+                "targets": [
+                  {
+                    "expr": "count(container_memory_usage_bytes{tenant=\"documentdb-preview\",container!=\"POD\",container!=\"\",name!=\"\"})",
+                    "legendFormat": "Running Containers"
+                  }
+                ],
+                "gridPos": {"h": 6, "w": 12, "x": 0, "y": 9}
+              },
+              {
+                "id": 4, 
+                "title": "Network I/O",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "rate(container_network_receive_bytes_total{tenant=\"documentdb-preview\"}[5m])",
+                    "legendFormat": "{{pod}} RX"
+                  },
+                  {
+                    "expr": "rate(container_network_transmit_bytes_total{tenant=\"documentdb-preview\"}[5m])",
+                    "legendFormat": "{{pod}} TX"
+                  }
+                ],
+                "gridPos": {"h": 6, "w": 12, "x": 12, "y": 9}
+              }
+            ],
+            "time": {"from": "now-1h", "to": "now"},
+            "refresh": "30s"
+          }
+        }

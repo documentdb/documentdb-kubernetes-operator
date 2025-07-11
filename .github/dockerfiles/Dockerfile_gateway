@@ -26,11 +26,13 @@ USER documentdb
 WORKDIR /home/documentdb/code/
 
 # Get the docuemntdb repository
-RUN wget -P /tmp https://github.com/documentdb/documentdb/archive/refs/tags/v${DocumentDB_VERSION}.zip && \
-    unzip /tmp/v${DocumentDB_VERSION}.zip -d /home/documentdb/code && \
-    rm /tmp/v${DocumentDB_VERSION}.zip
-
+#RUN wget -P /tmp https://github.com/documentdb/documentdb/archive/refs/tags/v${DocumentDB_VERSION}.zip && \
+    #unzip /tmp/v${DocumentDB_VERSION}.zip -d /home/documentdb/code && \
+    #rm /tmp/v${DocumentDB_VERSION}.zip
 RUN sudo chown -R documentdb:documentdb /home/documentdb/
+# For local builds, copy the code over directly
+COPY --chown=documentdb:documentdb . /home/documentdb/code/documentdb-${DocumentDB_VERSION}
+
 
 WORKDIR /home/documentdb/code/documentdb-${DocumentDB_VERSION}/pg_documentdb_gw
 
@@ -45,12 +47,17 @@ ENV DocumentDB_VERSION=${DocumentDB_VERSION}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    jq openssl lsof sudo ca-certificates && \
+    jq openssl lsof sudo ca-certificates postgresql-client && \
     apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/*
 
 ENV LANGUAGE=en_US.UTF-8 \
-    TERM=xterm-256color
+    TERM=xterm-256color \
+    OTEL_TRACING_ENABLED=true \
+    OTEL_METRICS_ENABLED=true \
+    OTEL_LOGGING_ENABLED=true \
+    OTEL_LOGS_CONSOLE_ENABLED=true \
+    PGHOST=localhost
 
 # ENV ENFORCE_SSL="true" \
 #     CERT_PATH="" \
@@ -73,14 +80,14 @@ RUN echo "%sudo ALL=(ALL:ALL) NOPASSWD: ALL" >> /etc/sudoers.d/no-pass-ask
 
 USER documentdb
 
-RUN sudo mkdir /home/documentdb/gateway
+RUN mkdir /home/documentdb/gateway
+RUN mkdir -p /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols/
 
-COPY --from=stage /home/documentdb/code/documentdb-${DocumentDB_VERSION}/pg_documentdb_gw/target/debug/documentdb_gateway /home/documentdb/gateway/documentdb_gateway
-COPY --from=stage /home/documentdb/code/documentdb-${DocumentDB_VERSION}/pg_documentdb_gw/SetupConfiguration.json /home/documentdb/gateway/SetupConfiguration.json
-COPY --from=stage /home/documentdb/code/documentdb-${DocumentDB_VERSION}/scripts/build_and_start_gateway.sh /home/documentdb/gateway/scripts/build_and_start_gateway.sh
-COPY --from=stage /home/documentdb/code/documentdb-${DocumentDB_VERSION}/scripts/utils.sh /home/documentdb/gateway/scripts/utils.sh
-
-RUN sudo chown -R documentdb:documentdb /home/documentdb/gateway
+COPY --from=stage --chown=documentdb:documentdb /home/documentdb/code/documentdb-${DocumentDB_VERSION}/pg_documentdb_gw/target/debug/documentdb_gateway /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols/documentdb_gateway
+COPY --from=stage --chown=documentdb:documentdb /home/documentdb/code/documentdb-${DocumentDB_VERSION}/pg_documentdb_gw/SetupConfiguration.json /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json
+COPY --from=stage --chown=documentdb:documentdb /home/documentdb/code/documentdb-${DocumentDB_VERSION}/scripts/build_and_start_gateway.sh /home/documentdb/gateway/scripts/build_and_start_gateway.sh
+COPY --from=stage --chown=documentdb:documentdb /home/documentdb/code/documentdb-${DocumentDB_VERSION}/scripts/emulator_entrypoint.sh /home/documentdb/gateway/scripts/emulator_entrypoint.sh
+COPY --from=stage --chown=documentdb:documentdb /home/documentdb/code/documentdb-${DocumentDB_VERSION}/scripts/utils.sh /home/documentdb/gateway/scripts/utils.sh
 
 WORKDIR /home/documentdb/gateway/scripts
-#ENTRYPOINT ["/bin/bash", "-c", "/home/documentdb/gateway/scripts/emulator_entrypoint.sh \"$@\"", "--"]
+ENTRYPOINT ["/bin/bash", "-c", "/home/documentdb/gateway/scripts/emulator_entrypoint.sh \"$@\"", "--"]

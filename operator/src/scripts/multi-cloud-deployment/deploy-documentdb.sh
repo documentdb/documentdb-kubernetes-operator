@@ -1,11 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# filepath: /Users/geeichbe/Projects/documentdb-kubernetes-operator/scripts/aks-fleet-deployment/deploy-multi-region.sh
 set -euo pipefail
 
-# Deploy multi-region DocumentDB using Fleet with Azure DNS
-# Usage: ./deploy-multi-region.sh [password]
+# Deploy multi-region DocumentDB using Fleet with Traffic Manager
+# Usage: ./deploy-documentdb.sh [password]
 #
 # Environment variables:
-#   RESOURCE_GROUP: Azure resource group (default: documentdb-aks-fleet-rg)
+#   RESOURCE_GROUP: Azure resource group (default: german-aks-fleet-rg)
 #   DOCUMENTDB_PASSWORD: Database password (will be generated if not provided)
 #   ENABLE_AZURE_DNS: Enable Azure DNS creation (default: true)
 #   AZURE_DNS_ZONE_NAME: Azure DNS zone name (default: same as resource group)
@@ -15,14 +16,21 @@ set -euo pipefail
 #   ./deploy-multi-region.sh
 #   ENABLE_AZURE_DNS=false ./deploy-multi-region.sh mypassword
 
+# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
-HUB_REGION="${HUB_REGION:-westus3}"
+# Resource group
+RESOURCE_GROUP="${RESOURCE_GROUP:-german-aks-fleet-rg}"
+
+AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-azure-documentdb}"
+GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gcp-documentdb}"
+EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-aws-documentdb}"
 
 # Azure DNS configuration
 AZURE_DNS_ZONE_NAME="${AZURE_DNS_ZONE_NAME:-${RESOURCE_GROUP}}"
 AZURE_DNS_PARENT_ZONE_RESOURCE_ID="${AZURE_DNS_PARENT_ZONE_RESOURCE_ID:-/subscriptions/81901d5e-31aa-46c5-b61a-537dbd5df1e7/resourceGroups/alaye-documentdb-dns/providers/Microsoft.Network/dnszones/multi-cloud.pgmongo-dev.cosmos.windows-int.net}"
+AZURE_DNS_ZONE_FULL_NAME="${AZURE_DNS_ZONE_FULL_NAME:-}"
+AZURE_DNS_ZONE_RG="${AZURE_DNS_ZONE_RG:-${RESOURCE_GROUP}}"
 ENABLE_AZURE_DNS="${ENABLE_AZURE_DNS:-true}"
 
 # Set password from argument or environment variable
@@ -42,47 +50,29 @@ fi
 # Export for envsubst
 export DOCUMENTDB_PASSWORD
 
-# Dynamically get member clusters from Azure
-echo "Discovering member clusters in resource group: $RESOURCE_GROUP..."
-MEMBER_CLUSTERS=$(az aks list -g "$RESOURCE_GROUP" -o json | jq -r '.[] | select(.name|startswith("member-")) | .name' | sort)
 
-if [ -z "$MEMBER_CLUSTERS" ]; then
-  echo "Error: No member clusters found in resource group $RESOURCE_GROUP"
-  echo "Please ensure the fleet is deployed first using ./deploy-fleet-bicep.sh"
-  exit 1
-fi
-
-# Convert to array
-CLUSTER_ARRAY=($MEMBER_CLUSTERS)
+# Convert to array and add GCP
+CLUSTER_ARRAY=("$EKS_CLUSTER_NAME" "$AKS_CLUSTER_NAME" "$GKE_CLUSTER_NAME")
 echo "Found ${#CLUSTER_ARRAY[@]} member clusters:"
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   echo "  - $cluster"
-  if [[ "$cluster" == *"$HUB_REGION"* ]]; then HUB_CLUSTER="$cluster"; fi
 done
 
-# Select primary cluster (prefer eastus2, or use first cluster)
-PRIMARY_CLUSTER="${CLUSTER_ARRAY[0]}"
-for cluster in "${CLUSTER_ARRAY[@]}"; do
-  if [[ "$cluster" == *"eastus2"* ]]; then
-    PRIMARY_CLUSTER="$cluster"
-    break
-  fi
-done
-
+PRIMARY_CLUSTER=${CLUSTER_ARRAY[0]}
 echo ""
 echo "Selected primary cluster: $PRIMARY_CLUSTER"
 
 # Build the cluster list YAML with proper indentation
-CLUSTER_LIST=""
-for cluster in "${CLUSTER_ARRAY[@]}"; do
-  if [ -z "$CLUSTER_LIST" ]; then
-    CLUSTER_LIST="      - name: ${cluster}"
-    CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"        environment: aks"
-  else
-    CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"      - name: ${cluster}"
-    CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"        environment: aks"
-  fi
-done
+CLUSTER_LIST=$(cat <<EOF
+      - name: ${AKS_CLUSTER_NAME}
+        environment: aks
+      - name: ${GKE_CLUSTER_NAME}
+        environment: gke
+      - name: ${EKS_CLUSTER_NAME}
+        environment: eks
+        storageClass: documentdb-storage
+EOF
+)
 
 # Step 1: Create cluster identification ConfigMaps on each member cluster
 echo ""
@@ -92,7 +82,7 @@ echo "======================================="
 
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   echo ""
-  echo "Processing ConfigMaps for $cluster..."
+  echo "Processing ConfigMap for $cluster..."
   
   # Check if context exists
   if ! kubectl config get-contexts "$cluster" &>/dev/null; then
@@ -110,7 +100,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   if kubectl --context "$cluster" get configmap cluster-name -n kube-system &>/dev/null; then
     echo "✓ ConfigMap created/updated for $cluster"
   else
-    echo "✗ Failed to create ConfigMap cluster-name for $cluster"
+    echo "✗ Failed to create ConfigMap for $cluster"
   fi
 done
 
@@ -121,26 +111,30 @@ echo "Deploying DocumentDB multi-region configuration..."
 echo "======================================="
 
 # Determine hub context
-HUB_CLUSTER="${HUB_CLUSTER:-hub}"
-if ! kubectl config get-contexts "$HUB_CLUSTER" &>/dev/null; then
-  echo "Error: Hub context not found. Please ensure you have credentials for the fleet."
-  exit 1
+HUB_CONTEXT="${HUB_CONTEXT:-hub}"
+if ! kubectl config get-contexts "$HUB_CONTEXT" &>/dev/null; then
+  echo "Hub context not found, trying to find first member cluster..."
+  HUB_CONTEXT="${CLUSTER_ARRAY[0]}"
+  if [ -z "$HUB_CONTEXT" ]; then
+    echo "Error: No suitable context found. Please ensure you have credentials for the fleet."
+    exit 1
+  fi
 fi
 
-echo "Using hub context: $HUB_CLUSTER"
+echo "Using hub context: $HUB_CONTEXT"
 
 # Check if resources already exist
 EXISTING_RESOURCES=""
-if kubectl --context "$HUB_CLUSTER" get namespace documentdb-preview-ns; then
+if kubectl --context "$HUB_CONTEXT" get namespace documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}namespace "
 fi
-if kubectl --context "$HUB_CLUSTER" get secret documentdb-credentials -n documentdb-preview-ns &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CONTEXT" get secret documentdb-credentials -n documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}secret "
 fi
-if kubectl --context "$HUB_CLUSTER" get documentdb documentdb-preview -n documentdb-preview-ns &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CONTEXT" get documentdb documentdb-preview -n documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}documentdb "
 fi
-if kubectl --context "$HUB_CLUSTER" get clusterresourceplacement documentdb-namespace-crp &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}clusterresourceplacement "
 fi
 
@@ -149,7 +143,7 @@ if [ -n "$EXISTING_RESOURCES" ]; then
   echo "⚠️  Warning: The following resources already exist: $EXISTING_RESOURCES"
   echo ""
   echo "Options:"
-  echo "1. Delete existing resources and redeploy (data will be lost)"
+  echo "1. Delete existing resources and redeploy ()"
   echo "2. Update existing deployment (preserve data)"
   echo "3. Cancel"
   echo ""
@@ -158,11 +152,11 @@ if [ -n "$EXISTING_RESOURCES" ]; then
   case $CHOICE in
     1)
       echo "Deleting existing resources..."
-      kubectl --context "$HUB_CLUSTER" delete clusterresourceplacement documentdb-namespace-crp --ignore-not-found=true
-      kubectl --context "$HUB_CLUSTER" delete namespace documentdb-preview-ns --ignore-not-found=true
+      kubectl --context "$HUB_CONTEXT" delete clusterresourceplacement documentdb-crp --ignore-not-found=true
+      kubectl --context "$HUB_CONTEXT" delete namespace documentdb-preview-ns --ignore-not-found=true
       echo "Waiting for namespace deletion to complete..."
       for cluster in "${CLUSTER_ARRAY[@]}"; do
-        kubectl --context "$cluster" wait --for=delete namespace/documentdb-preview-ns --timeout=60s 2>/dev/null || true
+        kubectl --context "$cluster" wait --for=delete namespace/documentdb-preview-ns --timeout=60s 
       done
       ;;
     2)
@@ -187,7 +181,7 @@ sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
     -e "s/{{PRIMARY_CLUSTER}}/$PRIMARY_CLUSTER/g" \
     -e "s#{{DOCUMENTDB_IMAGE}}#$DOCUMENTDB_IMAGE#g" \
     -e "s#{{GATEWAY_IMAGE}}#$GATEWAY_IMAGE#g" \
-    "$SCRIPT_DIR/documentdb-resource-crp.yaml" | \
+    "$SCRIPT_DIR/documentdb-cluster.yaml" | \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then
     echo "$CLUSTER_LIST"
@@ -210,7 +204,7 @@ echo "--------------------------------"
 # Apply the configuration
 echo ""
 echo "Applying DocumentDB multi-region configuration..."
-kubectl --context "$HUB_CLUSTER" apply -f "$TEMP_YAML"
+kubectl --context "$HUB_CONTEXT" apply -f "$TEMP_YAML"
 
 # Clean up temp file
 rm -f "$TEMP_YAML"
@@ -218,7 +212,7 @@ rm -f "$TEMP_YAML"
 # Check the ClusterResourcePlacement status
 echo ""
 echo "Checking ClusterResourcePlacement status..."
-kubectl --context "$HUB_CLUSTER" get clusterresourceplacement documentdb-namespace-crp -o wide
+kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp -o wide
 
 # Wait a bit for propagation
 echo ""
@@ -244,8 +238,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   # Check ConfigMap
   if kubectl --context "$cluster" get configmap cluster-name -n kube-system &>/dev/null; then
     CLUSTER_ID=$(kubectl --context "$cluster" get configmap cluster-name -n kube-system -o jsonpath='{.data.name}')
-    REGION=$(kubectl --context "$cluster" get configmap cluster-name -n kube-system -o jsonpath='{.data.region}')
-    echo "✓ Cluster identified as: $CLUSTER_ID (region: $REGION)"
+    echo "✓ Cluster identified as: $CLUSTER_ID"
   else
     echo "✗ Cluster identification ConfigMap not found"
   fi
@@ -299,17 +292,21 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
   echo "Creating Azure DNS zone for DocumentDB..."
   echo "======================================="
   
-  parentName=$(az network dns zone show --id $AZURE_DNS_PARENT_ZONE_RESOURCE_ID | jq -r ".name")
-  fullName="${AZURE_DNS_ZONE_NAME}.${parentName}"
-  
-  # Create Azure DNS zone
-  if az network dns zone show --name "$fullName" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-    echo "Azure DNS zone already exists, updating..."
+  if [ -n "$AZURE_DNS_ZONE_FULL_NAME" ]; then
+    fullName="$AZURE_DNS_ZONE_FULL_NAME"
   else
-    az network dns zone create \
-      --name "$fullName" \
-      --resource-group "$RESOURCE_GROUP" \
-      --parent-name "$AZURE_DNS_PARENT_ZONE_RESOURCE_ID"
+    parentName=$(az network dns zone show --id $AZURE_DNS_PARENT_ZONE_RESOURCE_ID | jq -r ".name")
+    fullName="${AZURE_DNS_ZONE_NAME}.${parentName}"
+  
+    # Create Azure DNS zone
+    if az network dns zone show --name "$AZURE_DNS_ZONE_NAME" --resource-group "$AZURE_DNS_ZONE_RG" &>/dev/null; then
+      echo "Azure DNS zone already exists, updating..."
+    else
+      az network dns zone create \
+        --name "$fullName" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
+        --parent-name "$AZURE_DNS_PARENT_ZONE_RESOURCE_ID"
+    fi
   fi
   
   # Wait for DocumentDB services to be ready and create endpoints
@@ -322,13 +319,18 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
     echo "Creating DNS record: $cluster"
 
     # Create service name by concatenating documentdb-preview with cluster name (max 63 chars)
-    SERVICE_NAME="documentdb-service-documentdb-preview"
+    SERVICE_NAME="documentdb-service-${cluster}"
+    SERVICE_NAME="${SERVICE_NAME:0:63}"
     
     # Get the external IP of the DocumentDB service
     EXTERNAL_IP=""
     for attempt in {1..12}; do  # Try for 2 minutes
       EXTERNAL_IP=$(kubectl --context "$cluster" get svc "$SERVICE_NAME" -n documentdb-preview-ns -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
       if [ -n "$EXTERNAL_IP" ] && [ "$EXTERNAL_IP" != "<pending>" ]; then
+        break
+      fi
+      EXTERNAL_HOSTNAME=$(kubectl --context "$cluster" get svc "$SERVICE_NAME" -n documentdb-preview-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+      if [ -n "$EXTERNAL_HOSTNAME" ] && [ "$EXTERNAL_HOSTNAME" != "<pending>" ]; then
         break
       fi
       echo "  Waiting for external IP for $cluster (service: $SERVICE_NAME, attempt $attempt/12)..."
@@ -338,24 +340,48 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
     if [ -n "$EXTERNAL_IP" ] && [ "$EXTERNAL_IP" != "<pending>" ]; then
       echo "  External IP for $cluster: $EXTERNAL_IP"
 
-      # Delete existing DNS record if it exists
+      # TODO Delete existing DNS record if it exists
       az network dns record-set a delete \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --yes
       
       # Create DNS record
       az network dns record-set a create \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --ttl 5
       az network dns record-set a add-record \
         --record-set-name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --ipv4-address "$EXTERNAL_IP" \
+        --ttl 5
+
+      echo "  ✓ Created DNS record $cluster"
+    elif [ -n "$EXTERNAL_HOSTNAME" ] && [ "$EXTERNAL_HOSTNAME" != "<pending>" ]; then
+      echo "  External hostname for $cluster: $EXTERNAL_HOSTNAME"
+
+      # TODO Delete existing DNS record if it exists
+      az network dns record-set cname delete \
+        --name "$cluster" \
+        --zone-name "$fullName" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
+        --yes
+      
+      # Create DNS record
+      az network dns record-set cname create \
+        --name "$cluster" \
+        --zone-name "$fullName" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
+        --ttl 5
+      az network dns record-set cname set-record \
+        --record-set-name "$cluster" \
+        --zone-name "$fullName" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
+        --cname "$EXTERNAL_HOSTNAME" \
         --ttl 5
 
       echo "  ✓ Created DNS record $cluster"
@@ -364,23 +390,22 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
     fi
   done
 
-  # Delete and recreate SRV record for MongoDB
   az network dns record-set srv delete \
     --name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
+    --resource-group "$AZURE_DNS_ZONE_RG" \
     --yes 
   
   az network dns record-set srv create \
     --name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
-    --ttl 1
+    --resource-group "$AZURE_DNS_ZONE_RG" \
+    --ttl 5
 
   mongoFQDN=$(az network dns record-set srv add-record \
     --record-set-name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
+    --resource-group "$AZURE_DNS_ZONE_RG" \
     --priority 0 \
     --weight 0 \
     --port 10260 \
@@ -394,26 +419,11 @@ fi
 
 echo ""
 echo "Connection Information:"
-echo "  Username: default_user"
+echo "  Username: docdb"
 echo "  Password: $DOCUMENTDB_PASSWORD"
 echo ""
-
-# Generate failover commands for all non-primary clusters
-echo "To initiate failover to a different region:"
-for cluster in "${CLUSTER_ARRAY[@]}"; do
-  if [ "$cluster" != "$PRIMARY_CLUSTER" ]; then
-    REGION=$(echo "$cluster" | awk -F- '{print $2}')
-    echo ""
-    echo "# Failover to $REGION:"
-    echo "kubectl --context $HUB_CLUSTER patch documentdb documentdb-preview -n documentdb-preview-ns \\"
-    echo "  --type='merge' -p '{\"spec\":{\"clusterReplication\":{\"primary\":\"$cluster\"}}}'"
-  fi
-done
-
-echo ""
 echo "To monitor the deployment:"
-echo "watch 'kubectl --context $HUB_CLUSTER get clusterresourceplacement documentdb-namespace-crp -o wide'"
-
+echo "watch 'kubectl --context $HUB_CONTEXT get clusterresourceplacement documentdb-crp -o wide'"
 echo ""
 echo "To check DocumentDB status across all clusters:"
 # Create a space-separated string from the array
