@@ -6,7 +6,7 @@ set -euo pipefail
 # Usage: ./deploy-documentdb.sh [password]
 #
 # Environment variables:
-#   RESOURCE_GROUP: Azure resource group (default: german-aks-fleet-rg)
+#   RESOURCE_GROUP: Azure resource group (default: documentdb-aks-fleet-rg)
 #   DOCUMENTDB_PASSWORD: Database password (will be generated if not provided)
 #   ENABLE_AZURE_DNS: Enable Azure DNS creation (default: true)
 #   AZURE_DNS_ZONE_NAME: Azure DNS zone name (default: same as resource group)
@@ -20,19 +20,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Resource group
-RESOURCE_GROUP="${RESOURCE_GROUP:-german-aks-fleet-rg}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 
-AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-aks-documentdb-cluster}"
-GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gke-documentdb-cluster}"
-EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-eks-documentdb-cluster}"
+AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-azure-documentdb}"
+GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gcp-documentdb}"
+EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-aws-documentdb}"
 
 # Azure DNS configuration
 AZURE_DNS_ZONE_NAME="${AZURE_DNS_ZONE_NAME:-${RESOURCE_GROUP}}"
-AZURE_DNS_PARENT_ZONE_RESOURCE_ID="${AZURE_DNS_PARENT_ZONE_RESOURCE_ID:-/subscriptions/81901d5e-31aa-46c5-b61a-537dbd5df1e7/resourceGroups/alaye-documentdb-dns/providers/Microsoft.Network/dnszones/multi-cloud.pgmongo-dev.cosmos.windows-int.net}"
+AZURE_DNS_PARENT_ZONE_RESOURCE_ID="${AZURE_DNS_PARENT_ZONE_RESOURCE_ID:-}"
+AZURE_DNS_ZONE_FULL_NAME="${AZURE_DNS_ZONE_FULL_NAME:-}"
+AZURE_DNS_ZONE_RG="${AZURE_DNS_ZONE_RG:-${RESOURCE_GROUP}}"
 ENABLE_AZURE_DNS="${ENABLE_AZURE_DNS:-true}"
 
 # Set password from argument or environment variable
 DOCUMENTDB_PASSWORD="${1:-${DOCUMENTDB_PASSWORD:-}}"
+DOCUMENTDB_IMAGE="${DOCUMENTDB_IMAGE:-ghcr.io/microsoft/documentdb/documentdb-local:16}"
+GATEWAY_IMAGE="${GATEWAY_IMAGE:-${DOCUMENTDB_IMAGE}}"
 
 # If no password provided, generate a secure one
 if [ -z "$DOCUMENTDB_PASSWORD" ]; then
@@ -54,7 +58,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   echo "  - $cluster"
 done
 
-PRIMARY_CLUSTER=${CLUSTER_ARRAY[0]}
+PRIMARY_CLUSTER=${CLUSTER_ARRAY[1]}
 echo ""
 echo "Selected primary cluster: $PRIMARY_CLUSTER"
 
@@ -175,6 +179,8 @@ TEMP_YAML=$(mktemp)
 # Use sed for safer substitution
 sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
     -e "s/{{PRIMARY_CLUSTER}}/$PRIMARY_CLUSTER/g" \
+    -e "s#{{DOCUMENTDB_IMAGE}}#$DOCUMENTDB_IMAGE#g" \
+    -e "s#{{GATEWAY_IMAGE}}#$GATEWAY_IMAGE#g" \
     "$SCRIPT_DIR/documentdb-cluster.yaml" | \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then
@@ -286,17 +292,21 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
   echo "Creating Azure DNS zone for DocumentDB..."
   echo "======================================="
   
-  parentName=$(az network dns zone show --id $AZURE_DNS_PARENT_ZONE_RESOURCE_ID | jq -r ".name")
-  fullName="${AZURE_DNS_ZONE_NAME}.${parentName}"
-  
-  # Create Azure DNS zone
-  if az network dns zone show --name "$AZURE_DNS_ZONE_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
-    echo "Azure DNS zone already exists, updating..."
+  if [ -n "$AZURE_DNS_ZONE_FULL_NAME" ]; then
+    fullName="$AZURE_DNS_ZONE_FULL_NAME"
   else
-    az network dns zone create \
-      --name "$fullName" \
-      --resource-group "$RESOURCE_GROUP" \
-      --parent-name "$AZURE_DNS_PARENT_ZONE_RESOURCE_ID"
+    parentName=$(az network dns zone show --id $AZURE_DNS_PARENT_ZONE_RESOURCE_ID | jq -r ".name")
+    fullName="${AZURE_DNS_ZONE_NAME}.${parentName}"
+  
+    # Create Azure DNS zone
+    if az network dns zone show --name "$AZURE_DNS_ZONE_NAME" --resource-group "$AZURE_DNS_ZONE_RG" &>/dev/null; then
+      echo "Azure DNS zone already exists, updating..."
+    else
+      az network dns zone create \
+        --name "$fullName" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
+        --parent-name "$AZURE_DNS_PARENT_ZONE_RESOURCE_ID"
+    fi
   fi
   
   # Wait for DocumentDB services to be ready and create endpoints
@@ -334,19 +344,19 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
       az network dns record-set a delete \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --yes
       
       # Create DNS record
       az network dns record-set a create \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --ttl 5
       az network dns record-set a add-record \
         --record-set-name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --ipv4-address "$EXTERNAL_IP" \
         --ttl 5
 
@@ -358,19 +368,19 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
       az network dns record-set cname delete \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --yes
       
       # Create DNS record
       az network dns record-set cname create \
         --name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --ttl 5
       az network dns record-set cname set-record \
         --record-set-name "$cluster" \
         --zone-name "$fullName" \
-        --resource-group "$RESOURCE_GROUP" \
+        --resource-group "$AZURE_DNS_ZONE_RG" \
         --cname "$EXTERNAL_HOSTNAME" \
         --ttl 5
 
@@ -383,19 +393,19 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
   az network dns record-set srv delete \
     --name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
+    --resource-group "$AZURE_DNS_ZONE_RG" \
     --yes 
   
   az network dns record-set srv create \
     --name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
+    --resource-group "$AZURE_DNS_ZONE_RG" \
     --ttl 5
 
   mongoFQDN=$(az network dns record-set srv add-record \
     --record-set-name "_mongodb._tcp" \
     --zone-name "$fullName" \
-    --resource-group "$RESOURCE_GROUP" \
+    --resource-group "$AZURE_DNS_ZONE_RG" \
     --priority 0 \
     --weight 0 \
     --port 10260 \
@@ -409,7 +419,7 @@ fi
 
 echo ""
 echo "Connection Information:"
-echo "  Username: default_user"
+echo "  Username: docdb"
 echo "  Password: $DOCUMENTDB_PASSWORD"
 echo ""
 echo "To monitor the deployment:"

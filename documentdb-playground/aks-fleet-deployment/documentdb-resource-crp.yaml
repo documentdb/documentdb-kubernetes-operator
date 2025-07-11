@@ -26,8 +26,8 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  documentDBImage: {{DOCUMENTDB_IMAGE}}
+  gatewayImage: {{GATEWAY_IMAGE}}
   resource:
     storage:
       pvcSize: 10Gi

@@ -19,11 +19,11 @@ collection = db.testcollection
 print(f"{'Inserted Document':<30} {'Insert Count':<15}")
 print("-" * 77)
 start_time = time.time()
-end_time = start_time + (10 * 60)  # 10 minutes
+end_time = start_time + (60 * 60)  # 60 minutes
 count = 0
+first_error_seen = False
 
 while time.time() < end_time:
-    failed = False
     write_result = ""
     try:
         doc = {
@@ -36,12 +36,12 @@ while time.time() < end_time:
         print(f"{str(write_result):<30} {count:<15}")
     except Exception as e:
         if not first_error_seen:
-            #print("Promotion in progress")
+            print("Switching cloud to Azure")
             first_error_seen = True
     
-    time.sleep(1)  
+    time.sleep(.25)  
 
-print(f"Completed {count} insert operations in 10 minutes")
+print(f"Completed {count} insert operations in 60 minutes")
 final_read_count = collection.count_documents({})
 print(f"Final read count: {final_read_count}")
 client.close()

@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 # ============================================================================
 
-RESOURCE_GROUP="${RESOURCE_GROUP:-german-aks-fleet-rg}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 RG_LOCATION="${RG_LOCATION:-eastus2}"
 HUB_REGION="${HUB_REGION:-$RG_LOCATION}"
 TEMPLATE_DIR="$(dirname "$0")"
@@ -16,16 +16,16 @@ HUB_VM_SIZE="${HUB_VM_SIZE:-}"
 VERSION="${VERSION:-200}"
 VALUES_FILE="${VALUES_FILE:-}"
 ISTIO_DIR="${ISTIO_DIR:-}"
-AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-aks-documentdb-cluster}"
+AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-azure-documentdb}"
 AKS_REGION="${AKS_REGION:-eastus2}"
 HUB_CONTEXT="${HUB_CONTEXT:-hub}"
 
 PROJECT_ID="${PROJECT_ID:-sanguine-office-475117-s6}"
 GCP_USER="${GCP_USER:-alexanderlaye59@gmail.com}"
 ZONE="${ZONE:-us-central1-a}"
-GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gke-documentdb-cluster}"
+GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gcp-documentdb}"
 
-EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-eks-documentdb-cluster}"
+EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-aws-documentdb}"
 EKS_REGION="${EKS_REGION:-us-west-2}"
 
 # ============================================================================
@@ -436,8 +436,9 @@ pushd $temp_dir
 git clone https://github.com/kubefleet-dev/kubefleet.git
 git clone https://github.com/Azure/fleet-networking.git
 pushd $temp_dir/kubefleet
+git checkout d3f42486fa78874e33ba8e6e5e34636767f77b8f
 chmod +x hack/membership/joinMC.sh
-hack/membership/joinMC.sh "v0.16.5" "$HUB_CONTEXT" "$GKE_CLUSTER_NAME" "$EKS_CLUSTER_NAME"
+hack/membership/joinMC.sh "v0.16.9" "$HUB_CONTEXT" "$GKE_CLUSTER_NAME" "$EKS_CLUSTER_NAME"
 popd
 
 # TODO clean this up a bit
@@ -568,7 +569,7 @@ kubectl --context "$EKS_CLUSTER_NAME" -n istio-system annotate service istio-eas
 # Step 6: Install DocumentDB Operator
 # ============================================================================
 
-CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/operator/documentdb-helm-chart"
+CHART_DIR="$(cd "$TEMPLATE_DIR/../../" && pwd)/operator/documentdb-helm-chart"
 CHART_PKG="$TEMPLATE_DIR/documentdb-operator-0.0.${VERSION}.tgz"
 
 # Apply cert-manager CRDs on hub

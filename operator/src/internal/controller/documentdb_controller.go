@@ -119,7 +119,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Check if the DocumentDB Service already exists for this instance
 		foundService, err := util.UpsertService(ctx, r.Client, ddbService)
 		if err != nil {
-			logger.Info("Failed to create DocumentDB Service; Requeuing.")
+			logger.Error(err, "Failed to create DocumentDB Service; Requeuing.")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 		}
 

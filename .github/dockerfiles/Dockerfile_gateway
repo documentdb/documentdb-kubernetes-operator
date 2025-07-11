@@ -29,6 +29,8 @@ WORKDIR /home/documentdb/code/
 RUN wget -P /tmp https://github.com/documentdb/documentdb/archive/refs/tags/v${DocumentDB_VERSION}.zip && \
     unzip /tmp/v${DocumentDB_VERSION}.zip -d /home/documentdb/code && \
     rm /tmp/v${DocumentDB_VERSION}.zip
+# For local builds, copy the code over directly (uncomment the line below, and comment the wget line above)
+# COPY --chown=documentdb:documentdb . /home/documentdb/code/documentdb-${DocumentDB_VERSION}
 
 RUN sudo chown -R documentdb:documentdb /home/documentdb/
 
