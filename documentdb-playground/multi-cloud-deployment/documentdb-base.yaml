@@ -39,6 +39,14 @@ spec:
     - group: "apiextensions.k8s.io"
       version: v1
       kind: CustomResourceDefinition
+      name: backups.db.microsoft.com
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: scheduledbackups.db.microsoft.com
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
       name: backups.postgresql.cnpg.io
     - group: "apiextensions.k8s.io"
       version: v1

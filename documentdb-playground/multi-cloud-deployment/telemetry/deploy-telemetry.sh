@@ -184,16 +184,15 @@ deploy_prometheus() {
     log "Deploying Prometheus in namespace: $namespace"
     
     # Get the directory where this script is located
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    DEPLOYMENT_DIR="$(dirname "$SCRIPT_DIR")/aks-fleet-deployment"
+    SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
     
-    if [ ! -f "$DEPLOYMENT_DIR/prometheus-values.yaml" ]; then
-        error "Prometheus values file not found: $DEPLOYMENT_DIR/prometheus-values.yaml"
+    if [ ! -f "$SCRIPT_DIR/prometheus-values.yaml" ]; then
+        error "Prometheus values file not found: $SCRIPT_DIR/prometheus-values.yaml"
     fi
     
     helm upgrade --install prometheus prometheus-community/prometheus \
         --namespace $namespace \
-        --values "$DEPLOYMENT_DIR/prometheus-values.yaml" \
+        --values "$SCRIPT_DIR/prometheus-values.yaml" \
         --wait --timeout=300s
     
     success "Prometheus deployed"
@@ -206,16 +205,15 @@ deploy_grafana() {
     log "Deploying Grafana in namespace: $namespace"
     
     # Get the directory where this script is located
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    DEPLOYMENT_DIR="$(dirname "$SCRIPT_DIR")/aks-fleet-deployment"
+    SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
     
-    if [ ! -f "$DEPLOYMENT_DIR/grafana-values.yaml" ]; then
-        error "Grafana values file not found: $DEPLOYMENT_DIR/grafana-values.yaml"
+    if [ ! -f "$SCRIPT_DIR/grafana-values.yaml" ]; then
+        error "Grafana values file not found: $SCRIPT_DIR/grafana-values.yaml"
     fi
     
     helm upgrade --install grafana grafana/grafana \
         --namespace $namespace \
-        --values "$DEPLOYMENT_DIR/grafana-values.yaml" \
+        --values "$SCRIPT_DIR/grafana-values.yaml" \
         --wait --timeout=300s
     
     success "Grafana deployed"
@@ -227,8 +225,7 @@ deploy_collectors() {
     log "Deploying OpenTelemetry collector to each member cluster..."
     
     # Get the directory where this script is located
-    SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    DEPLOYMENT_DIR="$(dirname "$SCRIPT_DIR")/aks-fleet-deployment"
+    SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
     
     # Get member clusters and primary cluster from documentdb resource
     MEMBER_CLUSTERS=$(kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o json 2>/dev/null | jq -r '.spec.clusterReplication.clusterList[].name' 2>/dev/null || echo "")
@@ -239,7 +236,7 @@ deploy_collectors() {
         kubectl --context "$cluster" wait --for=jsonpath='{.subsets[*].addresses[*].ip}' endpoints/opentelemetry-operator-webhook-service -n opentelemetry-operator-system --timeout=300s || warn "Webhook service not ready on $cluster, proceeding anyway..."
         
         log "Deploying OpenTelemetry Collector to cluster: $cluster"
-        sed "s/{{CLUSTER_NAME}}/$cluster/g" "$DEPLOYMENT_DIR/otel-collector.yaml" | kubectl --context "$cluster" apply -f -
+        sed "s/{{CLUSTER_NAME}}/$cluster/g" "$SCRIPT_DIR/otel-collector.yaml" | kubectl --context "$cluster" apply -f -
     done
     success "All collectors deployed"
 }
