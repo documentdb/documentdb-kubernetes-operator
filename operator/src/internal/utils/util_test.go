@@ -335,9 +335,9 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 
 			// Create a mock ReplicationContext
 			replicationContext := &ReplicationContext{
-				Self:        tt.documentDBName,
-				Environment: "test",
-				state:       NoReplication, // This will make EndpointEnabled() return true
+				CNPGClusterName: tt.documentDBName,
+				Environment:     "test",
+				state:           NoReplication, // This will make EndpointEnabled() return true
 			}
 
 			// If endpoint should be disabled, set a different state
