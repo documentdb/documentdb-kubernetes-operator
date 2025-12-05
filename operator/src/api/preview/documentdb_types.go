@@ -230,6 +230,7 @@ type TLSStatus struct {
 // +kubebuilder:resource:path=dbs,scope=Namespaced,singular=documentdb,shortName=documentdb
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:metadata:labels=app=documentdb-operator
 
 // DocumentDB is the Schema for the dbs API.
 type DocumentDB struct {

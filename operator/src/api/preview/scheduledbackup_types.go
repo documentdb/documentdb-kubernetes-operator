@@ -44,6 +44,7 @@ type ScheduledBackupStatus struct {
 // +kubebuilder:printcolumn:name="Cluster",type="string",JSONPath=".spec.cluster.name"
 // +kubebuilder:printcolumn:name="Schedule",type="string",JSONPath=".spec.schedule"
 // +kubebuilder:printcolumn:name="Retention Days",type="integer",JSONPath=".spec.retentionDays"
+// +kubebuilder:metadata:labels=app=documentdb-operator
 type ScheduledBackup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`

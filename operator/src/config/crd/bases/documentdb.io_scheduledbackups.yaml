@@ -5,6 +5,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
   name: scheduledbackups.documentdb.io
+  labels:
+    app: documentdb-operator
 spec:
   group: documentdb.io
   names:

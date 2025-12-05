@@ -7,8 +7,8 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 # Resource Group location (does not have to match cluster regions)
 RG_LOCATION="${RG_LOCATION:-eastus2}"
 # Hub region
-HUB_REGION="${HUB_REGION:-$RG_LOCATION}"
-TEMPLATE_DIR="$(dirname "$0")"
+HUB_REGION="${HUB_REGION:-westus3}"
+SCRIPT_DIR="$(dirname "$0")"
 
 # Regions for member clusters (keep in sync with parameters.bicepparam if you change it)
 if [ -n "${MEMBER_REGIONS_CSV:-}" ]; then
@@ -17,9 +17,9 @@ else
   MEMBER_REGIONS=("westus3" "uksouth" "eastus2")
 fi
 
-# Optional: explicitly override the VM size used by the template param hubVmSize.
-# If left empty, the template's default (currently Standard_D2s_v6) will be used.
-HUB_VM_SIZE="${HUB_VM_SIZE:-}"
+# Optional: explicitly override the VM size used by the template param vmSize.
+# If left empty, the template's default (currently Standard_DS2_v2) will be used.
+KUBE_VM_SIZE="${KUBE_VM_SIZE:-}"
 
 # Build JSON arrays for parameters (after any fallbacks)
 MEMBER_REGIONS_JSON=$(printf '%s\n' "${MEMBER_REGIONS[@]}" | jq -R . | jq -s .)
@@ -53,7 +53,7 @@ else
   az group create --name "$RESOURCE_GROUP" --location "$RG_LOCATION"
 fi
 
-echo "Deploying AKS Fleet with Bicep..."
+echo "Deploying AKS Clusters with Bicep..."
 # Ensure we don't kick off another deployment while clusters are still provisioning
 if ! wait_for_no_inprogress "$RESOURCE_GROUP"; then
   echo "Exiting without changes due to in-progress operations. Re-run when provisioning completes." >&2
@@ -61,20 +61,19 @@ if ! wait_for_no_inprogress "$RESOURCE_GROUP"; then
 fi
 # Build parameter overrides
 PARAMS=(
-  --parameters "$TEMPLATE_DIR/parameters.bicepparam"
-  --parameters hubRegion="$HUB_REGION"
+  --parameters "$SCRIPT_DIR/parameters.bicepparam"
   --parameters memberRegions="$MEMBER_REGIONS_JSON"
 )
-if [ -n "$HUB_VM_SIZE" ]; then
-  echo "Overriding hubVmSize with: $HUB_VM_SIZE"
-  PARAMS+=( --parameters hubVmSize="$HUB_VM_SIZE" )
+if [ -n "$KUBE_VM_SIZE" ]; then
+  echo "Overriding kubernetes VM size with: $KUBE_VM_SIZE"
+  PARAMS+=( --parameters vmSize="$KUBE_VM_SIZE" )
 fi
 
-DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-"aks-fleet-$(date +%s)"}
+DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-"aks-deployment-$(date +%s)"}
 az deployment group create \
   --name "$DEPLOYMENT_NAME" \
   --resource-group $RESOURCE_GROUP \
-  --template-file "$TEMPLATE_DIR/main.bicep" \
+  --template-file "$SCRIPT_DIR/main.bicep" \
   "${PARAMS[@]}" >/dev/null
 
 # Retrieve outputs
@@ -84,90 +83,95 @@ DEPLOYMENT_OUTPUT=$(az deployment group show \
   --query "properties.outputs" -o json)
 
 # Extract outputs
-FLEET_NAME=$(echo $DEPLOYMENT_OUTPUT | jq -r '.fleetName.value')
-FLEET_ID_FROM_OUTPUT=$(echo $DEPLOYMENT_OUTPUT | jq -r '.fleetId.value')
 MEMBER_CLUSTER_NAMES=$(echo $DEPLOYMENT_OUTPUT | jq -r '.memberClusterNames.value[]')
 
-# Get subscription ID
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-# Set FLEET_ID environment variable
-export FLEET_ID="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.ContainerService/fleets/${FLEET_NAME}"
-
-# Set up RBAC access for the current user
-echo "Setting up RBAC access for Fleet..."
-export IDENTITY=$(az ad signed-in-user show --query "id" --output tsv)
-export ROLE="Azure Kubernetes Fleet Manager RBAC Cluster Admin"
-echo "Assigning role '$ROLE' to user '$IDENTITY'..."
-az role assignment create --role "${ROLE}" --assignee ${IDENTITY} --scope ${FLEET_ID} >/dev/null 2>&1 || {
-  echo "Note: Role assignment may already exist or you may need admin permissions to assign roles."
-}
-
-# Verify the role assignment was successful
-echo "Verifying role assignment..."
-ASSIGNMENT_CHECK=$(az role assignment list --assignee ${IDENTITY} --scope ${FLEET_ID} --query "[?roleDefinitionName=='${ROLE}']" -o json)
-if [ "$(echo $ASSIGNMENT_CHECK | jq '. | length')" -gt 0 ]; then
-  echo "✅ Role assignment verified successfully"
-  echo "  Role: $ROLE"
-  echo "  Assignee: $IDENTITY"
-  echo "  Scope: Fleet $FLEET_NAME"
-else
-  echo "⚠️  WARNING: Role assignment could not be verified!"
-  echo "  You may not have the required permissions to access the fleet hub."
-  echo ""
-  echo "  To fix this, ask an administrator to run:"
-  echo "  az role assignment create --role \"${ROLE}\" --assignee ${IDENTITY} --scope ${FLEET_ID}"
-  echo ""
-  echo "  Or assign the role in Azure Portal:"
-  echo "  1. Navigate to the Fleet resource: $FLEET_NAME"
-  echo "  2. Go to Access Control (IAM)"
-  echo "  3. Add role assignment"
-  echo "  4. Select role: $ROLE"
-  echo "  5. Assign to: $IDENTITY"
-fi
-
-# Fetch kubeconfig for hub and members to ensure contexts exist
-echo "Fetching kubeconfig contexts..."
-FIRST_CLUSTER=""
-set +e
-az fleet get-credentials --resource-group "$RESOURCE_GROUP" --name "$FLEET_NAME" --overwrite-existing 
-GET_CREDS_RC=$?
-set -e
-if [ $GET_CREDS_RC -ne 0 ]; then
-  echo "Warning: failed to get credentials for fleet hub '$FLEET_NAME'." >&2
-  if [ "$(echo $ASSIGNMENT_CHECK | jq '. | length')" -eq 0 ]; then
-    echo "  This is likely because the role assignment is missing (see warning above)." >&2
-  fi
-  echo "  Trying member clusters with admin access..." >&2
-fi
-
+HUB_CLUSTER=""
 while read -r cluster; do
   [ -z "$cluster" ] && continue
-  set +e
-  az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$cluster" --overwrite-existing >/dev/null 2>&1
-  rc=$?
-  set -e
-  if [ $rc -eq 0 ]; then
-    [ -z "$FIRST_CLUSTER" ] && FIRST_CLUSTER="$cluster"
-  else
-    echo "Warning: failed to get credentials for member cluster '$cluster'." >&2
-  fi
+  az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$cluster" --overwrite-existing
+  if [[ "$cluster" == *"$HUB_REGION"* ]]; then HUB_CLUSTER="$cluster"; fi
 done <<< "$MEMBER_CLUSTER_NAMES"
 
+kubeDir=$(mktemp -d)
+git clone https://github.com/kubefleet-dev/kubefleet.git $kubeDir
+pushd $kubeDir
+# Set up HUB_CLUSTER as the hub
+kubectl config use-context $HUB_CLUSTER
+export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
+export TAG=$(curl "https://api.github.com/repos/kubefleet-dev/kubefleet/tags" | jq -r '.[0].name') # Gets latest tag
+# Install the helm chart for running Fleet agents on the hub cluster.
+helm upgrade --install hub-agent ./charts/hub-agent/ \
+        --set image.pullPolicy=Always \
+        --set image.repository=$REGISTRY/hub-agent \
+        --set image.tag=$TAG \
+        --set logVerbosity=5 \
+        --set enableGuardRail=false \
+        --set forceDeleteWaitTime="3m0s" \
+        --set clusterUnhealthyThreshold="5m0s" \
+        --set logFileMaxSize=100000 \
+        --set MaxConcurrentClusterPlacement=200 \
+        --set namespace=fleet-system-hub \
+        --set enableWorkload=true
+
+# Run the script.
+chmod +x ./hack/membership/joinMC.sh
+./hack/membership/joinMC.sh  $TAG $HUB_CLUSTER $MEMBER_CLUSTER_NAMES
+popd
+
+fleetNetworkingDir=$(mktemp -d)
+git clone https://github.com/Azure/fleet-networking.git $fleetNetworkingDir
+pushd $fleetNetworkingDir
+# Set up HUB_CLUSTER as the hub
+NETWORKING_TAG=$(curl "https://api.github.com/repos/Azure/fleet-networking/tags" | jq -r '.[0].name') # Gets latest tag
+
+# Install the helm chart for running Fleet agents on the hub cluster.
+kubectl config use-context $HUB_CLUSTER
+helm install hub-net-controller-manager ./charts/hub-net-controller-manager/ \
+  --set fleetSystemNamespace=fleet-system-hub \
+  --set leaderElectionNamespace=fleet-system-hub \
+  --set image.tag=$NETWORKING_TAG 
+
+HUB_CLUSTER_ADDRESS=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.server}")
+
+while read -r MEMBER_CLUSTER; do
+  kubectl config use-context $MEMBER_CLUSTER
+
+  kubectl apply -f config/crd/*
+
+  echo "Installing mcs-controller-manager..."
+  helm install mcs-controller-manager ./charts/mcs-controller-manager/ \
+    --set refreshtoken.repository=$REGISTRY/refresh-token \
+    --set refreshtoken.tag=$TAG \
+    --set image.tag=$NETWORKING_TAG \
+    --set image.pullPolicy=Always \
+    --set refreshtoken.pullPolicy=Always \
+    --set config.hubURL=$HUB_CLUSTER_ADDRESS \
+    --set config.memberClusterName=$MEMBER_CLUSTER \
+    --set enableV1Beta1APIs=true \
+    --set logVerbosity=8
+
+  echo "Installing member-net-controller-manager..."
+  helm install member-net-controller-manager ./charts/member-net-controller-manager/ \
+    --set refreshtoken.repository=$REGISTRY/refresh-token \
+    --set refreshtoken.tag=$TAG \
+    --set image.tag=$NETWORKING_TAG \
+    --set timage.pullPolicy=Always \
+    --set refreshtoken.pullPolicy=Always \
+    --set config.hubURL=$HUB_CLUSTER_ADDRESS \
+    --set config.memberClusterName=$MEMBER_CLUSTER \
+    --set enableV1Beta1APIs=true \
+    --set logVerbosity=8
+
+done <<< "$MEMBER_CLUSTER_NAMES"
+
+popd
+
 # Create kubectl aliases and export FLEET_ID (k-hub and k-<region>) persisted in ~/.bashrc
-ALIASES_BLOCK_START="# BEGIN aks-fleet aliases"
-ALIASES_BLOCK_END="# END aks-fleet aliases"
+ALIASES_BLOCK_START="# BEGIN aks aliases"
+ALIASES_BLOCK_END="# END aks aliases"
 ALIASES_TMP=$(mktemp)
 {
   echo "$ALIASES_BLOCK_START"
-  echo "export FLEET_ID=\"/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.ContainerService/fleets/${FLEET_NAME}\""
-  echo "export IDENTITY=\"${IDENTITY}\""
-  # Use first member as hub if fleet hub doesn't work
-  if [ $GET_CREDS_RC -eq 0 ]; then
-    echo "alias k-hub=\"kubectl --context 'hub'\""
-  elif [ -n "$FIRST_CLUSTER" ]; then
-    echo "alias k-hub=\"kubectl --context '$FIRST_CLUSTER'\"  # Using first member as hub"
-  fi
   # For each member cluster, derive region from name pattern 'member-<region>-<suffix>' and create k-<region>
   while read -r cluster; do
     [ -z "$cluster" ] && continue
@@ -198,32 +202,8 @@ rm -f "$ALIASES_TMP"
 echo ""
 echo "✅ Deployment completed successfully!"
 echo ""
-echo "Fleet Name: $FLEET_NAME"
-echo "Fleet ID: $FLEET_ID"
-echo "User Identity: $IDENTITY"
-echo "RBAC Role: $ROLE"
-echo "Role Assignment Status: $([ "$(echo $ASSIGNMENT_CHECK | jq '. | length')" -gt 0 ] && echo "✅ Verified" || echo "⚠️  Not verified")"
+echo "Hub cluster: $HUB_CLUSTER"
 echo "Member Clusters:"
 echo "$MEMBER_CLUSTER_NAMES" | while read cluster; do
   echo "  - $cluster"
 done
-
-echo ""
-echo "Environment variables and aliases have been saved to ~/.bashrc:"
-echo "  export FLEET_ID=$FLEET_ID"
-echo "  export IDENTITY=$IDENTITY"
-if [ -n "$FIRST_CLUSTER" ] && [ $GET_CREDS_RC -ne 0 ]; then
-  echo "  alias k-hub points to '$FIRST_CLUSTER' (first member cluster)"
-fi
-
-echo ""
-echo "To get credentials for the fleet hub (if available):"
-echo "az fleet get-credentials --resource-group $RESOURCE_GROUP --name $FLEET_NAME"
-echo ""
-echo "If you run into login problems refer to:"
-echo "https://learn.microsoft.com/en-us/azure/aks/kubelogin-authentication#azure-cli"
-echo "The default is web interactive/device login which might not be allowed by your administrator."
-echo "Try switching to Azure CLI in that case: kubelogin convert-kubeconfig -l azurecli"
-
-echo ""
-echo "Run 'source ~/.bashrc' to load the aliases and environment variables in your current session"

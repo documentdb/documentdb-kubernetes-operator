@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-# filepath: /operator/src/scripts/aks-fleet-deployment/deploy-multi-region.sh
+#!/bin/bash
 set -euo pipefail
 
 # Deploy multi-region DocumentDB using Fleet with Azure DNS
@@ -16,11 +15,10 @@ set -euo pipefail
 #   ./deploy-multi-region.sh
 #   ENABLE_AZURE_DNS=false ./deploy-multi-region.sh mypassword
 
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Resource group
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
+HUB_REGION="${HUB_REGION:-westus3}"
 
 # Azure DNS configuration
 AZURE_DNS_ZONE_NAME="${AZURE_DNS_ZONE_NAME:-${RESOURCE_GROUP}}"
@@ -57,21 +55,17 @@ CLUSTER_ARRAY=($MEMBER_CLUSTERS)
 echo "Found ${#CLUSTER_ARRAY[@]} member clusters:"
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   echo "  - $cluster"
+  if [[ "$cluster" == *"$HUB_REGION"* ]]; then HUB_CLUSTER="$cluster"; fi
 done
 
 # Select primary cluster (prefer eastus2, or use first cluster)
-PRIMARY_CLUSTER=""
+PRIMARY_CLUSTER="${CLUSTER_ARRAY[0]}"
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   if [[ "$cluster" == *"eastus2"* ]]; then
     PRIMARY_CLUSTER="$cluster"
     break
   fi
 done
-
-# If no eastus2 cluster found, use the first one
-if [ -z "$PRIMARY_CLUSTER" ]; then
-  PRIMARY_CLUSTER="${CLUSTER_ARRAY[0]}"
-fi
 
 echo ""
 echo "Selected primary cluster: $PRIMARY_CLUSTER"
@@ -104,19 +98,15 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     continue
   fi
   
-  # Extract region from cluster name (member-<region>-<suffix>)
-  REGION=$(echo "$cluster" | awk -F- '{print $2}')
-  
   # Create or update the cluster-name ConfigMap
   kubectl --context "$cluster" create configmap cluster-name \
     -n kube-system \
     --from-literal=name="$cluster" \
-    --from-literal=region="$REGION" \
     --dry-run=client -o yaml | kubectl --context "$cluster" apply -f -
   
   # Verify the ConfigMap was created
   if kubectl --context "$cluster" get configmap cluster-name -n kube-system &>/dev/null; then
-    echo "✓ ConfigMap created/updated for $cluster (region: $REGION)"
+    echo "✓ ConfigMap created/updated for $cluster"
   else
     echo "✗ Failed to create ConfigMap for $cluster"
   fi
@@ -129,26 +119,26 @@ echo "Deploying DocumentDB multi-region configuration..."
 echo "======================================="
 
 # Determine hub context
-HUB_CONTEXT="${HUB_CONTEXT:-hub}"
-if ! kubectl config get-contexts "$HUB_CONTEXT" &>/dev/null; then
+HUB_CLUSTER="${HUB_CLUSTER:-hub}"
+if ! kubectl config get-contexts "$HUB_CLUSTER" &>/dev/null; then
   echo "Error: Hub context not found. Please ensure you have credentials for the fleet."
   exit 1
 fi
 
-echo "Using hub context: $HUB_CONTEXT"
+echo "Using hub context: $HUB_CLUSTER"
 
 # Check if resources already exist
 EXISTING_RESOURCES=""
-if kubectl --context "$HUB_CONTEXT" get namespace documentdb-preview-ns; then
+if kubectl --context "$HUB_CLUSTER" get namespace documentdb-preview-ns; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}namespace "
 fi
-if kubectl --context "$HUB_CONTEXT" get secret documentdb-credentials -n documentdb-preview-ns &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CLUSTER" get secret documentdb-credentials -n documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}secret "
 fi
-if kubectl --context "$HUB_CONTEXT" get documentdb documentdb-preview -n documentdb-preview-ns &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CLUSTER" get documentdb documentdb-preview -n documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}documentdb "
 fi
-if kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CLUSTER" get clusterresourceplacement documentdb-namespace-crp &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}clusterresourceplacement "
 fi
 
@@ -166,8 +156,8 @@ if [ -n "$EXISTING_RESOURCES" ]; then
   case $CHOICE in
     1)
       echo "Deleting existing resources..."
-      kubectl --context "$HUB_CONTEXT" delete clusterresourceplacement documentdb-crp --ignore-not-found=true
-      kubectl --context "$HUB_CONTEXT" delete namespace documentdb-preview-ns --ignore-not-found=true
+      kubectl --context "$HUB_CLUSTER" delete clusterresourceplacement documentdb-namespace-crp --ignore-not-found=true
+      kubectl --context "$HUB_CLUSTER" delete namespace documentdb-preview-ns --ignore-not-found=true
       echo "Waiting for namespace deletion to complete..."
       for cluster in "${CLUSTER_ARRAY[@]}"; do
         kubectl --context "$cluster" wait --for=delete namespace/documentdb-preview-ns --timeout=60s 2>/dev/null || true
@@ -193,7 +183,7 @@ TEMP_YAML=$(mktemp)
 # Use sed for safer substitution
 sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
     -e "s/{{PRIMARY_CLUSTER}}/$PRIMARY_CLUSTER/g" \
-    "$SCRIPT_DIR/multi-region.yaml" | \
+    "$SCRIPT_DIR/documentdb-resource-crp.yaml" | \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then
     echo "$CLUSTER_LIST"
@@ -216,7 +206,7 @@ echo "--------------------------------"
 # Apply the configuration
 echo ""
 echo "Applying DocumentDB multi-region configuration..."
-kubectl --context "$HUB_CONTEXT" apply -f "$TEMP_YAML"
+kubectl --context "$HUB_CLUSTER" apply -f "$TEMP_YAML"
 
 # Clean up temp file
 rm -f "$TEMP_YAML"
@@ -224,7 +214,7 @@ rm -f "$TEMP_YAML"
 # Check the ClusterResourcePlacement status
 echo ""
 echo "Checking ClusterResourcePlacement status..."
-kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp -o wide
+kubectl --context "$HUB_CLUSTER" get clusterresourceplacement documentdb-namespace-crp -o wide
 
 # Wait a bit for propagation
 echo ""
@@ -412,14 +402,14 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     REGION=$(echo "$cluster" | awk -F- '{print $2}')
     echo ""
     echo "# Failover to $REGION:"
-    echo "kubectl --context $HUB_CONTEXT patch documentdb documentdb-preview -n documentdb-preview-ns \\"
+    echo "kubectl --context $HUB_CLUSTER patch documentdb documentdb-preview -n documentdb-preview-ns \\"
     echo "  --type='merge' -p '{\"spec\":{\"clusterReplication\":{\"primary\":\"$cluster\"}}}'"
   fi
 done
 
 echo ""
 echo "To monitor the deployment:"
-echo "watch 'kubectl --context $HUB_CONTEXT get clusterresourceplacement documentdb-crp -o wide'"
+echo "watch 'kubectl --context $HUB_CLUSTER get clusterresourceplacement documentdb-namespace-crp -o wide'"
 
 echo ""
 echo "To check DocumentDB status across all clusters:"

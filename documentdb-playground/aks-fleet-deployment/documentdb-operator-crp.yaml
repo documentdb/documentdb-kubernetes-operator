@@ -1,7 +1,7 @@
 apiVersion: placement.kubernetes-fleet.io/v1beta1
 kind: ClusterResourcePlacement
 metadata:
-  name: documentdb-base
+  name: documentdb-operator-crp
 spec:
   resourceSelectors:
     - group: ""
@@ -15,7 +15,9 @@ spec:
     - group: "apiextensions.k8s.io"
       version: v1
       kind: CustomResourceDefinition
-      name: dbs.documentdb.io
+      labelSelector:
+        matchLabels:
+          app: documentdb-operator
     - group: "apiextensions.k8s.io"
       version: v1
       kind: CustomResourceDefinition
@@ -68,7 +70,9 @@ spec:
     - group: "rbac.authorization.k8s.io"
       version: v1
       kind: ClusterRole
-      name: documentdb-operator-cluster-role
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: documentdb-operator
     - group: "rbac.authorization.k8s.io"
       version: v1
       kind: ClusterRole
@@ -84,7 +88,9 @@ spec:
     - group: "rbac.authorization.k8s.io"
       version: v1
       kind: ClusterRoleBinding
-      name: documentdb-operator-cluster-rolebinding
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: documentdb-operator
     - group: "rbac.authorization.k8s.io"
       version: v1
       kind: ClusterRoleBinding
