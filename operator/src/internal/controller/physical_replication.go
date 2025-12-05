@@ -25,6 +25,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	demotionTokenPollInterval = 5 * time.Second
+	demotionTokenWaitTimeout  = 10 * time.Minute
+)
+
 func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	ctx context.Context,
 	documentdb *dbpreview.DocumentDB,
@@ -250,14 +255,6 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 		return nil, -1
 	}
 
-	// Update the primary if it has changed
-	primaryChanged := current.Spec.ReplicaCluster.Primary != desired.Spec.ReplicaCluster.Primary
-
-	tokenNeedsUpdate, err := r.PromotionTokenNeedsUpdate(ctx, current.Namespace)
-	if err != nil {
-		return err, time.Second * 10
-	}
-
 	if current.Spec.ReplicaCluster.Self != desired.Spec.ReplicaCluster.Self {
 		return fmt.Errorf("self cannot be changed"), time.Second * 60
 	}
@@ -265,10 +262,40 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 	// Create JSON patch operations for all replica cluster updates
 	var patchOps []util.JSONPatch
 
-	if tokenNeedsUpdate || primaryChanged && current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
+	// Update if the primary has changed
+	primaryChanged := current.Spec.ReplicaCluster.Primary != desired.Spec.ReplicaCluster.Primary
+	if primaryChanged {
+		err, refreshTime := r.getPrimaryChangePatchOps(ctx, &patchOps, current, desired, documentdb, replicationContext)
+		if refreshTime > 0 || err != nil {
+			return err, refreshTime
+		}
+	}
+
+	// Update if the cluster list has changed
+	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
+	if replicasChanged {
+		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
+	}
+
+	if len(patchOps) > 0 {
+		patch, err := json.Marshal(patchOps)
+		if err != nil {
+			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
+		}
+		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
+		if err != nil {
+			return err, time.Second * 10
+		}
+	}
+
+	return nil, -1
+}
+
+func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]util.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+	if current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Primary => replica
 		// demote
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: desired.Spec.ReplicaCluster,
@@ -279,41 +306,30 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 			// Only add remove operation if synchronous field exists, otherwise there's an error
 			// TODO this wouldn't be true if our "wait for token" logic wasn't reliant on a failure
 			if current.Spec.PostgresConfiguration.Synchronous != nil {
-				patchOps = append(patchOps, util.JSONPatch{
+				*patchOps = append(*patchOps, util.JSONPatch{
 					Op:   util.JSON_PATCH_OP_REMOVE,
 					Path: util.JSON_PATCH_PATH_POSTGRES_CONFIG_SYNC,
 				})
 			}
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_INSTANCES,
 				Value: desired.Spec.Instances,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_PLUGINS,
 				Value: desired.Spec.Plugins,
 			})
 		}
 
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
+		log.Log.Info("Applying patch for Primary => Replica transition", "cluster", current.Name)
 
-		log.Log.Info("Applying patch for Primary => Replica transition", "patch", string(patch), "cluster", current.Name)
+		// push out the  promotion token when it's available
+		nn := types.NamespacedName{Name: current.Name, Namespace: current.Namespace}
+		go r.waitForDemotionTokenAndCreateService(nn, replicationContext)
 
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
-
-		// push out the  promotion token
-		err = r.CreateTokenService(ctx, current.Status.DemotionToken, documentdb.Namespace, replicationContext)
-		if err != nil {
-			return err, time.Second * 10
-		}
-	} else if primaryChanged && desired.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
+	} else if desired.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Replica => primary
 		// Look for the token if this is a managed failover
 		oldPrimaryAvailable := slices.Contains(
@@ -333,7 +349,7 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 			replicaClusterConfig.PromotionToken = token
 		}
 
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: replicaClusterConfig,
@@ -341,61 +357,86 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 
 		if documentdb.Spec.ClusterReplication.HighAvailability {
 			// need to add second instance and wal replica
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_POSTGRES_CONFIG,
 				Value: desired.Spec.PostgresConfiguration,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_INSTANCES,
 				Value: desired.Spec.Instances,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_PLUGINS,
 				Value: desired.Spec.Plugins,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_REPLICATION_SLOTS,
 				Value: desired.Spec.ReplicationSlots,
 			})
 		}
-
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
-
-		log.Log.Info("Applying patch for Replica => Primary transition", "patch", string(patch), "cluster", current.Name, "hasToken", replicaClusterConfig.PromotionToken != "")
-
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
-	} else if primaryChanged {
+		log.Log.Info("Applying patch for Replica => Primary transition", "cluster", current.Name, "hasToken", replicaClusterConfig.PromotionToken != "")
+	} else {
 		// Replica => replica
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: desired.Spec.ReplicaCluster,
 		})
 
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
-
-		log.Log.Info("Applying patch for Replica => Replica transition", "patch", string(patch), "cluster", current.Name)
-
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
+		log.Log.Info("Applying patch for Replica => Replica transition", "patch", "cluster", current.Name)
 	}
 
 	return nil, -1
+}
+
+func externalClusterNamesChanged(currentClusters, desiredClusters []cnpgv1.ExternalCluster) bool {
+	if len(currentClusters) != len(desiredClusters) {
+		return true
+	}
+
+	if len(currentClusters) == 0 {
+		return false
+	}
+
+	nameSet := make(map[string]bool, len(currentClusters))
+	for _, cluster := range currentClusters {
+		nameSet[cluster.Name] = true
+	}
+
+	for _, cluster := range desiredClusters {
+		if found := nameSet[cluster.Name]; !found {
+			return true
+		}
+		delete(nameSet, cluster.Name)
+	}
+
+	return len(nameSet) != 0
+}
+
+func getReplicasChangePatchOps(patchOps *[]util.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
+	*patchOps = append(*patchOps, util.JSONPatch{
+		Op:    util.JSON_PATCH_OP_REPLACE,
+		Path:  util.JSON_PATCH_PATH_EXTERNAL_CLUSTERS,
+		Value: desired.Spec.ExternalClusters,
+	})
+	if replicationContext.IsAzureFleetNetworking() {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:    util.JSON_PATCH_OP_REPLACE,
+			Path:  util.JSON_PATCH_PATH_MANAGED_SERVICES,
+			Value: desired.Spec.Managed.Services.Additional,
+		})
+	}
+	if replicationContext.IsPrimary() {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:    util.JSON_PATCH_OP_REPLACE,
+			Path:  util.JSON_PATCH_PATH_SYNCHRONOUS,
+			Value: desired.Spec.PostgresConfiguration.Synchronous,
+		})
+	}
 }
 
 func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
@@ -506,24 +547,41 @@ func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, 
 	return string(token[:]), nil, -1
 }
 
-// TODO make this not have to check the configmap twice
-// RETURN true if we have a configmap with a blank token
-func (r *DocumentDBReconciler) PromotionTokenNeedsUpdate(ctx context.Context, namespace string) (bool, error) {
-	tokenServiceName := "promotion-token"
-	configMap := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, configMap)
-	if err != nil {
-		// If we don't find the map, we don't need to update
-		if errors.IsNotFound(err) {
-			return false, nil
+func (r *DocumentDBReconciler) waitForDemotionTokenAndCreateService(clusterNN types.NamespacedName, replicationContext *util.ReplicationContext) {
+	ctx := context.Background()
+	ticker := time.NewTicker(demotionTokenPollInterval)
+	timeout := time.NewTimer(demotionTokenWaitTimeout)
+
+	for {
+		select {
+		case <-ticker.C:
+			done, err := r.ensureTokenServiceResources(ctx, clusterNN, replicationContext)
+			if err != nil {
+				log.Log.Error(err, "Failed to create token service resources", "cluster", clusterNN.Name)
+			}
+			if done {
+				return
+			}
+		case <-timeout.C:
+			ticker.Stop()
+			log.Log.Info("Timed out waiting for demotion token", "cluster", clusterNN.Name, "timeout", demotionTokenWaitTimeout)
+			return
 		}
-		return false, err
 	}
-	// Otherwise, we need to update if the value is blank
-	return configMap.Data["index.html"] == "", nil
 }
 
-func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token string, namespace string, replicationContext *util.ReplicationContext) error {
+// Returns true when token service resources are ready
+func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, clusterNN types.NamespacedName, replicationContext *util.ReplicationContext) (bool, error) {
+	cluster := &cnpgv1.Cluster{}
+	if err := r.Client.Get(ctx, clusterNN, cluster); err != nil {
+		return false, err
+	}
+
+	token := cluster.Status.DemotionToken
+	if token == "" {
+		return false, nil
+	}
+
 	tokenServiceName := "promotion-token"
 	labels := map[string]string{
 		"app": tokenServiceName,
@@ -533,7 +591,7 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 		},
 		Data: map[string]string{
 			"index.html": token,
@@ -546,27 +604,23 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 			configMap.Data["index.html"] = token
 			err = r.Client.Update(ctx, configMap)
 			if err != nil {
-				return fmt.Errorf("failed to update token ConfigMap: %w", err)
+				return false, fmt.Errorf("failed to update token ConfigMap: %w", err)
 			}
 		} else {
-			return fmt.Errorf("failed to create token ConfigMap: %w", err)
+			return false, fmt.Errorf("failed to create token ConfigMap: %w", err)
 		}
-	}
-
-	if token == "" {
-		return fmt.Errorf("No token found yet")
 	}
 
 	// When not using cross-cloud networking, just transfer with the configmap
 	if !replicationContext.IsAzureFleetNetworking() && !replicationContext.IsIstioNetworking() {
-		return nil
+		return true, nil
 	}
 
 	// Create nginx Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{
@@ -605,14 +659,14 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 
 	err = r.Client.Create(ctx, pod)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create nginx Pod: %w", err)
+		return false, fmt.Errorf("failed to create nginx Pod: %w", err)
 	}
 
 	// Create Service
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -629,7 +683,7 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 
 	err = r.Client.Create(ctx, service)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create Service: %w", err)
+		return false, fmt.Errorf("failed to create Service: %w", err)
 	}
 
 	// Create ServiceExport only for fleet networking
@@ -637,15 +691,15 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 		serviceExport := &fleetv1alpha1.ServiceExport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tokenServiceName,
-				Namespace: namespace,
+				Namespace: clusterNN.Namespace,
 			},
 		}
 
 		err = r.Client.Create(ctx, serviceExport)
 		if err != nil && !errors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create ServiceExport: %w", err)
+			return false, fmt.Errorf("failed to create ServiceExport: %w", err)
 		}
 	}
 
-	return nil
+	return true, nil
 }

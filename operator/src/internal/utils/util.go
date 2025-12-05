@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -309,6 +311,55 @@ func DeleteRoleBinding(ctx context.Context, c client.Client, name, namespace str
 		if err := c.Delete(ctx, roleBinding); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func DeleteOwnedResources(ctx context.Context, c client.Client, owner metav1.ObjectMeta) error {
+	log := log.FromContext(ctx)
+
+	hasOwnerReference := func(refs []metav1.OwnerReference) bool {
+		for _, ref := range refs {
+			if ref.UID == owner.UID && ref.Name == owner.Name {
+				return true
+			}
+		}
+		return false
+	}
+
+	listInNamespace := client.InNamespace(owner.Namespace)
+	var errList []error
+
+	var serviceList corev1.ServiceList
+	if err := c.List(ctx, &serviceList, listInNamespace); err != nil {
+		return fmt.Errorf("failed to list services: %w", err)
+	}
+	for i := range serviceList.Items {
+		svc := &serviceList.Items[i]
+		if hasOwnerReference(svc.OwnerReferences) {
+			if err := c.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete owned Service", "name", svc.Name, "namespace", svc.Namespace)
+				errList = append(errList, fmt.Errorf("service %s/%s: %w", svc.Namespace, svc.Name, err))
+			}
+		}
+	}
+
+	var clusterList cnpgv1.ClusterList
+	if err := c.List(ctx, &clusterList, listInNamespace); err != nil {
+		return fmt.Errorf("failed to list CNPG clusters: %w", err)
+	}
+	for i := range clusterList.Items {
+		cluster := &clusterList.Items[i]
+		if hasOwnerReference(cluster.OwnerReferences) {
+			if err := c.Delete(ctx, cluster); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete owned CNPG Cluster", "name", cluster.Name, "namespace", cluster.Namespace)
+				errList = append(errList, fmt.Errorf("cnpg cluster %s/%s: %w", cluster.Namespace, cluster.Name, err))
+			}
+		}
+	}
+
+	if len(errList) > 0 {
+		return utilerrors.NewAggregate(errList)
 	}
 	return nil
 }

@@ -10,19 +10,11 @@ RG_LOCATION="${RG_LOCATION:-eastus2}"
 HUB_REGION="${HUB_REGION:-westus3}"
 SCRIPT_DIR="$(dirname "$0")"
 
-# Regions for member clusters (keep in sync with parameters.bicepparam if you change it)
-if [ -n "${MEMBER_REGIONS_CSV:-}" ]; then
-  IFS=',' read -r -a MEMBER_REGIONS <<< "$MEMBER_REGIONS_CSV"
-else
-  MEMBER_REGIONS=("westus3" "uksouth" "eastus2")
-fi
-
 # Optional: explicitly override the VM size used by the template param vmSize.
 # If left empty, the template's default (currently Standard_DS2_v2) will be used.
 KUBE_VM_SIZE="${KUBE_VM_SIZE:-}"
-
-# Build JSON arrays for parameters (after any fallbacks)
-MEMBER_REGIONS_JSON=$(printf '%s\n' "${MEMBER_REGIONS[@]}" | jq -R . | jq -s .)
+# Optional: override the default member regions defined in main.bicep (comma-separated list)
+MEMBER_REGIONS="${MEMBER_REGIONS:-}"
 
 # Wait for any in-progress AKS operations in this resource group to finish
 wait_for_no_inprogress() {
@@ -59,14 +51,22 @@ if ! wait_for_no_inprogress "$RESOURCE_GROUP"; then
   echo "Exiting without changes due to in-progress operations. Re-run when provisioning completes." >&2
   exit 1
 fi
+
+PARAMS=()
 # Build parameter overrides
-PARAMS=(
-  --parameters "$SCRIPT_DIR/parameters.bicepparam"
-  --parameters memberRegions="$MEMBER_REGIONS_JSON"
-)
 if [ -n "$KUBE_VM_SIZE" ]; then
   echo "Overriding kubernetes VM size with: $KUBE_VM_SIZE"
   PARAMS+=( --parameters vmSize="$KUBE_VM_SIZE" )
+fi
+
+if [ -n "$MEMBER_REGIONS" ]; then
+  echo "Overriding member regions with: $MEMBER_REGIONS"
+  MEMBER_REGION_JSON=$(printf '%s' "$MEMBER_REGIONS" | jq -Rsc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))')
+  if [ "$(printf '%s' "$MEMBER_REGION_JSON" | jq 'length')" -eq 0 ]; then
+    echo "MEMBER_REGIONS did not contain any valid entries" >&2
+    exit 1
+  fi
+  PARAMS+=( --parameters memberRegions="$MEMBER_REGION_JSON" )
 fi
 
 DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-"aks-deployment-$(date +%s)"}
@@ -84,6 +84,30 @@ DEPLOYMENT_OUTPUT=$(az deployment group show \
 
 # Extract outputs
 MEMBER_CLUSTER_NAMES=$(echo $DEPLOYMENT_OUTPUT | jq -r '.memberClusterNames.value[]')
+VNET_NAMES=$(echo $DEPLOYMENT_OUTPUT | jq -r '.memberVnetNames.value[]')
+
+while read -r vnet1; do
+  while read -r vnet2; do
+    [ -z "$vnet1" ] && continue
+    [ -z "$vnet2" ] && continue
+    [ "$vnet1" = "$vnet2" ] && continue
+    echo "Peering VNet '$vnet1' with VNet '$vnet2'..."
+    az network vnet peering create \
+      --name "${vnet1}-to-${vnet2}-peering" \
+      --resource-group "$RESOURCE_GROUP" \
+      --vnet-name "$vnet1" \
+      --remote-vnet "$vnet2" \
+      --allow-vnet-access true \
+      --allow-forwarded-traffic true
+    az network vnet peering create \
+      --name "${vnet2}-to-${vnet1}-peering" \
+      --resource-group "$RESOURCE_GROUP" \
+      --vnet-name "$vnet2" \
+      --remote-vnet "$vnet1" \
+      --allow-vnet-access true \
+      --allow-forwarded-traffic true
+  done <<< "$VNET_NAMES"
+done <<< "$VNET_NAMES"
 
 HUB_CLUSTER=""
 while read -r cluster; do

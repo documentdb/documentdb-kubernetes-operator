@@ -40,6 +40,7 @@ const (
 	NoReplication replicationState = iota
 	Primary
 	Replica
+	NotPresent
 )
 
 func GetReplicationContext(ctx context.Context, client client.Client, documentdb dbpreview.DocumentDB) (*ReplicationContext, error) {
@@ -57,6 +58,19 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 	self, others, replicationState, err := getTopology(ctx, client, documentdb)
 	if err != nil {
 		return nil, err
+	}
+
+	// If self is nil, then this cluster is not part of the replication setup
+	// This edge case can happen when the Hub cluster is also a member, and we are not
+	// putting the documentdb instance on it
+	if self == nil {
+		return &ReplicationContext{
+			state:                        NotPresent,
+			CrossCloudNetworkingStrategy: None,
+			Environment:                  "",
+			StorageClass:                 "",
+			Self:                         "",
+		}, nil
 	}
 
 	// If no remote clusters, then just proceed with a regular cluster
@@ -111,6 +125,10 @@ func (r ReplicationContext) IsPrimary() bool {
 
 func (r *ReplicationContext) IsReplicating() bool {
 	return r.state == Replica || r.state == Primary
+}
+
+func (r *ReplicationContext) IsNotPresent() bool {
+	return r.state == NotPresent
 }
 
 // Gets the primary if you're a replica, otherwise returns the first other cluster
@@ -172,9 +190,9 @@ func (r ReplicationContext) GenerateOutgoingServiceNames(name, resourceGroup str
 
 // Creates the standby names list, which will be all other clusters in addition to "pg_receivewal"
 func (r *ReplicationContext) CreateStandbyNamesList() []string {
-	standbyNames := make([]string, len(r.Others)+1)
+	standbyNames := make([]string, len(r.Others))
 	copy(standbyNames, r.Others)
-	/* TODO re-enable when we have a WAL replica image
+	/* TODO re-enable when we have a WAL replica image (also add one to length)
 	standbyNames[len(r.Others)] = "pg_receivewal"
 	*/
 	return standbyNames

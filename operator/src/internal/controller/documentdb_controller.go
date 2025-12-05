@@ -82,6 +82,17 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if replicationContext.IsNotPresent() {
+		logger.Info("DocumentDB instance is not part of the replication setup; skipping reconciliation and deleting any present resources")
+		if err := r.cleanupResources(ctx, req, documentdb); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := util.DeleteOwnedResources(ctx, r.Client, documentdb.ObjectMeta); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	var documentDbServiceIp string
 
 	// Only create/manage the service if ExposeViaService is configured
