@@ -5,7 +5,7 @@
 * There is no simple way for the promotion token from a demoted cluster to
 transfer to the newly promoted cluster
 * There needs to be a central location where Azure DNS can be managed
-* We need some way to initiate failover without manual intervention
+* We need some way to manage the failover of many DocumentDB instances at once
 
 ## Implementation
 
@@ -14,13 +14,13 @@ It will try to remain as minimal as possible.
 
 ### Promotion token management
 
-The Controller will be able to query endpoints on the member clusters
-with the promotion token, and then create a configMap and CRP to
-send that token to the new primary cluster. It will have access to the
-documentdb crp so it will be able to see which member is primary.
+The Controller will be able to query the Kube API on the member clusters to
+get the promotion token from the Cluster CRD. Then it will create a configMap
+and CRP to send that token to the new primary cluster. It will use the
+documentdb crd to determine which member is primary.
 
 It will clean up the token and crp when the promotion is complete.
-It can determine this through another documentdb operator endpoint.
+It can determine this through the Cluster CRD status.
 
 ### DNS Management
 
@@ -39,19 +39,16 @@ This will need the following information
 * Parent DNS Zone (optional)
   * Parent DNS Zone RG and Subscription
 
-### Automatic failover
+### Regional Failover
 
-The operator will have a health check endpoint that the controller can
-periodically query to determine liveness for failover. There will be a
-setting for how long a primary cluster will be marked down before failover is
-initiated.
-
-The health check endpoint should provide the controller with a LSN for the
-database so that it can have an up to date list
-
-When that time limit is hit, the operator should use the LSNs that it knows
-to pick a promotion candidate and alter the DocumentDB object so the operators
-know to run the promotion process.
+The user should be able to initiate a regional failover, wherein all clusters in
+a region change their primary. The controller should know the LSNs on each
+instance, and pick the highest for each cluster to become the new primary. To
+initiate this failover, the user should create a CRD that marks a particular
+member cluster as not primary-ready. The controller will watch this resource,
+and use that information to update each DocumentDB instance. The crp will
+automatically push those changes, and the Operators will perform the actual
+promotions and demotions
 
 ## Other possible additions
 
