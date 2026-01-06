@@ -54,7 +54,6 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;update;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
@@ -256,13 +255,6 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error(err, "Failed to update DocumentDB status")
 			}
 		}
-	}
-
-	// Ensure finalizers are added to PVCs owned by the CNPG cluster
-	pvcReconciler := &PVCReconciler{Client: r.Client}
-	if err := pvcReconciler.ensurePVCFinalizers(ctx, currentCnpgCluster, documentdb); err != nil {
-		logger.Error(err, "Failed to ensure PVC finalizers")
-		// Don't fail the reconciliation, just log and continue
 	}
 
 	// Don't reque again unless there is a change
