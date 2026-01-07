@@ -59,14 +59,8 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		}
 	}
 
-	// Fetch the DocumentDB cluster
-	var cluster dbpreview.DocumentDB
-	if err := r.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: req.Namespace}, &cluster); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// Update retention annotation if needed
-	if err := r.updateRetentionAnnotation(ctx, &pvc, int32(cluster.Spec.Resource.Storage.PvcRetentionPeriodDays)); err != nil {
+	if err := r.updateRetentionAnnotation(ctx, &pvc, clusterName); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -120,11 +114,30 @@ func (r *PVCReconciler) findDocumentDBOwnerThroughCNPG(ctx context.Context, pvc 
 }
 
 // updateRetentionAnnotation updates the PVC retention annotation if it has changed.
-func (r *PVCReconciler) updateRetentionAnnotation(ctx context.Context, pvc *corev1.PersistentVolumeClaim, retentionDays int32) error {
+func (r *PVCReconciler) updateRetentionAnnotation(ctx context.Context, pvc *corev1.PersistentVolumeClaim, clusterName string) error {
+	var cluster dbpreview.DocumentDB
+	err := r.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: pvc.Namespace}, &cluster)
+	
+	// If cluster doesn't exist
+	if err != nil {
+		// If no annotation exists, set default value 7
+		if pvc.Annotations == nil || pvc.Annotations["documentdb.io/pvc-retention-days"] == "" {
+			if pvc.Annotations == nil {
+				pvc.Annotations = make(map[string]string)
+			}
+			pvc.Annotations["documentdb.io/pvc-retention-days"] = "7"
+			return r.Update(ctx, pvc)
+		}
+		// If annotation exists, do nothing
+		return nil
+	}
+
+	// Cluster exists - set or update annotation based on cluster value
 	if pvc.Annotations == nil {
 		pvc.Annotations = make(map[string]string)
 	}
 
+	retentionDays := cluster.Spec.Resource.Storage.PvcRetentionPeriodDays
 	expectedRetention := string(rune(retentionDays))
 	currentRetention := pvc.Annotations["documentdb.io/pvc-retention-days"]
 

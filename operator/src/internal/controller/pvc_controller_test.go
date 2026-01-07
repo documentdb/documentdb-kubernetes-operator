@@ -332,11 +332,60 @@ var _ = Describe("PVC Controller", func() {
 	})
 
 	Describe("Reconcile - Retention Annotation Management", func() {
-		Context("when PVC has no retention annotation", func() {
-			It("should add documentdb.io/pvc-retention-days annotation", func() {
+		Context("when DocumentDB does not exist and PVC has no annotation", func() {
+			It("should set default value 7 when no cluster and no annotation", func() {
+				// Create PVC with documentdb.io/cluster label but no retention annotation
+				// The cluster referenced does not exist
+				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(pvc).
+					Build()
+
+				reconciler := &PVCReconciler{Client: fakeClient}
+				reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+				// Verify annotation was set to default value 7
+				updated := &corev1.PersistentVolumeClaim{}
+				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+				Expect(updated.Annotations).ToNot(BeNil())
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("7"))
+			})
+		})
+
+		Context("when DocumentDB does not exist but PVC has annotation", func() {
+			It("should do nothing when no cluster but annotation exists", func() {
+				// Create PVC with documentdb.io/cluster label and existing retention annotation
+				// The cluster referenced does not exist
+				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+				pvc.Annotations = map[string]string{
+					"documentdb.io/pvc-retention-days": "10",
+					"custom-annotation":                "custom-value",
+				}
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(pvc).
+					Build()
+
+				reconciler := &PVCReconciler{Client: fakeClient}
+				reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+				// Verify annotations remain unchanged
+				updated := &corev1.PersistentVolumeClaim{}
+				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+				Expect(updated.Annotations).ToNot(BeNil())
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("10"))
+				Expect(updated.Annotations["custom-annotation"]).To(Equal("custom-value"))
+			})
+		})
+
+		Context("when DocumentDB exists but PVC has no annotation", func() {
+			It("should set annotation from cluster when no annotation exists", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 14
 
 				// Create PVC with documentdb.io/cluster label but no retention annotation
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -353,12 +402,12 @@ var _ = Describe("PVC Controller", func() {
 				updated := &corev1.PersistentVolumeClaim{}
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
-				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(7))))
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(14))))
 			})
 		})
 
-		Context("when PVC retention annotation changes", func() {
-			It("should update documentdb.io/pvc-retention-days annotation when value changes", func() {
+		Context("when DocumentDB exists and PVC has annotation", func() {
+			It("should update annotation when value differs from cluster", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
 				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 14
@@ -383,10 +432,8 @@ var _ = Describe("PVC Controller", func() {
 				Expect(updated.Annotations).ToNot(BeNil())
 				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(14))))
 			})
-		})
 
-		Context("when PVC retention annotation matches", func() {
-			It("should not modify annotation when value is already correct", func() {
+			It("should not modify annotation when value matches cluster", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
 				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
