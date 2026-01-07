@@ -5,7 +5,7 @@
 ARG TARGETOS
 ARG TARGETARCH
 ARG ARCH
-FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/go/microsoft/golang:1.24-azurelinux3.0 AS builder
+FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/go/microsoft/golang:1.25-azurelinux3.0 AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -26,7 +26,7 @@ COPY internal/ internal/
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 # The ARCH build arg can be used to override the target architecture (e.g., amd64, arm64)
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${ARCH:-${TARGETARCH}} go build -a -o manager cmd/main.go
+RUN GOEXPERIMENT=nosystemcrypto CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${ARCH:-${TARGETARCH}} go build -a -o manager cmd/main.go
 
 # Use Microsoft official image from MCR as minimal base image to package the manager binary
 FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/devcontainers/base:alpine

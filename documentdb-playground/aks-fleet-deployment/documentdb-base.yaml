@@ -23,6 +23,10 @@ spec:
     - group: "apiextensions.k8s.io"
       version: v1
       kind: CustomResourceDefinition
+      name: failoverquorums.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
       name: poolers.postgresql.cnpg.io
     - group: "apiextensions.k8s.io"
       version: v1
