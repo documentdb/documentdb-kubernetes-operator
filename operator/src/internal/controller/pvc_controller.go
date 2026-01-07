@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -65,9 +66,9 @@ func (r *PVCReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	}
 
 	// Manage finalizer based on retention policy
-	// if err := r.manageFinalizer(ctx, &pvc, &cluster); err != nil {
-	// 	return ctrl.Result{}, err
-	// }
+	if err := r.manageFinalizer(ctx, &pvc); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -117,7 +118,7 @@ func (r *PVCReconciler) findDocumentDBOwnerThroughCNPG(ctx context.Context, pvc 
 func (r *PVCReconciler) updateRetentionAnnotation(ctx context.Context, pvc *corev1.PersistentVolumeClaim, clusterName string) error {
 	var cluster dbpreview.DocumentDB
 	err := r.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: pvc.Namespace}, &cluster)
-	
+
 	// If cluster doesn't exist
 	if err != nil {
 		// If no annotation exists, set default value 7
@@ -150,8 +151,8 @@ func (r *PVCReconciler) updateRetentionAnnotation(ctx context.Context, pvc *core
 }
 
 // manageFinalizer adds or removes the PVC finalizer based on cluster deletion status and retention period.
-func (r *PVCReconciler) manageFinalizer(ctx context.Context, pvc *corev1.PersistentVolumeClaim, cluster *dbpreview.DocumentDB) error {
-	shouldHaveFinalizer := r.shouldRetainPVC(cluster)
+func (r *PVCReconciler) manageFinalizer(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error {
+	shouldHaveFinalizer := r.shouldRetainPVC(pvc)
 	hasFinalizer := containsString(pvc.Finalizers, PVCFinalizerName)
 
 	if shouldHaveFinalizer == hasFinalizer {
@@ -160,8 +161,14 @@ func (r *PVCReconciler) manageFinalizer(ctx context.Context, pvc *corev1.Persist
 	}
 
 	if shouldHaveFinalizer {
+		if pvc.Finalizers == nil {
+			pvc.Finalizers = []string{}
+		}
 		pvc.Finalizers = append(pvc.Finalizers, PVCFinalizerName)
 	} else {
+		if pvc.Finalizers == nil {
+			return nil
+		}
 		pvc.Finalizers = removeString(pvc.Finalizers, PVCFinalizerName)
 	}
 
@@ -169,21 +176,24 @@ func (r *PVCReconciler) manageFinalizer(ctx context.Context, pvc *corev1.Persist
 }
 
 // shouldRetainPVC determines if a PVC should be retained based on cluster deletion status and retention period.
-func (r *PVCReconciler) shouldRetainPVC(cluster *dbpreview.DocumentDB) bool {
-	// If cluster is not being deleted, retain the PVC
-	if cluster.DeletionTimestamp == nil {
+func (r *PVCReconciler) shouldRetainPVC(pvc *corev1.PersistentVolumeClaim) bool {
+	if pvc.DeletionTimestamp == nil {
 		return true
 	}
 
-	retentionDays := cluster.Spec.Resource.Storage.PvcRetentionPeriodDays
-
-	// Retention days <= 0 means retain forever
-	if retentionDays <= 0 {
-		return true
+	retentionDays := pvc.Annotations["documentdb.io/pvc-retention-days"]
+	if retentionDays == "" {
+		// Default retention if annotation missing
+		retentionDays = "7"
 	}
 
 	// Check if retention period has expired
-	retentionExpiration := cluster.DeletionTimestamp.AddDate(0, 0, int(retentionDays))
+	days, err := strconv.Atoi(retentionDays)
+	if err != nil {
+		// If conversion fails, use default of 7 days
+		days = 7
+	}
+	retentionExpiration := pvc.DeletionTimestamp.AddDate(0, 0, days)
 	return time.Now().Before(retentionExpiration)
 }
 

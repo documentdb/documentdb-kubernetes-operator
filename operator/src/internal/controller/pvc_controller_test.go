@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -484,6 +485,176 @@ var _ = Describe("PVC Controller", func() {
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
 				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(0))))
+			})
+		})
+	})
+
+	Describe("Finalizer Management", func() {
+		Context("when PVC is not deleted (deletionTimestamp is null)", func() {
+			It("should add finalizer if not exists", func() {
+				// Create DocumentDB and PVC without finalizer
+				documentDB := createDocumentDB(clusterName, pvcNamespace)
+				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+				// No finalizers initially
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(documentDB, pvc).
+					Build()
+
+				reconciler := &PVCReconciler{Client: fakeClient}
+				reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+				// Verify finalizer was added
+				updated := &corev1.PersistentVolumeClaim{}
+				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+				Expect(updated.Finalizers).To(ContainElement(PVCFinalizerName))
+			})
+
+			It("should do nothing if finalizer already exists", func() {
+				// Create DocumentDB and PVC with finalizer already present
+				documentDB := createDocumentDB(clusterName, pvcNamespace)
+				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+				pvc.Finalizers = []string{PVCFinalizerName, "some-other-finalizer"}
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(documentDB, pvc).
+					Build()
+
+				reconciler := &PVCReconciler{Client: fakeClient}
+				reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+				// Verify finalizers remain unchanged
+				updated := &corev1.PersistentVolumeClaim{}
+				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+				Expect(updated.Finalizers).To(Equal([]string{PVCFinalizerName, "some-other-finalizer"}))
+			})
+		})
+
+		Context("when PVC is deleted (deletionTimestamp is not null)", func() {
+			Context("and retention period has not been exceeded", func() {
+				It("should add finalizer if not exists", func() {
+					// Create DocumentDB
+					documentDB := createDocumentDB(clusterName, pvcNamespace)
+					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+					// Create PVC with deletionTimestamp (being deleted)
+					// Must have at least one finalizer for Kubernetes to accept deletionTimestamp
+					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+					now := metav1.Now()
+					pvc.DeletionTimestamp = &now
+					pvc.Finalizers = []string{"some-other-finalizer"} // Need at least one finalizer
+					pvc.Annotations = map[string]string{
+						"documentdb.io/pvc-retention-days": "7",
+					}
+
+					fakeClient := fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(documentDB, pvc).
+						Build()
+
+					reconciler := &PVCReconciler{Client: fakeClient}
+					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+					// Verify our finalizer was added
+					updated := &corev1.PersistentVolumeClaim{}
+					Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+					Expect(updated.Finalizers).To(ContainElement(PVCFinalizerName))
+					Expect(updated.Finalizers).To(ContainElement("some-other-finalizer"))
+				})
+
+				It("should do nothing if finalizer already exists", func() {
+					// Create DocumentDB
+					documentDB := createDocumentDB(clusterName, pvcNamespace)
+					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+					// Create PVC with deletionTimestamp and existing finalizer
+					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+					now := metav1.Now()
+					pvc.DeletionTimestamp = &now
+					pvc.Finalizers = []string{PVCFinalizerName, "another-finalizer"}
+					pvc.Annotations = map[string]string{
+						"documentdb.io/pvc-retention-days": "7",
+					}
+
+					fakeClient := fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(documentDB, pvc).
+						Build()
+
+					reconciler := &PVCReconciler{Client: fakeClient}
+					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+					// Verify finalizers remain unchanged
+					updated := &corev1.PersistentVolumeClaim{}
+					Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+					Expect(updated.Finalizers).To(Equal([]string{PVCFinalizerName, "another-finalizer"}))
+				})
+			})
+
+			Context("and retention period has been exceeded", func() {
+				It("should remove finalizer if exists", func() {
+					// Create DocumentDB
+					documentDB := createDocumentDB(clusterName, pvcNamespace)
+					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+					// Create PVC with deletionTimestamp from 10 days ago (exceeded 7 day retention)
+					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+					tenDaysAgo := metav1.NewTime(time.Now().AddDate(0, 0, -10))
+					pvc.DeletionTimestamp = &tenDaysAgo
+					pvc.Finalizers = []string{PVCFinalizerName, "another-finalizer"}
+					pvc.Annotations = map[string]string{
+						"documentdb.io/pvc-retention-days": "7",
+					}
+
+					fakeClient := fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(documentDB, pvc).
+						Build()
+
+					reconciler := &PVCReconciler{Client: fakeClient}
+					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+					// Verify finalizer was removed
+					updated := &corev1.PersistentVolumeClaim{}
+					Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+					Expect(updated.Finalizers).ToNot(ContainElement(PVCFinalizerName))
+					Expect(updated.Finalizers).To(Equal([]string{"another-finalizer"}))
+				})
+
+				It("should do nothing if finalizer does not exist", func() {
+					// Create DocumentDB
+					documentDB := createDocumentDB(clusterName, pvcNamespace)
+					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+
+					// Create PVC with deletionTimestamp from 10 days ago (exceeded 7 day retention)
+					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
+					tenDaysAgo := metav1.NewTime(time.Now().AddDate(0, 0, -10))
+					pvc.DeletionTimestamp = &tenDaysAgo
+					pvc.Finalizers = []string{"another-finalizer"}
+					pvc.Annotations = map[string]string{
+						"documentdb.io/pvc-retention-days": "7",
+					}
+
+					fakeClient := fake.NewClientBuilder().
+						WithScheme(scheme).
+						WithObjects(documentDB, pvc).
+						Build()
+
+					reconciler := &PVCReconciler{Client: fakeClient}
+					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+
+					// Verify finalizers remain unchanged (no PVC finalizer to remove)
+					updated := &corev1.PersistentVolumeClaim{}
+					Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
+					Expect(updated.Finalizers).To(Equal([]string{"another-finalizer"}))
+					Expect(updated.Finalizers).ToNot(ContainElement(PVCFinalizerName))
+				})
 			})
 		})
 	})
