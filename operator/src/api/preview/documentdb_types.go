@@ -90,6 +90,11 @@ type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
 	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
+
+	// PVC specifies the source PVC to restore from.
+	// Cannot be used together with Backup.
+	// +optional
+	PVC cnpgv1.LocalObjectReference `json:"pvc,omitempty"`
 }
 
 // BackupConfiguration defines backup settings for DocumentDB.

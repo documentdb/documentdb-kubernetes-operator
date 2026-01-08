@@ -8,6 +8,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
@@ -113,18 +114,44 @@ func getInheritedMetadataLabels(appName string) *cnpgv1.EmbeddedObjectMetadata {
 }
 
 func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion bool, log logr.Logger) *cnpgv1.BootstrapConfiguration {
-	if isPrimaryRegion && documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil && documentdb.Spec.Bootstrap.Recovery.Backup.Name != "" {
-		backupName := documentdb.Spec.Bootstrap.Recovery.Backup.Name
-		log.Info("DocumentDB cluster will be bootstrapped from backup", "backupName", backupName)
-		return &cnpgv1.BootstrapConfiguration{
-			Recovery: &cnpgv1.BootstrapRecovery{
-				Backup: &cnpgv1.BackupSource{
-					LocalObjectReference: cnpgv1.LocalObjectReference{Name: backupName},
+	if isPrimaryRegion && documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil {
+		recovery := documentdb.Spec.Bootstrap.Recovery
+
+		// Handle backup recovery
+		if recovery.Backup.Name != "" {
+			backupName := recovery.Backup.Name
+			log.Info("DocumentDB cluster will be bootstrapped from backup", "backupName", backupName)
+			return &cnpgv1.BootstrapConfiguration{
+				Recovery: &cnpgv1.BootstrapRecovery{
+					Backup: &cnpgv1.BackupSource{
+						LocalObjectReference: cnpgv1.LocalObjectReference{Name: backupName},
+					},
 				},
-			},
+			}
+		}
+
+		// Handle PVC recovery
+		if recovery.PVC.Name != "" {
+			pvcName := recovery.PVC.Name
+			log.Info("DocumentDB cluster will be bootstrapped from PVC", "pvcName", pvcName)
+			return &cnpgv1.BootstrapConfiguration{
+				Recovery: &cnpgv1.BootstrapRecovery{
+					VolumeSnapshots: &cnpgv1.DataSource{
+						Storage: corev1.TypedLocalObjectReference{
+							Name:     pvcName,
+							Kind:     "PersistentVolumeClaim",
+							APIGroup: pointer.String(""),
+						},
+					},
+				},
+			}
 		}
 	}
 
+	return getDefaultBootstrapConfiguration()
+}
+
+func getDefaultBootstrapConfiguration() *cnpgv1.BootstrapConfiguration {
 	return &cnpgv1.BootstrapConfiguration{
 		InitDB: &cnpgv1.BootstrapInitDB{
 			PostInitSQL: []string{
