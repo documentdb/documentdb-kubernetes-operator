@@ -64,10 +64,7 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 		return &singleClusterReplicationContext, nil
 	}
 
-	primaryCluster := documentdb.Name + "-" + documentdb.Spec.ClusterReplication.Primary
-	if len(primaryCluster) > CNPG_MAX_CLUSTER_NAME_LENGTH {
-		primaryCluster = primaryCluster[:CNPG_MAX_CLUSTER_NAME_LENGTH]
-	}
+	primaryCluster := generateCNPGClusterName(documentdb.Name, documentdb.Spec.ClusterReplication.Primary)
 
 	storageClass := documentdb.Spec.Resource.Storage.StorageClass
 	if self.StorageClassOverride != "" {
@@ -184,38 +181,31 @@ func (r *ReplicationContext) CreateStandbyNamesList() []string {
 }
 
 func getTopology(ctx context.Context, client client.Client, documentdb dbpreview.DocumentDB) (*dbpreview.MemberCluster, []string, replicationState, error) {
-	selfName := documentdb.Name
+	memberClusterName := documentdb.Name
 	var err error
 
 	if documentdb.Spec.ClusterReplication.CrossCloudNetworkingStrategy != string(None) {
-		selfName, err = GetSelfName(ctx, client)
+		memberClusterName, err = GetSelfName(ctx, client)
 		if err != nil {
 			return nil, nil, NoReplication, err
 		}
 	}
 
 	state := Replica
-	if documentdb.Spec.ClusterReplication.Primary == selfName {
+	if documentdb.Spec.ClusterReplication.Primary == memberClusterName {
 		state = Primary
 	}
 
 	others := []string{}
 	var self dbpreview.MemberCluster
 	for _, c := range documentdb.Spec.ClusterReplication.ClusterList {
-		if c.Name != selfName {
-			otherName := documentdb.Name + "-" + c.Name
-			if len(otherName) > CNPG_MAX_CLUSTER_NAME_LENGTH {
-				otherName = otherName[:CNPG_MAX_CLUSTER_NAME_LENGTH]
-			}
-			others = append(others, otherName)
+		if c.Name != memberClusterName {
+			others = append(others, generateCNPGClusterName(documentdb.Name, c.Name))
 		} else {
 			self = c
 		}
 	}
-	self.Name = documentdb.Name + "-" + self.Name
-	if len(self.Name) > CNPG_MAX_CLUSTER_NAME_LENGTH {
-		self.Name = self.Name[:CNPG_MAX_CLUSTER_NAME_LENGTH]
-	}
+	self.Name = generateCNPGClusterName(documentdb.Name, self.Name)
 	return &self, others, state, nil
 }
 
@@ -256,4 +246,23 @@ func generateServiceName(docdbName, sourceCluster, targetCluster, resourceGroup 
 		return hashStr[:length]
 	}
 	return hashStr
+}
+
+// Generate the CNPG Cluster name using the Documentdb name and a hash of the member cluster
+func generateCNPGClusterName(docdbName, cluster string) string {
+	var ret string
+
+	h := fnv.New64a()
+	h.Write([]byte(cluster))
+	hash := h.Sum64()
+	// Ensure there are at least 9 characters for the dash and hash
+	maxDocdbLen := CNPG_MAX_CLUSTER_NAME_LENGTH - 9
+	ret = fmt.Sprintf("%.*s-%x", maxDocdbLen, docdbName, hash)
+
+	// Truncate hash if still too long
+	if len(ret) > CNPG_MAX_CLUSTER_NAME_LENGTH {
+		ret = ret[:CNPG_MAX_CLUSTER_NAME_LENGTH]
+	}
+
+	return ret
 }
