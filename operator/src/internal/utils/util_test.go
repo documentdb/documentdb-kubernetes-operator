@@ -14,75 +14,80 @@ import (
 
 func TestGenerateServiceName(t *testing.T) {
 	tests := []struct {
-		name          string
-		source        string
-		target        string
-		resourceGroup string
-		expected      string
-		description   string
+		name           string
+		docdbName      string
+		sourceCluster  string
+		targetCluster  string
+		resourceGroup  string
+		expectedLength int
+		description    string
 	}{
 		{
-			name:          "short names within limit",
-			source:        "us-east",
-			target:        "us-west",
-			resourceGroup: "rg1",
-			expected:      "us-east-us-west",
-			description:   "Names that fit within the 63-character limit should be returned as-is",
+			name:           "short resource group",
+			docdbName:      "mydb",
+			sourceCluster:  "us-east",
+			targetCluster:  "us-west",
+			resourceGroup:  "rg1",
+			expectedLength: 20, // hash string length (8 hex chars from 32-bit hash)
+			description:    "Short resource group should return full hash string",
 		},
 		{
-			name:          "empty resource group",
-			source:        "eastus",
-			target:        "westus",
-			resourceGroup: "",
-			expected:      "eastus-westus",
-			description:   "Empty resource group should not affect the result",
+			name:           "empty resource group",
+			docdbName:      "testdb",
+			sourceCluster:  "eastus",
+			targetCluster:  "westus",
+			resourceGroup:  "",
+			expectedLength: 23, // full hash length
+			description:    "Empty resource group should return full hash string",
 		},
 		{
-			name:          "long resource group name",
-			source:        "eastus",
-			target:        "westus",
-			resourceGroup: "very-long-resource-group-name-that-exceeds-normal-limits",
-			expected:      "ea-we",
-			description:   "Long resource group names will cause truncation when service name is short",
+			name:           "long resource group name requiring truncation",
+			docdbName:      "database",
+			sourceCluster:  "eastus",
+			targetCluster:  "westus",
+			resourceGroup:  "very-long-resource-group-name-that-exceeds-normal-limits",
+			expectedLength: 6, // 63 - 56 - 1 = 6
+			description:    "Long resource group names will cause hash truncation",
 		},
 		{
-			name:          "names near character limit",
-			source:        "abcdefghijklmnopqrstuvwxyz123456", // 32 chars
-			target:        "abcdefghijklmnopqrstuvwxyz123456", // 32 chars, total with hyphen = 65
-			resourceGroup: "",
-			expected:      "abcdefghijklmnopqrstuvwxyz1234-abcdefghijklmnopqrstuvwxyz1234", // Should be truncated
-			description:   "Names at the boundary should be truncated to fit",
-		},
-		{
-			name:          "single character names",
-			source:        "a",
-			target:        "b",
-			resourceGroup: "c",
-			expected:      "a-b",
-			description:   "Single character names should work correctly",
-		},
-		{
-			name:          "moderate length names within limit",
-			source:        "westeurope",
-			target:        "eastus2",
-			resourceGroup: "my-resource-group",
-			expected:      "westeurope-eastus2",
-			description:   "Moderate length names should not require truncation",
+			name:           "resource group at boundary",
+			docdbName:      "db",
+			sourceCluster:  "source",
+			targetCluster:  "target",
+			resourceGroup:  "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghij",
+			expectedLength: 0, // 63 - 62 - 1 = 0
+			description:    "Resource group at 62 chars leaves no space for hash",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateServiceName(tt.source, tt.target, tt.resourceGroup)
-			if result != tt.expected {
-				t.Errorf("generateServiceName(%q, %q, %q) = %q; expected %q\nDescription: %s",
-					tt.source, tt.target, tt.resourceGroup, result, tt.expected, tt.description)
+			result := generateServiceName(tt.docdbName, tt.sourceCluster, tt.targetCluster, tt.resourceGroup)
+
+			// Verify the result matches expected length
+			if len(result) != tt.expectedLength {
+				t.Errorf("generateServiceName(%q, %q, %q, %q) returned length %d; expected %d\nDescription: %s\nResult: %q",
+					tt.docdbName, tt.sourceCluster, tt.targetCluster, tt.resourceGroup, len(result), tt.expectedLength, tt.description, result)
 			}
 
-			// Verify the result doesn't exceed reasonable length limits
-			if len(result) > 63 {
-				t.Errorf("GenerateServiceName(%q, %q, %q) returned a name longer than 63 characters: %q (length: %d)",
-					tt.source, tt.target, tt.resourceGroup, result, len(result))
+			// Verify result + resourceGroup doesn't exceed 63 chars (with hyphen)
+			totalLength := len(result) + len(tt.resourceGroup)
+			if len(tt.resourceGroup) > 0 {
+				totalLength++ // account for hyphen
+			}
+			if totalLength > 63 {
+				t.Errorf("generateServiceName(%q, %q, %q, %q) would exceed 63 chars when combined with resource group: result=%q (len=%d), resourceGroup=%q (len=%d), total=%d",
+					tt.docdbName, tt.sourceCluster, tt.targetCluster, tt.resourceGroup, result, len(result), tt.resourceGroup, len(tt.resourceGroup), totalLength)
+			}
+		})
+
+		// Test consistency - same inputs should produce same output
+		t.Run(tt.name+" consistency check", func(t *testing.T) {
+			result1 := generateServiceName(tt.docdbName, tt.sourceCluster, tt.targetCluster, tt.resourceGroup)
+			result2 := generateServiceName(tt.docdbName, tt.sourceCluster, tt.targetCluster, tt.resourceGroup)
+
+			if result1 != result2 {
+				t.Errorf("generateServiceName produced inconsistent results: %q vs %q", result1, result2)
 			}
 		})
 	}

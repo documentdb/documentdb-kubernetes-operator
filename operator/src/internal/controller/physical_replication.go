@@ -31,8 +31,6 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	replicationContext *util.ReplicationContext,
 	cnpgCluster *cnpgv1.Cluster,
 ) error {
-	isPrimary := documentdb.Spec.ClusterReplication.Primary == replicationContext.Self
-
 	if replicationContext.IsAzureFleetNetworking() {
 		err := r.CreateServiceImportAndExport(ctx, replicationContext, documentdb)
 		if err != nil {
@@ -48,11 +46,11 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	// No more errors possible, so we can safely edit the spec
 	cnpgCluster.Name = replicationContext.Self
 
-	if !isPrimary {
+	if !replicationContext.IsPrimary() {
 		cnpgCluster.Spec.InheritedMetadata.Labels[util.LABEL_REPLICATION_CLUSTER_TYPE] = "replica"
 		cnpgCluster.Spec.Bootstrap = &cnpgv1.BootstrapConfiguration{
 			PgBaseBackup: &cnpgv1.BootstrapPgBaseBackup{
-				Source:   documentdb.Spec.ClusterReplication.Primary,
+				Source:   replicationContext.PrimaryCluster,
 				Database: "postgres",
 				Owner:    "postgres",
 			},
@@ -95,7 +93,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 
 	cnpgCluster.Spec.ReplicaCluster = &cnpgv1.ReplicaClusterConfiguration{
 		Source:  replicationContext.GetReplicationSource(),
-		Primary: documentdb.Spec.ClusterReplication.Primary,
+		Primary: replicationContext.PrimaryCluster,
 		Self:    replicationContext.Self,
 	}
 
@@ -106,7 +104,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 				Additional: []cnpgv1.ManagedService{},
 			},
 		}
-		for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Namespace) {
+		for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
 			cnpgCluster.Spec.Managed.Services.Additional = append(cnpgCluster.Spec.Managed.Services.Additional,
 				cnpgv1.ManagedService{
 					SelectorType: cnpgv1.ServiceSelectorTypeRW,
@@ -118,7 +116,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 				})
 		}
 	}
-	selfHost := documentdb.Name + "-rw." + documentdb.Namespace + ".svc"
+	selfHost := replicationContext.Self + "-rw." + documentdb.Namespace + ".svc"
 	cnpgCluster.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
 		{
 			Name: replicationContext.Self,
@@ -130,7 +128,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			},
 		},
 	}
-	for clusterName, serviceName := range replicationContext.GenerateExternalClusterServices(documentdb.Namespace, replicationContext.IsAzureFleetNetworking()) {
+	for clusterName, serviceName := range replicationContext.GenerateExternalClusterServices(documentdb.Name, documentdb.Namespace, replicationContext.IsAzureFleetNetworking()) {
 		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, cnpgv1.ExternalCluster{
 			Name: clusterName,
 			ConnectionParameters: map[string]string{
@@ -198,7 +196,7 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 }
 
 func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
-	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Namespace) {
+	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
 		foundServiceExport := &fleetv1alpha1.ServiceExport{}
 		err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: documentdb.Namespace}, foundServiceExport)
 		if err != nil && errors.IsNotFound(err) {
@@ -219,7 +217,7 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 	}
 
 	// Below is true because this function is only called if we are fleet enabled
-	for sourceServiceName := range replicationContext.GenerateIncomingServiceNames(documentdb.Namespace) {
+	for sourceServiceName := range replicationContext.GenerateIncomingServiceNames(documentdb.Name, documentdb.Namespace) {
 		foundMCS := &fleetv1alpha1.MultiClusterService{}
 		err := r.Get(ctx, types.NamespacedName{Name: sourceServiceName, Namespace: documentdb.Namespace}, foundMCS)
 		if err != nil && errors.IsNotFound(err) {

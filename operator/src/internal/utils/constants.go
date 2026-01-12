@@ -33,6 +33,8 @@ const (
 
 	CNPG_DEFAULT_STOP_DELAY = 30
 
+	CNPG_MAX_CLUSTER_NAME_LENGTH = 50
+
 	// JSON Patch paths
 	JSON_PATCH_PATH_REPLICA_CLUSTER      = "/spec/replica"
 	JSON_PATCH_PATH_POSTGRES_CONFIG      = "/spec/postgresql"

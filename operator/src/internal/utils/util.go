@@ -42,7 +42,7 @@ func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicatio
 	}
 
 	// Ensure service name doesn't exceed 63 characters (Kubernetes limit)
-	serviceName := DOCUMENTDB_SERVICE_PREFIX + replicationContext.Self
+	serviceName := DOCUMENTDB_SERVICE_PREFIX + documentdb.Name
 	if len(serviceName) > 63 {
 		serviceName = serviceName[:63]
 	}

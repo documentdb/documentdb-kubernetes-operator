@@ -67,7 +67,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if errors.IsNotFound(err) {
 			// DocumentDB resource not found, handle cleanup
 			logger.Info("DocumentDB resource not found. Cleaning up associated resources.")
-			if err := r.cleanupResources(ctx, req, documentdb); err != nil {
+			if err := r.cleanupResources(ctx, req); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -194,7 +194,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {
 		// Check if permissions have already been granted
 		checkCommand := "SELECT 1 FROM pg_roles WHERE rolname = 'streaming_replica' AND pg_has_role('streaming_replica', 'documentdb_admin_role', 'USAGE');"
-		output, err := r.executeSQLCommand(ctx, currentCnpgCluster, replicationContext, checkCommand, "check-permissions")
+		output, err := r.executeSQLCommand(ctx, currentCnpgCluster, checkCommand)
 		if err != nil {
 			logger.Error(err, "Failed to check if permissions already granted")
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
@@ -203,7 +203,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if !strings.Contains(output, "(1 row)") {
 			grantCommand := "GRANT documentdb_admin_role TO streaming_replica;"
 
-			if _, err := r.executeSQLCommand(ctx, currentCnpgCluster, replicationContext, grantCommand, "grant-permissions"); err != nil {
+			if _, err := r.executeSQLCommand(ctx, currentCnpgCluster, grantCommand); err != nil {
 				logger.Error(err, "Failed to grant permissions to streaming_replica")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
@@ -262,7 +262,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // cleanupResources handles the cleanup of associated resources when a DocumentDB resource is not found
-func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Request, documentdb *dbpreview.DocumentDB) error {
+func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Request) error {
 	log := log.FromContext(ctx)
 
 	// Cleanup ServiceAccount, Role and RoleBinding
@@ -415,7 +415,7 @@ func Promote(ctx context.Context, cli client.Client,
 }
 
 // executeSQLCommand executes SQL commands directly in the postgres container of a running pod
-func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *cnpgv1.Cluster, replicationContext *util.ReplicationContext, sqlCommand, uniqueName string) (string, error) {
+func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *cnpgv1.Cluster, sqlCommand string) (string, error) {
 	logger := log.FromContext(ctx)
 
 	var targetPod corev1.Pod
