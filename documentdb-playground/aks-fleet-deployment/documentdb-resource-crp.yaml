@@ -47,13 +47,36 @@ spec:
 apiVersion: placement.kubernetes-fleet.io/v1beta1
 kind: ClusterResourcePlacement
 metadata:
-  name: documentdb-crp
+  name: documentdb-namespace-crp
 spec:
   resourceSelectors:
     - group: ""
       version: v1
       kind: Namespace
       name: documentdb-preview-ns
+      selectionScope: NamespaceOnly # only namespace itself is placed, no resources within the namespace
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+
+---
+# Application team manages resources using RP
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ResourcePlacement
+metadata:
+  name: documentdb-resource-rp
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - group: db.microsoft.com
+      kind: DocumentDB
+      version: preview
+      name: documentdb-preview
+    - group: ""
+      version: v1
+      kind: Secret
+      name: documentdb-credentials
   policy:
     placementType: PickAll
   strategy:

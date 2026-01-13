@@ -8,6 +8,7 @@ metadata:
   labels:
     app: sidecar-injector
     cnpg.io/pluginName: cnpg-i-sidecar-injector.documentdb.io
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
   name: sidecar-injector
   namespace: cnpg-system
 spec:

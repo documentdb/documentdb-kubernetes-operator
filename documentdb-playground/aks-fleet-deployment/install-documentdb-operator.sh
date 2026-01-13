@@ -8,13 +8,11 @@ set -euo pipefail
 #  - Package the local chart (if needed) and install the operator via Helm.
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
-HUB_CONTEXT=${HUB_CONTEXT:-hub}
+HUB_REGION="${HUB_REGION:-westus3}"
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/operator/documentdb-helm-chart"
 VERSION="${VERSION:-200}"
 VALUES_FILE="${VALUES_FILE:-}"
-
-# Helper: print and run
-run() { echo "+ $*"; "$@"; }
+BUILD_CHART="${BUILD_CHART:-true}"
 
 # Make sure we have the basics
 for cmd in az kubectl helm jq; do
@@ -24,76 +22,73 @@ for cmd in az kubectl helm jq; do
   fi
 done
 
-# Verify we can talk to the hub API
-echo "Verifying API connectivity to hub context ($HUB_CONTEXT)..."
-if ! kubectl --context "$HUB_CONTEXT" get ns ; then
-  echo "Error: unable to talk to cluster using context '$HUB_CONTEXT'. Check credentials and RBAC." >&2
-  kubectl --context "$HUB_CONTEXT" config view --minify
-  exit 1
-fi
+# Get the hub cluster context name
+MEMBERS=$(az aks list -g "$RESOURCE_GROUP" -o json | jq -r '.[] | select(.name|startswith("member-")) | .name')
+for cluster in $MEMBERS; do
+  echo "Fetching creds for $cluster..."
+  az aks get-credentials -g "$RESOURCE_GROUP" -n "$cluster" --overwrite-existing
+  if [[ "$cluster" == *"$HUB_REGION"* ]]; then HUB_CLUSTER="$cluster"; fi
+done
 
-# Build/package chart if local tgz not present
-CHART_PKG="./documentdb-operator-0.0.${VERSION}.tgz"
-if [ -f "$CHART_PKG" ]; then
-  echo "Found existing chart package $CHART_PKG"
-  rm -f "$CHART_PKG"
-fi
-echo "Packaging chart (helm dependency update && helm package)..."
-run helm dependency update "$CHART_DIR"
-run helm package "$CHART_DIR" --version 0.0."${VERSION}"
+# Build/package chart, removing old version
+if [ "$BUILD_CHART" == true ]; then
+  CHART_PKG="./documentdb-operator-0.0.${VERSION}.tgz"
+  if [ -f "$CHART_PKG" ]; then
+    echo "Found existing chart package $CHART_PKG"
+    rm -f "$CHART_PKG"
+  fi
+  echo "Packaging chart (helm dependency update && helm package)..."
+  helm dependency update "$CHART_DIR"
+  helm package "$CHART_DIR" --version 0.0."${VERSION}"
 
-
-# Install/upgrade operator using the packaged chart if available, otherwise fallback to OCI registry
-if [ -f "$CHART_PKG" ]; then
-  echo "Installing operator from package $CHART_PKG into namespace documentdb-operator on context $HUB_CONTEXT"
+  echo "Installing operator from package $CHART_PKG into namespace documentdb-operator on context $HUB_CLUSTER"
   if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
     echo "Using values file: $VALUES_FILE"
-    run helm upgrade --install documentdb-operator "$CHART_PKG" \
+    helm upgrade --install documentdb-operator "$CHART_PKG" \
       --namespace documentdb-operator \
-      --kube-context "$HUB_CONTEXT" \
+      --kube-context "$HUB_CLUSTER" \
       --create-namespace \
       --values "$VALUES_FILE"
   else
-    run helm upgrade --install documentdb-operator "$CHART_PKG" \
+    helm upgrade --install documentdb-operator "$CHART_PKG" \
       --namespace documentdb-operator \
-      --kube-context "$HUB_CONTEXT" \
+      --kube-context "$HUB_CLUSTER" \
       --create-namespace
   fi
 else
-  echo "Package not found. Installing from OCI registry (requires helm v3.8+)..."
+  echo "Installing from OCI registry (requires helm v3.8+)..."
   if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
     echo "Using values file: $VALUES_FILE"
-    run helm upgrade --install documentdb-operator \
-      oci://ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb-operator \
+    helm upgrade --install documentdb-operator \
+      oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator \
       --version 0.0.1 \
       --namespace documentdb-operator \
-      --kube-context "$HUB_CONTEXT" \
+      --kube-context "$HUB_CLUSTER" \
       --create-namespace \
       --values "$VALUES_FILE"
   else
-    run helm upgrade --install documentdb-operator \
-      oci://ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb-operator \
+    helm upgrade --install documentdb-operator \
+      oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator \
       --version 0.0.1 \
       --namespace documentdb-operator \
-      --kube-context "$HUB_CONTEXT" \
+      --kube-context "$HUB_CLUSTER" \
       --create-namespace
   fi
 fi
 
-kubectl --context "$HUB_CONTEXT"  apply -f ./documentdb-base.yaml
+kubectl --context "$HUB_CLUSTER" apply -f ./documentdb-operator-crp.yaml
 
 # Get all member clusters
-MEMBER_CLUSTERS=$(az aks list -g "$RESOURCE_GROUP" -o json | jq -r '.[] | select(.name|startswith("member-")) | .name')
 
 # Show status on all member clusters
 echo "Checking operator status on all member clusters..."
 
-for CLUSTER in $MEMBER_CLUSTERS; do
+for CLUSTER in $MEMBERS; do
   echo ""
   echo "======================================="
   echo "Cluster: $CLUSTER"
   echo "======================================="
-  
+
   # Get the context name for this cluster
   CONTEXT="$CLUSTER"
 
@@ -109,14 +104,14 @@ for CLUSTER in $MEMBER_CLUSTERS; do
     echo "✓ Operator rollout completed successfully on $CLUSTER"
   fi
   echo ""
-  
+
   echo "Operator deployments in $CLUSTER:"
   kubectl --context "$CONTEXT" get deploy -n documentdb-operator -o wide 2>/dev/null || echo "  No deployments found or unable to connect"
-  
+
   echo ""
   echo "Operator pods in $CLUSTER:"
   kubectl --context "$CONTEXT" get pods -n documentdb-operator -o wide 2>/dev/null || echo "  No pods found or unable to connect"
-  
+
   echo ""
   echo "cnpg-system pods in $CLUSTER:"
   kubectl --context "$CONTEXT" get pods -n cnpg-system -o wide 2>/dev/null || echo "  No pods found or unable to connect"
@@ -130,7 +125,7 @@ echo "======================================="
 # Show a summary table
 echo ""
 echo "Deployment Status Summary:"
-for CLUSTER in $MEMBER_CLUSTERS; do
+for CLUSTER in $MEMBERS; do
   READY=$(kubectl --context "$CLUSTER" get deploy documentdb-operator -n documentdb-operator -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
   DESIRED=$(kubectl --context "$CLUSTER" get deploy documentdb-operator -n documentdb-operator -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
   echo "  $CLUSTER: $READY/$DESIRED replicas ready"
