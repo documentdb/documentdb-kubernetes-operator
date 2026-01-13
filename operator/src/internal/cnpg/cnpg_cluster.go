@@ -8,6 +8,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
@@ -55,7 +56,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
 				Instances: documentdb.Spec.InstancesPerNode,
-				ImageName: documentdb_image,
+				ImageName: "ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm ", // TODO: Update to other pg images as needed
 				StorageConfiguration: cnpgv1.StorageConfiguration{
 					StorageClass: storageClassPointer, // Use configured storage class or default
 					Size:         documentdb.Spec.Resource.Storage.PvcSize,
@@ -76,6 +77,14 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresUID: 105,
 				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Extensions: []cnpgv1.ExtensionConfiguration{
+						{
+							Name: "documentdb",
+							ImageVolumeSource: corev1.ImageVolumeSource{
+								Reference: documentdb_image,
+							},
+						},
+					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
 					Parameters: map[string]string{
 						"cron.database_name":    "postgres",
