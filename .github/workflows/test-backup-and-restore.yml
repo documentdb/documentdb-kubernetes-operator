@@ -355,3 +355,158 @@ jobs:
         done
         echo "❌ Expired backup was not cleaned up within expected time."
         exit 1  
+     
+    - name: Test PVC retention after DocumentDB deletion
+      shell: bash
+      run: |
+        echo "Testing PVC retention after DocumentDB deletion..."
+        
+        # Get the PVC name before deleting the DocumentDB
+        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l documentdb.io/cluster=${{ env.DB_RESTORE_NAME }} -o jsonpath='{.items[0].metadata.name}')
+        echo "PVC name: $pvc_name"
+        
+        if [ -z "$pvc_name" ]; then
+          echo "❌ Failed to find PVC for cluster ${{ env.DB_RESTORE_NAME }}"
+          exit 1
+        fi
+        
+        # Delete the restored DocumentDB cluster
+        kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_RESTORE_NAME }} --wait=false
+        
+        # Wait for DocumentDB to be deleted
+        echo "Waiting for DocumentDB to be deleted..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          db_exists=$(kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }} --ignore-not-found)
+          if [ -z "$db_exists" ]; then
+            echo "✓ DocumentDB deleted successfully."
+            break
+          else
+            echo "DocumentDB still exists. Waiting..."
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        # Verify PVC still exists
+        pvc_exists=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name --ignore-not-found)
+        if [ -n "$pvc_exists" ]; then
+          echo "✓ PVC $pvc_name retained after DocumentDB deletion"
+        else
+          echo "❌ PVC $pvc_name was deleted unexpectedly"
+          exit 1
+        fi
+        
+        # Store PVC name for later steps
+        echo "$pvc_name" > /tmp/retained_pvc_name
+
+    - name: Restore DocumentDB from retained PVC
+      shell: bash
+      run: |
+        pvc_name=$(cat /tmp/retained_pvc_name)
+        echo "Restoring DocumentDB from PVC: $pvc_name"
+        
+        # Create DocumentDB resource with PVC recovery
+        cat <<EOF | kubectl apply -f -
+        apiVersion: documentdb.io/preview
+        kind: DocumentDB
+        metadata:
+          name: ${{ env.DB_RESTORE_NAME }}-from-pvc
+          namespace: ${{ env.DB_NS }}
+        spec:
+          nodeCount: ${{ matrix.node_count }}
+          instancesPerNode: ${{ matrix.instances_per_node }}
+          documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          resource:
+            storage:
+              pvcSize: 5Gi
+              storageClass: csi-hostpath-sc
+          exposeViaService:
+            serviceType: ClusterIP
+          bootstrap:
+            recovery:
+              pvc:
+                name: $pvc_name
+        EOF
+
+    - name: Setup port forwarding for PVC restored cluster
+      uses: ./.github/actions/setup-port-forwarding
+      with:
+        namespace: ${{ env.DB_NS }}
+        cluster-name: ${{ env.DB_RESTORE_NAME }}-from-pvc
+        port: ${{ env.DB_PORT }}
+        architecture: ${{ matrix.architecture }}
+        test-type: 'comprehensive'
+
+    - name: Validate data exists after PVC restoration
+      run: |
+        echo "Validating data exists after PVC restoration..."
+        
+        # Validate that the restored cluster has the expected data
+        count=$(mongosh 127.0.0.1:$DB_PORT --quiet --eval "db.testCollection.countDocuments({})" -u $DB_USERNAME -p $DB_PASSWORD --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates)
+        if [ "$count" -eq 100 ]; then
+          echo "✓ Data validation completed successfully after PVC restoration on ${{ matrix.architecture }}"
+        else
+          echo "❌ Data validation failed after PVC restoration on ${{ matrix.architecture }}. Count: $count"
+          exit 1
+        fi
+
+    - name: Cleanup PVC restored cluster port forwarding
+      if: always()
+      run: |
+        # Stop port-forward if it exists
+        if [ -f /tmp/pf_pid ]; then
+          PF_PID=$(cat /tmp/pf_pid)
+          kill $PF_PID 2>/dev/null || true
+          rm -f /tmp/pf_pid
+        fi
+        
+        # Clean up output log
+        rm -f /tmp/pf_output.log
+
+    - name: Test PVC cleanup after retention period
+      shell: bash
+      run: |
+        pvc_name=$(cat /tmp/retained_pvc_name)
+        echo "Testing PVC cleanup after retention period expires..."
+        echo "Using PVC from deleted restored DocumentDB: $pvc_name"
+        
+        # Get the retention days from the PVC annotation
+        retention_days=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.metadata.annotations.documentdb\.io/pvc-retention-days}')
+        if [ -z "$retention_days" ]; then
+          echo "❌ No retention days annotation found on PVC $pvc_name"
+          kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.metadata.annotations}'
+          exit 1
+        fi
+        echo "Current PVC retention period: $retention_days days"
+        
+        # Set retention days to 0 to simulate immediate deletion after retention period
+        echo "Setting retention days to 0 to simulate expired retention period..."
+        kubectl -n ${{ env.DB_NS }} annotate pvc $pvc_name documentdb.io/pvc-retention-days=0 --overwrite
+        
+        # Wait for PVC to be cleaned up
+        echo "Waiting for PVC to be cleaned up..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          pvc_exists=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name --ignore-not-found)
+          if [ -z "$pvc_exists" ]; then
+            echo "✓ PVC $pvc_name cleaned up successfully after retention period"
+            exit 0
+          else
+            echo "PVC still exists. Checking annotations..."
+            kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.metadata.annotations}'
+            echo ""
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        echo "❌ PVC was not cleaned up within expected time"
+        kubectl -n ${{ env.DB_NS }} describe pvc $pvc_name
+        
+        exit 1
