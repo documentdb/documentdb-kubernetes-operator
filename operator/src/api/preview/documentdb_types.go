@@ -86,6 +86,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines backup recovery settings.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.pvc) && self.pvc.name != '')",message="cannot specify both backup and pvc recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional

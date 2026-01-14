@@ -79,7 +79,23 @@ spec:
                         required:
                         - name
                         type: object
+                      pvc:
+                        description: |-
+                          PVC specifies the source PVC to restore from.
+                          Cannot be used together with Backup.
+                        properties:
+                          name:
+                            description: Name of the referent.
+                            type: string
+                        required:
+                        - name
+                        type: object
                     type: object
+                    x-kubernetes-validations:
+                    - message: cannot specify both backup and pvc recovery at the
+                        same time
+                      rule: '!(has(self.backup) && self.backup.name != '''' && has(self.pvc)
+                        && self.pvc.name != '''')'
                 type: object
               clusterReplication:
                 description: ClusterReplication configures cross-cluster replication
@@ -198,6 +214,15 @@ spec:
                   storage:
                     description: Storage configuration for DocumentDB persistent volumes.
                     properties:
+                      pvcRetentionDays:
+                        default: 7
+                        description: |-
+                          PvcRetentionDays specifies how many days PVCs should be retained after the DocumentDB cluster is deleted.
+                          This allows for data recovery after accidental cluster deletion.
+                          Set to 0 for immediate deletion (default behavior: 7 days).
+                        maximum: 365
+                        minimum: 0
+                        type: integer
                       pvcSize:
                         description: PvcSize is the size of the persistent volume
                           claim for DocumentDB storage (e.g., "10Gi").

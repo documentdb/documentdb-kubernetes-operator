@@ -29,7 +29,6 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/internal/controller"
-	webhookpreview "github.com/documentdb/documentdb-operator/internal/webhook/preview"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -237,12 +236,6 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("scheduled-backup-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ScheduledBackup")
-		os.Exit(1)
-	}
-
-	// Setup webhooks
-	if err = webhookpreview.SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "DocumentDB")
 		os.Exit(1)
 	}
 

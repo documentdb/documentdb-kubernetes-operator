@@ -296,7 +296,7 @@ func ClusterRetentionChangedPredicate() predicate.Predicate {
 			oldCluster := e.ObjectOld.(*dbpreview.DocumentDB)
 			newCluster := e.ObjectNew.(*dbpreview.DocumentDB)
 
-			// Only trigger if the specific field we care about has changed
+			// Only trigger if PvcRetentionDays has changed
 			return oldCluster.Spec.Resource.Storage.PvcRetentionDays != newCluster.Spec.Resource.Storage.PvcRetentionDays
 		},
 	}
