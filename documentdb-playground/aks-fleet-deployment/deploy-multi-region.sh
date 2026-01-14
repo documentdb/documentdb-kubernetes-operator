@@ -92,7 +92,7 @@ echo "======================================="
 
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   echo ""
-  echo "Processing ConfigMaps for $cluster..."
+  echo "Processing ConfigMap for $cluster..."
   
   # Check if context exists
   if ! kubectl config get-contexts "$cluster" &>/dev/null; then
@@ -110,7 +110,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   if kubectl --context "$cluster" get configmap cluster-name -n kube-system &>/dev/null; then
     echo "✓ ConfigMap created/updated for $cluster"
   else
-    echo "✗ Failed to create ConfigMap cluster-name for $cluster"
+    echo "✗ Failed to create ConfigMap for $cluster"
   fi
 done
 
