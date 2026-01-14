@@ -121,14 +121,14 @@ type StorageConfiguration struct {
 	// If not specified, the cluster's default storage class will be used.
 	StorageClass string `json:"storageClass,omitempty"`
 
-	// PvcRetentionPeriodDays specifies how many days PVCs should be retained after the DocumentDB cluster is deleted.
+	// PvcRetentionDays specifies how many days PVCs should be retained after the DocumentDB cluster is deleted.
 	// This allows for data recovery after accidental cluster deletion.
 	// Set to 0 for immediate deletion (default behavior: 7 days).
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=365
 	// +kubebuilder:default=7
 	// +optional
-	PvcRetentionPeriodDays int `json:"pvcRetentionPeriodDays,omitempty"`
+	PvcRetentionDays int `json:"pvcRetentionDays,omitempty"`
 }
 
 type ClusterReplication struct {

@@ -386,7 +386,7 @@ var _ = Describe("PVC Controller", func() {
 			It("should set annotation from cluster when no annotation exists", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 14
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 14
 
 				// Create PVC with documentdb.io/cluster label but no retention annotation
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -403,7 +403,7 @@ var _ = Describe("PVC Controller", func() {
 				updated := &corev1.PersistentVolumeClaim{}
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
-				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(14))))
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("14"))
 			})
 		})
 
@@ -411,12 +411,12 @@ var _ = Describe("PVC Controller", func() {
 			It("should update annotation when value differs from cluster", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 14
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 14
 
 				// Create PVC with old retention value
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
 				pvc.Annotations = map[string]string{
-					"documentdb.io/pvc-retention-days": string(rune(7)),
+					"documentdb.io/pvc-retention-days": "7",
 				}
 
 				fakeClient := fake.NewClientBuilder().
@@ -431,18 +431,18 @@ var _ = Describe("PVC Controller", func() {
 				updated := &corev1.PersistentVolumeClaim{}
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
-				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(14))))
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("14"))
 			})
 
 			It("should not modify annotation when value matches cluster", func() {
 				// Create DocumentDB with retention period
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 				// Create PVC with correct retention value
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
 				pvc.Annotations = map[string]string{
-					"documentdb.io/pvc-retention-days": string(rune(7)),
+					"documentdb.io/pvc-retention-days": "7",
 					"custom-annotation":                "custom-value",
 				}
 
@@ -458,7 +458,7 @@ var _ = Describe("PVC Controller", func() {
 				updated := &corev1.PersistentVolumeClaim{}
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
-				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(7))))
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("7"))
 				Expect(updated.Annotations["custom-annotation"]).To(Equal("custom-value"))
 			})
 		})
@@ -467,7 +467,7 @@ var _ = Describe("PVC Controller", func() {
 			It("should set annotation to zero", func() {
 				// Create DocumentDB with zero retention period (retain forever)
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 0
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 0
 
 				// Create PVC with documentdb.io/cluster label
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -484,7 +484,7 @@ var _ = Describe("PVC Controller", func() {
 				updated := &corev1.PersistentVolumeClaim{}
 				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: pvcName, Namespace: pvcNamespace}, updated)).To(Succeed())
 				Expect(updated.Annotations).ToNot(BeNil())
-				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal(string(rune(0))))
+				Expect(updated.Annotations["documentdb.io/pvc-retention-days"]).To(Equal("0"))
 			})
 		})
 	})
@@ -494,7 +494,7 @@ var _ = Describe("PVC Controller", func() {
 			It("should add finalizer if not exists", func() {
 				// Create DocumentDB and PVC without finalizer
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
 				// No finalizers initially
@@ -516,7 +516,7 @@ var _ = Describe("PVC Controller", func() {
 			It("should do nothing if finalizer already exists", func() {
 				// Create DocumentDB and PVC with finalizer already present
 				documentDB := createDocumentDB(clusterName, pvcNamespace)
-				documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+				documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 				pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
 				pvc.Finalizers = []string{PVCFinalizerName, "some-other-finalizer"}
@@ -538,10 +538,10 @@ var _ = Describe("PVC Controller", func() {
 
 		Context("when PVC is deleted (deletionTimestamp is not null)", func() {
 			Context("and retention period has not been exceeded", func() {
-				It("should add finalizer if not exists", func() {
+				It("should add finalizer if not exists and requeue after retention period", func() {
 					// Create DocumentDB
 					documentDB := createDocumentDB(clusterName, pvcNamespace)
-					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+					documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 					// Create PVC with deletionTimestamp (being deleted)
 					// Must have at least one finalizer for Kubernetes to accept deletionTimestamp
@@ -559,7 +559,17 @@ var _ = Describe("PVC Controller", func() {
 						Build()
 
 					reconciler := &PVCReconciler{Client: fakeClient}
-					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+					req := ctrl.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      pvcName,
+							Namespace: pvcNamespace,
+						},
+					}
+					result, err := reconciler.Reconcile(ctx, req)
+					Expect(err).ToNot(HaveOccurred())
+					// Should requeue to check retention expiration later
+					Expect(result.Requeue).To(BeFalse())
+					Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 					// Verify our finalizer was added
 					updated := &corev1.PersistentVolumeClaim{}
@@ -568,10 +578,10 @@ var _ = Describe("PVC Controller", func() {
 					Expect(updated.Finalizers).To(ContainElement("some-other-finalizer"))
 				})
 
-				It("should do nothing if finalizer already exists", func() {
+				It("should keep finalizer and requeue after retention period if finalizer already exists", func() {
 					// Create DocumentDB
 					documentDB := createDocumentDB(clusterName, pvcNamespace)
-					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+					documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 					// Create PVC with deletionTimestamp and existing finalizer
 					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -588,7 +598,17 @@ var _ = Describe("PVC Controller", func() {
 						Build()
 
 					reconciler := &PVCReconciler{Client: fakeClient}
-					reconcileAndExpectSuccess(reconciler, pvcName, pvcNamespace)
+					req := ctrl.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      pvcName,
+							Namespace: pvcNamespace,
+						},
+					}
+					result, err := reconciler.Reconcile(ctx, req)
+					Expect(err).ToNot(HaveOccurred())
+					// Should requeue to check retention expiration later
+					Expect(result.Requeue).To(BeFalse())
+					Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 
 					// Verify finalizers remain unchanged
 					updated := &corev1.PersistentVolumeClaim{}
@@ -601,7 +621,7 @@ var _ = Describe("PVC Controller", func() {
 				It("should remove finalizer if exists", func() {
 					// Create DocumentDB
 					documentDB := createDocumentDB(clusterName, pvcNamespace)
-					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+					documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 					// Create PVC with deletionTimestamp from 10 days ago (exceeded 7 day retention)
 					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -630,7 +650,7 @@ var _ = Describe("PVC Controller", func() {
 				It("should do nothing if finalizer does not exist", func() {
 					// Create DocumentDB
 					documentDB := createDocumentDB(clusterName, pvcNamespace)
-					documentDB.Spec.Resource.Storage.PvcRetentionPeriodDays = 7
+					documentDB.Spec.Resource.Storage.PvcRetentionDays = 7
 
 					// Create PVC with deletionTimestamp from 10 days ago (exceeded 7 day retention)
 					pvc := createPVC(pvcName, pvcNamespace, map[string]string{"documentdb.io/cluster": clusterName}, nil)
@@ -660,7 +680,7 @@ var _ = Describe("PVC Controller", func() {
 	})
 
 	Describe("ClusterRetentionChangedPredicate", func() {
-		It("should return true when PvcRetentionPeriodDays changes", func() {
+		It("should return true when PvcRetentionDays changes", func() {
 			oldCluster := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -669,8 +689,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 7,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 7,
 						},
 					},
 				},
@@ -684,8 +704,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 14,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 14,
 						},
 					},
 				},
@@ -700,7 +720,7 @@ var _ = Describe("PVC Controller", func() {
 			Expect(predicate.Update(updateEvent)).To(BeTrue())
 		})
 
-		It("should return false when PvcRetentionPeriodDays does not change", func() {
+		It("should return false when PvcRetentionDays does not change", func() {
 			oldCluster := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -709,8 +729,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 7,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 7,
 						},
 					},
 				},
@@ -724,8 +744,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "20Gi", // Different field changed
-							PvcRetentionPeriodDays: 7,      // Same value
+							PvcSize:          "20Gi", // Different field changed
+							PvcRetentionDays: 7,      // Same value
 						},
 					},
 				},
@@ -740,7 +760,7 @@ var _ = Describe("PVC Controller", func() {
 			Expect(predicate.Update(updateEvent)).To(BeFalse())
 		})
 
-		It("should return false when PvcRetentionPeriodDays is the same (both zero)", func() {
+		It("should return false when PvcRetentionDays is the same (both zero)", func() {
 			oldCluster := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -749,8 +769,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 0,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 0,
 						},
 					},
 				},
@@ -764,8 +784,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 0,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 0,
 						},
 					},
 				},
@@ -780,7 +800,7 @@ var _ = Describe("PVC Controller", func() {
 			Expect(predicate.Update(updateEvent)).To(BeFalse())
 		})
 
-		It("should return true when PvcRetentionPeriodDays changes from 0 to non-zero", func() {
+		It("should return true when PvcRetentionDays changes from 0 to non-zero", func() {
 			oldCluster := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -789,8 +809,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 0,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 0,
 						},
 					},
 				},
@@ -804,8 +824,8 @@ var _ = Describe("PVC Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                "10Gi",
-							PvcRetentionPeriodDays: 30,
+							PvcSize:          "10Gi",
+							PvcRetentionDays: 30,
 						},
 					},
 				},

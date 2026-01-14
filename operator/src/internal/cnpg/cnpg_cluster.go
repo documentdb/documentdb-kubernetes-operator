@@ -124,7 +124,7 @@ func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion
 			return &cnpgv1.BootstrapConfiguration{
 				Recovery: &cnpgv1.BootstrapRecovery{
 					Backup: &cnpgv1.BackupSource{
-						LocalObjectReference: cnpgv1.LocalObjectReference{Name: backupName},
+						LocalObjectReference: recovery.Backup,
 					},
 				},
 			}
