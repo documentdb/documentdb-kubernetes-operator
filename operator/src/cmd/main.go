@@ -239,10 +239,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.PVCReconciler{
+	if err = (&controller.PersistentVolumeReconciler{
 		Client: mgr.GetClient(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PVC")
+		setupLog.Error(err, "unable to create controller", "controller", "PersistentVolume")
 		os.Exit(1)
 	}
 

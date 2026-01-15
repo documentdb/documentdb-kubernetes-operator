@@ -86,7 +86,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines backup recovery settings.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.pvc) && self.pvc.name != '')",message="cannot specify both backup and pvc recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && size(self.backup.name) > 0 && has(self.pvc) && size(self.pvc.name) > 0)",message="cannot specify both backup and pvc recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
@@ -122,14 +122,14 @@ type StorageConfiguration struct {
 	// If not specified, the cluster's default storage class will be used.
 	StorageClass string `json:"storageClass,omitempty"`
 
-	// PvcRetentionDays specifies how many days PVCs should be retained after the DocumentDB cluster is deleted.
-	// This allows for data recovery after accidental cluster deletion.
-	// Set to 0 for immediate deletion (default behavior: 7 days).
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=365
-	// +kubebuilder:default=7
+	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+	// the DocumentDB cluster is deleted.
+	// Retain: The PV is kept after cluster deletion, allowing data recovery.
+	// Delete: The PV is deleted with the cluster (default behavior).
+	// +kubebuilder:validation:Enum=Retain;Delete
+	// +kubebuilder:default=Delete
 	// +optional
-	PvcRetentionDays int `json:"pvcRetentionDays,omitempty"`
+	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
 
 type ClusterReplication struct {

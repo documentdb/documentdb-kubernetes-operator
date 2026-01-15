@@ -94,8 +94,8 @@ spec:
                     x-kubernetes-validations:
                     - message: cannot specify both backup and pvc recovery at the
                         same time
-                      rule: '!(has(self.backup) && self.backup.name != '''' && has(self.pvc)
-                        && self.pvc.name != '''')'
+                      rule: '!(has(self.backup) && size(self.backup.name) > 0 && has(self.pvc)
+                        && size(self.pvc.name) > 0)'
                 type: object
               clusterReplication:
                 description: ClusterReplication configures cross-cluster replication
@@ -214,15 +214,17 @@ spec:
                   storage:
                     description: Storage configuration for DocumentDB persistent volumes.
                     properties:
-                      pvcRetentionDays:
-                        default: 7
+                      persistentVolumeReclaimPolicy:
+                        default: Delete
                         description: |-
-                          PvcRetentionDays specifies how many days PVCs should be retained after the DocumentDB cluster is deleted.
-                          This allows for data recovery after accidental cluster deletion.
-                          Set to 0 for immediate deletion (default behavior: 7 days).
-                        maximum: 365
-                        minimum: 0
-                        type: integer
+                          PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+                          the DocumentDB cluster is deleted.
+                          Retain: The PV is kept after cluster deletion, allowing data recovery.
+                          Delete: The PV is deleted with the cluster (default behavior).
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
                       pvcSize:
                         description: PvcSize is the size of the persistent volume
                           claim for DocumentDB storage (e.g., "10Gi").
