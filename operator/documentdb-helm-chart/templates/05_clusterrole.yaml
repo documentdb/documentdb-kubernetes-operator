@@ -56,3 +56,7 @@ rules:
 - apiGroups: ["snapshot.storage.k8s.io"]
   resources: ["volumesnapshotclasses"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# PersistentVolume permissions for PV controller
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "update", "patch"]

@@ -285,7 +285,6 @@ jobs:
             storage:
               pvcSize: 5Gi
               storageClass: csi-hostpath-sc
-              persistentVolumeReclaimPolicy: Retain
           exposeViaService:
             serviceType: ClusterIP
           bootstrap:
@@ -380,6 +379,41 @@ jobs:
           exit 1
         fi
         
+        # Check current PV reclaim policy - should be Delete by default
+        current_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+        echo "Current PV reclaim policy: $current_policy"
+        
+        if [ "$current_policy" != "Delete" ]; then
+          echo "⚠️ Expected PV reclaim policy to be 'Delete', but got '$current_policy'"
+        fi
+        
+        # Patch DocumentDB to set persistentVolumeReclaimPolicy to Retain
+        echo "Patching DocumentDB to set persistentVolumeReclaimPolicy to Retain..."
+        kubectl -n ${{ env.DB_NS }} patch documentdb ${{ env.DB_RESTORE_NAME }} --type=merge \
+          -p '{"spec":{"resource":{"storage":{"persistentVolumeReclaimPolicy":"Retain"}}}}'
+        
+        # Wait for PV controller to update the PV reclaim policy
+        echo "Waiting for PV reclaim policy to be updated to Retain..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=5
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          new_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+          if [ "$new_policy" == "Retain" ]; then
+            echo "✓ PV reclaim policy updated to Retain"
+            break
+          else
+            echo "PV reclaim policy is still '$new_policy'. Waiting..."
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        if [ "$new_policy" != "Retain" ]; then
+          echo "❌ PV reclaim policy was not updated to Retain within expected time"
+          exit 1
+        fi
+        
         # Delete the restored DocumentDB cluster
         kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_RESTORE_NAME }} --wait=false
         
@@ -400,7 +434,7 @@ jobs:
           ((++ITER))
         done
         
-        # Verify PV still exists
+        # Verify PV still exists (because reclaim policy is Retain)
         pv_exists=$(kubectl get pv $pv_name --ignore-not-found)
         if [ -n "$pv_exists" ]; then
           echo "✓ PV $pv_name retained after DocumentDB deletion"

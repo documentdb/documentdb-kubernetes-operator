@@ -240,8 +240,8 @@ func pvPredicate() predicate.Predicate {
 // SetupWithManager sets up the controller with the Manager
 func (r *PersistentVolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.PersistentVolume{}).
-		WithEventFilter(pvPredicate()).
+		// Apply pvPredicate only to PersistentVolume events, not globally
+		For(&corev1.PersistentVolume{}, builder.WithPredicates(pvPredicate())).
 		// Watch DocumentDB changes and trigger reconciliation of associated PVs
 		Watches(
 			&dbpreview.DocumentDB{},
