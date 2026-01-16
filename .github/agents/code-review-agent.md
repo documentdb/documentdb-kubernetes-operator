@@ -51,7 +51,7 @@ When reviewing code changes, evaluate the following areas:
 - [ ] Proper permission checks
 - [ ] Sensitive data not logged
 - [ ] Container security best practices followed
-- [ ] Supply chain: unsafe deps, license conflicts; recommend pinned versions. 
+- [ ] Supply chain: unsafe dependencies, license conflicts; recommend pinned versions. 
 
 ### 6. Performance
 - [ ] No unnecessary allocations in hot paths
@@ -113,7 +113,7 @@ Highlight well-written code or good practices.
 
 ## Project-Specific Context
 
-- **Language**: Go 1.21+
+- **Language**: Go 1.25.0+
 - **Framework**: Kubebuilder / controller-runtime
 - **Database**: DocumentDB (MongoDB-compatible)
 - **Deployment**: Kubernetes via Helm charts
