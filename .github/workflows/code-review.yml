@@ -1,0 +1,41 @@
+name: Code Review Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  models: read
+
+jobs:
+  code-review:
+    name: Run Code Review Agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Code Review Agent
+        uses: github/copilot-action@v1
+        with:
+          agent: ..github/agents/code-review-agent.md
+          prompt: |
+            Review this pull request thoroughly.
+            
+            Focus on:
+            - Code quality and Go best practices
+            - Kubernetes operator patterns
+            - Test coverage
+            - Security concerns
+            - Performance implications
+            - Documentation updates
+            
+            Provide constructive feedback using the severity levels defined in your instructions.
+            Run `go test ./...` to verify tests pass if relevant Go files were changed.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
