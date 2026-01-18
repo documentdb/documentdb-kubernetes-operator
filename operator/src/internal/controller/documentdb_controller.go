@@ -267,11 +267,9 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if documentdb extension needs to be updated
-	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) {
-		if err := r.updateDocumentDBExtensionIfNeeded(ctx, currentCnpgCluster); err != nil {
-			logger.Error(err, "Failed to update DocumentDB extension")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
+	if err := r.updateDocumentDBExtensionIfNeeded(ctx, currentCnpgCluster); err != nil {
+		logger.Error(err, "Failed to update DocumentDB extension")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
 	// Don't reque again unless there is a change
@@ -555,10 +553,40 @@ func (r *DocumentDBReconciler) updateDocumentDBExtensionImageIfNeeded(ctx contex
 	return nil
 }
 
+// parseExtensionVersionsFromOutput parses the output of pg_available_extensions query
+// Returns defaultVersion, installedVersion, and a boolean indicating if parsing was successful
+// Expected output format:
+//
+//	 default_version | installed_version
+//	-----------------+-------------------
+//	 0.110-0         | 0.110-0
+func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedVersion string, ok bool) {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 3 {
+		return "", "", false
+	}
+
+	// Parse the data row (3rd line, index 2)
+	dataLine := strings.TrimSpace(lines[2])
+	parts := strings.Split(dataLine, "|")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	defaultVersion = strings.TrimSpace(parts[0])
+	installedVersion = strings.TrimSpace(parts[1])
+	return defaultVersion, installedVersion, true
+}
+
 // updateDocumentDBExtensionIfNeeded checks if the installed documentdb extension version differs from the default version
 // and runs ALTER EXTENSION documentdb UPDATE if needed
 func (r *DocumentDBReconciler) updateDocumentDBExtensionIfNeeded(ctx context.Context, cluster *cnpgv1.Cluster) error {
 	logger := log.FromContext(ctx)
+
+	if !slices.Contains(cluster.Status.InstancesStatus[cnpgv1.PodHealthy], cluster.Status.CurrentPrimary) {
+		logger.Info("Current primary pod is not healthy; skipping DocumentDB extension version check")
+		return nil
+	}
 
 	// Query the extension versions
 	checkVersionSQL := "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'documentdb'"
@@ -568,26 +596,11 @@ func (r *DocumentDBReconciler) updateDocumentDBExtensionIfNeeded(ctx context.Con
 	}
 
 	// Parse the output to get default_version and installed_version
-	// Expected output format:
-	//  default_version | installed_version
-	// -----------------+-------------------
-	//  0.110-0         | 0.110-0
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) < 3 {
+	defaultVersion, installedVersion, ok := parseExtensionVersionsFromOutput(output)
+	if !ok {
 		logger.Info("DocumentDB extension not found or not installed yet", "output", output)
 		return nil
 	}
-
-	// Parse the data row (3rd line, index 2)
-	dataLine := strings.TrimSpace(lines[2])
-	parts := strings.Split(dataLine, "|")
-	if len(parts) != 2 {
-		logger.Info("Unexpected format from pg_available_extensions query", "output", output)
-		return nil
-	}
-
-	defaultVersion := strings.TrimSpace(parts[0])
-	installedVersion := strings.TrimSpace(parts[1])
 
 	// If installed_version is empty, extension is not installed
 	if installedVersion == "" {
