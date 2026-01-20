@@ -220,6 +220,9 @@ type DocumentDBStatus struct {
 	TargetPrimary    string `json:"targetPrimary,omitempty"`
 	LocalPrimary     string `json:"localPrimary,omitempty"`
 
+	// DocumentDBVersion is the currently installed version of the DocumentDB extension.
+	DocumentDBVersion string `json:"documentDBVersion,omitempty"`
+
 	// TLS reports gateway TLS provisioning status (Phase 1).
 	TLS *TLSStatus `json:"tls,omitempty"`
 }

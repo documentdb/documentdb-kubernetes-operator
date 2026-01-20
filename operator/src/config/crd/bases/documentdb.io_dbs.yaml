@@ -311,6 +311,10 @@ spec:
             properties:
               connectionString:
                 type: string
+              documentDBVersion:
+                description: DocumentDBVersion is the currently installed version
+                  of the DocumentDB extension.
+                type: string
               localPrimary:
                 type: string
               status:
