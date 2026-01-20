@@ -5,11 +5,14 @@ package controller
 
 import (
 	"context"
+	"slices"
+	"sort"
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -23,8 +26,31 @@ import (
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
+const (
+	// cnpgAPIVersionPrefix is the prefix for CNPG API versions
+	cnpgAPIVersionPrefix = "postgresql.cnpg.io"
+
+	// ownerRefKindCluster is the Kind for CNPG Cluster owner references
+	ownerRefKindCluster = "Cluster"
+
+	// ownerRefKindDocumentDB is the Kind for DocumentDB owner references
+	ownerRefKindDocumentDB = "DocumentDB"
+
+	// reclaimPolicyRetain is the string value for Retain policy in DocumentDB spec
+	reclaimPolicyRetain = "Retain"
+
+	// reclaimPolicyDelete is the string value for Delete policy in DocumentDB spec
+	reclaimPolicyDelete = "Delete"
+)
+
+// securityMountOptions defines the mount options applied to PVs for security hardening:
+// - nodev: Prevents device files from being interpreted on the filesystem
+// - nosuid: Prevents setuid/setgid bits from taking effect
+// - noexec: Prevents execution of binaries on the filesystem
+var securityMountOptions = []string{"nodev", "noexec", "nosuid"}
+
 // PersistentVolumeReconciler reconciles PersistentVolume objects
-// to set their ReclaimPolicy based on the associated DocumentDB configuration
+// to set their ReclaimPolicy and mount options based on the associated DocumentDB configuration
 type PersistentVolumeReconciler struct {
 	client.Client
 }
@@ -55,10 +81,6 @@ func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	// PV -> PVC -> CNPG Cluster -> DocumentDB
 	documentdb, err := r.findDocumentDBForPV(ctx, pv)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(1).Info("No DocumentDB found for PV, skipping", "pv", pv.Name)
-			return ctrl.Result{}, nil
-		}
 		logger.Error(err, "Failed to find DocumentDB for PV")
 		return ctrl.Result{}, err
 	}
@@ -68,30 +90,82 @@ func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	// Determine the desired reclaim policy from DocumentDB spec
-	desiredPolicy := r.getDesiredReclaimPolicy(documentdb)
-	currentPolicy := pv.Spec.PersistentVolumeReclaimPolicy
+	// Apply desired configuration to PV
+	needsUpdate := r.applyDesiredPVConfiguration(ctx, pv, documentdb)
 
-	// Update the PV's reclaim policy if it differs from the desired policy
-	if currentPolicy != desiredPolicy {
-		logger.Info("Updating PV reclaim policy",
-			"pv", pv.Name,
-			"currentPolicy", currentPolicy,
-			"desiredPolicy", desiredPolicy,
-			"documentdb", documentdb.Name)
-
-		pv.Spec.PersistentVolumeReclaimPolicy = desiredPolicy
+	if needsUpdate {
 		if err := r.Update(ctx, pv); err != nil {
-			logger.Error(err, "Failed to update PV reclaim policy")
+			logger.Error(err, "Failed to update PV")
 			return ctrl.Result{}, err
 		}
 
-		logger.Info("Successfully updated PV reclaim policy",
+		logger.Info("Successfully updated PV",
 			"pv", pv.Name,
-			"newPolicy", desiredPolicy)
+			"reclaimPolicy", pv.Spec.PersistentVolumeReclaimPolicy,
+			"mountOptions", pv.Spec.MountOptions)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// applyDesiredPVConfiguration applies the desired reclaim policy and mount options to a PV.
+// Returns true if any changes were made.
+func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Context, pv *corev1.PersistentVolume, documentdb *dbpreview.DocumentDB) bool {
+	logger := log.FromContext(ctx)
+	needsUpdate := false
+
+	// Check if reclaim policy needs update
+	desiredPolicy := r.getDesiredReclaimPolicy(documentdb)
+	if pv.Spec.PersistentVolumeReclaimPolicy != desiredPolicy {
+		logger.Info("PV reclaim policy needs update",
+			"pv", pv.Name,
+			"currentPolicy", pv.Spec.PersistentVolumeReclaimPolicy,
+			"desiredPolicy", desiredPolicy,
+			"documentdb", documentdb.Name)
+		pv.Spec.PersistentVolumeReclaimPolicy = desiredPolicy
+		needsUpdate = true
+	}
+
+	// Check if mount options need update
+	if !containsAllMountOptions(pv.Spec.MountOptions, securityMountOptions) {
+		logger.Info("PV mount options need update",
+			"pv", pv.Name,
+			"currentMountOptions", pv.Spec.MountOptions,
+			"desiredMountOptions", securityMountOptions)
+		pv.Spec.MountOptions = mergeMountOptions(pv.Spec.MountOptions, securityMountOptions)
+		needsUpdate = true
+	}
+
+	return needsUpdate
+}
+
+// containsAllMountOptions checks if all desired mount options are present in current options
+func containsAllMountOptions(current, desired []string) bool {
+	for _, opt := range desired {
+		if !slices.Contains(current, opt) {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeMountOptions merges desired mount options into current, avoiding duplicates.
+// Returns a sorted slice for deterministic output.
+func mergeMountOptions(current, desired []string) []string {
+	optSet := make(map[string]struct{}, len(current)+len(desired))
+	for _, opt := range current {
+		optSet[opt] = struct{}{}
+	}
+	for _, opt := range desired {
+		optSet[opt] = struct{}{}
+	}
+
+	result := make([]string, 0, len(optSet))
+	for opt := range optSet {
+		result = append(result, opt)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // findDocumentDBForPV traverses the ownership chain to find the DocumentDB
@@ -145,21 +219,22 @@ func (r *PersistentVolumeReconciler) findDocumentDBForPV(ctx context.Context, pv
 func (r *PersistentVolumeReconciler) findCNPGClusterOwner(ctx context.Context, pvc *corev1.PersistentVolumeClaim) *cnpgv1.Cluster {
 	logger := log.FromContext(ctx)
 
-	// Check owner references for CNPG Cluster
 	for _, ownerRef := range pvc.OwnerReferences {
-		if ownerRef.Kind == "Cluster" && strings.Contains(ownerRef.APIVersion, "cnpg") {
-			cluster := &cnpgv1.Cluster{}
-			if err := r.Get(ctx, types.NamespacedName{
-				Name:      ownerRef.Name,
-				Namespace: pvc.Namespace,
-			}, cluster); err != nil {
-				if !errors.IsNotFound(err) {
-					logger.Error(err, "Failed to get CNPG Cluster", "name", ownerRef.Name)
-				}
-				continue
-			}
-			return cluster
+		if !isCNPGClusterOwnerRef(ownerRef) {
+			continue
 		}
+
+		cluster := &cnpgv1.Cluster{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      ownerRef.Name,
+			Namespace: pvc.Namespace,
+		}, cluster); err != nil {
+			if !errors.IsNotFound(err) {
+				logger.Error(err, "Failed to get CNPG Cluster", "name", ownerRef.Name)
+			}
+			continue
+		}
+		return cluster
 	}
 
 	return nil
@@ -169,34 +244,48 @@ func (r *PersistentVolumeReconciler) findCNPGClusterOwner(ctx context.Context, p
 func (r *PersistentVolumeReconciler) findDocumentDBOwner(ctx context.Context, cluster *cnpgv1.Cluster) *dbpreview.DocumentDB {
 	logger := log.FromContext(ctx)
 
-	// Check owner references for DocumentDB
 	for _, ownerRef := range cluster.OwnerReferences {
-		if ownerRef.Kind == "DocumentDB" {
-			documentdb := &dbpreview.DocumentDB{}
-			if err := r.Get(ctx, types.NamespacedName{
-				Name:      ownerRef.Name,
-				Namespace: cluster.Namespace,
-			}, documentdb); err != nil {
-				if !errors.IsNotFound(err) {
-					logger.Error(err, "Failed to get DocumentDB", "name", ownerRef.Name)
-				}
-				continue
-			}
-			return documentdb
+		if ownerRef.Kind != ownerRefKindDocumentDB {
+			continue
 		}
+
+		documentdb := &dbpreview.DocumentDB{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      ownerRef.Name,
+			Namespace: cluster.Namespace,
+		}, documentdb); err != nil {
+			if !errors.IsNotFound(err) {
+				logger.Error(err, "Failed to get DocumentDB", "name", ownerRef.Name)
+			}
+			continue
+		}
+		return documentdb
 	}
 
 	return nil
 }
 
+// isCNPGClusterOwnerRef checks if an owner reference refers to a CNPG Cluster
+func isCNPGClusterOwnerRef(ownerRef metav1.OwnerReference) bool {
+	return ownerRef.Kind == ownerRefKindCluster && strings.Contains(ownerRef.APIVersion, cnpgAPIVersionPrefix)
+}
+
+// isOwnedByDocumentDB checks if a CNPG Cluster is owned by a specific DocumentDB
+func isOwnedByDocumentDB(cluster *cnpgv1.Cluster, documentdbName string) bool {
+	for _, ownerRef := range cluster.OwnerReferences {
+		if ownerRef.Kind == ownerRefKindDocumentDB && ownerRef.Name == documentdbName {
+			return true
+		}
+	}
+	return false
+}
+
 // getDesiredReclaimPolicy returns the reclaim policy based on DocumentDB configuration
 func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbpreview.DocumentDB) corev1.PersistentVolumeReclaimPolicy {
-	policy := documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy
-
-	switch policy {
-	case "Retain":
+	switch documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy {
+	case reclaimPolicyRetain:
 		return corev1.PersistentVolumeReclaimRetain
-	case "Delete":
+	case reclaimPolicyDelete:
 		return corev1.PersistentVolumeReclaimDelete
 	default:
 		// Default to Delete if not specified
@@ -290,15 +379,7 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 	var requests []reconcile.Request
 
 	for _, cluster := range clusterList.Items {
-		// Check if this cluster is owned by the DocumentDB
-		isOwned := false
-		for _, ownerRef := range cluster.OwnerReferences {
-			if ownerRef.Kind == "DocumentDB" && ownerRef.Name == documentdb.Name {
-				isOwned = true
-				break
-			}
-		}
-		if !isOwned {
+		if !isOwnedByDocumentDB(&cluster, documentdb.Name) {
 			continue
 		}
 
@@ -310,10 +391,8 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 		}
 
 		for _, pvc := range pvcList.Items {
-			// Check if this PVC is owned by the cluster
 			for _, ownerRef := range pvc.OwnerReferences {
-				if ownerRef.Kind == "Cluster" && ownerRef.Name == cluster.Name && strings.Contains(ownerRef.APIVersion, "cnpg") {
-					// Find the PV bound to this PVC
+				if isCNPGClusterOwnerRef(ownerRef) && ownerRef.Name == cluster.Name {
 					if pvc.Spec.VolumeName != "" {
 						requests = append(requests, reconcile.Request{
 							NamespacedName: types.NamespacedName{
