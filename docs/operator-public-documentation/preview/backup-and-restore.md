@@ -289,3 +289,112 @@ spec:
 - Failed backups still expire (timer starts at creation).
 - Deleting the cluster does NOT delete its Backup objects immediately—they still wait for expiration.
 - No "keep forever" mode—export externally if you need permanent archival.
+
+## PersistentVolume Retention and Recovery
+
+The DocumentDB operator supports retaining PersistentVolumes (PVs) after cluster deletion, allowing you to recover data by creating a new cluster from the retained PV.
+
+### Configuring PV Retention
+
+By default, PVs are deleted when the DocumentDB cluster is deleted. To retain the PV, set the `persistentVolumeReclaimPolicy` to `Retain`:
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  resource:
+    storage:
+      pvcSize: 10Gi
+      persistentVolumeReclaimPolicy: Retain  # Keep PV after cluster deletion
+  # ... other configuration
+```
+
+### How PV Retention Works
+
+1. When you set `persistentVolumeReclaimPolicy: Retain`, the operator updates the underlying PersistentVolume's reclaim policy
+2. When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state
+3. The retained PV contains all the database data and can be used to recover the cluster
+
+### Recovering from a Retained PV
+
+To restore a DocumentDB cluster from a retained PV:
+
+**Step 1: Identify the retained PV**
+
+```bash
+# List PVs in Released state
+kubectl get pv | grep Released
+```
+
+**Step 2: Clear the claimRef to make the PV available**
+
+The PV in "Released" state still has a reference to the old deleted PVC. Clear it:
+
+```bash
+kubectl patch pv <pv-name> --type=json -p='[{"op": "remove", "path": "/spec/claimRef"}]'
+```
+
+Verify the PV is now "Available":
+
+```bash
+kubectl get pv <pv-name>
+```
+
+**Step 3: Create a new PVC bound to the retained PV**
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recovered-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi  # Must match the PV capacity
+  storageClassName: managed-csi  # Must match the PV's storage class
+  volumeName: <pv-name>  # Specify the retained PV name
+```
+
+Apply and verify the PVC is bound:
+
+```bash
+kubectl apply -f recovered-pvc.yaml
+kubectl get pvc recovered-pvc
+```
+
+**Step 4: Create a new DocumentDB cluster with PVC recovery**
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-recovered-cluster
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
+  exposeViaService:
+    serviceType: ClusterIP
+  bootstrap:
+    recovery:
+      pvc:
+        name: recovered-pvc  # Reference the PVC bound to the retained PV
+```
+
+### Important Notes for PV Recovery
+
+- The new cluster must be in the same namespace as the PVC
+- Storage size and class should match the original configuration
+- You cannot specify both `backup` and `pvc` recovery at the same time
+- PVC recovery preserves all data including users, roles, and collections
+- After successful recovery, consider setting up regular backups for the new cluster
