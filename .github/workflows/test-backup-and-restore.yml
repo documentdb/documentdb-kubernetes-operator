@@ -362,7 +362,8 @@ jobs:
         echo "Testing PV retention after DocumentDB deletion..."
         
         # Get the PVC name and PV name before deleting the DocumentDB
-        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l documentdb.io/cluster=${{ env.DB_RESTORE_NAME }} -o jsonpath='{.items[0].metadata.name}')
+        # PVCs are created by CNPG and labeled with cnpg.io/cluster
+        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_RESTORE_NAME }} -o jsonpath='{.items[0].metadata.name}')
         echo "PVC name: $pvc_name"
         
         if [ -z "$pvc_name" ]; then
