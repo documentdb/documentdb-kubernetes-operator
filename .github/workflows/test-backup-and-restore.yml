@@ -415,6 +415,21 @@ jobs:
           exit 1
         fi
         
+        # Verify mount options are set by the PV controller
+        echo "Verifying PV mount options are set..."
+        mount_options=$(kubectl get pv $pv_name -o jsonpath='{.spec.mountOptions}')
+        echo "PV mount options: $mount_options"
+        
+        # Check for security mount options (nodev, nosuid, noexec)
+        if echo "$mount_options" | grep -q "nodev" && \
+           echo "$mount_options" | grep -q "nosuid" && \
+           echo "$mount_options" | grep -q "noexec"; then
+          echo "✓ PV mount options (nodev, nosuid, noexec) are set correctly"
+        else
+          echo "❌ PV mount options are missing. Expected nodev, nosuid, noexec"
+          exit 1
+        fi
+        
         # Delete the restored DocumentDB cluster
         kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_RESTORE_NAME }} --wait=false
         
