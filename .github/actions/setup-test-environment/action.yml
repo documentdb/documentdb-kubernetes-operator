@@ -578,7 +578,7 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.110.0
+          documentDBImage: ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.109.0
           gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
           resource:
             storage:
