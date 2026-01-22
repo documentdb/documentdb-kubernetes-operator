@@ -18,7 +18,7 @@ stringData:
 
 ---
 
-apiVersion: db.microsoft.com/preview
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-preview
@@ -26,8 +26,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   resource:
     storage:
       pvcSize: 10Gi
@@ -69,7 +67,7 @@ metadata:
   namespace: documentdb-preview-ns
 spec:
   resourceSelectors:
-    - group: db.microsoft.com
+    - group: documentdb.io
       kind: DocumentDB
       version: preview
       name: documentdb-preview

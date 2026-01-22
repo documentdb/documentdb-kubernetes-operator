@@ -204,7 +204,7 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
 		foundServiceExport := &fleetv1alpha1.ServiceExport{}
 		err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: documentdb.Namespace}, foundServiceExport)
-		if err != nil && errors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			log.Log.Info("Service Export not found. Creating a new Service Export " + serviceName)
 
 			// Service Export
@@ -218,6 +218,8 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 			if err != nil {
 				return err
 			}
+		} else {
+			return err
 		}
 	}
 
@@ -274,6 +276,7 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 	// Update if the cluster list has changed
 	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
 	if replicasChanged {
+		log.Log.Info("Updating external clusters")
 		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
 	}
 
@@ -387,7 +390,7 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 			Value: desired.Spec.ReplicaCluster,
 		})
 
-		log.Log.Info("Applying patch for Replica => Replica transition", "patch", "cluster", current.Name)
+		log.Log.Info("Applying patch for Replica => Replica transition", "cluster", current.Name)
 	}
 
 	return nil, -1
@@ -551,6 +554,8 @@ func (r *DocumentDBReconciler) waitForDemotionTokenAndCreateService(clusterNN ty
 	ctx := context.Background()
 	ticker := time.NewTicker(demotionTokenPollInterval)
 	timeout := time.NewTimer(demotionTokenWaitTimeout)
+	defer ticker.Stop()
+	defer timeout.Stop()
 
 	for {
 		select {
@@ -563,7 +568,6 @@ func (r *DocumentDBReconciler) waitForDemotionTokenAndCreateService(clusterNN ty
 				return
 			}
 		case <-timeout.C:
-			ticker.Stop()
 			log.Log.Info("Timed out waiting for demotion token", "cluster", clusterNN.Name, "timeout", demotionTokenWaitTimeout)
 			return
 		}

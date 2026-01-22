@@ -215,16 +215,16 @@ func getTopology(ctx context.Context, client client.Client, documentdb dbpreview
 	}
 
 	others := []string{}
-	var self dbpreview.MemberCluster
+	var self *dbpreview.MemberCluster
 	for _, c := range documentdb.Spec.ClusterReplication.ClusterList {
 		if c.Name != memberClusterName {
 			others = append(others, generateCNPGClusterName(documentdb.Name, c.Name))
 		} else {
-			self = c
+			self = &c
+			self.Name = generateCNPGClusterName(documentdb.Name, self.Name)
 		}
 	}
-	self.Name = generateCNPGClusterName(documentdb.Name, self.Name)
-	return &self, others, state, nil
+	return self, others, state, nil
 }
 
 func GetSelfName(ctx context.Context, client client.Client) (string, error) {

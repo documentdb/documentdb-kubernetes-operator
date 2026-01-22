@@ -99,13 +99,6 @@ while read -r vnet1; do
       --remote-vnet "$vnet2" \
       --allow-vnet-access true \
       --allow-forwarded-traffic true
-    az network vnet peering create \
-      --name "${vnet2}-to-${vnet1}-peering" \
-      --resource-group "$RESOURCE_GROUP" \
-      --vnet-name "$vnet2" \
-      --remote-vnet "$vnet1" \
-      --allow-vnet-access true \
-      --allow-forwarded-traffic true
   done <<< "$VNET_NAMES"
 done <<< "$VNET_NAMES"
 

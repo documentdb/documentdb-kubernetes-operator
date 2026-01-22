@@ -84,7 +84,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if replicationContext.IsNotPresent() {
 		logger.Info("DocumentDB instance is not part of the replication setup; skipping reconciliation and deleting any present resources")
-		if err := r.cleanupResources(ctx, req, documentdb); err != nil {
+		if err := r.cleanupResources(ctx, req); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := util.DeleteOwnedResources(ctx, r.Client, documentdb.ObjectMeta); err != nil {

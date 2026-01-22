@@ -1,10 +1,9 @@
-#/bin/bash
+#!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 HUB_REGION="${HUB_REGION:-westus3}"
-EXCLUDE_REGION="${EXCLUDE_REGION:-westus2}"
 
 # Dynamically get member clusters from Azure
 echo "Discovering member clusters in resource group: $RESOURCE_GROUP..."
@@ -25,10 +24,10 @@ done
 
 kubectl --context $HUB_CLUSTER patch documentdb documentdb-preview -n documentdb-preview-ns \
   --type='json' -p='[
-  {"op": "remove", "path": "/spec/clusterReplication/clusterList/2"},
+  {"op": "remove", "path": "/spec/clusterReplication/clusterList/2"}
   ]'
 
 kubectl --context $HUB_CLUSTER patch resourceplacement documentdb-resource-rp -n documentdb-preview-ns \
   --type='json' -p='[
-  {"op": "add", "path": "/spec/policy/clusterNames/2"}
+  {"op": "remove", "path": "/spec/policy/clusterNames/2"}
   ]'

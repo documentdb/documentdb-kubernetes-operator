@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -27,10 +27,10 @@ done
 
 kubectl --context $HUB_CLUSTER patch documentdb documentdb-preview -n documentdb-preview-ns \
   --type='json' -p='[
-  {"op": "add", "path": "/spec/clusterReplication/clusterList/3", "value":{name: "'"$EXCLUDE_CLUSTER"'", environment: "aks"}},
+  {"op": "add", "path": "/spec/clusterReplication/clusterList/3", "value":{"name": "'"$EXCLUDE_CLUSTER"'", "environment": "aks"}}
   ]'
 
 kubectl --context $HUB_CLUSTER patch resourceplacement documentdb-resource-rp -n documentdb-preview-ns \
   --type='json' -p='[
-  {"op": "add", "path": "/spec/policy/clusterNames/3", "value": "'"$EXCLUDE_CLUSTER"'"},
+  {"op": "add", "path": "/spec/policy/clusterNames/3", "value": "'"$EXCLUDE_CLUSTER"'"}
   ]'
