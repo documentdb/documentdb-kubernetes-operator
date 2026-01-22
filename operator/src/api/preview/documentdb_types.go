@@ -39,8 +39,8 @@ type DocumentDBSpec struct {
 	GatewayImage string `json:"gatewayImage,omitempty"`
 
 	// PostgresImage is the container image to use for the PostgreSQL server.
-	// If not specified, defaults to "ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm".
-	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm"
+	// If not specified, defaults to "ghcr.io/cloudnative-pg/postgresql:18-standard-bookworm".
+	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-standard-bookworm"
 	// +optional
 	PostgresImage string `json:"postgresImage,omitempty"`
 
