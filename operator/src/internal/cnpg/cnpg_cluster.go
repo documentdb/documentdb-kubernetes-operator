@@ -74,8 +74,6 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						Parameters: params,
 					}}
 				}(),
-				PostgresUID: 105,
-				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
 					Extensions: []cnpgv1.ExtensionConfiguration{
 						{
