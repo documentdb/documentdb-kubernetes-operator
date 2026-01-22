@@ -14,7 +14,7 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
   - Manages `DocumentDB`, `Backup`, and `ScheduledBackup` CRDs
   - Reconciles desired state with actual cluster state
   - Handles cluster lifecycle, replication, and high availability
-  - Built on CloudNative-PG for robust PostgreSQL foundation
+  - Built on [CloudNative-PG](https://cloudnative-pg.io/) for robust PostgreSQL foundation
 
 - **kubectl-documentdb plugin** (in `documentdb-kubectl-plugin/`)
   - CLI plugin for managing DocumentDB resources
@@ -30,7 +30,7 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
 ## Tech Stack
 
 **Languages:**
-- **Go:** Go 1.25+ (check `go.mod` for exact version)
+- **Go:** Go 1.25.0 (check `go.mod` for exact version)
 - **Runtime Platform:** Linux containers (multi-arch: amd64, arm64, s390x, ppc64le)
 - **Developer Platform:** Linux, macOS, WSL2 (devcontainer recommended)
 
@@ -54,11 +54,24 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
 **Tools:**
 - controller-gen, golangci-lint, kind, kustomize, setup-envtest, helm
 
+### Version Compatibility Matrix
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| Kubernetes | 1.30+ | Based on k8s.io/api v0.34.2 |
+| CloudNative-PG | 1.28.0 | Helm chart uses CNPG chart 0.26.1 |
+| cert-manager | 1.19.2 | Required for TLS certificate management |
+| controller-runtime | 0.22.4 | Kubebuilder framework |
+| Go | 1.25.0 | See `operator/src/go.mod` |
+| Helm | 3.x | Required for deployment |
+
+> **Note:** When the project moves to GA, maintain a separate version compatibility matrix for each release to track dependency versions across operator releases.
+
 ---
 
 ## Build & Test Commands
 
-All commands should be run from the `operator/src/` directory unless otherwise specified.
+All commands should be run from the `operator/src/` directory unless otherwise specified. For comprehensive setup instructions, see the [Development Environment Guide](docs/developer-guides/development-environment.md).
 
 ### Build
 
@@ -129,6 +142,7 @@ make manifests generate
 # 2. "Reopen in Container"
 
 # Using deploy script (creates kind cluster and deploys):
+# Run from operator/src/ directory:
 DEPLOY=true DEPLOY_CLUSTER=true ./scripts/development/deploy.sh
 
 # Run operator locally against cluster
@@ -154,8 +168,7 @@ stern documentdb-operator -n documentdb-operator
 │   │   │   ├── controller/            # Reconciliation controllers
 │   │   │   ├── cnpg/                  # CloudNative-PG integration
 │   │   │   └── utils/                 # Shared utilities
-│   │   ├── config/                    # Kustomize manifests
-│   │   └── test/                      # Test suites
+│   │   └── config/                    # Kustomize manifests
 │   ├── documentdb-helm-chart/         # Helm chart
 │   │   ├── Chart.yaml
 │   │   ├── values.yaml
@@ -217,7 +230,7 @@ stern documentdb-operator -n documentdb-operator
 ### Branching Strategy
 
 - **Main branch:** `main` (default, protected)
-- **Feature branches:** Created from `main`, merged via PR
+- **Feature branches:** `developer/feature-name` pattern, created from `main`, merged via PR
 
 ### Commit Message Format
 
@@ -239,6 +252,8 @@ Types:
 ### PR Requirements
 
 - Must pass all CI checks (build, test, lint)
+- Should pass local tests (deploy to Kind and run test suite)
+- All issues found by the code review agent are fixed/addressed
 - CLA signature required (automatic via CLA bot)
 - Reasonable title and description
 - Tests for new functionality
@@ -276,7 +291,6 @@ Types:
 - `/operator/src/Makefile` - Core build logic
 - `/operator/src/go.mod` - Dependencies (use `go mod tidy`)
 - `/operator/src/PROJECT` - Kubebuilder project config
-- `/.golangci.yaml` - Linter configuration
 
 ### Helm Charts (requires careful review)
 
@@ -296,12 +310,13 @@ Types:
 ## Important Notes for AI Agents
 
 1. **Never commit to `main` directly** - always use PRs
-2. **CRD changes** require running `make manifests generate` and may break compatibility
-3. **API changes** in `/operator/src/api/preview/` trigger CRD regeneration
-4. **Generated files** must be committed after running generators
-5. **Helm chart changes** may require updating CRDs in `/operator/documentdb-helm-chart/crds/`
-6. **Go version changes** should align with `go.mod` specification
-7. **Dependencies:** Avoid unnecessary additions; security and maintenance matter
+2. **Never commit secrets or passwords** - use Kubernetes Secrets or environment variables
+3. **CRD changes** require running `make manifests generate` and may break compatibility
+4. **API changes** in `/operator/src/api/preview/` trigger CRD regeneration
+5. **Generated files** must be committed after running generators
+6. **Helm chart changes** may require updating CRDs in `/operator/documentdb-helm-chart/crds/`
+7. **Go version changes** should align with `go.mod` specification
+8. **Dependencies:** Avoid unnecessary additions; security and maintenance matter
 
 ### Development Workflow
 
@@ -331,7 +346,7 @@ Types:
 
 - Use Ginkgo/Gomega for BDD-style tests
 - Place unit tests alongside source files (`*_test.go`)
-- Integration tests in `/operator/src/test/`
+- E2E tests run via `make test-e2e` (requires Kind cluster)
 - Mock external dependencies appropriately
 - Ensure tests are idempotent and isolated
 
