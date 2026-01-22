@@ -1,5 +1,7 @@
 # Copilot Instructions for DocumentDB Kubernetes Operator
 
+> **Note:** For comprehensive AI agent briefing including architecture, tech stack, build commands, and project boundaries, see [AGENTS.md](../AGENTS.md) in the repository root.
+
 ## Project Overview
 
 This is the DocumentDB Kubernetes Operator project, a Go-based Kubernetes operator built with Kubebuilder/controller-runtime for managing DocumentDB (MongoDB-compatible) deployments on Kubernetes.
