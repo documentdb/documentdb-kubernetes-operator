@@ -86,10 +86,16 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines backup recovery settings.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && size(self.backup.name) > 0 && has(self.pvc) && size(self.pvc.name) > 0)",message="cannot specify both backup and pvc recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
 	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
+
+	// PVC specifies the source PVC to restore from.
+	// Cannot be used together with Backup.
+	// +optional
+	PVC cnpgv1.LocalObjectReference `json:"pvc,omitempty"`
 }
 
 // BackupConfiguration defines backup settings for DocumentDB.
@@ -115,6 +121,15 @@ type StorageConfiguration struct {
 	// StorageClass specifies the storage class for DocumentDB persistent volumes.
 	// If not specified, the cluster's default storage class will be used.
 	StorageClass string `json:"storageClass,omitempty"`
+
+	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+	// the DocumentDB cluster is deleted.
+	// Retain: The PV is kept after cluster deletion, allowing data recovery.
+	// Delete: The PV is deleted with the cluster (default behavior).
+	// +kubebuilder:validation:Enum=Retain;Delete
+	// +kubebuilder:default=Delete
+	// +optional
+	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
 
 type ClusterReplication struct {

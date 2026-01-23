@@ -239,6 +239,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controller.PersistentVolumeReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PersistentVolume")
+		os.Exit(1)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
