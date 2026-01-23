@@ -155,7 +155,7 @@ while read -r MEMBER_CLUSTER; do
     --set refreshtoken.repository=$REGISTRY/refresh-token \
     --set refreshtoken.tag=$TAG \
     --set image.tag=$NETWORKING_TAG \
-    --set timage.pullPolicy=Always \
+    --set image.pullPolicy=Always \
     --set refreshtoken.pullPolicy=Always \
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
     --set config.memberClusterName=$MEMBER_CLUSTER \

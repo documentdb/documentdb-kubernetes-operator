@@ -69,7 +69,7 @@ metadata:
   namespace: documentdb-preview-ns
 spec:
   resourceSelectors:
-    - group: db.microsoft.com
+    - group: documentdb.io
       kind: DocumentDB
       version: preview
       name: documentdb-preview
