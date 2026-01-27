@@ -81,3 +81,7 @@ spec:
 {{CLUSTER_LIST_CRP}}
   strategy:
     type: RollingUpdate
+    applyStrategy:
+      type: ServerSideApply
+      serverSideApplyConfig:
+        force: true

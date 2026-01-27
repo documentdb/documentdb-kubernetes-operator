@@ -17,6 +17,7 @@ declare -a CLUSTER_ARRAY=()
 declare -a DOCUMENTDB_CLUSTER_NAMES=()
 declare -A DOCUMENTDB_CLUSTER_SET=()
 EXPECTED_CLUSTER_NAMES_JSON="[]"
+EXPECTED_CNPG_NAMES_JSON="[]"
 declare -i EXPECTED_CLUSTER_COUNT=0
 
 log() {
@@ -40,6 +41,29 @@ record_failure() {
   echo "[$cluster] ✖ $*"
   OVERALL_STATUS=1
   FAILURE_MESSAGES+=("[$cluster] $*")
+}
+
+get_cnpg_name_for_cluster() {
+  local cluster="$1"
+
+  if ! kubectl --context "$cluster" get namespace "$DOCUMENTDB_NAMESPACE" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local cnpg_list
+  if ! cnpg_list=$(kubectl --context "$cluster" get clusters.postgresql.cnpg.io -n "$DOCUMENTDB_NAMESPACE" -o json 2>/dev/null); then
+    return 1
+  fi
+
+  local doc_owned_clusters
+  doc_owned_clusters=$(echo "$cnpg_list" | jq --arg doc "$DOCUMENTDB_NAME" '[.items[] | select(any(.metadata.ownerReferences[]?; .kind=="DocumentDB" and .name==$doc))]')
+  local doc_owned_count
+  doc_owned_count=$(echo "$doc_owned_clusters" | jq 'length')
+  if (( doc_owned_count == 0 )); then
+    return 1
+  fi
+
+  echo "$doc_owned_clusters" | jq -r '.[0].metadata.name'
 }
 
 check_member_cluster() {
@@ -76,17 +100,21 @@ check_member_cluster() {
   cnpg_name=$(echo "$cnpg_obj" | jq -r '.metadata.name')
 
   local external_count
+  local expected_external_names_json
+  expected_external_names_json="$EXPECTED_CNPG_NAMES_JSON"
+  local expected_external_count
+  expected_external_count=$(echo "$expected_external_names_json" | jq 'length')
   external_count=$(echo "$cnpg_obj" | jq '.spec.externalClusters // [] | length')
-  if (( external_count == EXPECTED_CLUSTER_COUNT )); then
+  if (( external_count == expected_external_count )); then
     record_success "$cluster" "Cluster $cnpg_name externalClusters count matches ($external_count)"
   else
-    record_failure "$cluster" "Cluster $cnpg_name has $external_count externalClusters (expected $EXPECTED_CLUSTER_COUNT)"
+    record_failure "$cluster" "Cluster $cnpg_name has $external_count externalClusters (expected $expected_external_count)"
   fi
 
   local external_names_json
   external_names_json=$(echo "$cnpg_obj" | jq '[.spec.externalClusters // [] | .[]? | .name] | map(select(. != null))')
   local missing_names
-  missing_names=$(jq --argjson expected "$EXPECTED_CLUSTER_NAMES_JSON" --argjson actual "$external_names_json" -n '[ $expected[] | select(. as $item | ($actual | index($item)) | not) ]')
+  missing_names=$(jq --argjson expected "$expected_external_names_json" --argjson actual "$external_names_json" -n '[ $expected[] | select(. as $item | ($actual | index($item)) | not) ]')
   local missing_count
   missing_count=$(echo "$missing_names" | jq 'length')
   if (( missing_count > 0 )); then
@@ -98,7 +126,7 @@ check_member_cluster() {
   fi
 
   local extra_names
-  extra_names=$(jq --argjson expected "$EXPECTED_CLUSTER_NAMES_JSON" --argjson actual "$external_names_json" -n '[ $actual[] | select(. as $item | ($expected | index($item)) | not) ]')
+  extra_names=$(jq --argjson expected "$expected_external_names_json" --argjson actual "$external_names_json" -n '[ $actual[] | select(. as $item | ($expected | index($item)) | not) ]')
   local extra_count
   extra_count=$(echo "$extra_names" | jq 'length')
   if (( extra_count > 0 )); then
@@ -243,10 +271,23 @@ main() {
     DOCUMENTDB_CLUSTER_SET["$name"]=1
   done
 
+  EXPECTED_CNPG_NAMES_JSON="[]"
+  for cluster in "${DOCUMENTDB_CLUSTER_NAMES[@]}"; do
+    local cnpg_name
+    if ! cnpg_name=$(get_cnpg_name_for_cluster "$cluster"); then
+      record_failure "$cluster" "Unable to determine CNPG cluster name for DocumentDB $DOCUMENTDB_NAME"
+      continue
+    fi
+    EXPECTED_CNPG_NAMES_JSON=$(jq --arg name "$cnpg_name" '. + [$name]' <<<"$EXPECTED_CNPG_NAMES_JSON")
+  done
+
   log "DocumentDB $DOCUMENTDB_NAME expects $EXPECTED_CLUSTER_COUNT cluster(s):"
   for name in "${DOCUMENTDB_CLUSTER_NAMES[@]}"; do
     echo "  - $name"
   done
+
+  log "Resolved CNPG cluster names:"
+  echo "$EXPECTED_CNPG_NAMES_JSON" | jq -r '.[]' | sed 's/^/  - /'
 
   for name in "${DOCUMENTDB_CLUSTER_NAMES[@]}"; do
     local match_found="false"

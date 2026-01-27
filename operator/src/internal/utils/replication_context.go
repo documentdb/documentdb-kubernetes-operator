@@ -15,12 +15,14 @@ import (
 )
 
 type ReplicationContext struct {
-	Self                         string
-	Others                       []string
-	PrimaryCluster               string
+	CNPGClusterName              string
+	OtherCNPGClusterNames        []string
+	PrimaryCNPGClusterName       string
 	CrossCloudNetworkingStrategy crossCloudNetworkingStrategy
 	Environment                  string
 	StorageClass                 string
+	FleetMemberName              string
+	OtherFleetMemberNames        []string
 	currentLocalPrimary          string
 	targetLocalPrimary           string
 	state                        replicationState
@@ -49,7 +51,7 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 		CrossCloudNetworkingStrategy: None,
 		Environment:                  documentdb.Spec.Environment,
 		StorageClass:                 documentdb.Spec.Resource.Storage.StorageClass,
-		Self:                         documentdb.Name,
+		CNPGClusterName:              documentdb.Name,
 	}
 	if documentdb.Spec.ClusterReplication == nil {
 		return &singleClusterReplicationContext, nil
@@ -69,7 +71,7 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 			CrossCloudNetworkingStrategy: None,
 			Environment:                  "",
 			StorageClass:                 "",
-			Self:                         "",
+			CNPGClusterName:              "",
 		}, nil
 	}
 
@@ -79,6 +81,11 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 	}
 
 	primaryCluster := generateCNPGClusterName(documentdb.Name, documentdb.Spec.ClusterReplication.Primary)
+
+	otherCNPGClusterNames := make([]string, len(others))
+	for i, other := range others {
+		otherCNPGClusterNames[i] = generateCNPGClusterName(documentdb.Name, other)
+	}
 
 	storageClass := documentdb.Spec.Resource.Storage.StorageClass
 	if self.StorageClassOverride != "" {
@@ -90,13 +97,15 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 	}
 
 	return &ReplicationContext{
-		Self:                         self.Name,
-		Others:                       others,
+		CNPGClusterName:              generateCNPGClusterName(documentdb.Name, self.Name),
+		OtherCNPGClusterNames:        otherCNPGClusterNames,
 		CrossCloudNetworkingStrategy: crossCloudNetworkingStrategy(documentdb.Spec.ClusterReplication.CrossCloudNetworkingStrategy),
-		PrimaryCluster:               primaryCluster,
+		PrimaryCNPGClusterName:       primaryCluster,
 		Environment:                  environment,
 		StorageClass:                 storageClass,
 		state:                        replicationState,
+		FleetMemberName:              self.Name,
+		OtherFleetMemberNames:        others,
 		targetLocalPrimary:           documentdb.Status.TargetPrimary,
 		currentLocalPrimary:          documentdb.Status.LocalPrimary,
 	}, nil
@@ -112,10 +121,12 @@ func (r ReplicationContext) String() string {
 		stateStr = "Primary"
 	case Replica:
 		stateStr = "Replica"
+	case NotPresent:
+		stateStr = "NotPresent"
 	}
 
-	return fmt.Sprintf("ReplicationContext{Self: %s, State: %s, Others: %v, PrimaryRegion: %s, CurrentLocalPrimary: %s, TargetLocalPrimary: %s}",
-		r.Self, stateStr, r.Others, r.PrimaryCluster, r.currentLocalPrimary, r.targetLocalPrimary)
+	return fmt.Sprintf("ReplicationContext{CNPGClusterName: %s, State: %s, Others: %v, PrimaryRegion: %s, CurrentLocalPrimary: %s, TargetLocalPrimary: %s}",
+		r.CNPGClusterName, stateStr, r.OtherCNPGClusterNames, r.PrimaryCNPGClusterName, r.currentLocalPrimary, r.targetLocalPrimary)
 }
 
 // Returns true if this instance is the primary or if there is no replication configured.
@@ -134,9 +145,9 @@ func (r *ReplicationContext) IsNotPresent() bool {
 // Gets the primary if you're a replica, otherwise returns the first other cluster
 func (r ReplicationContext) GetReplicationSource() string {
 	if r.state == Replica {
-		return r.PrimaryCluster
+		return r.PrimaryCNPGClusterName
 	}
-	return r.Others[0]
+	return r.OtherCNPGClusterNames[0]
 }
 
 // EndpointEnabled returns true if the endpoint should be enabled for this DocumentDB instance.
@@ -151,10 +162,10 @@ func (r ReplicationContext) EndpointEnabled() bool {
 
 func (r ReplicationContext) GenerateExternalClusterServices(name, namespace string, fleetEnabled bool) func(yield func(string, string) bool) {
 	return func(yield func(string, string) bool) {
-		for _, other := range r.Others {
+		for _, other := range r.OtherCNPGClusterNames {
 			serviceName := other + "-rw." + namespace + ".svc"
 			if fleetEnabled {
-				serviceName = namespace + "-" + generateServiceName(name, other, r.Self, namespace) + ".fleet-system.svc"
+				serviceName = namespace + "-" + generateServiceName(name, other, r.CNPGClusterName, namespace) + ".fleet-system.svc"
 			}
 
 			if !yield(other, serviceName) {
@@ -167,8 +178,8 @@ func (r ReplicationContext) GenerateExternalClusterServices(name, namespace stri
 // Create an iterator that yields outgoing service names, for use in a for each loop
 func (r ReplicationContext) GenerateIncomingServiceNames(name, resourceGroup string) func(yield func(string) bool) {
 	return func(yield func(string) bool) {
-		for _, other := range r.Others {
-			serviceName := generateServiceName(name, other, r.Self, resourceGroup)
+		for _, other := range r.OtherCNPGClusterNames {
+			serviceName := generateServiceName(name, other, r.CNPGClusterName, resourceGroup)
 			if !yield(serviceName) {
 				break
 			}
@@ -179,8 +190,8 @@ func (r ReplicationContext) GenerateIncomingServiceNames(name, resourceGroup str
 // Create an iterator that yields outgoing service names, for use in a for each loop
 func (r ReplicationContext) GenerateOutgoingServiceNames(name, resourceGroup string) func(yield func(string) bool) {
 	return func(yield func(string) bool) {
-		for _, other := range r.Others {
-			serviceName := generateServiceName(name, r.Self, other, resourceGroup)
+		for _, other := range r.OtherCNPGClusterNames {
+			serviceName := generateServiceName(name, r.CNPGClusterName, other, resourceGroup)
 			if !yield(serviceName) {
 				break
 			}
@@ -188,10 +199,23 @@ func (r ReplicationContext) GenerateOutgoingServiceNames(name, resourceGroup str
 	}
 }
 
+func (r ReplicationContext) GenerateFleetMemberNames() func(yield func(string) bool) {
+	return func(yield func(string) bool) {
+		for _, other := range r.OtherFleetMemberNames {
+			if !yield(other) {
+				return
+			}
+		}
+		if !yield(r.FleetMemberName) {
+			return
+		}
+	}
+}
+
 // Creates the standby names list, which will be all other clusters in addition to "pg_receivewal"
 func (r *ReplicationContext) CreateStandbyNamesList() []string {
-	standbyNames := make([]string, len(r.Others))
-	copy(standbyNames, r.Others)
+	standbyNames := make([]string, len(r.OtherCNPGClusterNames))
+	copy(standbyNames, r.OtherCNPGClusterNames)
 	/* TODO re-enable when we have a WAL replica image (also add one to length)
 	standbyNames[len(r.Others)] = "pg_receivewal"
 	*/
@@ -203,7 +227,7 @@ func getTopology(ctx context.Context, client client.Client, documentdb dbpreview
 	var err error
 
 	if documentdb.Spec.ClusterReplication.CrossCloudNetworkingStrategy != string(None) {
-		memberClusterName, err = GetSelfName(ctx, client)
+		memberClusterName, err = GetFleetMemberName(ctx, client)
 		if err != nil {
 			return nil, nil, NoReplication, err
 		}
@@ -218,16 +242,15 @@ func getTopology(ctx context.Context, client client.Client, documentdb dbpreview
 	var self *dbpreview.MemberCluster
 	for _, c := range documentdb.Spec.ClusterReplication.ClusterList {
 		if c.Name != memberClusterName {
-			others = append(others, generateCNPGClusterName(documentdb.Name, c.Name))
+			others = append(others, c.Name)
 		} else {
-			self = &c
-			self.Name = generateCNPGClusterName(documentdb.Name, self.Name)
+			self = c.DeepCopy()
 		}
 	}
 	return self, others, state, nil
 }
 
-func GetSelfName(ctx context.Context, client client.Client) (string, error) {
+func GetFleetMemberName(ctx context.Context, client client.Client) (string, error) {
 	clusterMapName := "cluster-name"
 	clusterNameConfigMap := &corev1.ConfigMap{}
 	err := client.Get(ctx, types.NamespacedName{Name: clusterMapName, Namespace: "kube-system"}, clusterNameConfigMap)
@@ -235,11 +258,11 @@ func GetSelfName(ctx context.Context, client client.Client) (string, error) {
 		return "", err
 	}
 
-	self := clusterNameConfigMap.Data["name"]
-	if self == "" {
+	memberName := clusterNameConfigMap.Data["name"]
+	if memberName == "" {
 		return "", fmt.Errorf("name key not found in kube-system:cluster-name configmap")
 	}
-	return self, nil
+	return memberName, nil
 }
 
 func (r *ReplicationContext) IsAzureFleetNetworking() bool {

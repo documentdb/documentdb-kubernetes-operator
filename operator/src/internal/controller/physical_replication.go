@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -21,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -49,13 +51,13 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 
 	// No more errors possible, so we can safely edit the spec
-	cnpgCluster.Name = replicationContext.Self
+	cnpgCluster.Name = replicationContext.CNPGClusterName
 
 	if !replicationContext.IsPrimary() {
 		cnpgCluster.Spec.InheritedMetadata.Labels[util.LABEL_REPLICATION_CLUSTER_TYPE] = "replica"
 		cnpgCluster.Spec.Bootstrap = &cnpgv1.BootstrapConfiguration{
 			PgBaseBackup: &cnpgv1.BootstrapPgBaseBackup{
-				Source:   replicationContext.PrimaryCluster,
+				Source:   replicationContext.PrimaryCNPGClusterName,
 				Database: "postgres",
 				Owner:    "postgres",
 			},
@@ -98,8 +100,8 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 
 	cnpgCluster.Spec.ReplicaCluster = &cnpgv1.ReplicaClusterConfiguration{
 		Source:  replicationContext.GetReplicationSource(),
-		Primary: replicationContext.PrimaryCluster,
-		Self:    replicationContext.Self,
+		Primary: replicationContext.PrimaryCNPGClusterName,
+		Self:    replicationContext.CNPGClusterName,
 	}
 
 	if replicationContext.IsAzureFleetNetworking() {
@@ -121,10 +123,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 				})
 		}
 	}
-	selfHost := replicationContext.Self + "-rw." + documentdb.Namespace + ".svc"
+	selfHost := replicationContext.CNPGClusterName + "-rw." + documentdb.Namespace + ".svc"
 	cnpgCluster.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
 		{
-			Name: replicationContext.Self,
+			Name: replicationContext.CNPGClusterName,
 			ConnectionParameters: map[string]string{
 				"host":   selfHost,
 				"port":   "5432",
@@ -152,7 +154,7 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 	// Create dummy -rw services for remote clusters so DNS resolution works
 	// These services have non-matching selectors, so they have no local endpoints
 	// Istio will automatically route traffic through the east-west gateway
-	for _, remoteCluster := range replicationContext.Others {
+	for _, remoteCluster := range replicationContext.OtherCNPGClusterNames {
 		// Create the -rw (read-write/primary) service for each remote cluster
 		serviceNameRW := remoteCluster + "-rw"
 		foundServiceRW := &corev1.Service{}
@@ -216,9 +218,12 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 			}
 			err = r.Create(ctx, ringServiceExport)
 			if err != nil {
+				if errors.IsAlreadyExists(err) {
+					continue
+				}
 				return err
 			}
-		} else {
+		} else if err != nil {
 			return err
 		}
 	}
@@ -229,11 +234,21 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 		err := r.Get(ctx, types.NamespacedName{Name: sourceServiceName, Namespace: documentdb.Namespace}, foundMCS)
 		if err != nil && errors.IsNotFound(err) {
 			log.Log.Info("Multi Cluster Service not found. Creating a new Multi Cluster Service")
-			// Multi Cluster Service
+			// Multi Cluster Service with owner reference to ensure cleanup
 			foundMCS = &fleetv1alpha1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sourceServiceName,
 					Namespace: documentdb.Namespace,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         documentdb.APIVersion,
+							Kind:               documentdb.Kind,
+							Name:               documentdb.Name,
+							UID:                documentdb.UID,
+							BlockOwnerDeletion: ptr.To(true),
+							Controller:         ptr.To(true),
+						},
+					},
 				},
 				Spec: fleetv1alpha1.MultiClusterServiceSpec{
 					ServiceImport: fleetv1alpha1.ServiceImportRef{
@@ -336,7 +351,7 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 		// Replica => primary
 		// Look for the token if this is a managed failover
 		oldPrimaryAvailable := slices.Contains(
-			replicationContext.Others,
+			replicationContext.OtherCNPGClusterNames,
 			current.Spec.ReplicaCluster.Primary)
 
 		replicaClusterConfig := desired.Spec.ReplicaCluster
@@ -572,6 +587,133 @@ func (r *DocumentDBReconciler) waitForDemotionTokenAndCreateService(clusterNN ty
 			return
 		}
 	}
+}
+
+// CleanupMismatchedServiceImports finds and removes ServiceImports that have no ownerReferences
+// and are marked as "in-use-by" the current cluster.
+// RETURNS: Whether or not a deletion occurred, and error if any error occurs during the process
+//
+// There is currently an incompatibility when you use fleet-networking with a cluster that
+// is both a hub and a member. The ServiceImport that is generated on the hub will sometimes
+// be interpreted as a member-side ServiceImport and attach itself to the export, thus preventing
+// the intended MCS from attaching to it. This function finds those offending ServiceImports and
+// removes them.
+func (r *DocumentDBReconciler) CleanupMismatchedServiceImports(ctx context.Context, namespace string, replicationContext *util.ReplicationContext) (bool, *fleetv1alpha1.ServiceImportList, error) {
+	deleted := false
+
+	// List all ServiceImports in the namespace
+	serviceImportList := &fleetv1alpha1.ServiceImportList{}
+	if err := r.Client.List(ctx, serviceImportList, client.InNamespace(namespace)); err != nil {
+		// If the CRD doesn't exist, skip cleanup
+		if errors.IsNotFound(err) {
+			return deleted, nil, nil
+		}
+		return deleted, nil, fmt.Errorf("failed to list ServiceImports: %w", err)
+	}
+
+	inUseByAnnotation := "networking.fleet.azure.com/service-in-use-by"
+
+	for i := range serviceImportList.Items {
+		badServiceImport := &serviceImportList.Items[i]
+		// If it has an OwnerReference, then it is properly being used by the cluster's MCS
+		if len(badServiceImport.OwnerReferences) > 0 {
+			continue
+		}
+
+		annotations := badServiceImport.GetAnnotations()
+		if annotations == nil {
+			continue
+		}
+
+		inUseBy, exists := annotations[inUseByAnnotation]
+		// If it has its own name as the cluster name, then it has erroneously attached itself to the export
+		if !exists || !containsClusterName(inUseBy, replicationContext.FleetMemberName) {
+			continue
+		}
+
+		log.Log.Info("Found mismatched ServiceImport", "name", badServiceImport.Name, "namespace", namespace, "cluster", replicationContext.FleetMemberName)
+
+		// Debug log the entire ServiceImport before deletion
+		log.Log.V(1).Info("Deleting ServiceImport", "serviceImport", fmt.Sprintf("%+v", badServiceImport))
+
+		if err := r.Client.Delete(ctx, badServiceImport); err != nil && !errors.IsNotFound(err) {
+			log.Log.Error(err, "Failed to delete ServiceImport", "name", badServiceImport.Name)
+			continue
+		}
+		deleted = true
+
+		log.Log.Info("Deleted ServiceImport", "name", badServiceImport.Name, "namespace", namespace)
+	}
+
+	return deleted, serviceImportList, nil
+}
+
+// ForceReconcileInternalServiceExports finds InternalServiceExports that don't have a matching
+// ServiceImport with proper owner references in the target namespace, and annotates them to
+// trigger reconciliation so the fleet-networking controller can recreate the ServiceImports properly.
+// Returns whether any InternalServiceExports were annotated for reconciliation, and error if any occurs.
+func (r *DocumentDBReconciler) ForceReconcileInternalServiceExports(ctx context.Context, namespace string, replicationContext *util.ReplicationContext, imports *fleetv1alpha1.ServiceImportList) (bool, error) {
+	reconciled := false
+
+	// Extract all serviceImport names for easy lookup
+	serviceImportNames := make(map[string]bool)
+	for i := range imports.Items {
+		serviceImportNames[imports.Items[i].Name] = true
+	}
+
+	for fleetMemberName := range replicationContext.GenerateFleetMemberNames() {
+		// List all InternalServiceExports in each fleet member namespace
+		fleetMemberNamespace := "fleet-member-" + fleetMemberName
+		iseList := &fleetv1alpha1.InternalServiceExportList{}
+		if err := r.Client.List(ctx, iseList, client.InNamespace(fleetMemberNamespace)); err != nil {
+			// If the CRD doesn't exist or namespace doesn't exist, skip
+			if errors.IsNotFound(err) {
+				return reconciled, nil
+			}
+			return reconciled, fmt.Errorf("failed to list InternalServiceExports: %w", err)
+		}
+
+		// Check each InternalServiceExport for a matching ServiceImport
+		for i := range iseList.Items {
+			ise := &iseList.Items[i]
+
+			// ISE name format is: <namespace>-<service-name>
+			// Extract the service name by removing the namespace prefix
+			prefix := namespace + "-"
+			if !strings.HasPrefix(ise.Name, prefix) {
+				continue
+			}
+			serviceName := strings.TrimPrefix(ise.Name, prefix)
+
+			// Check if there's a valid ServiceImport for this ISE
+			if serviceImportNames[serviceName] {
+				continue
+			}
+
+			log.Log.Info("Found InternalServiceExport without import", "name", ise.Name, "namespace", fleetMemberNamespace)
+
+			// Add reconcile annotation with current timestamp to trigger reconciliation
+			if ise.Annotations == nil {
+				ise.Annotations = make(map[string]string)
+			}
+			ise.Annotations["reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
+
+			if err := r.Client.Update(ctx, ise); err != nil {
+				log.Log.Error(err, "Failed to annotate InternalServiceExport", "name", ise.Name, "namespace", fleetMemberNamespace)
+				continue
+			}
+
+			reconciled = true
+			log.Log.Info("Annotated InternalServiceExport for reconciliation", "name", ise.Name, "namespace", fleetMemberNamespace)
+		}
+	}
+	return reconciled, nil
+}
+
+// containsClusterName checks if the inUseBy string contains the cluster name
+func containsClusterName(inUseBy, clusterName string) bool {
+	// The annotation value typically contains the cluster name
+	return strings.Contains(inUseBy, clusterName)
 }
 
 // Returns true when token service resources are ready

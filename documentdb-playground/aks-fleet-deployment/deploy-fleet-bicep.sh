@@ -114,6 +114,20 @@ git clone https://github.com/kubefleet-dev/kubefleet.git $kubeDir
 pushd $kubeDir
 # Set up HUB_CLUSTER as the hub
 kubectl config use-context $HUB_CLUSTER
+
+# Install cert manager on hub cluster
+helm repo add jetstack https://charts.jetstack.io 
+helm repo update 
+
+echo -e "\nInstalling cert-manager on $HUB_CLUSTER..."
+helm upgrade --install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true 
+kubectl rollout status deployment/cert-manager -n cert-manager --timeout=240s || true
+echo "Pods ($HUB_CLUSTER):"
+kubectl get pods -n cert-manager -o wide || true
+
 export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
 export TAG=$(curl "https://api.github.com/repos/kubefleet-dev/kubefleet/tags" | jq -r '.[0].name') # Gets latest tag
 # Install the helm chart for running Fleet agents on the hub cluster.
@@ -128,7 +142,10 @@ helm upgrade --install hub-agent ./charts/hub-agent/ \
         --set logFileMaxSize=100000 \
         --set MaxConcurrentClusterPlacement=200 \
         --set namespace=fleet-system-hub \
-        --set enableWorkload=true
+        --set enableWorkload=true #\
+        #--set useCertManager=true \
+        #--set enableWebhook=true
+
 
 # Run the script.
 chmod +x ./hack/membership/joinMC.sh
