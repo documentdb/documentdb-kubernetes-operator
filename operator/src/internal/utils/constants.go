@@ -26,6 +26,7 @@ const (
 	LABEL_REPLICATION_CLUSTER_TYPE = "replication_cluster_type"
 	LABEL_DOCUMENTDB_NAME          = "documentdb.io/name"
 	LABEL_DOCUMENTDB_COMPONENT     = "documentdb.io/component"
+	FLEET_IN_USE_BY_ANNOTATION     = "networking.fleet.azure.com/service-in-use-by"
 
 	DOCUMENTDB_SERVICE_PREFIX = "documentdb-service-"
 

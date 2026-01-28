@@ -672,8 +672,6 @@ func (r *DocumentDBReconciler) CleanupMismatchedServiceImports(ctx context.Conte
 		return deleted, nil, fmt.Errorf("failed to list ServiceImports: %w", err)
 	}
 
-	inUseByAnnotation := "networking.fleet.azure.com/service-in-use-by"
-
 	for i := range serviceImportList.Items {
 		badServiceImport := &serviceImportList.Items[i]
 		// If it has an OwnerReference, then it is properly being used by the cluster's MCS
@@ -686,7 +684,7 @@ func (r *DocumentDBReconciler) CleanupMismatchedServiceImports(ctx context.Conte
 			continue
 		}
 
-		inUseBy, exists := annotations[inUseByAnnotation]
+		inUseBy, exists := annotations[util.FLEET_IN_USE_BY_ANNOTATION]
 		// If it has its own name as the cluster name, then it has erroneously attached itself to the export
 		if !exists || !containsClusterName(inUseBy, replicationContext.FleetMemberName) {
 			continue
