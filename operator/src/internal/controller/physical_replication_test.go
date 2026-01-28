@@ -2,11 +2,11 @@ package controller
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/stretchr/testify/require"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -21,13 +21,12 @@ import (
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
-func buildDocumentDBReconciler(t *testing.T, objs ...runtime.Object) *DocumentDBReconciler {
-	t.Helper()
+func buildDocumentDBReconciler(objs ...runtime.Object) *DocumentDBReconciler {
 	scheme := runtime.NewScheme()
-	require.NoError(t, dbpreview.AddToScheme(scheme))
-	require.NoError(t, cnpgv1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, rbacv1.AddToScheme(scheme))
+	Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+	Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
+	Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
 	builder := fake.NewClientBuilder().WithScheme(scheme)
 	if len(objs) > 0 {
@@ -46,128 +45,130 @@ func buildDocumentDBReconciler(t *testing.T, objs ...runtime.Object) *DocumentDB
 	return &DocumentDBReconciler{Client: builder.Build(), Scheme: scheme}
 }
 
-func TestDocumentDBReconcileSkipsWhenNotPresent(t *testing.T) {
-	ctx := context.Background()
-	namespace := "default"
+var _ = Describe("Physical Replication", func() {
+	It("deletes owned resources when DocumentDB is not present", func() {
+		ctx := context.Background()
+		namespace := "default"
 
-	documentdb := baseDocumentDB("docdb-not-present", namespace)
-	documentdb.UID = types.UID("docdb-not-present-uid")
-	documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
-		CrossCloudNetworkingStrategy: string(util.AzureFleet),
-		Primary:                      "member-2",
-		ClusterList: []dbpreview.MemberCluster{
-			{Name: "member-2"},
-			{Name: "member-3"},
-		},
-	}
-
-	ownerRef := metav1.OwnerReference{
-		APIVersion: "documentdb.io/preview",
-		Kind:       "DocumentDB",
-		Name:       documentdb.Name,
-		UID:        documentdb.UID,
-	}
-
-	ownedService := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "owned-service",
-			Namespace:       namespace,
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
-		},
-	}
-
-	ownedCluster := &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "owned-cnpg",
-			Namespace:       namespace,
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
-		},
-	}
-
-	clusterNameConfigMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "cluster-name",
-			Namespace: "kube-system",
-		},
-		Data: map[string]string{
-			"name": "member-1",
-		},
-	}
-
-	reconciler := buildDocumentDBReconciler(t, documentdb, ownedService, ownedCluster, clusterNameConfigMap)
-
-	result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: documentdb.Name, Namespace: namespace}})
-	require.NoError(t, err)
-	require.Equal(t, ctrl.Result{}, result)
-
-	service := &corev1.Service{}
-	err = reconciler.Client.Get(ctx, types.NamespacedName{Name: ownedService.Name, Namespace: namespace}, service)
-	require.True(t, errors.IsNotFound(err))
-
-	cluster := &cnpgv1.Cluster{}
-	err = reconciler.Client.Get(ctx, types.NamespacedName{Name: ownedCluster.Name, Namespace: namespace}, cluster)
-	require.True(t, errors.IsNotFound(err))
-}
-
-func TestTryUpdateClusterUpdatesExternalClusters(t *testing.T) {
-	ctx := context.Background()
-	namespace := "default"
-
-	documentdb := baseDocumentDB("docdb-repl", namespace)
-	documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
-		CrossCloudNetworkingStrategy: string(util.None),
-		Primary:                      documentdb.Name,
-		ClusterList: []dbpreview.MemberCluster{
-			{Name: documentdb.Name},
-			{Name: "member-2"},
-		},
-	}
-
-	current := &cnpgv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "docdb-repl",
-			Namespace: namespace,
-		},
-		Spec: cnpgv1.ClusterSpec{
-			ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
-				Self:    documentdb.Name,
-				Primary: documentdb.Name,
-				Source:  documentdb.Name,
+		documentdb := baseDocumentDB("docdb-not-present", namespace)
+		documentdb.UID = types.UID("docdb-not-present-uid")
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.AzureFleet),
+			Primary:                      "member-2",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "member-2"},
+				{Name: "member-3"},
 			},
-			ExternalClusters: []cnpgv1.ExternalCluster{
+		}
+
+		ownerRef := metav1.OwnerReference{
+			APIVersion: "documentdb.io/preview",
+			Kind:       "DocumentDB",
+			Name:       documentdb.Name,
+			UID:        documentdb.UID,
+		}
+
+		ownedService := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "owned-service",
+				Namespace:       namespace,
+				OwnerReferences: []metav1.OwnerReference{ownerRef},
+			},
+		}
+
+		ownedCluster := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "owned-cnpg",
+				Namespace:       namespace,
+				OwnerReferences: []metav1.OwnerReference{ownerRef},
+			},
+		}
+
+		clusterNameConfigMap := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "cluster-name",
+				Namespace: "kube-system",
+			},
+			Data: map[string]string{
+				"name": "member-1",
+			},
+		}
+
+		reconciler := buildDocumentDBReconciler(documentdb, ownedService, ownedCluster, clusterNameConfigMap)
+
+		result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: documentdb.Name, Namespace: namespace}})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(result).To(Equal(ctrl.Result{}))
+
+		service := &corev1.Service{}
+		err = reconciler.Client.Get(ctx, types.NamespacedName{Name: ownedService.Name, Namespace: namespace}, service)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+
+		cluster := &cnpgv1.Cluster{}
+		err = reconciler.Client.Get(ctx, types.NamespacedName{Name: ownedCluster.Name, Namespace: namespace}, cluster)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("updates external clusters and synchronous config", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-repl", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      documentdb.Name,
+			ClusterList: []dbpreview.MemberCluster{
 				{Name: documentdb.Name},
 				{Name: "member-2"},
 			},
-			PostgresConfiguration: cnpgv1.PostgresConfiguration{
-				Synchronous: &cnpgv1.SynchronousReplicaConfiguration{
-					Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
-					Number: 1,
+		}
+
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-repl",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:    documentdb.Name,
+					Primary: documentdb.Name,
+					Source:  documentdb.Name,
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: documentdb.Name},
+					{Name: "member-2"},
+				},
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Synchronous: &cnpgv1.SynchronousReplicaConfiguration{
+						Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+						Number: 1,
+					},
 				},
 			},
-		},
-	}
+		}
 
-	desired := current.DeepCopy()
-	desired.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
-		{Name: documentdb.Name},
-		{Name: "member-2"},
-		{Name: "member-3"},
-	}
-	desired.Spec.PostgresConfiguration.Synchronous = &cnpgv1.SynchronousReplicaConfiguration{
-		Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
-		Number: 2,
-	}
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
+			{Name: documentdb.Name},
+			{Name: "member-2"},
+			{Name: "member-3"},
+		}
+		desired.Spec.PostgresConfiguration.Synchronous = &cnpgv1.SynchronousReplicaConfiguration{
+			Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+			Number: 2,
+		}
 
-	reconciler := buildDocumentDBReconciler(t, current)
-	replicationContext, err := util.GetReplicationContext(ctx, reconciler.Client, *documentdb)
-	require.NoError(t, err)
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext, err := util.GetReplicationContext(ctx, reconciler.Client, *documentdb)
+		Expect(err).ToNot(HaveOccurred())
 
-	err, requeue := reconciler.TryUpdateCluster(ctx, current, desired, documentdb, replicationContext)
-	require.NoError(t, err)
-	require.Equal(t, time.Duration(-1), requeue)
+		err, requeue := reconciler.TryUpdateCluster(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
 
-	updated := &cnpgv1.Cluster{}
-	require.NoError(t, reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated))
-	require.Len(t, updated.Spec.ExternalClusters, 3)
-	require.Equal(t, 2, updated.Spec.PostgresConfiguration.Synchronous.Number)
-}
+		updated := &cnpgv1.Cluster{}
+		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.ExternalClusters).To(HaveLen(3))
+		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
+	})
+})

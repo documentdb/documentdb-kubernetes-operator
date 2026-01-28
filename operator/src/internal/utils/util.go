@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -16,7 +15,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -363,7 +364,7 @@ func DeleteOwnedResources(ctx context.Context, c client.Client, owner metav1.Obj
 	var mcsList fleetv1alpha1.MultiClusterServiceList
 	if err := c.List(ctx, &mcsList, listInNamespace); err != nil && !errors.IsNotFound(err) {
 		// Ignore if CRD doesn't exist
-		if !isNoKindMatchError(err) {
+		if !isCRDMissing(err) {
 			return fmt.Errorf("failed to list MultiClusterServices: %w", err)
 		}
 	} else {
@@ -381,7 +382,7 @@ func DeleteOwnedResources(ctx context.Context, c client.Client, owner metav1.Obj
 	var serviceExportList fleetv1alpha1.ServiceExportList
 	if err := c.List(ctx, &serviceExportList, listInNamespace); err != nil && !errors.IsNotFound(err) {
 		// Ignore if CRD doesn't exist
-		if !isNoKindMatchError(err) {
+		if !isCRDMissing(err) {
 			return fmt.Errorf("failed to list ServiceExports: %w", err)
 		}
 	} else {
@@ -402,13 +403,13 @@ func DeleteOwnedResources(ctx context.Context, c client.Client, owner metav1.Obj
 	return nil
 }
 
-// isNoKindMatchError checks if the error is a "no kind match" error, which occurs when
+// isCRDMissing checks if the error is a "no kind match" error, which occurs when
 // a CRD is not installed in the cluster
-func isNoKindMatchError(err error) bool {
+func isCRDMissing(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "no matches for kind")
+	return meta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err)
 }
 
 // GenerateConnectionString returns a MongoDB connection string for the DocumentDB instance.

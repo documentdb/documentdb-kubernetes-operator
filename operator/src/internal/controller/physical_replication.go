@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -202,21 +203,23 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 }
 
 func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
+	labels := map[string]string{
+		util.LABEL_DOCUMENTDB_NAME: documentdb.Name,
+	}
+
 	// List all existing ServiceExports in the namespace
 	existingServiceExports := &fleetv1alpha1.ServiceExportList{}
-	if err := r.Client.List(ctx, existingServiceExports, client.InNamespace(documentdb.Namespace)); err != nil {
+	if err := r.Client.List(ctx, existingServiceExports, client.InNamespace(documentdb.Namespace), client.MatchingLabels(labels)); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to list ServiceExports: %w", err)
 		}
 	}
 
-	// Build a map of existing ServiceExports that start with documentdb.Name
+	// Build a map of existing ServiceExports that are tagged for this DocumentDB
 	existingExports := make(map[string]*fleetv1alpha1.ServiceExport)
 	for i := range existingServiceExports.Items {
 		export := &existingServiceExports.Items[i]
-		if strings.HasPrefix(export.Name, documentdb.Name) {
-			existingExports[export.Name] = export
-		}
+		existingExports[export.Name] = export
 	}
 
 	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
@@ -226,12 +229,15 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serviceName,
 					Namespace: documentdb.Namespace,
+					Labels:    labels,
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion: documentdb.APIVersion,
-							Kind:       documentdb.Kind,
-							Name:       documentdb.Name,
-							UID:        documentdb.UID,
+							APIVersion:         documentdb.APIVersion,
+							Kind:               documentdb.Kind,
+							Name:               documentdb.Name,
+							UID:                documentdb.UID,
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
 						},
 					},
 				},
@@ -253,19 +259,17 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 
 	// List all existing MultiClusterServices in the namespace
 	existingMCSList := &fleetv1alpha1.MultiClusterServiceList{}
-	if err := r.Client.List(ctx, existingMCSList, client.InNamespace(documentdb.Namespace)); err != nil {
+	if err := r.Client.List(ctx, existingMCSList, client.InNamespace(documentdb.Namespace), client.MatchingLabels(labels)); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to list MultiClusterServices: %w", err)
 		}
 	}
 
-	// Build a map of existing MultiClusterServices that start with documentdb.Name
+	// Build a map of existing MultiClusterServices that are tagged for this DocumentDB
 	existingMCS := make(map[string]*fleetv1alpha1.MultiClusterService)
 	for i := range existingMCSList.Items {
 		mcs := &existingMCSList.Items[i]
-		if strings.HasPrefix(mcs.Name, documentdb.Name) {
-			existingMCS[mcs.Name] = mcs
-		}
+		existingMCS[mcs.Name] = mcs
 	}
 
 	// Below is valid because this function is only called if fleet-networking is enabled
@@ -277,12 +281,15 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sourceServiceName,
 					Namespace: documentdb.Namespace,
+					Labels:    labels,
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion: documentdb.APIVersion,
-							Kind:       documentdb.Kind,
-							Name:       documentdb.Name,
-							UID:        documentdb.UID,
+							APIVersion:         documentdb.APIVersion,
+							Kind:               documentdb.Kind,
+							Name:               documentdb.Name,
+							UID:                documentdb.UID,
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
 						},
 					},
 				},
@@ -400,7 +407,7 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 		replicaClusterConfig := desired.Spec.ReplicaCluster
 		// If the old primary is available, we can read the token from it
 		if oldPrimaryAvailable {
-			token, err, refreshTime := r.ReadToken(ctx, documentdb.Namespace, replicationContext)
+			token, err, refreshTime := r.ReadToken(ctx, documentdb, replicationContext)
 			if err != nil || refreshTime > 0 {
 				return err, refreshTime
 			}
@@ -500,8 +507,9 @@ func getReplicasChangePatchOps(patchOps *[]util.JSONPatch, desired *cnpgv1.Clust
 	}
 }
 
-func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
+func (r *DocumentDBReconciler) ReadToken(ctx context.Context, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
 	tokenServiceName := "promotion-token"
+	namespace := documentdb.Namespace
 
 	// If we are not using cross-cloud networking, we only need to read the token from the configmap
 	if !replicationContext.IsAzureFleetNetworking() && !replicationContext.IsIstioNetworking() {
@@ -578,6 +586,16 @@ func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tokenServiceName,
 				Namespace: namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         documentdb.APIVersion,
+						Kind:               documentdb.Kind,
+						Name:               documentdb.Name,
+						UID:                documentdb.UID,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
 			},
 			Spec: fleetv1alpha1.MultiClusterServiceSpec{
 				ServiceImport: fleetv1alpha1.ServiceImportRef{
@@ -873,10 +891,12 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 				Namespace: clusterNN.Namespace,
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion: cluster.APIVersion,
-						Kind:       cluster.Kind,
-						Name:       cluster.Name,
-						UID:        cluster.UID,
+						APIVersion:         cluster.APIVersion,
+						Kind:               cluster.Kind,
+						Name:               cluster.Name,
+						UID:                cluster.UID,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
 					},
 				},
 			},

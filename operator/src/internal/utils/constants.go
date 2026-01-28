@@ -24,6 +24,8 @@ const (
 	LABEL_NODE_INDEX               = "node_index"
 	LABEL_SERVICE_TYPE             = "service_type"
 	LABEL_REPLICATION_CLUSTER_TYPE = "replication_cluster_type"
+	LABEL_DOCUMENTDB_NAME          = "documentdb.io/name"
+	LABEL_DOCUMENTDB_COMPONENT     = "documentdb.io/component"
 
 	DOCUMENTDB_SERVICE_PREFIX = "documentdb-service-"
 
