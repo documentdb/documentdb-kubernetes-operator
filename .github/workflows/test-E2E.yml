@@ -57,6 +57,7 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
+  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -143,6 +144,7 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ env.DOCUMENTDB_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
@@ -268,8 +270,8 @@ jobs:
       run: |
         echo "Testing DocumentDB extension image upgrade on ${{ matrix.architecture }}..."
         
-        OLD_IMAGE="ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.109.0"
-        NEW_IMAGE="ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.110.0"
+        OLD_IMAGE="${{ env.DOCUMENTDB_IMAGE }}"
+        NEW_IMAGE="ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0"
         
         # Verify current image is the old image
         CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
@@ -293,19 +295,18 @@ jobs:
         # Wait for cluster to be healthy with new image
         echo "Waiting for cluster to be healthy with new image..."
         timeout 600 bash -c '
-        NEW_IMAGE="ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.110.0"
         
         while true; do
           DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
           CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
           
-          # Check extension image in CNPG cluster
-          EXTENSION_IMAGE=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.spec.postgresConfiguration.extensions[?(@.name==\"documentdb\")].imageVolumeSource.reference}" 2>/dev/null || echo "N/A")
+          # Check DocumentDB version in status
+          DOCUMENTDB_VERSION=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.documentDBVersion}" 2>/dev/null || echo "N/A")
           
-          echo "DocumentDB status: $DB_STATUS, CNPG Cluster phase: $CLUSTER_STATUS, Extension image: $EXTENSION_IMAGE"
+          echo "DocumentDB status: $DB_STATUS, CNPG Cluster phase: $CLUSTER_STATUS, DocumentDB version: $DOCUMENTDB_VERSION"
           
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
-            if [[ "$EXTENSION_IMAGE" == "$NEW_IMAGE" ]]; then
+            if [[ "$DOCUMENTDB_VERSION" == "0.109-0" ]]; then
               HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
               if [[ "$HEALTHY_PODS" -ge "1" ]]; then
                 echo "✓ Cluster is healthy with new image and $HEALTHY_PODS healthy pods"
@@ -321,20 +322,11 @@ jobs:
         # Verify the new image is applied
         echo "Verifying new image is applied..."
         FINAL_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
-        CNPG_EXTENSION_IMAGE=$(kubectl get cluster $DB_NAME -n $DB_NS -o jsonpath='{.spec.postgresConfiguration.extensions[?(@.name=="documentdb")].imageVolumeSource.reference}')
-        
         echo "Final DocumentDB image in spec: $FINAL_IMAGE"
-        echo "Final extension image in CNPG cluster: $CNPG_EXTENSION_IMAGE"
         
         if [[ "$FINAL_IMAGE" != "$NEW_IMAGE" ]]; then
           echo "❌ New image not applied to DocumentDB spec"
           kubectl get documentdb $DB_NAME -n $DB_NS -o yaml
-          exit 1
-        fi
-        
-        if [[ "$CNPG_EXTENSION_IMAGE" != "$NEW_IMAGE" ]]; then
-          echo "❌ New image not applied to CNPG cluster extension"
-          kubectl get cluster $DB_NAME -n $DB_NS -o yaml
           exit 1
         fi
         

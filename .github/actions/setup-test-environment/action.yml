@@ -54,6 +54,9 @@ inputs:
     description: 'Whether to use external images instead of loading from artifacts'
     required: false
     default: 'false'
+  documentdb-image:
+    description: 'DocumentDB image to use for the cluster'
+    required: true
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -593,7 +596,7 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ghcr.io/guanzhousongmicrosoft/documentdb-pg18-amd64:0.109.0
+          documentDBImage: ${{ inputs.documentdb-image }}
           gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
           resource:
             storage:

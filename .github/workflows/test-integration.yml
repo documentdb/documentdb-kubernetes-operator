@@ -33,6 +33,7 @@ env:
   DB_USERNAME: default_user
   DB_PASSWORD: Admin100
   DB_PORT: 10260
+  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
 
 jobs:
   # Use the reusable build workflow - only if no image tag is provided or on pull_request
@@ -119,6 +120,7 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ env.DOCUMENTDB_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && github.event.inputs.image_tag != '' && github.event.inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
