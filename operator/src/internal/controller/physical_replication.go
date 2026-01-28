@@ -411,7 +411,7 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 			if err != nil || refreshTime > 0 {
 				return err, refreshTime
 			}
-			log.Log.Info("Token read successfully", "token", token)
+			log.Log.Info("Token read successfully")
 
 			// Update the configuration with the token
 			replicaClusterConfig.PromotionToken = token
@@ -722,7 +722,7 @@ func (r *DocumentDBReconciler) ForceReconcileInternalServiceExports(ctx context.
 		if err := r.Client.List(ctx, iseList, client.InNamespace(fleetMemberNamespace)); err != nil {
 			// If the CRD doesn't exist or namespace doesn't exist, skip
 			if errors.IsNotFound(err) {
-				return reconciled, nil
+				continue
 			}
 			return reconciled, fmt.Errorf("failed to list InternalServiceExports: %w", err)
 		}
