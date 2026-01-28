@@ -200,9 +200,12 @@ runs:
     - name: Create kind cluster
       uses: helm/kind-action@v1.12.0
       with:
-        version: v0.31.0
-        node_image: kindest/node:v1.35.0@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f
         cluster_name: documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}
+        config: |
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          featureGates:
+            "ImageVolume": true
 
     - name: Load Docker images into kind cluster (local build)
       if: inputs.use-external-images == 'false'
