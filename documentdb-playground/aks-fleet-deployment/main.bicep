@@ -19,18 +19,6 @@ param nodeCount int = 2
 // Optionally include kubernetesVersion in cluster properties
 var maybeK8sVersion = empty(kubernetesVersion) ? {} : { kubernetesVersion: kubernetesVersion }
 
-// Define non-overlapping address spaces for each member cluster
-var memberVnetAddressSpaces = [
-  '10.1.0.0/16'  // westus3
-  '10.2.0.0/16'  // uksouth
-  '10.3.0.0/16'  // eastus2
-]
-var memberSubnetAddressSpaces = [
-  '10.1.0.0/20'  // westus3
-  '10.2.0.0/20'  // uksouth
-  '10.3.0.0/20'  // eastus2
-]
-
 // Member VNets
 resource memberVnets 'Microsoft.Network/virtualNetworks@2023-09-01' = [for (region, i) in memberRegions: {
   name: 'member-${region}-vnet'
@@ -38,14 +26,14 @@ resource memberVnets 'Microsoft.Network/virtualNetworks@2023-09-01' = [for (regi
   properties: {
     addressSpace: {
       addressPrefixes: [
-        memberVnetAddressSpaces[i]
+        '10.${i}.0.0/16'
       ]
     }
     subnets: [
       {
         name: 'aks-subnet'
         properties: {
-          addressPrefix: memberSubnetAddressSpaces[i]
+          addressPrefix: '10.${i}.0.0/20'
         }
       }
     ]
@@ -84,59 +72,5 @@ resource memberClusters 'Microsoft.ContainerService/managedClusters@2023-10-01' 
   ]
 }]
 
-// Create peering pairs for full mesh
-var peeringPairs = [
-  {
-    sourceIndex: 0
-    targetIndex: 1
-    sourceName: memberRegions[0]
-    targetName: memberRegions[1]
-  }
-  {
-    sourceIndex: 0
-    targetIndex: 2
-    sourceName: memberRegions[0]
-    targetName: memberRegions[2]
-  }
-  {
-    sourceIndex: 1
-    targetIndex: 2
-    sourceName: memberRegions[1]
-    targetName: memberRegions[2]
-  }
-]
-
-// VNet peerings - Forward direction
-resource memberPeeringsForward 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2023-09-01' = [for pair in peeringPairs: {
-  name: '${pair.sourceName}-to-${pair.targetName}'
-  parent: memberVnets[pair.sourceIndex]
-  properties: {
-    remoteVirtualNetwork: {
-      id: memberVnets[pair.targetIndex].id
-    }
-    allowVirtualNetworkAccess: true
-    allowForwardedTraffic: true
-    allowGatewayTransit: false
-    useRemoteGateways: false
-  }
-}]
-
-// VNet peerings - Reverse direction
-resource memberPeeringsReverse 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2023-09-01' = [for pair in peeringPairs: {
-  name: '${pair.targetName}-to-${pair.sourceName}'
-  parent: memberVnets[pair.targetIndex]
-  properties: {
-    remoteVirtualNetwork: {
-      id: memberVnets[pair.sourceIndex].id
-    }
-    allowVirtualNetworkAccess: true
-    allowForwardedTraffic: true
-    allowGatewayTransit: false
-    useRemoteGateways: false
-  }
-  dependsOn: [
-    memberPeeringsForward
-  ]
-}]
-
 output memberClusterNames array = [for i in range(0, length(memberRegions)): memberClusters[i].name]
+output memberVnetNames array = [for i in range(0, length(memberRegions)): memberVnets[i].name]
