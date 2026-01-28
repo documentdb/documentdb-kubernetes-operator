@@ -9,10 +9,6 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
-      documentdb_version:
-        description: 'DocumentDB image version to test'
-        required: false
-        default: '16'
       node_count:
         description: 'Number of DocumentDB nodes'
         required: false
@@ -26,11 +22,6 @@ on:
       image_tag:
         description: 'Optional: Use existing image tag instead of building locally'
         required: false
-        type: string
-      documentdb_version:
-        description: 'DocumentDB image version to test'
-        required: false
-        default: '16'
         type: string
       node_count:
         description: 'Number of DocumentDB nodes'
@@ -52,6 +43,7 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
+  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -131,6 +123,7 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ env.DOCUMENTDB_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
@@ -279,7 +272,7 @@ jobs:
         spec:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
-          documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
           gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
           resource:
             storage:
