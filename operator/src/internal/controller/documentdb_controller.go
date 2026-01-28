@@ -286,7 +286,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		if reconciled {
 			log.Log.Info("Annotated InternalServiceExports for reconciliation; requeuing to allow fleet-networking to recreate ServiceImports")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 	}
 

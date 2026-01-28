@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -203,50 +202,87 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 }
 
 func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
-	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
-		foundServiceExport := &fleetv1alpha1.ServiceExport{}
-		err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: documentdb.Namespace}, foundServiceExport)
-		if errors.IsNotFound(err) {
-			log.Log.Info("Service Export not found. Creating a new Service Export " + serviceName)
+	// List all existing ServiceExports in the namespace
+	existingServiceExports := &fleetv1alpha1.ServiceExportList{}
+	if err := r.Client.List(ctx, existingServiceExports, client.InNamespace(documentdb.Namespace)); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to list ServiceExports: %w", err)
+		}
+	}
 
-			// Service Export
+	// Build a map of existing ServiceExports that start with documentdb.Name
+	existingExports := make(map[string]*fleetv1alpha1.ServiceExport)
+	for i := range existingServiceExports.Items {
+		export := &existingServiceExports.Items[i]
+		if strings.HasPrefix(export.Name, documentdb.Name) {
+			existingExports[export.Name] = export
+		}
+	}
+
+	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
+		_, exists := existingExports[serviceName]
+		if !exists {
 			ringServiceExport := &fleetv1alpha1.ServiceExport{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serviceName,
 					Namespace: documentdb.Namespace,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: documentdb.APIVersion,
+							Kind:       documentdb.Kind,
+							Name:       documentdb.Name,
+							UID:        documentdb.UID,
+						},
+					},
 				},
 			}
-			err = r.Create(ctx, ringServiceExport)
-			if err != nil {
-				if errors.IsAlreadyExists(err) {
-					continue
-				}
+			if err := r.Create(ctx, ringServiceExport); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
-		} else if err != nil {
-			return err
+		} else { // if exists then we don't want to remove it
+			delete(existingExports, serviceName)
 		}
 	}
 
-	// Below is true because this function is only called if we are fleet enabled
+	// If it's still in the existingExports map, it means it's no longer needed and should be deleted
+	for serviceName, export := range existingExports {
+		if err := r.Client.Delete(ctx, export); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ServiceExport %s: %w", serviceName, err)
+		}
+	}
+
+	// List all existing MultiClusterServices in the namespace
+	existingMCSList := &fleetv1alpha1.MultiClusterServiceList{}
+	if err := r.Client.List(ctx, existingMCSList, client.InNamespace(documentdb.Namespace)); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to list MultiClusterServices: %w", err)
+		}
+	}
+
+	// Build a map of existing MultiClusterServices that start with documentdb.Name
+	existingMCS := make(map[string]*fleetv1alpha1.MultiClusterService)
+	for i := range existingMCSList.Items {
+		mcs := &existingMCSList.Items[i]
+		if strings.HasPrefix(mcs.Name, documentdb.Name) {
+			existingMCS[mcs.Name] = mcs
+		}
+	}
+
+	// Below is valid because this function is only called if fleet-networking is enabled
 	for sourceServiceName := range replicationContext.GenerateIncomingServiceNames(documentdb.Name, documentdb.Namespace) {
-		foundMCS := &fleetv1alpha1.MultiClusterService{}
-		err := r.Get(ctx, types.NamespacedName{Name: sourceServiceName, Namespace: documentdb.Namespace}, foundMCS)
-		if err != nil && errors.IsNotFound(err) {
-			log.Log.Info("Multi Cluster Service not found. Creating a new Multi Cluster Service")
+		_, exists := existingMCS[sourceServiceName]
+		if !exists {
 			// Multi Cluster Service with owner reference to ensure cleanup
-			foundMCS = &fleetv1alpha1.MultiClusterService{
+			newMCS := &fleetv1alpha1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sourceServiceName,
 					Namespace: documentdb.Namespace,
 					OwnerReferences: []metav1.OwnerReference{
 						{
-							APIVersion:         documentdb.APIVersion,
-							Kind:               documentdb.Kind,
-							Name:               documentdb.Name,
-							UID:                documentdb.UID,
-							BlockOwnerDeletion: ptr.To(true),
-							Controller:         ptr.To(true),
+							APIVersion: documentdb.APIVersion,
+							Kind:       documentdb.Kind,
+							Name:       documentdb.Name,
+							UID:        documentdb.UID,
 						},
 					},
 				},
@@ -256,10 +292,18 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 					},
 				},
 			}
-			err = r.Create(ctx, foundMCS)
-			if err != nil {
+			if err := r.Create(ctx, newMCS); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
+		} else { // if exists then we don't want to remove it
+			delete(existingMCS, sourceServiceName)
+		}
+	}
+
+	// If it's still in the existingMCS map, it means it's no longer needed and should be deleted
+	for serviceName, mcs := range existingMCS {
+		if err := r.Client.Delete(ctx, mcs); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete MultiClusterService %s: %w", serviceName, err)
 		}
 	}
 
@@ -291,7 +335,6 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 	// Update if the cluster list has changed
 	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
 	if replicasChanged {
-		log.Log.Info("Updating external clusters")
 		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
 	}
 
@@ -631,18 +674,11 @@ func (r *DocumentDBReconciler) CleanupMismatchedServiceImports(ctx context.Conte
 			continue
 		}
 
-		log.Log.Info("Found mismatched ServiceImport", "name", badServiceImport.Name, "namespace", namespace, "cluster", replicationContext.FleetMemberName)
-
-		// Debug log the entire ServiceImport before deletion
-		log.Log.V(1).Info("Deleting ServiceImport", "serviceImport", fmt.Sprintf("%+v", badServiceImport))
-
 		if err := r.Client.Delete(ctx, badServiceImport); err != nil && !errors.IsNotFound(err) {
 			log.Log.Error(err, "Failed to delete ServiceImport", "name", badServiceImport.Name)
 			continue
 		}
 		deleted = true
-
-		log.Log.Info("Deleted ServiceImport", "name", badServiceImport.Name, "namespace", namespace)
 	}
 
 	return deleted, serviceImportList, nil
@@ -690,8 +726,6 @@ func (r *DocumentDBReconciler) ForceReconcileInternalServiceExports(ctx context.
 				continue
 			}
 
-			log.Log.Info("Found InternalServiceExport without import", "name", ise.Name, "namespace", fleetMemberNamespace)
-
 			// Add reconcile annotation with current timestamp to trigger reconciliation
 			if ise.Annotations == nil {
 				ise.Annotations = make(map[string]string)
@@ -704,7 +738,6 @@ func (r *DocumentDBReconciler) ForceReconcileInternalServiceExports(ctx context.
 			}
 
 			reconciled = true
-			log.Log.Info("Annotated InternalServiceExport for reconciliation", "name", ise.Name, "namespace", fleetMemberNamespace)
 		}
 	}
 	return reconciled, nil
@@ -838,6 +871,14 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tokenServiceName,
 				Namespace: clusterNN.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: cluster.APIVersion,
+						Kind:       cluster.Kind,
+						Name:       cluster.Name,
+						UID:        cluster.UID,
+					},
+				},
 			},
 		}
 

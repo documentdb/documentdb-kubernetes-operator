@@ -28,7 +28,6 @@ done
 
 # Build the cluster list YAML with proper indentation
 CLUSTER_LIST=""
-CLUSTER_LIST_CRP=""
 for cluster in "${CLUSTER_ARRAY[@]}"; do
   if [ "$cluster" == "$EXCLUDE_CLUSTER" ]; then
     echo "Excluding cluster $cluster from DocumentDB configuration"
@@ -37,10 +36,17 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   if [ -z "$CLUSTER_LIST" ]; then
     CLUSTER_LIST="      - name: ${cluster}"
     CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"        environment: aks"
-    CLUSTER_LIST_CRP="      - ${cluster}"
   else
     CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"      - name: ${cluster}"
     CLUSTER_LIST="${CLUSTER_LIST}"$'\n'"        environment: aks"
+  fi
+done
+
+CLUSTER_LIST_CRP=""
+for cluster in "${CLUSTER_ARRAY[@]}"; do
+  if [ -z "$CLUSTER_LIST_CRP" ]; then
+    CLUSTER_LIST_CRP="      - ${cluster}"
+  else
     CLUSTER_LIST_CRP="${CLUSTER_LIST_CRP}"$'\n'"      - ${cluster}"
   fi
 done
@@ -63,4 +69,33 @@ done > "$TEMP_YAML"
 
 echo ""
 echo "Applying DocumentDB multi-region configuration..."
-kubectl --context "$HUB_CLUSTER" apply -f "$TEMP_YAML"
+
+MAX_RETRIES=60
+RETRY_INTERVAL=3
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  kubectl --context "$HUB_CLUSTER" apply -f "$TEMP_YAML" &> /dev/null
+  
+  echo "Checking if $EXCLUDE_CLUSTER has been removed from clusterReplication on the excluded cluster..."
+  
+  # Get the clusterReplication.clusters field from the DocumentDB object on the excluded cluster
+  CLUSTER_LIST_JSON=$(kubectl --context "$EXCLUDE_CLUSTER" get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.clusterList[*].name}' 2>/dev/null)
+  
+  if ! echo "$CLUSTER_LIST_JSON" | grep -q "$EXCLUDE_CLUSTER"; then
+    echo "Success: $EXCLUDE_CLUSTER is now excluded from clusterReplication field"
+    break
+  fi
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "Cluster still in clusterReplication (attempt $RETRY_COUNT/$MAX_RETRIES). Retrying in ${RETRY_INTERVAL}s..."
+  sleep $RETRY_INTERVAL
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "Error: Timed out waiting for $EXCLUDE_CLUSTER to be removed from clusterReplication"
+  exit 1
+fi
+
+rm -f "$TEMP_YAML"
+echo "Done."
