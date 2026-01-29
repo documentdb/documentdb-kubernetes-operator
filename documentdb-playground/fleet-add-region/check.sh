@@ -212,6 +212,126 @@ check_non_member_cluster() {
   else
     record_success "$cluster" "Namespace $DOCUMENTDB_NAMESPACE absent; no DocumentDB services present"
   fi
+
+  # Check for ServiceExports that shouldn't exist on non-member clusters
+  local svcexport_json
+  if svcexport_json=$(kubectl --context "$cluster" get serviceexport -n "$DOCUMENTDB_NAMESPACE" -o json 2>/dev/null); then
+    local doc_owned_exports
+    doc_owned_exports=$(echo "$svcexport_json" | jq --arg doc "$DOCUMENTDB_NAME" '[.items[] | select(any(.metadata.ownerReferences[]?; .kind=="DocumentDB" and .name==$doc))]')
+    local export_count
+    export_count=$(echo "$doc_owned_exports" | jq 'length')
+    if (( export_count == 0 )); then
+      record_success "$cluster" "No DocumentDB ServiceExports present"
+    else
+      record_failure "$cluster" "Found $export_count DocumentDB ServiceExport(s) but region is not in clusterList"
+    fi
+  else
+    record_success "$cluster" "ServiceExport CRD unavailable; no DocumentDB ServiceExports present"
+  fi
+
+  # Check for MultiClusterServices that shouldn't exist on non-member clusters
+  local mcs_json
+  if mcs_json=$(kubectl --context "$cluster" get multiclusterservice -n "$DOCUMENTDB_NAMESPACE" -o json 2>/dev/null); then
+    local doc_owned_mcs
+    doc_owned_mcs=$(echo "$mcs_json" | jq --arg doc "$DOCUMENTDB_NAME" '[.items[] | select(any(.metadata.ownerReferences[]?; .kind=="DocumentDB" and .name==$doc))]')
+    local mcs_count
+    mcs_count=$(echo "$doc_owned_mcs" | jq 'length')
+    if (( mcs_count == 0 )); then
+      record_success "$cluster" "No DocumentDB MultiClusterServices present"
+    else
+      record_failure "$cluster" "Found $mcs_count DocumentDB MultiClusterService(s) but region is not in clusterList"
+    fi
+  else
+    record_success "$cluster" "MultiClusterService CRD unavailable; no DocumentDB MultiClusterServices present"
+  fi
+}
+
+check_multiclusterservices() {
+  local hub_cluster="$1"
+
+  log "Checking MultiClusterServices on hub cluster: $hub_cluster"
+
+  local mcs_json
+  if ! mcs_json=$(kubectl --context "$hub_cluster" get multiclusterservice -n "$DOCUMENTDB_NAMESPACE" -o json 2>&1); then
+    record_failure "$hub_cluster" "Unable to list MultiClusterServices: $mcs_json"
+    return
+  fi
+
+  local doc_owned_mcs
+  doc_owned_mcs=$(echo "$mcs_json" | jq --arg doc "$DOCUMENTDB_NAME" '[.items[] | select(any(.metadata.ownerReferences[]?; .kind=="DocumentDB" and .name==$doc))]')
+  local mcs_count
+  mcs_count=$(echo "$doc_owned_mcs" | jq 'length')
+
+  if (( mcs_count == 0 )); then
+    record_failure "$hub_cluster" "No MultiClusterServices owned by DocumentDB $DOCUMENTDB_NAME"
+    return
+  fi
+
+  record_success "$hub_cluster" "Found $mcs_count MultiClusterService(s) owned by DocumentDB $DOCUMENTDB_NAME"
+
+  # Check each MCS for Valid condition
+  local invalid_mcs
+  invalid_mcs=$(echo "$doc_owned_mcs" | jq '[.[] | select(.status.conditions == null or ([.status.conditions[] | select(.type=="Valid" and .status=="True")] | length == 0)) | .metadata.name]')
+  local invalid_count
+  invalid_count=$(echo "$invalid_mcs" | jq 'length')
+
+  if (( invalid_count > 0 )); then
+    local invalid_list
+    invalid_list=$(echo "$invalid_mcs" | jq -r 'join(", ")')
+    record_failure "$hub_cluster" "MultiClusterServices not valid: $invalid_list"
+  else
+    record_success "$hub_cluster" "All $mcs_count MultiClusterService(s) are valid"
+  fi
+}
+
+check_serviceexports() {
+  local cluster="$1"
+
+  local svcexport_json
+  if ! svcexport_json=$(kubectl --context "$cluster" get serviceexport -n "$DOCUMENTDB_NAMESPACE" -o json 2>&1); then
+    record_failure "$cluster" "Unable to list ServiceExports: $svcexport_json"
+    return
+  fi
+
+  local doc_owned_exports
+  doc_owned_exports=$(echo "$svcexport_json" | jq --arg doc "$DOCUMENTDB_NAME" '[.items[] | select(any(.metadata.ownerReferences[]?; .kind=="DocumentDB" and .name==$doc))]')
+  local export_count
+  export_count=$(echo "$doc_owned_exports" | jq 'length')
+
+  if (( export_count == 0 )); then
+    record_failure "$cluster" "No ServiceExports owned by DocumentDB $DOCUMENTDB_NAME"
+    return
+  fi
+
+  record_success "$cluster" "Found $export_count ServiceExport(s) owned by DocumentDB $DOCUMENTDB_NAME"
+
+  # Check each ServiceExport for Valid condition
+  local invalid_exports
+  invalid_exports=$(echo "$doc_owned_exports" | jq '[.[] | select(.status.conditions == null or ([.status.conditions[] | select(.type=="Valid" and .status=="True")] | length == 0)) | .metadata.name]')
+  local invalid_count
+  invalid_count=$(echo "$invalid_exports" | jq 'length')
+
+  if (( invalid_count > 0 )); then
+    local invalid_list
+    invalid_list=$(echo "$invalid_exports" | jq -r 'join(", ")')
+    record_failure "$cluster" "ServiceExports not valid: $invalid_list"
+  else
+    record_success "$cluster" "All $export_count ServiceExport(s) are valid"
+  fi
+
+  # Check for conflicts
+  local conflicted_exports
+  conflicted_exports=$(echo "$doc_owned_exports" | jq '[.[] | select([.status.conditions[]? | select(.type=="Conflict" and .status=="True")] | length > 0) | .metadata.name]')
+  local conflict_count
+  conflict_count=$(echo "$conflicted_exports" | jq 'length')
+
+  if (( conflict_count > 0 )); then
+    local conflict_list
+    conflict_list=$(echo "$conflicted_exports" | jq -r 'join(", ")')
+    record_failure "$cluster" "ServiceExports have conflicts: $conflict_list"
+  else
+    record_success "$cluster" "No ServiceExport conflicts detected"
+  fi
 }
 
 main() {
@@ -302,11 +422,16 @@ main() {
     fi
   done
 
+  # Check MultiClusterServices on the hub cluster
+  echo
+  check_multiclusterservices "$hub_cluster"
+
   for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo
     if [[ -n "${DOCUMENTDB_CLUSTER_SET[$cluster]:-}" ]]; then
       log "Checking DocumentDB member cluster: $cluster"
       check_member_cluster "$cluster"
+      check_serviceexports "$cluster"
     else
       log "Checking non-member cluster: $cluster"
       check_non_member_cluster "$cluster"
