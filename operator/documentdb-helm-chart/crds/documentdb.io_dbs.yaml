@@ -81,7 +81,23 @@ spec:
                         required:
                         - name
                         type: object
+                      pvc:
+                        description: |-
+                          PVC specifies the source PVC to restore from.
+                          Cannot be used together with Backup.
+                        properties:
+                          name:
+                            description: Name of the referent.
+                            type: string
+                        required:
+                        - name
+                        type: object
                     type: object
+                    x-kubernetes-validations:
+                    - message: cannot specify both backup and pvc recovery at the
+                        same time
+                      rule: '!(has(self.backup) && size(self.backup.name) > 0 && has(self.pvc)
+                        && size(self.pvc.name) > 0)'
                 type: object
               clusterReplication:
                 description: ClusterReplication configures cross-cluster replication
@@ -200,6 +216,17 @@ spec:
                   storage:
                     description: Storage configuration for DocumentDB persistent volumes.
                     properties:
+                      persistentVolumeReclaimPolicy:
+                        default: Delete
+                        description: |-
+                          PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+                          the DocumentDB cluster is deleted.
+                          Retain: The PV is kept after cluster deletion, allowing data recovery.
+                          Delete: The PV is deleted with the cluster (default behavior).
+                        enum:
+                        - Retain
+                        - Delete
+                        type: string
                       pvcSize:
                         description: PvcSize is the size of the persistent volume
                           claim for DocumentDB storage (e.g., "10Gi").
