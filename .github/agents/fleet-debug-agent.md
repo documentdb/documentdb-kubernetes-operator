@@ -13,9 +13,9 @@ source of information should be the references listed at the end of this documen
 
 ## Initial Cluster Discovery
 
-Get all documentdb names
+Get all documentdb names.
 `kubectl get documentdb -Ao json | jq -r '.items | to_entries[] | "\(.key): \(.value.metadata.name)"'`
-if there are multiple, confirm which one is being debugged and replace the index value 0 in the following commands.
+If there are multiple, confirm which one is being debugged and replace the index value 0 in the following commands.
 
 Get cluster names and primary from the DocumentDB custom resource (run first):
 `kubectl get documentdb -Ao json | jq ".items[0].spec.clusterReplication | {clusters: [.clusterList[].name], primary: .primary}"`
@@ -53,7 +53,7 @@ Supporting operator pods are located in:
 - `documentdb-operator` namespace - contains the main DocumentDB operator
 - `cnpg-system` namespace - contains CloudNativePG operator and sidecar-injector
 
-# Log locations
+# Log Locations
 
 Fleet networking logs can be found in the pod with the name matching mcs-controller-manager-* and 
 member-net-controller-manager on member clusters, and hub-net-controller-manager on the hub cluster.
