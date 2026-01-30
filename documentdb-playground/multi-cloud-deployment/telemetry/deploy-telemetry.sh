@@ -244,8 +244,7 @@ deploy_collectors() {
 # Deploy monitoring stack only on primary
 deploy_monitoring_stack() {
 
-    #primary=$(kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.primary}')
-    primary="azure-documentdb"
+    primary=$(kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.primary}')
     kubectl config use-context "$primary"
 
     log "Deploying monitoring stack to primary"
@@ -355,34 +354,6 @@ EOF
     success "Fleet ServiceExport and MultiClusterService resources created for OTEL collectors"
 }
 
-# Wait for collectors to be ready
-wait_for_collectors() {
-    log "Waiting for OpenTelemetry collectors to be ready..."
-    
-    # Wait for Sales collector
-    kubectl wait --for=condition=available deployment/documentdb-sales-collector-collector -n $SALES_NAMESPACE --timeout=300s
-    success "Sales collector is ready"
-    
-    # Wait for Accounts collector  
-    kubectl wait --for=condition=available deployment/documentdb-accounts-collector-collector -n $ACCOUNTS_NAMESPACE --timeout=300s
-    success "Accounts collector is ready"
-}
-
-# Wait for monitoring stacks to be ready
-wait_for_monitoring_stacks() {
-    log "Waiting for monitoring stacks to be ready..."
-    
-    # Wait for Sales monitoring stack
-    kubectl wait --for=condition=available deployment/prometheus-sales-server -n $SALES_NAMESPACE --timeout=300s
-    kubectl wait --for=condition=available deployment/grafana-sales -n $SALES_NAMESPACE --timeout=300s
-    success "Sales monitoring stack is ready"
-    
-    # Wait for Accounts monitoring stack
-    kubectl wait --for=condition=available deployment/prometheus-accounts-server -n $ACCOUNTS_NAMESPACE --timeout=300s 
-    kubectl wait --for=condition=available deployment/grafana-accounts -n $ACCOUNTS_NAMESPACE --timeout=300s
-    success "Accounts monitoring stack is ready"
-}
-
 # Main execution
 main() {
     log "Starting Multi-Tenant DocumentDB + Telemetry Deployment..."
@@ -417,8 +388,6 @@ main() {
     
     if [[ "$SKIP_WAIT" == "false" ]]; then
         error "Wait not yet implemented"
-        #wait_for_collectors
-        #wait_for_monitoring_stacks
     fi
 }
 
