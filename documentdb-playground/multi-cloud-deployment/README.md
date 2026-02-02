@@ -189,7 +189,7 @@ kubectl --context <cluster-name> get documentdb,pods -n documentdb-preview-ns
 kubectl --context <primary-cluster> port-forward \
   -n documentdb-preview-ns svc/documentdb-service-<cluster-name> 10260:10260
 
-mongosh localhost:10260 -u default_user -p <password> \
+mongosh localhost:10260 -u docdb -p <password> \
   --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates
 ```
 
@@ -198,12 +198,12 @@ mongosh localhost:10260 -u default_user -p <password> \
 When `ENABLE_AZURE_DNS=true`, use the MongoDB SRV connection string:
 
 ```bash
-mongosh "mongodb+srv://default_user:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+mongosh "mongodb+srv://docdb:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 ```
 
 Example:
 ```bash
-mongosh "mongodb+srv://default_user:mypassword@documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+mongosh "mongodb+srv://docdb:mypassword@documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 ```
 
 ### Observability and Telemetry

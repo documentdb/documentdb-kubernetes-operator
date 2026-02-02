@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            error "Unknown option: $1"
+            echo "Unknown option: $1"
             usage
             exit 1
             ;;
@@ -359,8 +359,6 @@ main() {
     log "Starting Multi-Tenant DocumentDB + Telemetry Deployment..."
     log "========================================================="
     log "Configuration:"
-    log "  Deploy DocumentDB: $DEPLOY_DOCUMENTDB"
-    log "  Deploy Telemetry: $DEPLOY_TELEMETRY"
     log "  Skip Wait: $SKIP_WAIT"
     log ""
     
@@ -370,7 +368,7 @@ main() {
 
     CROSS_CLOUD_STRATEGY=$(kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.crossCloudNetworkingStrategy}' 2>/dev/null || echo "")
     
-    deploy_collectors $CROSS_CLOUD_STRATEGY
+    deploy_collectors 
     
     deploy_monitoring_stack
     
@@ -380,7 +378,7 @@ main() {
         log "Cross-cloud networking strategy is Istio. Creating placeholder services..."
         create_placeholder_prometheus_services
     elif [ "$CROSS_CLOUD_STRATEGY" = "AzureFleet" ]; then
-        log "Cross-cloud networking strategy is Istio. Creating placeholder services..."
+        log "Cross-cloud networking strategy is AzureFleet. Creating placeholder services..."
         create_service_exports_and_imports
     else
         log "Cross-cloud networking strategy is '$CROSS_CLOUD_STRATEGY', not 'Istio'. Skipping placeholder services."

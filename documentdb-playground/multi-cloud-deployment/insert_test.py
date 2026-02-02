@@ -41,7 +41,7 @@ while time.time() < end_time:
     
     time.sleep(.25)  
 
-print(f"Completed {count} insert operations in 10 minutes")
+print(f"Completed {count} insert operations in 60 minutes")
 final_read_count = collection.count_documents({})
 print(f"Final read count: {final_read_count}")
 client.close()
