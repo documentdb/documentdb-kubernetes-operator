@@ -264,7 +264,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
-	// Don't reque again unless there is a change
+	// Don't requeue again unless there is a change
 	return ctrl.Result{}, nil
 }
 
@@ -509,6 +509,11 @@ func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedV
 func (r *DocumentDBReconciler) upgradeDocumentDBExtensionIfNeeded(ctx context.Context, currentCluster, desiredCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
 	logger := log.FromContext(ctx)
 
+	// Refetch documentdb to avoid potential race conditions with status updates
+	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
+		return fmt.Errorf("failed to refetch DocumentDB resource: %w", err)
+	}
+
 	// Step 1: Check if extension image needs to be updated in CNPG cluster spec
 	imageUpdated, err := r.updateExtensionImageIfNeeded(ctx, currentCluster, desiredCluster)
 	if err != nil {
@@ -551,6 +556,7 @@ func (r *DocumentDBReconciler) upgradeDocumentDBExtensionIfNeeded(ctx context.Co
 		documentdb.Status.DocumentDBVersion = installedVersion
 		if err := r.Status().Update(ctx, documentdb); err != nil {
 			logger.Error(err, "Failed to update DocumentDB status with extension version")
+			return fmt.Errorf("failed to update DocumentDB status with extension version: %w", err)
 		}
 	}
 
@@ -578,6 +584,7 @@ func (r *DocumentDBReconciler) upgradeDocumentDBExtensionIfNeeded(ctx context.Co
 	documentdb.Status.DocumentDBVersion = defaultVersion
 	if err := r.Status().Update(ctx, documentdb); err != nil {
 		logger.Error(err, "Failed to update DocumentDB status after extension upgrade")
+		return fmt.Errorf("failed to update DocumentDB status after extension upgrade: %w", err)
 	}
 
 	return nil

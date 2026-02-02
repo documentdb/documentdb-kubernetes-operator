@@ -178,6 +178,9 @@ jobs:
         echo "Waiting for cluster to be healthy with new image..."
         
         # Extract expected version from image tag (e.g., "0.110.0" -> "0.110-0")
+        # NOTE: This parsing assumes semver format "X.Y.Z" where the last component becomes
+        # hyphen-separated in the extension version. Pre-release tags (e.g., "0.110.0-beta")
+        # are not currently supported and would not be converted correctly.
         NEW_VERSION_TAG="${NEW_IMAGE##*:}"
         EXPECTED_VERSION=$(echo "$NEW_VERSION_TAG" | sed 's/\.\([^.]*\)$/-\1/')
         echo "Expected DocumentDB version after upgrade: $EXPECTED_VERSION"
