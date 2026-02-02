@@ -47,6 +47,12 @@ const (
 // - nodev: Prevents device files from being interpreted on the filesystem
 // - nosuid: Prevents setuid/setgid bits from taking effect
 // - noexec: Prevents execution of binaries on the filesystem
+//
+// NOTE: These mount options are compatible with most CSI drivers and storage providers.
+// However, some storage classes may not support these options, which could cause PV
+// binding issues or pod startup failures. If you encounter issues with PV binding after
+// deploying the operator, verify your storage provider supports these mount options.
+// Common compatible providers: Azure Disk, AWS EBS, GCE PD, most NFS implementations.
 var securityMountOptions = []string{"nodev", "noexec", "nosuid"}
 
 // PersistentVolumeReconciler reconciles PersistentVolume objects
@@ -361,7 +367,8 @@ func documentDBReclaimPolicyPredicate() predicate.Predicate {
 	}
 }
 
-// findPVsForDocumentDB finds all PVs associated with a DocumentDB and returns reconcile requests for them
+// findPVsForDocumentDB finds all PVs associated with a DocumentDB and returns reconcile requests for them.
+// Uses CNPG's cluster label (cnpg.io/cluster) for efficient PVC filtering instead of listing all resources.
 func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := log.FromContext(ctx)
 	documentdb, ok := obj.(*dbpreview.DocumentDB)
@@ -369,40 +376,26 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 		return nil
 	}
 
-	// Find CNPG Cluster owned by this DocumentDB
-	clusterList := &cnpgv1.ClusterList{}
-	if err := r.List(ctx, clusterList, client.InNamespace(documentdb.Namespace)); err != nil {
-		logger.Error(err, "Failed to list CNPG Clusters")
+	// Use CNPG's cluster label to efficiently find PVCs belonging to this DocumentDB.
+	// CNPG automatically labels PVCs with "cnpg.io/cluster" set to the cluster name,
+	// and CNPG cluster name matches DocumentDB name by convention.
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList,
+		client.InNamespace(documentdb.Namespace),
+		client.MatchingLabels{cnpgClusterLabel: documentdb.Name},
+	); err != nil {
+		logger.Error(err, "Failed to list PVCs for DocumentDB")
 		return nil
 	}
 
 	var requests []reconcile.Request
-
-	for _, cluster := range clusterList.Items {
-		if !isOwnedByDocumentDB(&cluster, documentdb.Name) {
-			continue
-		}
-
-		// Find PVCs owned by this cluster
-		pvcList := &corev1.PersistentVolumeClaimList{}
-		if err := r.List(ctx, pvcList, client.InNamespace(cluster.Namespace)); err != nil {
-			logger.Error(err, "Failed to list PVCs")
-			continue
-		}
-
-		for _, pvc := range pvcList.Items {
-			for _, ownerRef := range pvc.OwnerReferences {
-				if isCNPGClusterOwnerRef(ownerRef) && ownerRef.Name == cluster.Name {
-					if pvc.Spec.VolumeName != "" {
-						requests = append(requests, reconcile.Request{
-							NamespacedName: types.NamespacedName{
-								Name: pvc.Spec.VolumeName,
-							},
-						})
-					}
-					break
-				}
-			}
+	for _, pvc := range pvcList.Items {
+		if pvc.Spec.VolumeName != "" {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: pvc.Spec.VolumeName,
+				},
+			})
 		}
 	}
 

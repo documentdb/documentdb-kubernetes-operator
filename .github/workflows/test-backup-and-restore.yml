@@ -357,6 +357,7 @@ jobs:
         exit 1  
      
     - name: Test PV retention after DocumentDB deletion
+      id: test-pv-retention
       shell: bash
       run: |
         echo "Testing PV retention after DocumentDB deletion..."
@@ -419,13 +420,13 @@ jobs:
           exit 1
         fi
         
-        # Store PV name for later steps
-        echo "$pv_name" > /tmp/retained_pv_name
+        # Store PV name for later steps using GitHub Actions output (more robust than temp files)
+        echo "pv_name=$pv_name" >> $GITHUB_OUTPUT
 
     - name: Restore DocumentDB from retained PV
       shell: bash
       run: |
-        pv_name=$(cat /tmp/retained_pv_name)
+        pv_name="${{ steps.test-pv-retention.outputs.pv_name }}"
         echo "Restoring DocumentDB from retained PV: $pv_name"
         
         # Check the PV status - it should be in "Released" state after PVC deletion

@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -14,7 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -479,15 +482,45 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result).To(Equal(ctrl.Result{}))
 		})
-	})
 
-	Describe("findPVsForDocumentDB", func() {
-		It("returns reconcile requests for PVs associated with DocumentDB", func() {
+		It("returns error when Get PV fails with non-NotFound error", func() {
+			expectedErr := fmt.Errorf("api server unavailable")
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*corev1.PersistentVolume); ok {
+							return expectedErr
+						}
+						return client.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: pvName},
+			})
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("api server unavailable"))
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+
+		It("returns error when PV update fails", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
 					UID:       "documentdb-uid",
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PersistentVolumeReclaimPolicy: "Retain",
+						},
+					},
 				},
 			}
 
@@ -528,9 +561,107 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+					ClaimRef: &corev1.ObjectReference{
+						Name:      pvcName,
+						Namespace: testNamespace,
+					},
+				},
+			}
+
+			expectedErr := fmt.Errorf("update conflict")
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(documentdb, cluster, pvc).
+				WithObjects(documentdb, cluster, pvc, pv).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Update: func(ctx context.Context, client client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+						if _, ok := obj.(*corev1.PersistentVolume); ok {
+							return expectedErr
+						}
+						return client.Update(ctx, obj, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: pvName},
+			})
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("update conflict"))
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+
+		It("returns error when findDocumentDBForPV fails due to PVC Get error", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
+					ClaimRef: &corev1.ObjectReference{
+						Name:      pvcName,
+						Namespace: testNamespace,
+					},
+				},
+			}
+
+			expectedErr := fmt.Errorf("permission denied")
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pv).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*corev1.PersistentVolumeClaim); ok {
+							return expectedErr
+						}
+						return client.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: pvName},
+			})
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("permission denied"))
+			Expect(result).To(Equal(ctrl.Result{}))
+		})
+	})
+
+	Describe("findPVsForDocumentDB", func() {
+		It("returns reconcile requests for PVs associated with DocumentDB using CNPG cluster label", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentdbName,
+					Namespace: testNamespace,
+					UID:       "documentdb-uid",
+				},
+			}
+
+			// PVC with CNPG cluster label (this is how CNPG labels its PVCs)
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pvcName,
+					Namespace: testNamespace,
+					Labels: map[string]string{
+						"cnpg.io/cluster": documentdbName, // CNPG cluster name matches DocumentDB name
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					VolumeName: pvName,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pvc).
 				Build()
 
 			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
@@ -540,7 +671,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(requests[0].Name).To(Equal(pvName))
 		})
 
-		It("returns empty when DocumentDB has no associated clusters", func() {
+		It("returns empty when no PVCs have matching CNPG cluster label", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
@@ -548,9 +679,23 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 
+			// PVC without CNPG cluster label or with different label value
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pvcName,
+					Namespace: testNamespace,
+					Labels: map[string]string{
+						"cnpg.io/cluster": "different-cluster",
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					VolumeName: pvName,
+				},
+			}
+
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(documentdb).
+				WithObjects(documentdb, pvc).
 				Build()
 
 			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
@@ -575,6 +720,66 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 			requests := reconciler.findPVsForDocumentDB(ctx, pvc)
 			Expect(requests).To(BeNil())
+		})
+
+		It("returns nil when listing PVCs fails", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentdbName,
+					Namespace: testNamespace,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						if _, ok := list.(*corev1.PersistentVolumeClaimList); ok {
+							return fmt.Errorf("pvc list error")
+						}
+						return client.List(ctx, list, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(requests).To(BeNil())
+		})
+
+		It("skips PVCs without volume name", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentdbName,
+					Namespace: testNamespace,
+				},
+			}
+
+			// PVC with CNPG cluster label but no volume name yet (not bound)
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pvcName,
+					Namespace: testNamespace,
+					Labels: map[string]string{
+						"cnpg.io/cluster": documentdbName,
+					},
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					VolumeName: "", // Not yet bound
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pvc).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(requests).To(BeEmpty())
 		})
 	})
 
@@ -980,6 +1185,43 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(result).ToNot(BeNil())
 			Expect(result.Name).To(Equal(clusterName))
 		})
+
+		It("returns nil and continues when Get CNPG Cluster fails with non-NotFound error", func() {
+			trueVal := true
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pvcName,
+					Namespace: testNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "postgresql.cnpg.io/v1",
+							Kind:       "Cluster",
+							Name:       clusterName,
+							UID:        "cluster-uid",
+							Controller: &trueVal,
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*cnpgv1.Cluster); ok {
+							return fmt.Errorf("api timeout")
+						}
+						return client.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			// Should return nil and continue (error is logged but not returned)
+			result := reconciler.findCNPGClusterOwner(ctx, pvc)
+			Expect(result).To(BeNil())
+		})
 	})
 
 	Describe("findDocumentDBOwner", func() {
@@ -1062,6 +1304,43 @@ var _ = Describe("PersistentVolume Controller", func() {
 			result := reconciler.findDocumentDBOwner(ctx, cluster)
 			Expect(result).ToNot(BeNil())
 			Expect(result.Name).To(Equal(documentdbName))
+		})
+
+		It("returns nil and continues when Get DocumentDB fails with non-NotFound error", func() {
+			trueVal := true
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: testNamespace,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "documentdb.io/v1",
+							Kind:       "DocumentDB",
+							Name:       documentdbName,
+							UID:        "documentdb-uid",
+							Controller: &trueVal,
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*dbpreview.DocumentDB); ok {
+							return fmt.Errorf("api timeout")
+						}
+						return client.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			// Should return nil and continue (error is logged but not returned)
+			result := reconciler.findDocumentDBOwner(ctx, cluster)
+			Expect(result).To(BeNil())
 		})
 	})
 })
