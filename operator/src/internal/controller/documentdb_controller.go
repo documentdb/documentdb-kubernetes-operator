@@ -23,10 +23,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/remotecommand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -39,6 +41,12 @@ import (
 const (
 	RequeueAfterShort = 10 * time.Second
 	RequeueAfterLong  = 30 * time.Second
+
+	// documentDBFinalizer ensures we can emit PV retention warnings before deletion completes
+	documentDBFinalizer = "documentdb.io/pv-retention-finalizer"
+
+	// CNPG label used to identify PVCs belonging to a cluster
+	cnpgClusterLabel = "cnpg.io/cluster"
 )
 
 // DocumentDBReconciler reconciles a DocumentDB object
@@ -47,6 +55,7 @@ type DocumentDBReconciler struct {
 	Scheme    *runtime.Scheme
 	Config    *rest.Config
 	Clientset kubernetes.Interface
+	Recorder  record.EventRecorder
 }
 
 var reconcileMutex sync.Mutex
@@ -54,6 +63,7 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
@@ -74,6 +84,22 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion with finalizer
+	if !documentdb.ObjectMeta.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, documentdb)
+	}
+
+	// Ensure finalizer is present for non-deleting resources
+	if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
+		controllerutil.AddFinalizer(documentdb, documentDBFinalizer)
+		if err := r.Update(ctx, documentdb); err != nil {
+			logger.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Added finalizer to DocumentDB")
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
@@ -283,6 +309,94 @@ func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Re
 
 	log.Info("Cleanup process completed", "DocumentDB", req.Name, "Namespace", req.Namespace)
 	return nil
+}
+
+// handleDeletion processes DocumentDB deletion, emitting warnings about retained PVs if needed
+func (r *DocumentDBReconciler) handleDeletion(ctx context.Context, documentdb *dbpreview.DocumentDB) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
+		// Finalizer already removed, nothing to do
+		return ctrl.Result{}, nil
+	}
+
+	// Check if PVs will be retained and emit warning
+	if r.shouldWarnAboutRetainedPVs(documentdb) {
+		if err := r.emitPVRetentionWarning(ctx, documentdb); err != nil {
+			// Log but don't block deletion
+			logger.Error(err, "Failed to emit PV retention warning, continuing with deletion")
+		}
+	}
+
+	// Remove finalizer to allow deletion to proceed
+	controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
+	if err := r.Update(ctx, documentdb); err != nil {
+		logger.Error(err, "Failed to remove finalizer")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Removed finalizer, deletion will proceed")
+	return ctrl.Result{}, nil
+}
+
+// shouldWarnAboutRetainedPVs returns true if the reclaim policy is Retain (explicitly or by default)
+func (r *DocumentDBReconciler) shouldWarnAboutRetainedPVs(documentdb *dbpreview.DocumentDB) bool {
+	policy := documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy
+	// Default is Retain, so warn unless explicitly set to Delete
+	return policy == "" || policy == reclaimPolicyRetain
+}
+
+// emitPVRetentionWarning emits a warning event listing PVs that will be retained after deletion
+func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, documentdb *dbpreview.DocumentDB) error {
+	logger := log.FromContext(ctx)
+
+	if r.Recorder == nil {
+		logger.Info("Event recorder not configured, skipping PV retention warning")
+		return nil
+	}
+
+	// Find PVs associated with this DocumentDB
+	pvNames, err := r.findPVsForDocumentDB(ctx, documentdb)
+	if err != nil {
+		return fmt.Errorf("failed to find PVs: %w", err)
+	}
+
+	if len(pvNames) == 0 {
+		logger.V(1).Info("No PVs found for DocumentDB")
+		return nil
+	}
+
+	// Emit actionable warning event
+	message := fmt.Sprintf(
+		"PersistentVolumes retained after cluster deletion (policy=Retain). "+
+			"To delete when no longer needed: kubectl delete pv %s",
+		strings.Join(pvNames, " "))
+
+	r.Recorder.Event(documentdb, corev1.EventTypeWarning, "PVsRetained", message)
+	logger.Info("Emitted PV retention warning", "pvCount", len(pvNames), "pvNames", pvNames)
+
+	return nil
+}
+
+// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster using CNPG labels
+func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
+	// CNPG cluster name matches DocumentDB name
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList,
+		client.InNamespace(documentdb.Namespace),
+		client.MatchingLabels{cnpgClusterLabel: documentdb.Name},
+	); err != nil {
+		return nil, err
+	}
+
+	pvNames := make([]string, 0, len(pvcList.Items))
+	for _, pvc := range pvcList.Items {
+		if pvc.Status.Phase == corev1.ClaimBound && pvc.Spec.VolumeName != "" {
+			pvNames = append(pvNames, pvc.Spec.VolumeName)
+		}
+	}
+
+	return pvNames, nil
 }
 
 func (r *DocumentDBReconciler) EnsureServiceAccountRoleAndRoleBinding(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {

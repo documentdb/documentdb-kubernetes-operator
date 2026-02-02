@@ -280,6 +280,143 @@ jobs:
         # Check events
         kubectl get events -n $DB_NS --sort-by='.lastTimestamp'
 
+    - name: Verify mount options are set by PV controller
+      run: |
+        echo "Verifying PV mount options are set by the PV controller..."
+        
+        # Get the PVC and PV names from the existing cluster
+        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_NAME }} -o jsonpath='{.items[0].metadata.name}')
+        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
+        
+        echo "PVC name: $pvc_name"
+        echo "PV name: $pv_name"
+        
+        if [ -z "$pv_name" ]; then
+          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          exit 1
+        fi
+        
+        # Get mount options from PV
+        mount_options=$(kubectl get pv $pv_name -o jsonpath='{.spec.mountOptions}')
+        echo "PV mount options: $mount_options"
+        
+        # Check for security mount options (nodev, nosuid, noexec)
+        if echo "$mount_options" | grep -q "nodev" && \
+           echo "$mount_options" | grep -q "nosuid" && \
+           echo "$mount_options" | grep -q "noexec"; then
+          echo "✓ PV mount options (nodev, nosuid, noexec) are set correctly"
+        else
+          echo "❌ PV mount options are missing. Expected nodev, nosuid, noexec"
+          exit 1
+        fi
+
+    - name: Test PV reclaim policy default and explicit Delete
+      shell: bash
+      run: |
+        echo "Testing PV reclaim policy - default (Retain) and explicit Delete..."
+        
+        # Test 1: Verify default policy is Retain on the existing cluster
+        echo "=== Test 1: Verify default PV reclaim policy is Retain ==="
+        
+        # Get the PVC and PV names from the existing cluster
+        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_NAME }} -o jsonpath='{.items[0].metadata.name}')
+        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
+        
+        echo "PVC name: $pvc_name"
+        echo "PV name: $pv_name"
+        
+        if [ -z "$pv_name" ]; then
+          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          exit 1
+        fi
+        
+        # Verify default PV reclaim policy is Retain
+        current_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+        echo "Current PV reclaim policy: $current_policy"
+        
+        if [ "$current_policy" != "Retain" ]; then
+          echo "❌ Expected default PV reclaim policy to be 'Retain', but got '$current_policy'"
+          exit 1
+        fi
+        echo "✓ Default PV reclaim policy is correctly set to Retain"
+        
+        # Test 2: Change policy to Delete and verify PV is deleted with cluster
+        echo ""
+        echo "=== Test 2: Change policy to Delete and verify PV cleanup ==="
+        
+        # Patch the existing DocumentDB to set persistentVolumeReclaimPolicy to Delete
+        echo "Patching DocumentDB to set persistentVolumeReclaimPolicy to Delete..."
+        kubectl -n ${{ env.DB_NS }} patch documentdb ${{ env.DB_NAME }} --type=merge \
+          -p '{"spec":{"resource":{"storage":{"persistentVolumeReclaimPolicy":"Delete"}}}}'
+        
+        # Wait for PV controller to update the PV reclaim policy
+        echo "Waiting for PV reclaim policy to be updated to Delete..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=5
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          new_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+          if [ "$new_policy" == "Delete" ]; then
+            echo "✓ PV reclaim policy updated to Delete"
+            break
+          else
+            echo "PV reclaim policy is still '$new_policy'. Waiting..."
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        if [ "$new_policy" != "Delete" ]; then
+          echo "❌ PV reclaim policy was not updated to Delete within expected time"
+          exit 1
+        fi
+        
+        # Delete the DocumentDB cluster
+        echo "Deleting DocumentDB cluster to test PV cleanup with Delete policy..."
+        kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_NAME }} --wait=false
+        
+        # Wait for DocumentDB to be deleted
+        echo "Waiting for DocumentDB to be deleted..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          db_exists=$(kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_NAME }} --ignore-not-found)
+          if [ -z "$db_exists" ]; then
+            echo "✓ DocumentDB deleted successfully."
+            break
+          else
+            echo "DocumentDB still exists. Waiting..."
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        # Verify no PVsRetained warning event was emitted (since policy is Delete)
+        events=$(kubectl -n ${{ env.DB_NS }} get events --field-selector reason=PVsRetained,involvedObject.name=${{ env.DB_NAME }} --ignore-not-found -o jsonpath='{.items}')
+        if [ -z "$events" ] || [ "$events" == "[]" ]; then
+          echo "✓ No PVsRetained warning event emitted (expected for Delete policy)"
+        else
+          echo "⚠️ Unexpected PVsRetained event found for Delete policy cluster"
+        fi
+        
+        # Wait a bit for PV to be deleted (the storage class handles actual deletion)
+        echo "Waiting for PV to be deleted..."
+        sleep 30
+        
+        # Verify PV was deleted (because reclaim policy is Delete)
+        pv_exists=$(kubectl get pv $pv_name --ignore-not-found 2>/dev/null)
+        if [ -z "$pv_exists" ]; then
+          echo "✓ PV $pv_name was deleted as expected (Delete policy)"
+        else
+          pv_status=$(kubectl get pv $pv_name -o jsonpath='{.status.phase}')
+          echo "⚠️ PV $pv_name still exists with status: $pv_status"
+          echo "Note: PV deletion depends on the storage provisioner. The reclaim policy was correctly set to Delete."
+        fi
+        
+        echo ""
+        echo "✓ PV reclaim policy test completed successfully"
+
     - name: Collect comprehensive logs on failure
       if: failure()
       uses: ./.github/actions/collect-logs

@@ -380,55 +380,15 @@ jobs:
           exit 1
         fi
         
-        # Check current PV reclaim policy - should be Delete by default
+        # Check current PV reclaim policy - should be Retain by default
         current_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
         echo "Current PV reclaim policy: $current_policy"
         
-        if [ "$current_policy" != "Delete" ]; then
-          echo "⚠️ Expected PV reclaim policy to be 'Delete', but got '$current_policy'"
-        fi
-        
-        # Patch DocumentDB to set persistentVolumeReclaimPolicy to Retain
-        echo "Patching DocumentDB to set persistentVolumeReclaimPolicy to Retain..."
-        kubectl -n ${{ env.DB_NS }} patch documentdb ${{ env.DB_RESTORE_NAME }} --type=merge \
-          -p '{"spec":{"resource":{"storage":{"persistentVolumeReclaimPolicy":"Retain"}}}}'
-        
-        # Wait for PV controller to update the PV reclaim policy
-        echo "Waiting for PV reclaim policy to be updated to Retain..."
-        MAX_RETRIES=30
-        SLEEP_INTERVAL=5
-        ITER=0
-        while [ $ITER -lt $MAX_RETRIES ]; do
-          new_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
-          if [ "$new_policy" == "Retain" ]; then
-            echo "✓ PV reclaim policy updated to Retain"
-            break
-          else
-            echo "PV reclaim policy is still '$new_policy'. Waiting..."
-            sleep $SLEEP_INTERVAL
-          fi
-          ((++ITER))
-        done
-        
-        if [ "$new_policy" != "Retain" ]; then
-          echo "❌ PV reclaim policy was not updated to Retain within expected time"
+        if [ "$current_policy" != "Retain" ]; then
+          echo "❌ Expected PV reclaim policy to be 'Retain' (default), but got '$current_policy'"
           exit 1
         fi
-        
-        # Verify mount options are set by the PV controller
-        echo "Verifying PV mount options are set..."
-        mount_options=$(kubectl get pv $pv_name -o jsonpath='{.spec.mountOptions}')
-        echo "PV mount options: $mount_options"
-        
-        # Check for security mount options (nodev, nosuid, noexec)
-        if echo "$mount_options" | grep -q "nodev" && \
-           echo "$mount_options" | grep -q "nosuid" && \
-           echo "$mount_options" | grep -q "noexec"; then
-          echo "✓ PV mount options (nodev, nosuid, noexec) are set correctly"
-        else
-          echo "❌ PV mount options are missing. Expected nodev, nosuid, noexec"
-          exit 1
-        fi
+        echo "✓ PV reclaim policy is correctly set to Retain (default)"
         
         # Delete the restored DocumentDB cluster
         kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_RESTORE_NAME }} --wait=false
@@ -586,3 +546,13 @@ jobs:
         
         # Clean up output log
         rm -f /tmp/pf_output.log
+
+    - name: Collect logs on failure
+      if: failure()
+      uses: ./.github/actions/collect-logs
+      with:
+        architecture: ${{ matrix.architecture }}
+        operator-namespace: ${{ env.OPERATOR_NS }}
+        db-namespace: ${{ env.DB_NS }}
+        db-cluster-name: ${{ env.DB_NAME }}
+        cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}
