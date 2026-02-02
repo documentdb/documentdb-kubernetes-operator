@@ -209,7 +209,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(reconciler.getDesiredReclaimPolicy(documentdb)).To(Equal(corev1.PersistentVolumeReclaimDelete))
 		})
 
-		It("returns Delete when spec is empty (default)", func() {
+		It("returns Retain when spec is empty (default)", func() {
 			documentdb := &dbpreview.DocumentDB{
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
@@ -217,10 +217,10 @@ var _ = Describe("PersistentVolume Controller", func() {
 					},
 				},
 			}
-			Expect(reconciler.getDesiredReclaimPolicy(documentdb)).To(Equal(corev1.PersistentVolumeReclaimDelete))
+			Expect(reconciler.getDesiredReclaimPolicy(documentdb)).To(Equal(corev1.PersistentVolumeReclaimRetain))
 		})
 
-		It("returns Delete for unknown policy value", func() {
+		It("returns Retain for unknown policy value", func() {
 			documentdb := &dbpreview.DocumentDB{
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
@@ -230,7 +230,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 					},
 				},
 			}
-			Expect(reconciler.getDesiredReclaimPolicy(documentdb)).To(Equal(corev1.PersistentVolumeReclaimDelete))
+			Expect(reconciler.getDesiredReclaimPolicy(documentdb)).To(Equal(corev1.PersistentVolumeReclaimRetain))
 		})
 	})
 

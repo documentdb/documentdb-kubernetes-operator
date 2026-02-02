@@ -288,8 +288,8 @@ func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbprevi
 	case reclaimPolicyDelete:
 		return corev1.PersistentVolumeReclaimDelete
 	default:
-		// Default to Delete if not specified
-		return corev1.PersistentVolumeReclaimDelete
+		// Default to Retain if not specified - safer for database workloads
+		return corev1.PersistentVolumeReclaimRetain
 	}
 }
 

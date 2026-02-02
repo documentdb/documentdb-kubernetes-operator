@@ -124,10 +124,19 @@ type StorageConfiguration struct {
 
 	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
 	// the DocumentDB cluster is deleted.
-	// Retain: The PV is kept after cluster deletion, allowing data recovery.
-	// Delete: The PV is deleted with the cluster (default behavior).
+	//
+	// Options:
+	//   - Retain (default): The PV is preserved after cluster deletion, allowing manual
+	//     data recovery or forensic analysis. Use for production workloads where data
+	//     safety is critical. Orphaned PVs must be manually deleted when no longer needed.
+	//   - Delete: The PV is automatically deleted with the cluster. Use for development,
+	//     testing, or ephemeral environments where data persistence is not required.
+	//
+	// WARNING: Setting this to "Delete" means all data will be permanently lost when
+	// the DocumentDB cluster is deleted. This cannot be undone.
+	//
 	// +kubebuilder:validation:Enum=Retain;Delete
-	// +kubebuilder:default=Delete
+	// +kubebuilder:default=Retain
 	// +optional
 	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
