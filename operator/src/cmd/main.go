@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -29,8 +30,15 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/internal/controller"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
+)
+
+// Version information - set via ldflags at build time
+var (
+	version          = "dev"
+	helmChartVersion = ""
 )
 
 var (
@@ -211,29 +219,52 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize telemetry
+	telemetryMgr, err := telemetry.NewManager(
+		context.Background(),
+		telemetry.ManagerConfig{
+			OperatorVersion:  version,
+			HelmChartVersion: helmChartVersion,
+			Logger:           setupLog,
+		},
+		mgr.GetClient(),
+		clientset,
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to initialize telemetry manager")
+		// Continue without telemetry - it's not critical
+	} else {
+		telemetryMgr.Start()
+		defer telemetryMgr.Stop()
+		setupLog.Info("Telemetry initialized", "enabled", telemetryMgr.IsEnabled())
+	}
+
 	if err = (&controller.DocumentDBReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Config:    mgr.GetConfig(),
-		Clientset: clientset,
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Config:       mgr.GetConfig(),
+		Clientset:    clientset,
+		TelemetryMgr: telemetryMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DocumentDB")
 		os.Exit(1)
 	}
 
 	if err = (&controller.BackupReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("backup-controller"),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Recorder:     mgr.GetEventRecorderFor("backup-controller"),
+		TelemetryMgr: telemetryMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Backup")
 		os.Exit(1)
 	}
 
 	if err = (&controller.ScheduledBackupReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("scheduled-backup-controller"),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		Recorder:     mgr.GetEventRecorderFor("scheduled-backup-controller"),
+		TelemetryMgr: telemetryMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ScheduledBackup")
 		os.Exit(1)

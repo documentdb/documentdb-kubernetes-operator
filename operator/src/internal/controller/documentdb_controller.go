@@ -33,6 +33,7 @@ import (
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -44,9 +45,10 @@ const (
 // DocumentDBReconciler reconciles a DocumentDB object
 type DocumentDBReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Config    *rest.Config
-	Clientset kubernetes.Interface
+	Scheme       *runtime.Scheme
+	Config       *rest.Config
+	Clientset    kubernetes.Interface
+	TelemetryMgr *telemetry.Manager
 }
 
 var reconcileMutex sync.Mutex
@@ -55,6 +57,7 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/finalizers,verbs=update
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	reconcileStart := time.Now()
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
 
@@ -73,8 +76,21 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
+		r.trackReconcileError(ctx, "DocumentDB", req.Name, req.Namespace, "get-resource", err)
 		return ctrl.Result{}, err
 	}
+
+	// Ensure cluster has telemetry ID
+	if r.TelemetryMgr != nil && r.TelemetryMgr.IsEnabled() {
+		if _, err := r.TelemetryMgr.GUIDs.GetOrCreateClusterID(ctx, documentdb); err != nil {
+			logger.V(1).Info("Failed to create telemetry ID for cluster", "error", err)
+		}
+	}
+
+	// Track reconciliation at the end
+	defer func() {
+		r.trackReconcileDuration(ctx, "DocumentDB", "reconcile", time.Since(reconcileStart).Seconds(), err == nil)
+	}()
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
 	if err != nil {
@@ -468,4 +484,90 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 	}
 
 	return stdout.String(), nil
+}
+
+// trackReconcileError tracks reconciliation errors to telemetry.
+func (r *DocumentDBReconciler) trackReconcileError(ctx context.Context, resourceType, resourceName, namespace, errorType string, err error) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	r.TelemetryMgr.Events.TrackReconciliationError(telemetry.ReconciliationErrorEvent{
+		ResourceType:     resourceType,
+		ResourceID:       resourceName, // Will be replaced with GUID when available
+		NamespaceHash:    telemetry.HashNamespace(namespace),
+		ErrorType:        errorType,
+		ErrorMessage:     sanitizeError(err),
+		ResolutionStatus: "pending",
+	})
+}
+
+// trackReconcileDuration tracks reconciliation duration to telemetry.
+func (r *DocumentDBReconciler) trackReconcileDuration(ctx context.Context, resourceType, operation string, durationSeconds float64, success bool) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	status := "success"
+	if !success {
+		status = "error"
+	}
+
+	r.TelemetryMgr.Metrics.TrackReconciliationDuration(telemetry.ReconciliationDurationMetric{
+		ResourceType:    resourceType,
+		Operation:       operation,
+		Status:          status,
+		DurationSeconds: durationSeconds,
+	})
+}
+
+// TrackClusterCreated tracks when a new cluster is created.
+func (r *DocumentDBReconciler) TrackClusterCreated(ctx context.Context, documentdb *dbpreview.DocumentDB, durationSeconds float64) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
+	bootstrapType := "new"
+	if documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil {
+		bootstrapType = "recovery"
+	}
+
+	r.TelemetryMgr.Events.TrackClusterCreated(telemetry.ClusterCreatedEvent{
+		ClusterID:               clusterID,
+		NamespaceHash:           telemetry.HashNamespace(documentdb.Namespace),
+		CreationDurationSeconds: durationSeconds,
+		NodeCount:               documentdb.Spec.NodeCount,
+		InstancesPerNode:        documentdb.Spec.InstancesPerNode,
+		StorageSize:             documentdb.Spec.Resource.Storage.PvcSize,
+		CloudProvider:           telemetry.MapCloudProviderToString(documentdb.Spec.Environment),
+		TLSEnabled:              documentdb.Spec.TLS != nil,
+		BootstrapType:           bootstrapType,
+		SidecarInjectorPlugin:   documentdb.Spec.SidecarInjectorPluginName != "",
+		ServiceType:             documentdb.Spec.ExposeViaService.ServiceType,
+	})
+
+	// Also track cluster configuration metric
+	r.TelemetryMgr.Metrics.TrackClusterConfiguration(telemetry.ClusterConfigurationMetric{
+		ClusterID:         clusterID,
+		NamespaceHash:     telemetry.HashNamespace(documentdb.Namespace),
+		NodeCount:         documentdb.Spec.NodeCount,
+		InstancesPerNode:  documentdb.Spec.InstancesPerNode,
+		TotalInstances:    documentdb.Spec.NodeCount * documentdb.Spec.InstancesPerNode,
+		PVCSizeCategory:   telemetry.CategorizePVCSize(documentdb.Spec.Resource.Storage.PvcSize),
+		DocumentDBVersion: documentdb.Spec.DocumentDBVersion,
+	})
+}
+
+// sanitizeError removes potential PII from error messages.
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// Truncate long messages
+	if len(msg) > 200 {
+		msg = msg[:200] + "..."
+	}
+	return msg
 }
