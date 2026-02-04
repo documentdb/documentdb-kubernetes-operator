@@ -1,7 +1,6 @@
-```chatagent
 ---
 description: 'Agent for cutting releases of the DocumentDB Kubernetes Operator.'
-tools: [execute, read, terminal, editFiles]
+tools: [execute, read, terminal]
 ---
 # Release Agent Instructions
 
@@ -24,6 +23,17 @@ This agent is invoked when a user says:
    - If user provides a specific version (e.g., "release 0.2.0"), use that version
    - If no version specified, increment the **patch version** by 1 (e.g., `0.1.3` → `0.1.4`)
 3. **Validate version format**: Must match semantic versioning `X.Y.Z`
+   - Version must only contain numbers and dots (regex: `^[0-9]+\.[0-9]+\.[0-9]+$`)
+   - **Security**: Always validate version format BEFORE using in any shell commands to prevent command injection
+   - Reject any version containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, etc.)
+4. **Validate version increment**: New version must be greater than current version
+   - Compare major, minor, then patch components
+   - If new version ≤ current version, show error:
+     ```
+     ❌ Error: New version (0.1.2) must be greater than current version (0.1.3).
+     Please specify a version higher than 0.1.3.
+     ```
+   - Do not proceed with release until a valid higher version is provided
 
 ### Step 2: Update Chart.yaml
 
@@ -46,14 +56,17 @@ dependencies:
 
 ### Step 3: Generate Changelog Entry
 
-1. **Get the date of the last CHANGELOG update**:
-   - Read `CHANGELOG.md` and find the date of the most recent release entry
+1. **Get the date of the most recent release**:
+   - Read `CHANGELOG.md` and find the date from the most recent release entry (format: `## [X.Y.Z] - YYYY-MM-DD`)
    - Format: `## [X.Y.Z] - YYYY-MM-DD`
 
 2. **Fetch commit messages since last release**:
    ```bash
    git log --oneline --since="YYYY-MM-DD" --pretty=format:"- %s"
    ```
+   - Use the date from the most recent release entry in `CHANGELOG.md`
+   - **Note**: Filter out release preparation commits (e.g., `chore: prepare release`, changelog bump commits) as these belong to the previous release
+   - Alternatively, use the day **after** the last release date to avoid including release-day commits
 
 3. **Categorize commits** based on conventional commit prefixes:
    - `feat:` → **Major Features**
@@ -156,20 +169,35 @@ After completing the release preparation, output:
 
 ### Next Steps
 1. Review the changes
-2. Run `make manifests generate` if API changes were included
-3. Run `make test` to verify everything works
+2. Run `make manifests generate` from `operator/src/` if API changes were included
+3. Run `make test` from `operator/src/` to verify everything works
 4. Commit with message: `chore: prepare release 0.1.4`
 5. Create PR for release
 6. After merge, trigger the release workflow:
    - Run "RELEASE - Build Candidate Images" workflow with version `0.1.4`
-   - Run "RELEASE - Promote Candidate Images" workflow to publish
+   - Run "RELEASE - Promote Candidate Images and Publish Helm Chart" workflow to publish
 ```
 
 ## Error Handling
 
 - If `Chart.yaml` cannot be found, report error and stop
 - If `CHANGELOG.md` cannot be found, create a new one with proper header
-- If git commands fail, proceed with manual changelog entry (ask user for changes)
+- If git commands fail, proceed with a **manual changelog entry**:
+  - Ask the user to provide a list of changes in the following format, one per line:
+    - `- [type] description of the change`
+  - Valid `type` values: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `breaking`
+  - Example:
+    ```
+    - [feat] Add support for configurable backup window
+    - [fix] Resolve panic when scaling replicas to zero
+    - [docs] Clarify TLS configuration requirements
+    ```
+  - Use the provided list to construct the new `CHANGELOG.md` entry for the release version and date, keeping the overall changelog style consistent with existing entries
+  - Map types to changelog sections:
+    - `feat`, `breaking` → **Major Features**
+    - `fix` → **Bug Fixes**
+    - `docs` → **Documentation**
+    - `chore`, `refactor`, `test`, `perf` → **Enhancements & Fixes**
 - If version format is invalid, ask user to provide valid semantic version
 
 ## Important Notes
@@ -190,8 +218,6 @@ Use these commands to trigger the release agent:
 | `/release minor` | Increment minor version | `0.1.3` → `0.2.0` |
 | `/release major` | Increment major version | `0.1.3` → `1.0.0` |
 | `/release X.Y.Z` | Set exact version | `/release 0.2.1` |
-| `/release --dry-run` | Preview changes without applying | Shows what would change |
-| `/release --skip-changelog` | Skip changelog generation | Only updates Chart.yaml |
 
 ## Example Usage
 
@@ -215,18 +241,19 @@ Use these commands to trigger the release agent:
 @release-agent release 1.0.0
 ```
 
-### Preview Release Changes
-```
-@release-agent dry run release
-```
-
 ### Release with Custom Changelog Entry
 ```
 @release-agent release 0.2.0 with changelog:
-- Added new backup scheduling feature
-- Fixed connection timeout issues
-- Updated documentation
+- [feat] Add support for configurable backup window
+- [fix] Resolve panic when scaling replicas to zero
+- [docs] Clarify TLS configuration requirements
 ```
+
+The custom changelog format uses `[type] description` where type maps to sections:
+- `feat`, `breaking` → **Major Features**
+- `fix` → **Bug Fixes**
+- `docs` → **Documentation**
+- `chore`, `refactor`, `test`, `perf` → **Enhancements & Fixes**
 
 ### Create PR After Review
 ```
@@ -250,24 +277,35 @@ When user says "create PR", "cut a PR", or "open PR":
    ```bash
    git checkout -b release/v{version}
    ```
+   - **Branch naming convention**: `release/v{version}` (e.g., `release/v0.1.4`)
+   - This differs from feature branches which use `developer/feature-name` pattern
 
-2. **Stage ONLY the release files** (do not add other files):
+2. **Check for other uncommitted changes**:
+   ```bash
+   git status
+   ```
+   - If there are other uncommitted changes besides `Chart.yaml` and `CHANGELOG.md`:
+     - **Option A**: Stash them first: `git stash push -m "WIP before release"`
+     - **Option B**: Ask user to commit or discard unrelated changes before proceeding
+   - Do NOT proceed if unrelated changes might be accidentally committed
+
+3. **Stage ONLY the release files** (do not add other files):
    ```bash
    git add operator/documentdb-helm-chart/Chart.yaml CHANGELOG.md
    ```
 
-3. **Commit changes**:
+4. **Commit changes**:
    ```bash
    git commit -m "chore: prepare release {version}"
    ```
 
-4. **Push the branch to your fork**:
+5. **Push the branch to your fork**:
    ```bash
    # Push to your fork (origin should point to your fork)
    git push origin release/v{version}
    ```
 
-5. **Create Pull Request** using GitHub CLI (from fork to upstream):
+6. **Create Pull Request** using GitHub CLI (from fork to upstream):
    ```bash
    gh pr create \
      --title "chore: release v{version}" \
@@ -285,12 +323,12 @@ When user says "create PR", "cut a PR", or "open PR":
 
    ### Post-Merge Steps
    1. Run 'RELEASE - Build Candidate Images' workflow with version \`{version}\`
-   2. Run 'RELEASE - Promote Candidate Images' workflow to publish" \
+   2. Run 'RELEASE - Promote Candidate Images and Publish Helm Chart' workflow to publish" \
      --base main \
      --repo documentdb/documentdb-kubernetes-operator
    ```
 
-6. **Output the PR URL** for the user to review
+7. **Output the PR URL** for the user to review
 
 ### PR Commands
 
@@ -324,7 +362,7 @@ After creating the PR, output:
 2. Approve and merge
 3. After merge, trigger release workflows:
    - "RELEASE - Build Candidate Images" with version `0.1.4`
-   - "RELEASE - Promote Candidate Images" to publish
+   - "RELEASE - Promote Candidate Images and Publish Helm Chart" to publish
 ```
 
 ### Prerequisites for PR Creation
@@ -340,8 +378,9 @@ If `gh` CLI is not available, provide manual instructions:
 GitHub CLI not available. Please create PR manually:
 
 1. Create branch: `git checkout -b release/v{version}`
-2. Commit: `git commit -am "chore: prepare release {version}"`
-3. Push: `git push origin release/v{version}`
-4. Open: https://github.com/documentdb/documentdb-kubernetes-operator/compare/main...release/v{version}
+2. Stage files: `git add operator/documentdb-helm-chart/Chart.yaml CHANGELOG.md`
+3. Commit: `git commit -m "chore: prepare release {version}"`
+4. Push: `git push origin release/v{version}`
+5. Open: https://github.com/documentdb/documentdb-kubernetes-operator/compare/main...release/v{version}
 ```
 ```
