@@ -1,6 +1,6 @@
 ---
 description: 'Agent for cutting releases of the DocumentDB Kubernetes Operator.'
-tools: [execute, read, terminal]
+tools: [execute, read, terminal, editFiles]
 ---
 # Release Agent Instructions
 
