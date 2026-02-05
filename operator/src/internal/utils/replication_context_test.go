@@ -110,6 +110,15 @@ func TestReplicationContext_GetReplicationSource(t *testing.T) {
 			},
 			expected: "other-cluster-1",
 		},
+		{
+			name: "Replica state with empty Others still returns primary cluster",
+			context: ReplicationContext{
+				state:          Replica,
+				PrimaryCluster: "primary-cluster",
+				Others:         []string{},
+			},
+			expected: "primary-cluster",
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,6 +129,36 @@ func TestReplicationContext_GetReplicationSource(t *testing.T) {
 			}
 		})
 	}
+
+	// Document panic behavior for edge cases where Others is empty.
+	// These test cases verify that GetReplicationSource panics when called
+	// inappropriately, documenting the precondition that Others must be
+	// non-empty when state is Primary or NoReplication.
+	t.Run("Primary state with empty Others panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when Primary state has empty Others slice, but no panic occurred")
+			}
+		}()
+		ctx := ReplicationContext{
+			state:  Primary,
+			Others: []string{},
+		}
+		_ = ctx.GetReplicationSource()
+	})
+
+	t.Run("NoReplication state with empty Others panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic when NoReplication state has empty Others slice, but no panic occurred")
+			}
+		}()
+		ctx := ReplicationContext{
+			state:  NoReplication,
+			Others: []string{},
+		}
+		_ = ctx.GetReplicationSource()
+	})
 }
 
 func TestReplicationContext_EndpointEnabled(t *testing.T) {
@@ -572,7 +611,3 @@ func TestGenerateCNPGClusterName(t *testing.T) {
 		}
 	})
 }
-
-// TestReplicationContext_String_ContainsExpectedValues validates the String() method output.
-// Note: Full integration testing of GetReplicationContext requires a Kubernetes client
-// and is covered by the controller integration tests in internal/controller/suite_test.go.
