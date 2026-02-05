@@ -4,6 +4,7 @@
 package util
 
 import (
+	"strings"
 	"testing"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
@@ -212,56 +213,42 @@ func TestGenerateConnectionString(t *testing.T) {
 			}
 
 			// Verify TLS parameter is present
-			if !contains(result, "tls=true") {
+			if !strings.Contains(result, "tls=true") {
 				t.Error("Connection string should contain 'tls=true'")
 			}
 
 			// Verify SCRAM-SHA-256 auth mechanism
-			if !contains(result, "authMechanism=SCRAM-SHA-256") {
+			if !strings.Contains(result, "authMechanism=SCRAM-SHA-256") {
 				t.Error("Connection string should contain 'authMechanism=SCRAM-SHA-256'")
 			}
 
 			// Verify replicaSet parameter
-			if !contains(result, "replicaSet=rs0") {
+			if !strings.Contains(result, "replicaSet=rs0") {
 				t.Error("Connection string should contain 'replicaSet=rs0'")
 			}
 
 			// Verify tlsAllowInvalidCertificates based on trustTLS
 			if tt.trustTLS {
-				if contains(result, "tlsAllowInvalidCertificates") {
+				if strings.Contains(result, "tlsAllowInvalidCertificates") {
 					t.Error("Connection string should NOT contain 'tlsAllowInvalidCertificates' when trustTLS is true")
 				}
 			} else {
-				if !contains(result, "tlsAllowInvalidCertificates=true") {
+				if !strings.Contains(result, "tlsAllowInvalidCertificates=true") {
 					t.Error("Connection string should contain 'tlsAllowInvalidCertificates=true' when trustTLS is false")
 				}
 			}
 
 			// Verify service IP is in the connection string
-			if !contains(result, tt.serviceIp) {
+			if !strings.Contains(result, tt.serviceIp) {
 				t.Errorf("Connection string should contain service IP/hostname %q", tt.serviceIp)
 			}
 
 			// Verify namespace is used correctly
-			if !contains(result, tt.documentdb.Namespace) {
+			if !strings.Contains(result, tt.documentdb.Namespace) {
 				t.Errorf("Connection string should contain namespace %q", tt.documentdb.Namespace)
 			}
 		})
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
@@ -391,6 +378,445 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 			}
 
 			t.Logf("✅ %s: %s", tt.name, tt.description)
+		})
+	}
+}
+
+func TestGetPortFor(t *testing.T) {
+	tests := []struct {
+		name     string
+		portName string
+		expected int32
+	}{
+		{
+			name:     "postgres port returns default 5432",
+			portName: POSTGRES_PORT,
+			expected: 5432,
+		},
+		{
+			name:     "sidecar port returns default 8445",
+			portName: SIDECAR_PORT,
+			expected: 8445,
+		},
+		{
+			name:     "gateway port returns default 10260",
+			portName: GATEWAY_PORT,
+			expected: 10260,
+		},
+		{
+			name:     "unknown port returns 0",
+			portName: "UNKNOWN_PORT",
+			expected: 0,
+		},
+		{
+			name:     "empty port name returns 0",
+			portName: "",
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetPortFor(tt.portName)
+			if result != tt.expected {
+				t.Errorf("GetPortFor(%q) = %d, expected %d", tt.portName, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetGatewayImageForDocumentDB(t *testing.T) {
+	tests := []struct {
+		name       string
+		documentdb *dbpreview.DocumentDB
+		expected   string
+	}{
+		{
+			name: "uses custom gateway image when specified",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					GatewayImage: "custom-registry/gateway:v1.0.0",
+				},
+			},
+			expected: "custom-registry/gateway:v1.0.0",
+		},
+		{
+			name: "returns default gateway image when not specified",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					GatewayImage: "",
+				},
+			},
+			expected: DEFAULT_GATEWAY_IMAGE,
+		},
+		{
+			name: "returns default when spec has empty gateway image",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{},
+			},
+			expected: DEFAULT_GATEWAY_IMAGE,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetGatewayImageForDocumentDB(tt.documentdb)
+			if result != tt.expected {
+				t.Errorf("GetGatewayImageForDocumentDB() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetDocumentDBImageForInstance(t *testing.T) {
+	tests := []struct {
+		name       string
+		documentdb *dbpreview.DocumentDB
+		expected   string
+	}{
+		{
+			name: "uses custom documentdb image when specified",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "custom-registry/documentdb:v2.0.0",
+				},
+			},
+			expected: "custom-registry/documentdb:v2.0.0",
+		},
+		{
+			name: "returns default documentdb image when not specified",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "",
+				},
+			},
+			expected: DEFAULT_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "returns default when spec has empty documentdb image",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{},
+			},
+			expected: DEFAULT_DOCUMENTDB_IMAGE,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetDocumentDBImageForInstance(tt.documentdb)
+			if result != tt.expected {
+				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetEnvironmentSpecificAnnotations(t *testing.T) {
+	tests := []struct {
+		name                string
+		environment         string
+		expectedAnnotations map[string]string
+	}{
+		{
+			name:        "EKS environment returns AWS NLB annotations",
+			environment: "eks",
+			expectedAnnotations: map[string]string{
+				"service.beta.kubernetes.io/aws-load-balancer-type":                              "nlb",
+				"service.beta.kubernetes.io/aws-load-balancer-scheme":                            "internet-facing",
+				"service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled": "true",
+				"service.beta.kubernetes.io/aws-load-balancer-nlb-target-type":                   "ip",
+			},
+		},
+		{
+			name:        "AKS environment returns Azure annotations",
+			environment: "aks",
+			expectedAnnotations: map[string]string{
+				"service.beta.kubernetes.io/azure-load-balancer-external": "true",
+			},
+		},
+		{
+			name:        "GKE environment returns Google Cloud annotations",
+			environment: "gke",
+			expectedAnnotations: map[string]string{
+				"cloud.google.com/load-balancer-type": "External",
+			},
+		},
+		{
+			name:                "unknown environment returns empty annotations",
+			environment:         "unknown",
+			expectedAnnotations: map[string]string{},
+		},
+		{
+			name:                "empty environment returns empty annotations",
+			environment:         "",
+			expectedAnnotations: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getEnvironmentSpecificAnnotations(tt.environment)
+
+			if len(result) != len(tt.expectedAnnotations) {
+				t.Errorf("Expected %d annotations, got %d", len(tt.expectedAnnotations), len(result))
+			}
+
+			for key, expectedValue := range tt.expectedAnnotations {
+				if actualValue, exists := result[key]; !exists {
+					t.Errorf("Expected annotation %q to exist", key)
+				} else if actualValue != expectedValue {
+					t.Errorf("Expected annotation %q = %q, got %q", key, expectedValue, actualValue)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateServiceName_PublicFunction(t *testing.T) {
+	tests := []struct {
+		name          string
+		source        string
+		target        string
+		resourceGroup string
+		maxLength     int
+	}{
+		{
+			name:          "short names",
+			source:        "east",
+			target:        "west",
+			resourceGroup: "rg1",
+			maxLength:     63,
+		},
+		{
+			name:          "long names require truncation",
+			source:        "very-long-source-region-name-that-exceeds",
+			target:        "very-long-target-region-name-that-exceeds",
+			resourceGroup: "my-resource-group",
+			maxLength:     63,
+		},
+		{
+			name:          "empty resource group",
+			source:        "source",
+			target:        "target",
+			resourceGroup: "",
+			maxLength:     63,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateServiceName(tt.source, tt.target, tt.resourceGroup)
+
+			totalLength := len(result) + len(tt.resourceGroup)
+			if tt.resourceGroup != "" {
+				totalLength += 2 // account for hyphens
+			}
+
+			if totalLength > tt.maxLength {
+				t.Errorf("Total length %d exceeds max %d: result=%q, resourceGroup=%q",
+					totalLength, tt.maxLength, result, tt.resourceGroup)
+			}
+
+			if result == "" {
+				t.Error("Generated service name should not be empty")
+			}
+		})
+
+		// Test consistency
+		t.Run(tt.name+" consistency", func(t *testing.T) {
+			result1 := GenerateServiceName(tt.source, tt.target, tt.resourceGroup)
+			result2 := GenerateServiceName(tt.source, tt.target, tt.resourceGroup)
+
+			if result1 != result2 {
+				t.Errorf("Inconsistent results: %q vs %q", result1, result2)
+			}
+		})
+	}
+}
+
+func TestEnsureServiceIP(t *testing.T) {
+	tests := []struct {
+		name        string
+		service     *corev1.Service
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "nil service returns error",
+			service:     nil,
+			expectError: true,
+			errorMsg:    "service is nil",
+		},
+		{
+			name: "ClusterIP service with valid IP",
+			service: &corev1.Service{
+				Spec: corev1.ServiceSpec{
+					Type:      corev1.ServiceTypeClusterIP,
+					ClusterIP: "10.0.0.1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "ClusterIP service with None returns error",
+			service: &corev1.Service{
+				Spec: corev1.ServiceSpec{
+					Type:      corev1.ServiceTypeClusterIP,
+					ClusterIP: "None",
+				},
+			},
+			expectError: true,
+			errorMsg:    "ClusterIP not assigned",
+		},
+		{
+			name: "ClusterIP service with empty IP returns error",
+			service: &corev1.Service{
+				Spec: corev1.ServiceSpec{
+					Type:      corev1.ServiceTypeClusterIP,
+					ClusterIP: "",
+				},
+			},
+			expectError: true,
+			errorMsg:    "ClusterIP not assigned",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			result, err := EnsureServiceIP(ctx, tt.service)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, but got nil", tt.errorMsg)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if result == "" {
+					t.Error("Expected non-empty result")
+				}
+			}
+		})
+	}
+}
+
+func TestGetDocumentDBServiceDefinition_LoadBalancerAnnotations(t *testing.T) {
+	tests := []struct {
+		name              string
+		environment       string
+		serviceType       corev1.ServiceType
+		expectAnnotations bool
+	}{
+		{
+			name:              "LoadBalancer with EKS gets annotations",
+			environment:       "eks",
+			serviceType:       corev1.ServiceTypeLoadBalancer,
+			expectAnnotations: true,
+		},
+		{
+			name:              "LoadBalancer with AKS gets annotations",
+			environment:       "aks",
+			serviceType:       corev1.ServiceTypeLoadBalancer,
+			expectAnnotations: true,
+		},
+		{
+			name:              "ClusterIP does not get annotations",
+			environment:       "eks",
+			serviceType:       corev1.ServiceTypeClusterIP,
+			expectAnnotations: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			documentdb := &dbpreview.DocumentDB{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "documentdb.io/preview",
+					Kind:       "DocumentDB",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-db",
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
+			}
+
+			replicationContext := &ReplicationContext{
+				Self:        "test-db",
+				Environment: tt.environment,
+				state:       NoReplication,
+			}
+
+			service := GetDocumentDBServiceDefinition(documentdb, replicationContext, "default", tt.serviceType)
+
+			if tt.expectAnnotations {
+				if service.Annotations == nil || len(service.Annotations) == 0 {
+					t.Error("Expected annotations to be set for LoadBalancer service")
+				}
+			} else {
+				if service.Annotations != nil && len(service.Annotations) > 0 {
+					t.Errorf("Expected no annotations for %v service, got %v", tt.serviceType, service.Annotations)
+				}
+			}
+		})
+	}
+}
+
+func TestGetDocumentDBServiceDefinition_ServiceNameLength(t *testing.T) {
+	tests := []struct {
+		name           string
+		documentdbName string
+		maxLength      int
+	}{
+		{
+			name:           "short name",
+			documentdbName: "db",
+			maxLength:      63,
+		},
+		{
+			name:           "name at boundary",
+			documentdbName: "this-is-a-very-long-documentdb-name-that-approaches-the-max",
+			maxLength:      63,
+		},
+		{
+			name:           "very long name gets truncated",
+			documentdbName: "this-is-an-extremely-long-documentdb-name-that-definitely-exceeds-sixty-three-characters",
+			maxLength:      63,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			documentdb := &dbpreview.DocumentDB{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "documentdb.io/preview",
+					Kind:       "DocumentDB",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.documentdbName,
+					Namespace: "default",
+					UID:       types.UID("test-uid"),
+				},
+			}
+
+			replicationContext := &ReplicationContext{
+				Self:  tt.documentdbName,
+				state: NoReplication,
+			}
+
+			service := GetDocumentDBServiceDefinition(documentdb, replicationContext, "default", corev1.ServiceTypeClusterIP)
+
+			if len(service.Name) > tt.maxLength {
+				t.Errorf("Service name %q exceeds max length %d (got %d)", service.Name, tt.maxLength, len(service.Name))
+			}
+
+			if service.Name == "" {
+				t.Error("Service name should not be empty")
+			}
 		})
 	}
 }
