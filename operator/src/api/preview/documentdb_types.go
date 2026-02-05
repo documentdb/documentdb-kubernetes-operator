@@ -86,10 +86,16 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines backup recovery settings.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.pvc) && self.pvc.name != ”)",message="cannot specify both backup and pvc recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
 	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
+
+	// PVC specifies the source PVC to restore from.
+	// Cannot be used together with Backup.
+	// +optional
+	PVC cnpgv1.LocalObjectReference `json:"pvc,omitempty"`
 }
 
 // BackupConfiguration defines backup settings for DocumentDB.
@@ -115,6 +121,27 @@ type StorageConfiguration struct {
 	// StorageClass specifies the storage class for DocumentDB persistent volumes.
 	// If not specified, the cluster's default storage class will be used.
 	StorageClass string `json:"storageClass,omitempty"`
+
+	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+	// the DocumentDB cluster is deleted.
+	//
+	// When a DocumentDB cluster is deleted, the following chain of deletions occurs:
+	// DocumentDB deletion → CNPG Cluster deletion → PVC deletion → PV deletion (based on this policy)
+	//
+	// Options:
+	//   - Retain (default): The PV is preserved after cluster deletion, allowing manual
+	//     data recovery or forensic analysis. Use for production workloads where data
+	//     safety is critical. Orphaned PVs must be manually deleted when no longer needed.
+	//   - Delete: The PV is automatically deleted when the PVC is deleted. Use for development,
+	//     testing, or ephemeral environments where data persistence is not required.
+	//
+	// WARNING: Setting this to "Delete" means all data will be permanently lost when
+	// the DocumentDB cluster is deleted. This cannot be undone.
+	//
+	// +kubebuilder:validation:Enum=Retain;Delete
+	// +kubebuilder:default=Retain
+	// +optional
+	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
 
 type ClusterReplication struct {

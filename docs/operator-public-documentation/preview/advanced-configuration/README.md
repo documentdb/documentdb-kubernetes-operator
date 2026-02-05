@@ -257,6 +257,111 @@ kubectl patch documentdb <name> -n <namespace> --type='json' \
   -p='[{"op": "replace", "path": "/spec/storage/size", "value":"200Gi"}]'
 ```
 
+### PersistentVolume Security
+
+The DocumentDB operator automatically applies security-hardening mount options to all PersistentVolumes associated with DocumentDB clusters:
+
+| Mount Option | Description |
+|--------------|-------------|
+| `nodev` | Prevents device files from being interpreted on the filesystem |
+| `nosuid` | Prevents setuid/setgid bits from taking effect |
+| `noexec` | Prevents execution of binaries on the filesystem |
+
+These options are automatically applied by the PV controller and require no additional configuration.
+
+### Disk Encryption
+
+Encryption at rest is essential for protecting sensitive database data. Here's how to configure disk encryption for each cloud provider:
+
+#### Azure Kubernetes Service (AKS)
+
+AKS encrypts all managed disks by default using Azure Storage Service Encryption (SSE) with platform-managed keys. No additional configuration is required.
+
+For customer-managed keys (CMK), use Azure Disk Encryption:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: managed-csi-encrypted
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Premium_LRS
+  # For customer-managed keys, specify the disk encryption set
+  diskEncryptionSetID: /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.Compute/diskEncryptionSets/<des-name>
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
+#### Google Kubernetes Engine (GKE)
+
+GKE encrypts all persistent disks by default using Google-managed encryption keys. No additional configuration is required.
+
+For customer-managed encryption keys (CMEK):
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pd-ssd-encrypted
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-ssd
+  # For CMEK, specify the key
+  disk-encryption-kms-key: projects/<project>/locations/<region>/keyRings/<keyring>/cryptoKeys/<key>
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
+#### Amazon Elastic Kubernetes Service (EKS)
+
+**Important**: Unlike AKS and GKE, EBS volumes on EKS are **not encrypted by default**. You must explicitly enable encryption in the StorageClass:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-sc-encrypted
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"  # Required for encryption
+  # Optional: specify a KMS key for customer-managed encryption
+  # kmsKeyId: arn:aws:kms:<region>:<account-id>:key/<key-id>
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
+To use the encrypted storage class with DocumentDB:
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  environment: eks
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: ebs-sc-encrypted  # Use the encrypted storage class
+  # ... other configuration
+```
+
+### Encryption Summary
+
+| Provider | Default Encryption | Customer-Managed Keys |
+|----------|-------------------|----------------------|
+| AKS | ✅ Enabled (SSE) | Optional via DiskEncryptionSet |
+| GKE | ✅ Enabled (Google-managed) | Optional via CMEK |
+| EKS | ❌ **Not enabled** | Required: set `encrypted: "true"` in StorageClass |
+
+**Recommendation**: For production deployments on EKS, always create a StorageClass with `encrypted: "true"` to ensure data at rest is protected.
+
 ---
 
 ## Resource Management
