@@ -60,7 +60,7 @@ resource memberCluster 'Microsoft.ContainerService/managedClusters@2023-10-01' =
 
 // Member clusters fleet membership
 resource memberFleetMembers 'Microsoft.ContainerService/fleets/members@2023-10-15' = {
-  name: 'member-${memberRegion}-${uniqueString(resourceGroup().id, memberRegion)}'
+  name: memberName
   parent: fleet
   properties: {
     clusterResourceId: memberCluster.id

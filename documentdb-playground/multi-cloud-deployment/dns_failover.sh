@@ -4,7 +4,7 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 DOCUMENTDB_NAME="${DOCUMENTDB_NAME:-documentdb-preview}"
 DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-preview-ns}"
 HUB_CONTEXT="${HUB_CONTEXT:-hub}"
-GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gke-documentdb-cluster}"
+GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gcp-documentdb}"
 
 MEMBER_CLUSTERS=$(kubectl --context "$HUB_CONTEXT" get documentdb $DOCUMENTDB_NAME -n $DOCUMENTDB_NAMESPACE -o json | jq -r ".spec.clusterReplication.clusterList[].name")
 PRIMARY_CLUSTER=$(kubectl --context "$HUB_CONTEXT" get documentdb $DOCUMENTDB_NAME -n $DOCUMENTDB_NAMESPACE -o json | jq -r ".spec.clusterReplication.primary")
