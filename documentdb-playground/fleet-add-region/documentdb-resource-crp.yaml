@@ -1,0 +1,87 @@
+# Namespace definition
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: default_user
+  password: {{DOCUMENTDB_PASSWORD}}
+
+---
+
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  resource:
+    storage:
+      pvcSize: 10Gi
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    crossCloudNetworkingStrategy: AzureFleet
+    primary: {{PRIMARY_CLUSTER}}
+    clusterList:
+{{CLUSTER_LIST}}
+  exposeViaService:
+    serviceType: LoadBalancer
+  logLevel: info
+
+---
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-namespace-crp
+spec:
+  resourceSelectors:
+    - group: ""
+      version: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+      selectionScope: NamespaceOnly # only namespace itself is placed, no resources within the namespace
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+
+---
+# Application team manages resources using RP
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ResourcePlacement
+metadata:
+  name: documentdb-resource-rp
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - group: documentdb.io
+      kind: DocumentDB
+      version: preview
+      name: documentdb-preview
+    - group: ""
+      version: v1
+      kind: Secret
+      name: documentdb-credentials
+  policy:
+    placementType: PickFixed
+    clusterNames:
+{{CLUSTER_LIST_CRP}}
+  strategy:
+    type: RollingUpdate
+    applyStrategy:
+      type: ServerSideApply
+      serverSideApplyConfig:
+        force: true
