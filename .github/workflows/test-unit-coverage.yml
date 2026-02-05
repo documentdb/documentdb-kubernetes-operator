@@ -1,0 +1,66 @@
+name: Unit Test Coverage
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Only trigger on Go code changes in operator/src
+      - 'operator/src/**/*.go'
+      - 'operator/src/go.mod'
+      - 'operator/src/go.sum'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GO_VERSION: '1.25.0'
+
+jobs:
+  coverage:
+    name: Check Unit Test Coverage
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: operator/src
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for diff coverage analysis
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: operator/src/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic \
+            -coverpkg=./... \
+            $(go list ./... | grep -v /test/e2e)
+          
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
+      - name: Check diff coverage (newly added lines)
+        uses: seriousben/go-patch-cover-action@v1
+        with:
+          version: v0.7.0
+          coverage-filename: operator/src/coverage.out
+          previous-coverage-filename: operator/src/coverage.out
+          threshold-file: 90
+          threshold-total: 0  # Only enforce threshold on new lines, not total
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: operator/src/coverage.out
+          retention-days: 7
