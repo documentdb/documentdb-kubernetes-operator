@@ -57,6 +57,8 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
+  DOCUMENTDB_OLD_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0
+  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -143,9 +145,91 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ env.DOCUMENTDB_OLD_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
+
+    - name: Test DocumentDB Image Upgrade
+      run: |
+        echo "Testing DocumentDB extension image upgrade on ${{ matrix.architecture }}..."
+        
+        OLD_IMAGE="${{ env.DOCUMENTDB_OLD_IMAGE }}"
+        NEW_IMAGE="${{ env.DOCUMENTDB_IMAGE }}"
+        
+        # Verify current image is the old image
+        CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        echo "Current DocumentDB image: $CURRENT_IMAGE"
+        
+        if [[ "$CURRENT_IMAGE" != "$OLD_IMAGE" ]]; then
+          echo "❌ Expected old image $OLD_IMAGE but found $CURRENT_IMAGE"
+          exit 1
+        fi
+        echo "✓ Cluster deployed with old image"
+        
+        # Check DocumentDB version in status before upgrade
+        DOCUMENTDB_VERSION_BEFORE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.documentDBVersion}')
+        echo "DocumentDB version before upgrade: $DOCUMENTDB_VERSION_BEFORE"
+        
+        echo ""
+        echo "Upgrading DocumentDB image to $NEW_IMAGE..."
+        kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' -p "{\"spec\":{\"documentDBImage\":\"$NEW_IMAGE\"}}"
+        
+        echo "Waiting for cluster to be healthy with new image..."
+        
+        # Extract expected version from image tag (e.g., "0.110.0" -> "0.110-0")
+        # NOTE: This parsing assumes semver format "X.Y.Z" where the last component becomes
+        # hyphen-separated in the extension version. Pre-release tags (e.g., "0.110.0-beta")
+        # are not currently supported and would not be converted correctly.
+        NEW_VERSION_TAG="${NEW_IMAGE##*:}"
+        EXPECTED_VERSION=$(echo "$NEW_VERSION_TAG" | sed 's/\.\([^.]*\)$/-\1/')
+        echo "Expected DocumentDB version after upgrade: $EXPECTED_VERSION"
+        
+        timeout 600 bash -c '
+        
+        while true; do
+          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          
+          # Check DocumentDB version in status
+          DOCUMENTDB_VERSION=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.documentDBVersion}" 2>/dev/null || echo "N/A")
+          
+          echo "DocumentDB status: $DB_STATUS, CNPG Cluster phase: $CLUSTER_STATUS, DocumentDB version: $DOCUMENTDB_VERSION"
+          
+          if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
+            if [[ "$DOCUMENTDB_VERSION" == "'"$EXPECTED_VERSION"'" ]]; then
+              HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+              if [[ "$HEALTHY_PODS" -ge "1" ]]; then
+                echo "✓ Cluster is healthy with new image and $HEALTHY_PODS healthy pods"
+                break
+              fi
+            fi
+          fi
+          
+          sleep 10
+        done
+        '
+        
+        echo "Verifying new image is applied..."
+        FINAL_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        echo "Final DocumentDB image in spec: $FINAL_IMAGE"
+        
+        if [[ "$FINAL_IMAGE" != "$NEW_IMAGE" ]]; then
+          echo "❌ New image not applied to DocumentDB spec"
+          kubectl get documentdb $DB_NAME -n $DB_NS -o yaml
+          exit 1
+        fi
+        
+        echo "✓ New image applied successfully"
+        
+        # Check DocumentDB version in status after upgrade
+        DOCUMENTDB_VERSION_AFTER=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.documentDBVersion}')
+        echo "DocumentDB version before upgrade: $DOCUMENTDB_VERSION_BEFORE"
+        echo "DocumentDB version after upgrade: $DOCUMENTDB_VERSION_AFTER"
+        
+        echo ""
+        echo "✅ DocumentDB image upgrade test completed successfully!"
+        echo "Upgraded from $OLD_IMAGE to $NEW_IMAGE"
 
     - name: Setup port forwarding for comprehensive tests
       uses: ./.github/actions/setup-port-forwarding
