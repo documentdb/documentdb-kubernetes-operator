@@ -76,6 +76,10 @@ type DocumentDBSpec struct {
 	// Backup configures backup settings for DocumentDB.
 	// +optional
 	Backup *BackupConfiguration `json:"backup,omitempty"`
+
+	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
+	// +optional
+	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`
 }
 
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
