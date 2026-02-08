@@ -81,6 +81,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						"cron.database_name":    "postgres",
 						"max_replication_slots": "10",
 						"max_wal_senders":       "10",
+						"wal_level":             "logical",
 					},
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 trust",
