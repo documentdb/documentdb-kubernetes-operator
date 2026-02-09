@@ -31,21 +31,24 @@ pip install -r requirements.txt
 az login
 az account set --subscription "<your-subscription-id>"
 
-# Create Azure DocumentDB (with MongoDB compatibility) account
-az cosmosdb create \
-  --name documentdb-sync-target \
+# Create Azure DocumentDB (with MongoDB compatibility) cluster
+az cosmosdb mongocluster create \
+  --cluster-name documentdb-sync-target \
   --resource-group <your-resource-group> \
-  --kind MongoDB \
-  --server-version 4.2 \
-  --default-consistency-level Eventual \
-  --locations regionName=eastus failoverPriority=0 isZoneRedundant=false
+  --location eastus \
+  --administrator-login <your-admin-user> \
+  --administrator-login-password <your-admin-password> \
+  --server-version 5.0 \
+  --shard-node-tier "M30" \
+  --shard-node-ha true \
+  --shard-node-disk-size-gb 128 \
+  --shard-node-count 1
 
 # Get connection string
-az cosmosdb keys list \
-  --name documentdb-sync-target \
+az cosmosdb mongocluster show \
+  --cluster-name documentdb-sync-target \
   --resource-group <your-resource-group> \
-  --type connection-strings \
-  --query "connectionStrings[0].connectionString" -o tsv
+  --query "connectionString" -o tsv
 ```
 
 ### 3. Configure the sync service
@@ -164,13 +167,6 @@ db.mycollection.deleteOne({ name: "Test" })
 Use Azure Portal Data Explorer or mongosh to connect to your Azure DocumentDB (with MongoDB compatibility) and verify the documents were synced.
 
 ## Troubleshooting
-
-### "Change stream error (is it enabled?)"
-
-Enable change streams:
-```sql
-SELECT documentdb_api.set_config('enableChangeStreams', 'true');
-```
 
 ### "Could not connect to database"
 
