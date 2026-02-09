@@ -109,8 +109,8 @@ class SyncState:
             with os.fdopen(fd, 'w') as f:
                 json.dump(self._state, f, indent=2, default=str)
             
-            # Atomic rename (POSIX guarantees atomicity)
-            os.rename(temp_path, self.state_file)
+            # Atomic replace (works on both Windows and POSIX)
+            os.replace(temp_path, self.state_file)
             logger.debug(f"State persisted to {self.state_file}")
         except Exception as e:
             # Clean up temp file on failure
@@ -210,7 +210,7 @@ class SyncState:
         flushed even when the number of changes is less than persist_interval.
         """
         if self._changes_since_persist > 0:
-            logger.info(f"Flushing {self._changes_since_persist} pending change(s) to disk")
+            logger.info(f"Persisting resume tokens to state file for {self._changes_since_persist} change(s)")
             self.persist()
     
     def get_stats(self) -> Dict[str, int]:
