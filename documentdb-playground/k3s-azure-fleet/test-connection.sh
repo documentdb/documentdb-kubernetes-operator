@@ -65,6 +65,8 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo "✓ (Status: $STATUS)"
   else
     echo "✗ Not found"
+    ((FAILED++))
+    continue
   fi
   
   # Check pods
@@ -96,6 +98,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     fi
   else
     echo "✗ Not found"
+    ((FAILED++))
   fi
   
   # Check secret
@@ -104,6 +107,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo "✓"
   else
     echo "✗ Not found"
+    ((FAILED++))
   fi
   
   # Check operator

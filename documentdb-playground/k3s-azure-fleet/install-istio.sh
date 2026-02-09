@@ -37,6 +37,14 @@ echo "Clusters: ${ALL_CLUSTERS[*]}"
 echo "======================================="
 echo ""
 
+# Check prerequisites
+for cmd in kubectl helm make openssl curl; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: Required command '$cmd' not found."
+        exit 1
+    fi
+done
+
 # Download istioctl if not present
 if ! command -v istioctl &> /dev/null; then
     echo "Installing istioctl..."

@@ -25,7 +25,7 @@ echo "Hub Cluster: $HUB_CLUSTER_NAME"
 echo "======================================="
 
 # Check prerequisites
-for cmd in kubectl helm git jq; do
+for cmd in kubectl helm git jq curl; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required command '$cmd' not found."
     exit 1
@@ -94,6 +94,7 @@ echo "✓ Hub-agent installed"
 echo ""
 echo "Joining member clusters to fleet..."
 chmod +x ./hack/membership/joinMC.sh
+# Note: $ALL_MEMBERS is intentionally unquoted — joinMC.sh expects individual context names as separate args
 ./hack/membership/joinMC.sh "$TAG" "$HUB_CLUSTER_NAME" $ALL_MEMBERS
 
 popd > /dev/null

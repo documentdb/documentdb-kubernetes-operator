@@ -144,7 +144,12 @@ fi
 # Generate manifest with substitutions
 TEMP_YAML=$(mktemp)
 
-sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
+# Escape password for safe use in sed (handle /, &, \ characters)
+ESCAPED_PASSWORD="${DOCUMENTDB_PASSWORD//\\/\\\\}"
+ESCAPED_PASSWORD="${ESCAPED_PASSWORD//&/\\&}"
+ESCAPED_PASSWORD="${ESCAPED_PASSWORD//\//\\/}"
+
+sed -e "s/{{DOCUMENTDB_PASSWORD}}/$ESCAPED_PASSWORD/g" \
     -e "s/{{PRIMARY_CLUSTER}}/$PRIMARY_CLUSTER/g" \
     "$SCRIPT_DIR/documentdb-resource-crp.yaml" | \
 while IFS= read -r line; do

@@ -28,7 +28,7 @@ echo "Chart Directory: $CHART_DIR"
 echo "======================================="
 
 # Check prerequisites
-for cmd in kubectl helm; do
+for cmd in kubectl helm az base64 awk curl; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "Error: Required command '$cmd' not found."
     exit 1
