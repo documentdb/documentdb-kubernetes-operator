@@ -23,8 +23,14 @@ param sshPublicKey string
 @description('Admin username for VMs')
 param adminUsername string = 'azureuser'
 
+@description('Kubernetes version for AKS (empty string uses region default)')
+param kubernetesVersion string = '1.32'
+
 @description('k3s version')
 param k3sVersion string = 'v1.30.4+k3s1'
+
+@description('Allowed source IP for Kube API access (default: any). Set to your IP/CIDR for security.')
+param allowedSourceIP string = '*'
 
 // Variables
 var aksClusterName = 'hub-${hubLocation}'
@@ -63,7 +69,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
   }
   properties: {
     dnsPrefix: aksClusterName
-    kubernetesVersion: '1.32'
+    kubernetesVersion: kubernetesVersion
     enableRBAC: true
     networkProfile: {
       networkPlugin: 'azure'
@@ -129,7 +135,7 @@ resource k3sNsgs 'Microsoft.Network/networkSecurityGroups@2023-05-01' = [for (re
           direction: 'Inbound'
           access: 'Allow'
           protocol: 'Tcp'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: allowedSourceIP
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '6443'

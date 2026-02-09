@@ -483,10 +483,8 @@ This playground uses Azure VM Run Command instead of SSH for all VM operations:
 - Apply CRDs explicitly with `kubectl apply -f` before Helm install (the `crds.enabled=true` flag can silently fail)
 
 ### Corporate Network (NRMS)
-- Azure NRMS policies auto-add deny rules at priority 105-109 on NSGs
-- Port 22 is denied by NRMS-Rule-106; to enable SSH, add allow rule at priority 100
-- Port 6443 is not in NRMS deny lists but corporate VPN/firewall may block it
-- NSG minimum priority is 100 (cannot go lower)
+- Port 22 could be denied by the corporate firewall; to enable SSH, add allow rule 
+- Port 6443 might be blocked by corporate VPN/firewall 
 
 ### Bicep Deployment Tips
 - Use `resourceId()` function for subnet references to avoid race conditions
