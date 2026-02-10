@@ -60,12 +60,16 @@ This playground demonstrates deploying DocumentDB on **k3s clusters running on A
 
 ## Network Requirements
 
-> **Important**: The k3s VMs require the following network access:
+> **Important**: The deployment creates NSGs (Network Security Groups) for both AKS and k3s subnets to prevent Azure NRMS from auto-creating restrictive rules. The k3s VMs require the following network access:
 > 
 > | Port | Protocol | Direction | Purpose |
 > |------|----------|-----------|---------|
 > | 6443 | TCP | Inbound | Kubernetes API server (kubectl access) |
-> | 15443 | TCP | Inbound | Istio east-west gateway |
+> | 15443 | TCP | Inbound | Istio east-west gateway (cross-cluster mTLS) |
+> | 15012 | TCP | Inbound | Istio xDS secure gRPC (cross-cluster discovery) |
+> | 15017 | TCP | Inbound | Istio webhook (sidecar injection) |
+> | 15021 | TCP | Inbound | Istio health/status |
+> | 15010 | TCP | Inbound | Istio xDS plaintext gRPC |
 > | 80, 443 | TCP | Inbound | HTTP/HTTPS traffic |
 >
 > **Corporate Environment Considerations**:
@@ -122,6 +126,9 @@ Deploys Azure infrastructure:
 - AKS hub cluster in westus3 (also serves as a member)
 - Azure VMs with k3s in eastus2 and uksouth
 - Each cluster in its own VNet (no peering required - Istio handles connectivity)
+- NSGs on all subnets (prevents Azure NRMS auto-creation of restrictive rules)
+- **Istio CA certificates**: Pre-generated locally via openssl (zero cluster dependency) and injected into k3s VMs via cloud-init `write_files`
+- **Istio remote secrets**: Auto-generated on k3s VMs via cloud-init `runcmd` (creates service account, extracts token, builds remote-secret YAML)
 
 ```bash
 # With defaults
@@ -138,11 +145,11 @@ export K3S_REGIONS_CSV="eastus2,uksouth,northeurope"
 ### 2. `install-istio.sh`
 
 Installs Istio service mesh on all clusters:
-- Generates shared root CA for cross-cluster trust
-- AKS hub: installs via `istioctl` (standard approach)
-- k3s VMs: installs via **Helm** (`istio-base` + `istiod`) to avoid ownership conflicts, plus `istioctl` for east-west gateway only
+- **Shared root CA**: Pre-generated during `deploy-infrastructure.sh` and injected into k3s VMs via cloud-init (zero cluster dependency)
+- **AKS hub**: installs via `istioctl` (standard approach)
+- **k3s VMs**: installs entirely via **Helm** (`istio-base` + `istiod` + `istio/gateway`) with `--skip-schema-validation` to avoid ownership conflicts with `istioctl`
+- **Remote secrets**: Pre-generated on k3s VMs via cloud-init, then distributed to other clusters
 - Patches k3s east-west gateways with VM public IPs (k3s `servicelb` only assigns internal IPs)
-- Creates remote secrets for cross-cluster service discovery
 
 ```bash
 ./install-istio.sh
@@ -465,6 +472,9 @@ This playground uses Azure VM Run Command instead of SSH for all VM operations:
 
 ### Istio on k3s
 - **Use Helm**, not `istioctl install`, for k3s clusters — `istioctl` creates resources without Helm annotations, causing ownership conflicts if you later use Helm
+- **`--skip-schema-validation`** is required for all Helm installs (`istio-base`, `istiod`, `istio/gateway`) — the gateway chart's JSON schema rejects documented values like `labels`, `env`, `service`, `networkGateway`
+- **Istio CA certs are pre-generated** during infrastructure deploy (pure `openssl` operations, no cluster needed) and injected via cloud-init `write_files` with `encoding: b64` — the k3s cloud-init `runcmd` creates the `cacerts` Kubernetes secret from these files
+- **Remote secrets are pre-generated** on each k3s VM via cloud-init — creates an `istio-remote-reader` service account (NOT `istio-reader-service-account` which conflicts with Helm's `istio-base` chart), extracts token and CA, and builds the complete remote-secret YAML at `/etc/istio-remote/remote-secret.yaml`
 - k3s uses `servicelb` (klipper) for LoadBalancer services which assigns node IPs, not public IPs
 - Patch east-west gateway services with `externalIPs` pointing to the node's public IP:
   ```bash
@@ -484,13 +494,17 @@ This playground uses Azure VM Run Command instead of SSH for all VM operations:
 
 ### Corporate Network (NRMS)
 - Port 22 could be denied by the corporate firewall; to enable SSH, add allow rule 
-- Port 6443 might be blocked by corporate VPN/firewall 
+- Port 6443 might be blocked by corporate VPN/firewall
+- **NSGs are deployed in Bicep** and associated at the subnet level to prevent Azure NRMS from auto-creating restrictive NSGs — without pre-created NSGs, NRMS may block ports needed for Istio and k3s
+- Both AKS and k3s NSGs include all required ports (SSH, K8s API, all Istio control/data plane ports, HTTP/HTTPS)
 
 ### Bicep Deployment Tips
 - Use `resourceId()` function for subnet references to avoid race conditions
 - Add explicit `dependsOn` for AKS clusters referencing VNets
 - Check AKS supported Kubernetes versions: `az aks get-versions --location <region>`
 - Azure VMs require SSH key even when not using SSH; changing key on existing VM causes "PropertyChangeNotAllowed" error
+- **`format()` escaping for cloud-init**: In Bicep `format()` templates, `{{` produces literal `{` and `}}` produces literal `}` — critical when embedding bash `${VAR}` or jsonpath `{.data.token}` in cloud-init scripts
+- **`@secure()` does not work with Bicep `array` type** (BCP124) — Istio cert data is passed as a plain array parameter
 
 ## Related Playgrounds
 

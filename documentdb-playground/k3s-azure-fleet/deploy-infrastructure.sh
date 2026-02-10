@@ -40,6 +40,61 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
 fi
 SSH_PUBLIC_KEY=$(cat "${SSH_KEY_PATH}.pub")
 
+# ─── Generate Istio CA certificates (pre-deploy) ───
+ISTIO_VERSION="${ISTIO_VERSION:-1.24.0}"
+CERT_DIR="${SCRIPT_DIR}/.istio-certs"
+mkdir -p "$CERT_DIR"
+
+echo "Generating Istio CA certificates..."
+
+# Download Istio cert tools if not present
+if [ ! -d "$CERT_DIR/istio-${ISTIO_VERSION}" ]; then
+    echo "  Downloading Istio ${ISTIO_VERSION} cert tools..."
+    curl -sL "https://github.com/istio/istio/archive/refs/tags/${ISTIO_VERSION}.tar.gz" | tar xz -C "$CERT_DIR"
+fi
+
+# Generate root CA (shared across all clusters)
+if [ ! -f "$CERT_DIR/root-cert.pem" ]; then
+    echo "  Generating shared root CA..."
+    pushd "$CERT_DIR" > /dev/null
+    make -f "istio-${ISTIO_VERSION}/tools/certs/Makefile.selfsigned.mk" root-ca
+    popd > /dev/null
+fi
+
+# Generate per-cluster intermediate certs and build JSON array for Bicep
+ISTIO_CERTS_JSON="["
+for i in "${!K3S_REGION_ARRAY[@]}"; do
+    region="${K3S_REGION_ARRAY[$i]}"
+    cluster_name="k3s-${region}"
+
+    if [ ! -f "$CERT_DIR/${cluster_name}/ca-cert.pem" ]; then
+        echo "  Generating certificates for ${cluster_name}..."
+        pushd "$CERT_DIR" > /dev/null
+        make -f "istio-${ISTIO_VERSION}/tools/certs/Makefile.selfsigned.mk" "${cluster_name}-cacerts"
+        popd > /dev/null
+    fi
+
+    # Base64-encode each PEM file for cloud-init write_files (encoding: b64)
+    ROOT_CERT_B64=$(base64 < "$CERT_DIR/${cluster_name}/root-cert.pem" | tr -d '\n')
+    CA_CERT_B64=$(base64 < "$CERT_DIR/${cluster_name}/ca-cert.pem" | tr -d '\n')
+    CA_KEY_B64=$(base64 < "$CERT_DIR/${cluster_name}/ca-key.pem" | tr -d '\n')
+    CERT_CHAIN_B64=$(base64 < "$CERT_DIR/${cluster_name}/cert-chain.pem" | tr -d '\n')
+
+    [ "$i" -gt 0 ] && ISTIO_CERTS_JSON+=","
+    ISTIO_CERTS_JSON+="{\"rootCert\":\"${ROOT_CERT_B64}\",\"caCert\":\"${CA_CERT_B64}\",\"caKey\":\"${CA_KEY_B64}\",\"certChain\":\"${CERT_CHAIN_B64}\"}"
+done
+ISTIO_CERTS_JSON+="]"
+
+echo "✓ Istio certificates generated for ${#K3S_REGION_ARRAY[@]} k3s cluster(s)"
+
+# Also generate certs for AKS hub (applied later by install-istio.sh via kubectl)
+if [ ! -f "$CERT_DIR/hub-${HUB_REGION}/ca-cert.pem" ]; then
+    echo "  Generating certificates for hub-${HUB_REGION}..."
+    pushd "$CERT_DIR" > /dev/null
+    make -f "istio-${ISTIO_VERSION}/tools/certs/Makefile.selfsigned.mk" "hub-${HUB_REGION}-cacerts"
+    popd > /dev/null
+fi
+
 # Create resource group
 echo "Creating/verifying resource group..."
 if az group show --name "$RESOURCE_GROUP" &>/dev/null; then
@@ -85,6 +140,7 @@ if [ "$SKIP_BICEP" = "false" ]; then
         --parameters hubLocation="$HUB_REGION" \
         --parameters k3sRegions="$K3S_REGIONS_JSON" \
         --parameters sshPublicKey="$SSH_PUBLIC_KEY" \
+        --parameters istioCerts="$ISTIO_CERTS_JSON" \
         --output none
     
     echo "✓ Infrastructure deployed"
