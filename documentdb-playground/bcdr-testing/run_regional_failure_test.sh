@@ -129,7 +129,7 @@ echo "Starting workload..."
   "$insert_endpoint" "$read_endpoint_1" "$read_endpoint_2" \
   "$username" "$password" \
   --duration-seconds "$TOTAL_DURATION_SECONDS" \
-  --use-srv $use_srv &
+  --use-srv "$use_srv" &
 python_pid=$!
 
 sleep "$CHAOS_DELAY_SECONDS"
@@ -148,7 +148,6 @@ kubectl documentdb promote \
   --failover
 
 if [[ "$USE_DNS_ENDPOINTS" == "true" ]]; then
-  # Repoint srv url
   az network dns record-set srv remove-record \
     --record-set-name "_mongodb._tcp" \
     --zone-name "$DNS_ZONE_FQDN" \
@@ -159,7 +158,6 @@ if [[ "$USE_DNS_ENDPOINTS" == "true" ]]; then
     --target "$primary_context.$DNS_ZONE_FQDN" \
     --keep-empty-record-set > /dev/null
 
-#create new one
   az network dns record-set srv add-record \
     --record-set-name "_mongodb._tcp" \
     --zone-name "$DNS_ZONE_FQDN" \

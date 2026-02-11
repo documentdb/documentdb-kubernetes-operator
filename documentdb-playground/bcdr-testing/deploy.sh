@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 export MEMBER_REGIONS="westus3,uksouth,eastus2"
 export RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-bcdr-test-rg}"
 SCRIPT_DIR="$(dirname "$0")"
