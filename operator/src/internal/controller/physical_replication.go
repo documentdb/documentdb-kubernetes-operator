@@ -360,6 +360,15 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 }
 
 func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]util.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+
+	// Remove old bootstrap method if present
+	if current.Spec.Bootstrap != nil {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:   util.JSON_PATCH_OP_REMOVE,
+			Path: util.JSON_PATCH_PATH_BOOTSTRAP,
+		})
+	}
+
 	if current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Primary => replica
 		// demote
