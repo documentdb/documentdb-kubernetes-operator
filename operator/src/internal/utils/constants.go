@@ -48,6 +48,7 @@ const (
 	JSON_PATCH_PATH_EXTERNAL_CLUSTERS    = "/spec/externalClusters"
 	JSON_PATCH_PATH_MANAGED_SERVICES     = "/spec/managed/services/additional"
 	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
+	JSON_PATCH_PATH_BOOTSTRAP            = "/spec/bootstrap"
 
 	// JSON Patch operations
 	JSON_PATCH_OP_REPLACE = "replace"

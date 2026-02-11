@@ -233,6 +233,9 @@ else
 fi
 rm -f "$ALIASES_TMP"
 
+echo "Tag the HUB/MEMBER cluster"
+kubectl --context $HUB_CLUSTER label membercluster $HUB_CLUSTER "documentdb.io/fleet-hub"=true
+
 echo ""
 echo "✅ Deployment completed successfully!"
 echo ""
