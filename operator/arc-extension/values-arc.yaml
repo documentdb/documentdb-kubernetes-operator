@@ -1,0 +1,112 @@
+# Azure Extension Helm values for DocumentDB Operator
+#
+# These values override the default values.yaml when deploying
+# via Azure extension manager (AKS or Arc-enabled clusters).
+#
+# Usage: Applied automatically when extension is installed via:
+#   az k8s-extension create --extension-type Microsoft.DocumentDB.Operator ...
+#
+# Works for both:
+#   --cluster-type managedClusters (AKS)
+#   --cluster-type connectedClusters (Arc-enabled)
+
+# Namespace configuration
+namespace: documentdb-operator
+replicaCount: 1
+
+# DocumentDB version - can be overridden via --configuration-settings
+documentDbVersion: ""
+
+# Service account configuration
+serviceAccount:
+  create: true
+  automount: true
+  annotations:
+    # Arc-specific annotation for managed identity
+    azure.workload.identity/client-id: ""
+  name: "documentdb-operator"
+
+# WAL Replica feature flag
+walReplica: false
+
+# Image configuration - uses ghcr.io registry
+image:
+  documentdbk8soperator:
+    repository: ghcr.io/documentdb/documentdb-kubernetes-operator/operator
+    pullPolicy: Always
+  sidecarinjector:
+    repository: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar
+    pullPolicy: Always
+  walreplica:
+    repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
+    pullPolicy: Always
+
+# CNPG configuration
+cloudnative-pg:
+  namespaceOverride: cnpg-system
+
+# Arc-specific configuration
+arc:
+  # Enable Arc integration features
+  enabled: true
+  
+  # Extension metadata (populated by Arc)
+  extensionName: ""
+  clusterName: ""
+  resourceGroup: ""
+  subscriptionId: ""
+  
+  # Metering configuration (Phase 2 - disabled by default)
+  metering:
+    enabled: false
+    reportingInterval: 15m
+    endpoint: ""
+
+# Pod labels for Arc identification
+podLabels:
+  azure-arc-extension: "documentdb-operator"
+  azure-arc-extension-type: "Microsoft.DocumentDB.Operator"
+
+# Pod annotations
+podAnnotations:
+  # Prometheus scraping (if Azure Monitor is enabled)
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+# Resource limits appropriate for Arc-managed deployments
+resources:
+  operator:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Tolerations for Arc agent nodes
+tolerations:
+  - key: "kubernetes.azure.com/scalesetpriority"
+    operator: "Equal"
+    value: "spot"
+    effect: "NoSchedule"
+
+# Node selector (optional - for dedicated nodes)
+nodeSelector: {}
+
+# Affinity rules
+affinity: {}
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL

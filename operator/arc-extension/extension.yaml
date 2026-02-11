@@ -1,0 +1,139 @@
+# Azure Extension Manifest for DocumentDB Kubernetes Operator
+# 
+# This manifest tells Azure how to deploy the DocumentDB operator
+# on Kubernetes clusters (AKS and Arc-enabled).
+#
+# Extension Type: Microsoft.DocumentDB.Operator
+# Chart Source: OCI registry at ghcr.io/documentdb/documentdb-operator
+#
+# Supported cluster types:
+#   - managedClusters (AKS) - no Arc agent required
+#   - connectedClusters (Arc-enabled) - Arc agent required
+
+apiVersion: arc.azure.com/v1
+kind: ExtensionConfiguration
+metadata:
+  name: documentdb-operator
+  namespace: documentdb-operator
+
+spec:
+  # Extension identity registered with Azure
+  extensionType: Microsoft.DocumentDB.Operator
+  
+  # Extension version (should match Helm chart version)
+  version: 0.1.3
+  
+  # Release train configuration
+  releaseTrain: stable
+  autoUpgradeMinorVersion: true
+  
+  # Helm chart configuration
+  helm:
+    # OCI registry location (existing ghcr.io - no repackaging needed)
+    registryUrl: oci://ghcr.io/documentdb
+    chartName: documentdb-operator
+    chartVersion: "0.1.3"
+    
+    # Deployment configuration
+    releaseName: documentdb-operator
+    releaseNamespace: documentdb-operator
+    createNamespace: true
+    
+    # Default timeout for Helm operations
+    timeout: 10m
+    
+    # Values file for Arc-specific overrides
+    valuesFile: values-arc.yaml
+
+  # User-configurable settings exposed via az k8s-extension create
+  # Example: az k8s-extension create ... --configuration-settings documentDbVersion=0.1.3
+  configurationSettings:
+    - name: documentDbVersion
+      description: "DocumentDB operator version"
+      type: string
+      defaultValue: "0.1.3"
+      required: false
+      
+    - name: replicaCount
+      description: "Number of operator replicas"
+      type: integer
+      defaultValue: "1"
+      required: false
+      
+    - name: walReplica
+      description: "Enable WAL replica feature"
+      type: boolean
+      defaultValue: "false"
+      required: false
+
+  # Protected settings (secrets) - not logged or displayed
+  configurationProtectedSettings:
+    - name: registry.username
+      description: "Container registry username (if private)"
+      type: string
+      required: false
+      
+    - name: registry.password
+      description: "Container registry password (if private)"
+      type: string
+      required: false
+
+  # Health monitoring configuration
+  healthChecks:
+    # Primary operator deployment
+    - kind: Deployment
+      name: documentdb-operator
+      namespace: documentdb-operator
+      healthyThreshold: 1
+      unhealthyThreshold: 3
+      
+    # CNPG operator (dependency)
+    - kind: Deployment
+      name: cloudnative-pg
+      namespace: cnpg-system
+      healthyThreshold: 1
+      unhealthyThreshold: 3
+
+  # Scope: cluster-wide (not namespace-scoped)
+  scope:
+    cluster:
+      releaseNamespace: documentdb-operator
+
+  # Identity configuration for Azure resources access
+  identity:
+    type: SystemAssigned
+
+  # Resource requirements for extension pods
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+---
+# Release train definitions
+apiVersion: arc.azure.com/v1
+kind: ReleaseTrainConfiguration
+metadata:
+  name: documentdb-operator-release-trains
+
+spec:
+  releaseTrains:
+    # Stable release train - production ready
+    - name: stable
+      enabled: true
+      versions:
+        - "0.1.3"
+        - "0.1.2"
+        - "0.1.1"
+      defaultVersion: "0.1.3"
+      
+    # Preview release train - early access features
+    - name: preview
+      enabled: true
+      versions:
+        - "0.2.0-preview"
+        - "0.1.3"
+      defaultVersion: "0.1.3"
