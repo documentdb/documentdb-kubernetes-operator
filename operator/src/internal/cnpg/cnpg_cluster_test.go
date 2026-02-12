@@ -7,6 +7,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -85,14 +86,17 @@ var _ = Describe("getBootstrapConfiguration", func() {
 		Expect(result.InitDB).To(BeNil())
 	})
 
-	It("returns PVC recovery when PVC name is specified", func() {
-		pvcName := "my-pvc"
+	It("returns PV recovery when PV name is specified", func() {
+		pvName := "my-pv"
 		documentdb := &dbpreview.DocumentDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-cluster",
+			},
 			Spec: dbpreview.DocumentDBSpec{
 				Bootstrap: &dbpreview.BootstrapConfiguration{
 					Recovery: &dbpreview.RecoveryConfiguration{
-						PVC: cnpgv1.LocalObjectReference{
-							Name: pvcName,
+						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+							Name: pvName,
 						},
 					},
 				},
@@ -103,7 +107,8 @@ var _ = Describe("getBootstrapConfiguration", func() {
 		Expect(result).ToNot(BeNil())
 		Expect(result.Recovery).ToNot(BeNil())
 		Expect(result.Recovery.VolumeSnapshots).ToNot(BeNil())
-		Expect(result.Recovery.VolumeSnapshots.Storage.Name).To(Equal(pvcName))
+		// Temp PVC name is based on documentdb name
+		Expect(result.Recovery.VolumeSnapshots.Storage.Name).To(Equal("test-cluster-pv-recovery-temp"))
 		Expect(result.Recovery.VolumeSnapshots.Storage.Kind).To(Equal("PersistentVolumeClaim"))
 		Expect(result.Recovery.VolumeSnapshots.Storage.APIGroup).To(Equal(pointer.String("")))
 		Expect(result.Recovery.Backup).To(BeNil())
@@ -129,12 +134,12 @@ var _ = Describe("getBootstrapConfiguration", func() {
 		Expect(result.Recovery).To(BeNil())
 	})
 
-	It("returns default bootstrap when PVC name is empty", func() {
+	It("returns default bootstrap when PV name is empty", func() {
 		documentdb := &dbpreview.DocumentDB{
 			Spec: dbpreview.DocumentDBSpec{
 				Bootstrap: &dbpreview.BootstrapConfiguration{
 					Recovery: &dbpreview.RecoveryConfiguration{
-						PVC: cnpgv1.LocalObjectReference{
+						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
 							Name: "",
 						},
 					},
@@ -225,12 +230,15 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Bootstrap.Recovery.Backup.LocalObjectReference.Name).To(Equal("test-backup"))
 	})
 
-	It("creates a CNPG cluster spec with PVC recovery", func() {
+	It("creates a CNPG cluster spec with PV recovery", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
 		documentdb := &dbpreview.DocumentDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-cluster",
+			},
 			Spec: dbpreview.DocumentDBSpec{
 				InstancesPerNode: 3,
 				Resource: dbpreview.Resource{
@@ -240,8 +248,8 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 				},
 				Bootstrap: &dbpreview.BootstrapConfiguration{
 					Recovery: &dbpreview.RecoveryConfiguration{
-						PVC: cnpgv1.LocalObjectReference{
-							Name: "test-pvc",
+						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+							Name: "test-pv",
 						},
 					},
 				},
@@ -253,7 +261,8 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Bootstrap).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap.Recovery).ToNot(BeNil())
 		Expect(result.Spec.Bootstrap.Recovery.VolumeSnapshots).ToNot(BeNil())
-		Expect(result.Spec.Bootstrap.Recovery.VolumeSnapshots.Storage.Name).To(Equal("test-pvc"))
+		// Temp PVC name is based on documentdb name
+		Expect(result.Spec.Bootstrap.Recovery.VolumeSnapshots.Storage.Name).To(Equal("test-cluster-pv-recovery-temp"))
 		Expect(result.Spec.Bootstrap.Recovery.VolumeSnapshots.Storage.Kind).To(Equal("PersistentVolumeClaim"))
 	})
 

@@ -130,15 +130,16 @@ func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion
 			}
 		}
 
-		// Handle PVC recovery
-		if recovery.PVC.Name != "" {
-			pvcName := recovery.PVC.Name
-			log.Info("DocumentDB cluster will be bootstrapped from PVC", "pvcName", pvcName)
+		// Handle PV recovery (via temporary PVC created by the controller)
+		if recovery.PersistentVolume != nil && recovery.PersistentVolume.Name != "" {
+			tempPVCName := util.TempPVCNameForPVRecovery(documentdb.Name)
+			log.Info("DocumentDB cluster will be bootstrapped from PV via temp PVC",
+				"pvName", recovery.PersistentVolume.Name, "tempPVC", tempPVCName)
 			return &cnpgv1.BootstrapConfiguration{
 				Recovery: &cnpgv1.BootstrapRecovery{
 					VolumeSnapshots: &cnpgv1.DataSource{
 						Storage: corev1.TypedLocalObjectReference{
-							Name:     pvcName,
+							Name:     tempPVCName,
 							Kind:     "PersistentVolumeClaim",
 							APIGroup: pointer.String(""),
 						},

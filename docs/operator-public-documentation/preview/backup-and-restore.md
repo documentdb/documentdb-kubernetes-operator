@@ -296,7 +296,7 @@ The DocumentDB operator supports retaining PersistentVolumes (PVs) after cluster
 
 ### Configuring PV Retention
 
-By default, PVs are deleted when the DocumentDB cluster is deleted. To retain the PV, set the `persistentVolumeReclaimPolicy` to `Retain`:
+By default, PVs are retained when the DocumentDB cluster is deleted (policy is `Retain`). To delete the PV automatically, set the `persistentVolumeReclaimPolicy` to `Delete`:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -308,15 +308,17 @@ spec:
   resource:
     storage:
       pvcSize: 10Gi
-      persistentVolumeReclaimPolicy: Retain  # Keep PV after cluster deletion
+      persistentVolumeReclaimPolicy: Retain  # Default - keeps PV after cluster deletion
+      # persistentVolumeReclaimPolicy: Delete  # Deletes PV when cluster is deleted
   # ... other configuration
 ```
 
 ### How PV Retention Works
 
-1. When you set `persistentVolumeReclaimPolicy: Retain`, the operator updates the underlying PersistentVolume's reclaim policy
+1. When `persistentVolumeReclaimPolicy` is `Retain` (the default), the operator updates the underlying PersistentVolume's reclaim policy
 2. When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state
-3. The retained PV contains all the database data and can be used to recover the cluster
+3. The operator emits a warning event listing the retained PVs for visibility
+4. The retained PV contains all the database data and can be used to recover the cluster
 
 ### Recovering from a Retained PV
 
@@ -327,48 +329,14 @@ To restore a DocumentDB cluster from a retained PV:
 ```bash
 # List PVs in Released state
 kubectl get pv | grep Released
+
+# Or find PVs associated with your deleted cluster
+kubectl get pv -l cnpg.io/cluster=<old-cluster-name>
 ```
 
-**Step 2: Clear the claimRef to make the PV available**
+**Step 2: Create a new DocumentDB cluster with PV recovery**
 
-The PV in "Released" state still has a reference to the old deleted PVC. Clear it:
-
-```bash
-kubectl patch pv <pv-name> --type=json -p='[{"op": "remove", "path": "/spec/claimRef"}]'
-```
-
-Verify the PV is now "Available":
-
-```bash
-kubectl get pv <pv-name>
-```
-
-**Step 3: Create a new PVC bound to the retained PV**
-
-```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: recovered-pvc
-  namespace: default
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi  # Must match the PV capacity
-  storageClassName: managed-csi  # Must match the PV's storage class
-  volumeName: <pv-name>  # Specify the retained PV name
-```
-
-Apply and verify the PVC is bound:
-
-```bash
-kubectl apply -f recovered-pvc.yaml
-kubectl get pvc recovered-pvc
-```
-
-**Step 4: Create a new DocumentDB cluster with PVC recovery**
+The operator automatically handles all the complexity of PV recovery:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -387,14 +355,36 @@ spec:
     serviceType: ClusterIP
   bootstrap:
     recovery:
-      pvc:
-        name: recovered-pvc  # Reference the PVC bound to the retained PV
+      persistentVolume:
+        name: <pv-name>  # Name of the retained PV to recover from
+```
+
+**What the operator does automatically:**
+
+1. Validates that the PV exists and is in `Available` or `Released` state
+2. If the PV is `Released`, clears the `claimRef` to make it available for binding
+3. Creates a temporary PVC bound to the retained PV
+4. Uses the temporary PVC as a data source for CNPG to clone the data
+5. After the cluster becomes healthy, deletes the temporary PVC
+6. The source PV is released back for manual cleanup or reuse
+
+### Cleaning Up Retained PVs
+
+After successful recovery (or when you no longer need the data), delete the retained PV:
+
+```bash
+# View retention warning events
+kubectl get events -n <namespace> --field-selector reason=PVsRetained
+
+# Delete the retained PV when no longer needed
+kubectl delete pv <pv-name>
 ```
 
 ### Important Notes for PV Recovery
 
-- The new cluster must be in the same namespace as the PVC
-- Storage size and class should match the original configuration
-- You cannot specify both `backup` and `pvc` recovery at the same time
-- PVC recovery preserves all data including users, roles, and collections
+- The PV must exist and be in `Available` or `Released` state
+- The PV must have been created with `persistentVolumeReclaimPolicy: Retain`
+- You cannot specify both `backup` and `persistentVolume` recovery at the same time
+- PV recovery preserves all data including users, roles, and collections
 - After successful recovery, consider setting up regular backups for the new cluster
+- The source PV remains after recovery and must be manually deleted when no longer needed

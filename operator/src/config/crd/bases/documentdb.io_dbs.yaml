@@ -79,23 +79,28 @@ spec:
                         required:
                         - name
                         type: object
-                      pvc:
+                      persistentVolume:
                         description: |-
-                          PVC specifies the source PVC to restore from.
+                          PersistentVolume specifies the PV to restore from.
+                          The operator will create a temporary PVC bound to this PV, use it for CNPG recovery,
+                          and delete the temporary PVC after the cluster is healthy.
                           Cannot be used together with Backup.
                         properties:
                           name:
-                            description: Name of the referent.
+                            description: |-
+                              Name is the name of the PersistentVolume to recover from.
+                              The PV must exist and be in Available or Released state.
+                            minLength: 1
                             type: string
                         required:
                         - name
                         type: object
                     type: object
                     x-kubernetes-validations:
-                    - message: cannot specify both backup and pvc recovery at the
-                        same time
-                      rule: '!(has(self.backup) && self.backup.name != '''' && has(self.pvc)
-                        && self.pvc.name != '''')'
+                    - message: cannot specify both backup and persistentVolume recovery
+                        at the same time
+                      rule: '!(has(self.backup) && self.backup.name != '''' && has(self.persistentVolume)
+                        && self.persistentVolume.name != '''')'
                 type: object
               clusterReplication:
                 description: ClusterReplication configures cross-cluster replication

@@ -85,17 +85,27 @@ type BootstrapConfiguration struct {
 	Recovery *RecoveryConfiguration `json:"recovery,omitempty"`
 }
 
-// RecoveryConfiguration defines backup recovery settings.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.pvc) && self.pvc.name != ”)",message="cannot specify both backup and pvc recovery at the same time"
+// RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
 	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
 
-	// PVC specifies the source PVC to restore from.
+	// PersistentVolume specifies the PV to restore from.
+	// The operator will create a temporary PVC bound to this PV, use it for CNPG recovery,
+	// and delete the temporary PVC after the cluster is healthy.
 	// Cannot be used together with Backup.
 	// +optional
-	PVC cnpgv1.LocalObjectReference `json:"pvc,omitempty"`
+	PersistentVolume *PVRecoveryConfiguration `json:"persistentVolume,omitempty"`
+}
+
+// PVRecoveryConfiguration defines settings for recovering from a retained PersistentVolume.
+type PVRecoveryConfiguration struct {
+	// Name is the name of the PersistentVolume to recover from.
+	// The PV must exist and be in Available or Released state.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // BackupConfiguration defines backup settings for DocumentDB.
