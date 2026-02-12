@@ -60,3 +60,7 @@ rules:
 - apiGroups: [""]
   resources: ["persistentvolumes"]
   verbs: ["get", "list", "watch", "update", "patch"]
+# StorageClass permissions for PV controller (needed to check provisioner capabilities)
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]

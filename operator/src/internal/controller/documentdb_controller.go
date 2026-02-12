@@ -47,6 +47,10 @@ const (
 
 	// CNPG label used to identify PVCs belonging to a cluster
 	cnpgClusterLabel = "cnpg.io/cluster"
+
+	// cnpgClusterHealthyPhase is the CNPG cluster status phase indicating a healthy cluster.
+	// This value is from CNPG's internal status representation.
+	cnpgClusterHealthyPhase = "Cluster in healthy state"
 )
 
 // DocumentDBReconciler reconciles a DocumentDB object
@@ -55,7 +59,8 @@ type DocumentDBReconciler struct {
 	Scheme    *runtime.Scheme
 	Config    *rest.Config
 	Clientset kubernetes.Interface
-	Recorder  record.EventRecorder
+	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
+	Recorder record.EventRecorder
 }
 
 var reconcileMutex sync.Mutex
@@ -625,7 +630,7 @@ func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, document
 
 	if cnpgErr == nil {
 		// CNPG exists - check if healthy and cleanup temp PVC
-		if cnpgCluster.Status.Phase == "Cluster in healthy state" {
+		if cnpgCluster.Status.Phase == cnpgClusterHealthyPhase {
 			tempPVC := &corev1.PersistentVolumeClaim{}
 			if err := r.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: namespace}, tempPVC); err == nil {
 				logger.Info("Deleting temp PVC after successful recovery", "pvc", tempPVCName)

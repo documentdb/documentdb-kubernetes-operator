@@ -444,6 +444,12 @@ jobs:
           exit 1
         fi
         
+        # Verify pv_name is not empty before writing to GITHUB_OUTPUT
+        if [ -z "$pv_name" ]; then
+          echo "❌ Error: PV name is empty, cannot proceed with recovery test"
+          exit 1
+        fi
+        
         # Store PV name for later steps using GitHub Actions output (more robust than temp files)
         echo "pv_name=$pv_name" >> $GITHUB_OUTPUT
 

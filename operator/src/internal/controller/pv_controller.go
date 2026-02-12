@@ -11,6 +11,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,6 +42,10 @@ const (
 
 	// reclaimPolicyDelete is the string value for Delete policy in DocumentDB spec
 	reclaimPolicyDelete = "Delete"
+
+	// cnpgClusterLabel is the label used by CNPG to identify PVCs belonging to a cluster.
+	// This is defined here to avoid coupling with documentdb_controller.go.
+	cnpgClusterLabelPV = "cnpg.io/cluster"
 )
 
 // securityMountOptions defines the mount options applied to PVs for security hardening:
@@ -55,6 +60,16 @@ const (
 // Common compatible providers: Azure Disk, AWS EBS, GCE PD, most NFS implementations.
 var securityMountOptions = []string{"nodev", "noexec", "nosuid"}
 
+// unsupportedMountOptionsProvisioners lists storage provisioners that do not support
+// mount options. These are typically local/dev environment provisioners used in
+// kind, minikube, or similar local Kubernetes clusters.
+// When a PV uses one of these provisioners, security mount options will be skipped
+// to avoid PV binding failures.
+var unsupportedMountOptionsProvisioners = []string{
+	"rancher.io/local-path",      // kind default local-path-provisioner
+	"k8s.io/minikube-hostpath",   // minikube default hostpath provisioner
+}
+
 // PersistentVolumeReconciler reconciles PersistentVolume objects
 // to set their ReclaimPolicy and mount options based on the associated DocumentDB configuration
 type PersistentVolumeReconciler struct {
@@ -63,6 +78,7 @@ type PersistentVolumeReconciler struct {
 
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch
+// +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -132,17 +148,62 @@ func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Con
 		needsUpdate = true
 	}
 
-	// Check if mount options need update
-	if !containsAllMountOptions(pv.Spec.MountOptions, securityMountOptions) {
-		logger.Info("PV mount options need update",
+	// Check if the storage provisioner supports mount options
+	// Skip mount options for local/dev provisioners (kind, minikube, etc.)
+	if r.provisionerSupportsMountOptions(ctx, pv) {
+		// Check if mount options need update
+		if !containsAllMountOptions(pv.Spec.MountOptions, securityMountOptions) {
+			logger.Info("PV mount options need update",
+				"pv", pv.Name,
+				"currentMountOptions", pv.Spec.MountOptions,
+				"desiredMountOptions", securityMountOptions)
+			pv.Spec.MountOptions = mergeMountOptions(pv.Spec.MountOptions, securityMountOptions)
+			needsUpdate = true
+		}
+	} else {
+		logger.V(1).Info("Skipping mount options for PV - provisioner does not support them",
 			"pv", pv.Name,
-			"currentMountOptions", pv.Spec.MountOptions,
-			"desiredMountOptions", securityMountOptions)
-		pv.Spec.MountOptions = mergeMountOptions(pv.Spec.MountOptions, securityMountOptions)
-		needsUpdate = true
+			"storageClassName", pv.Spec.StorageClassName)
 	}
 
 	return needsUpdate
+}
+
+// provisionerSupportsMountOptions checks if the PV's storage class provisioner supports mount options.
+// Returns false for known local/dev provisioners (kind, minikube, etc.) that don't support mount options.
+// Returns true for production provisioners (Azure Disk, AWS EBS, etc.) or if the provisioner cannot be determined.
+func (r *PersistentVolumeReconciler) provisionerSupportsMountOptions(ctx context.Context, pv *corev1.PersistentVolume) bool {
+	logger := log.FromContext(ctx)
+
+	// If no storage class is specified, assume mount options are supported (safer default for production)
+	if pv.Spec.StorageClassName == "" {
+		return true
+	}
+
+	// Fetch the StorageClass to get the provisioner
+	storageClass := &storagev1.StorageClass{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pv.Spec.StorageClassName}, storageClass); err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(1).Info("StorageClass not found, assuming mount options are supported",
+				"storageClassName", pv.Spec.StorageClassName)
+			return true
+		}
+		logger.Error(err, "Failed to get StorageClass, assuming mount options are supported",
+			"storageClassName", pv.Spec.StorageClassName)
+		return true
+	}
+
+	// Check if the provisioner is in the unsupported list
+	for _, unsupportedProvisioner := range unsupportedMountOptionsProvisioners {
+		if storageClass.Provisioner == unsupportedProvisioner {
+			logger.V(1).Info("Provisioner does not support mount options",
+				"provisioner", storageClass.Provisioner,
+				"storageClassName", pv.Spec.StorageClassName)
+			return false
+		}
+	}
+
+	return true
 }
 
 // containsAllMountOptions checks if all desired mount options are present in current options
@@ -382,7 +443,7 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := r.List(ctx, pvcList,
 		client.InNamespace(documentdb.Namespace),
-		client.MatchingLabels{cnpgClusterLabel: documentdb.Name},
+		client.MatchingLabels{cnpgClusterLabelPV: documentdb.Name},
 	); err != nil {
 		logger.Error(err, "Failed to list PVCs for DocumentDB")
 		return nil

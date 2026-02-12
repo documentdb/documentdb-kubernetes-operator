@@ -41,18 +41,7 @@ var _ = Describe("DocumentDB Controller", func() {
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	})
 
-	Describe("shouldWarnAboutRetainedPVs", func() {
-		var reconciler *DocumentDBReconciler
-
-		BeforeEach(func() {
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-			reconciler = &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-			}
-		})
-
+	Describe("ShouldWarnAboutRetainedPVs", func() {
 		It("returns true when policy is empty (default Retain)", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
@@ -68,7 +57,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					},
 				},
 			}
-			Expect(reconciler.shouldWarnAboutRetainedPVs(documentdb)).To(BeTrue())
+			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeTrue())
 		})
 
 		It("returns true when policy is explicitly Retain", func() {
@@ -86,7 +75,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					},
 				},
 			}
-			Expect(reconciler.shouldWarnAboutRetainedPVs(documentdb)).To(BeTrue())
+			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeTrue())
 		})
 
 		It("returns false when policy is Delete", func() {
@@ -104,7 +93,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					},
 				},
 			}
-			Expect(reconciler.shouldWarnAboutRetainedPVs(documentdb)).To(BeFalse())
+			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeFalse())
 		})
 	})
 
@@ -392,19 +381,19 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 	})
 
-	Describe("handleDeletion", func() {
-		It("removes finalizer and allows deletion when finalizer is present", func() {
+	Describe("reconcileFinalizer", func() {
+		It("adds finalizer when not present and object is not being deleted", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
-					Finalizers: []string{documentDBFinalizer},
+					Finalizers: []string{}, // No finalizer
 				},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
 							PvcSize:                       "10Gi",
-							PersistentVolumeReclaimPolicy: "Delete", // No warning should be emitted
+							PersistentVolumeReclaimPolicy: "Delete",
 						},
 					},
 				},
@@ -421,18 +410,59 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			// Call handleDeletion - it checks for finalizer, not DeletionTimestamp
-			result, err := reconciler.handleDeletion(ctx, documentdb)
+			// Call reconcileFinalizer - should add finalizer since object is not being deleted
+			done, result, err := reconciler.reconcileFinalizer(ctx, documentdb)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(done).To(BeTrue())
+			Expect(result.Requeue).To(BeTrue())
 
-			// Verify finalizer was removed
+			// Verify finalizer was added
 			updated := &dbpreview.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeFalse())
+			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
 		})
 
-		It("emits warning event when policy is Retain and PVCs exist", func() {
+		It("continues reconciliation when finalizer is present and object is not being deleted", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer}, // Finalizer present
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize:                       "10Gi",
+							PersistentVolumeReclaimPolicy: "Retain",
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			// Call reconcileFinalizer - should continue since finalizer is present and not deleting
+			done, result, err := reconciler.reconcileFinalizer(ctx, documentdb)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(done).To(BeFalse()) // Should continue reconciliation
+			Expect(result.Requeue).To(BeFalse())
+
+			// Verify finalizer is still present
+			updated := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
+			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
+		})
+
+		It("findPVsForDocumentDB returns PV names for bound PVCs", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName + "-1",
@@ -476,46 +506,10 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			result, err := reconciler.handleDeletion(ctx, documentdb)
+			// Call findPVsForDocumentDB directly
+			pvNames, err := reconciler.findPVsForDocumentDB(ctx, documentdb)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
-
-			// Verify warning event was emitted
-			Eventually(recorder.Events).Should(Receive(ContainSubstring("pv-retained")))
-
-			// Verify finalizer was removed
-			updated := &dbpreview.DocumentDB{}
-			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeFalse())
-		})
-
-		It("returns without action when finalizer is not present", func() {
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       documentDBName,
-					Namespace:  documentDBNamespace,
-					Finalizers: []string{}, // No finalizer
-				},
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(documentdb).
-				Build()
-
-			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-			}
-
-			result, err := reconciler.handleDeletion(ctx, documentdb)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
-
-			// Verify object still exists (no Update was called)
-			existing := &dbpreview.DocumentDB{}
-			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, existing)).To(Succeed())
+			Expect(pvNames).To(ContainElement("pv-retained"))
 		})
 
 		It("does not emit warning when policy is Delete", func() {
@@ -556,7 +550,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				WithObjects(documentdb, pvc).
 				Build()
 
-			// Create a new recorder to ensure it's empty
+			// Create a new recorder to verify no events are emitted during this test
 			localRecorder := record.NewFakeRecorder(10)
 			reconciler := &DocumentDBReconciler{
 				Client:   fakeClient,
@@ -564,7 +558,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: localRecorder,
 			}
 
-			result, err := reconciler.handleDeletion(ctx, documentdb)
+			_, result, err := reconciler.reconcileFinalizer(ctx, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.Requeue).To(BeFalse())
 
