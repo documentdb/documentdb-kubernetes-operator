@@ -56,3 +56,7 @@ rules:
 - apiGroups: ["snapshot.storage.k8s.io"]
   resources: ["volumesnapshotclasses"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Node read permissions for telemetry cloud provider detection
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]

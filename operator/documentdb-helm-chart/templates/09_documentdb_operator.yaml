@@ -24,7 +24,28 @@ spec:
         env:
         - name: GATEWAY_PORT
           value: "10260"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         {{- if .Values.documentDbVersion | default .Chart.AppVersion }}
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion | default .Chart.AppVersion }}"
+        {{- end }}
+        # Telemetry configuration
+        {{- if not .Values.telemetry.enabled }}
+        - name: DOCUMENTDB_TELEMETRY_ENABLED
+          value: "false"
+        {{- else }}
+        {{- if .Values.telemetry.existingSecret }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.telemetry.existingSecret }}
+        {{- else if .Values.telemetry.connectionString }}
+        - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+          value: {{ .Values.telemetry.connectionString | quote }}
+        {{- else if .Values.telemetry.instrumentationKey }}
+        - name: APPINSIGHTS_INSTRUMENTATIONKEY
+          value: {{ .Values.telemetry.instrumentationKey | quote }}
+        {{- end }}
         {{- end }}

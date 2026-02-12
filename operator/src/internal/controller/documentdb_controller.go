@@ -147,11 +147,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
 		if errors.IsNotFound(err) {
+			clusterCreateStart := time.Now()
 			if err := r.Client.Create(ctx, desiredCnpgCluster); err != nil {
 				logger.Error(err, "Failed to create CNPG Cluster")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
 			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
+			// Track cluster creation telemetry
+			r.TrackClusterCreated(ctx, documentdb, time.Since(clusterCreateStart).Seconds())
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 		logger.Error(err, "Failed to get CNPG Cluster")
@@ -159,11 +162,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if anything has changed in the generated cnpg spec
+	updateStart := time.Now()
 	err, requeueTime := r.TryUpdateCluster(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
 	if err != nil {
 		logger.Error(err, "Failed to update CNPG Cluster")
 	}
 	if requeueTime > 0 {
+		// Track cluster update if something changed
+		r.trackClusterUpdated(ctx, documentdb, "configuration", time.Since(updateStart).Seconds())
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
@@ -518,6 +524,25 @@ func (r *DocumentDBReconciler) trackReconcileDuration(ctx context.Context, resou
 		Operation:       operation,
 		Status:          status,
 		DurationSeconds: durationSeconds,
+	})
+}
+
+// trackClusterUpdated tracks when a cluster is updated.
+func (r *DocumentDBReconciler) trackClusterUpdated(ctx context.Context, documentdb *dbpreview.DocumentDB, updateType string, durationSeconds float64) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
+	if clusterID == "" {
+		return
+	}
+
+	r.TelemetryMgr.Events.TrackClusterUpdated(telemetry.ClusterUpdatedEvent{
+		ClusterID:             clusterID,
+		NamespaceHash:         telemetry.HashNamespace(documentdb.Namespace),
+		UpdateType:            updateType,
+		UpdateDurationSeconds: durationSeconds,
 	})
 }
 

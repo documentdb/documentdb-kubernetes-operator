@@ -6,6 +6,18 @@ replicaCount: 1
 # Defaults to Chart.appVersion if not specified  
 documentDbVersion: ""
 
+# Telemetry configuration for Application Insights
+telemetry:
+  # Enable or disable telemetry collection
+  enabled: true
+  # Application Insights instrumentation key (provide either this or connectionString)
+  instrumentationKey: ""
+  # Application Insights connection string (alternative to instrumentationKey)
+  connectionString: ""
+  # Name of existing secret containing telemetry credentials
+  # Secret should have keys: APPINSIGHTS_INSTRUMENTATIONKEY or APPLICATIONINSIGHTS_CONNECTION_STRING
+  existingSecret: ""
+
 serviceAccount:
   create: true
   automount: true
