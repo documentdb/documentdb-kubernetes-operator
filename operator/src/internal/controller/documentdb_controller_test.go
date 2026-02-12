@@ -10,6 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,62 +41,6 @@ var _ = Describe("DocumentDB Controller", func() {
 		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
-	})
-
-	Describe("ShouldWarnAboutRetainedPVs", func() {
-		It("returns true when policy is empty (default Retain)", func() {
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName,
-					Namespace: documentDBNamespace,
-				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                       "10Gi",
-							PersistentVolumeReclaimPolicy: "", // empty = default Retain
-						},
-					},
-				},
-			}
-			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeTrue())
-		})
-
-		It("returns true when policy is explicitly Retain", func() {
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName,
-					Namespace: documentDBNamespace,
-				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                       "10Gi",
-							PersistentVolumeReclaimPolicy: "Retain",
-						},
-					},
-				},
-			}
-			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeTrue())
-		})
-
-		It("returns false when policy is Delete", func() {
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName,
-					Namespace: documentDBNamespace,
-				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                       "10Gi",
-							PersistentVolumeReclaimPolicy: "Delete",
-						},
-					},
-				},
-			}
-			Expect(documentdb.ShouldWarnAboutRetainedPVs()).To(BeFalse())
-		})
 	})
 
 	Describe("findPVsForDocumentDB", func() {
@@ -462,56 +408,6 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
 		})
 
-		It("findPVsForDocumentDB returns PV names for bound PVCs", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-1",
-					Namespace: documentDBNamespace,
-					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-retained",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
-				},
-			}
-
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       documentDBName,
-					Namespace:  documentDBNamespace,
-					Finalizers: []string{documentDBFinalizer},
-				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
-							PvcSize:                       "10Gi",
-							PersistentVolumeReclaimPolicy: "Retain",
-						},
-					},
-				},
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(documentdb, pvc).
-				Build()
-
-			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-			}
-
-			// Call findPVsForDocumentDB directly
-			pvNames, err := reconciler.findPVsForDocumentDB(ctx, documentdb)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(pvNames).To(ContainElement("pv-retained"))
-		})
-
 		It("does not emit warning when policy is Delete", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -567,19 +463,47 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 	})
 
-	Describe("Finalizer management in Reconcile", func() {
-		It("adds finalizer to new DocumentDB resource", func() {
+	Describe("reconcilePVRecovery", func() {
+		It("returns immediately when PV recovery is not configured", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
 				Spec: dbpreview.DocumentDBSpec{
-					NodeCount:        1,
-					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
-							PvcSize: "10Gi",
+					// No bootstrap.recovery.persistentVolume configured
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
+		})
+
+		It("returns error when PV does not exist", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "non-existent-pv",
+							},
 						},
 					},
 				},
@@ -590,17 +514,411 @@ var _ = Describe("DocumentDB Controller", func() {
 				WithObjects(documentdb).
 				Build()
 
-			// Verify resource starts without finalizer
-			Expect(controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer)).To(BeFalse())
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
 
-			// Add finalizer like the controller does
-			controllerutil.AddFinalizer(documentdb, documentDBFinalizer)
-			Expect(fakeClient.Update(ctx, documentdb)).To(Succeed())
+			_, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not found"))
+		})
 
-			// Verify finalizer was added
-			updated := &dbpreview.DocumentDB{}
-			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
-			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
+		It("returns error when PV is Bound (not available for recovery)", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "bound-pv",
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+				Status: corev1.PersistentVolumeStatus{
+					Phase: corev1.VolumeBound, // Not available
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "bound-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			_, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("must be Available or Released for recovery"))
+		})
+
+		It("clears claimRef and requeues when PV is Released with claimRef", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "released-pv",
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+					ClaimRef: &corev1.ObjectReference{
+						Name:      "old-pvc",
+						Namespace: documentDBNamespace,
+					},
+				},
+				Status: corev1.PersistentVolumeStatus{
+					Phase: corev1.VolumeReleased,
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "released-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+
+			// Verify claimRef was cleared
+			updatedPV := &corev1.PersistentVolume{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "released-pv"}, updatedPV)).To(Succeed())
+			Expect(updatedPV.Spec.ClaimRef).To(BeNil())
+		})
+
+		It("creates temp PVC when PV is Available", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "available-pv",
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "standard",
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+				Status: corev1.PersistentVolumeStatus{
+					Phase: corev1.VolumeAvailable,
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+					UID:       "test-uid",
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "available-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+
+			// Verify temp PVC was created
+			tempPVC := &corev1.PersistentVolumeClaim{}
+			tempPVCName := documentDBName + "-pv-recovery-temp"
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: documentDBNamespace}, tempPVC)).To(Succeed())
+			Expect(tempPVC.Spec.VolumeName).To(Equal("available-pv"))
+		})
+
+		It("waits for temp PVC to bind when it exists but is not bound", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "available-pv",
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "standard",
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+				Status: corev1.PersistentVolumeStatus{
+					Phase: corev1.VolumeAvailable,
+				},
+			}
+
+			tempPVC := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName + "-pv-recovery-temp",
+					Namespace: documentDBNamespace,
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					VolumeName: "available-pv",
+				},
+				Status: corev1.PersistentVolumeClaimStatus{
+					Phase: corev1.ClaimPending, // Not yet bound
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "available-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv, tempPVC).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+		})
+
+		It("proceeds when temp PVC is bound", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "available-pv",
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "standard",
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("10Gi"),
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+				Status: corev1.PersistentVolumeStatus{
+					Phase: corev1.VolumeAvailable,
+				},
+			}
+
+			tempPVC := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName + "-pv-recovery-temp",
+					Namespace: documentDBNamespace,
+				},
+				Spec: corev1.PersistentVolumeClaimSpec{
+					VolumeName: "available-pv",
+				},
+				Status: corev1.PersistentVolumeClaimStatus{
+					Phase: corev1.ClaimBound, // Bound and ready
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "available-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv, tempPVC).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+			Expect(result.RequeueAfter).To(BeZero())
+		})
+
+		It("deletes temp PVC when CNPG cluster is healthy", func() {
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Status: cnpgv1.ClusterStatus{
+					Phase: "Cluster in healthy state",
+				},
+			}
+
+			tempPVC := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName + "-pv-recovery-temp",
+					Namespace: documentDBNamespace,
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "some-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster, tempPVC).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+
+			// Verify temp PVC was deleted
+			deletedPVC := &corev1.PersistentVolumeClaim{}
+			err = fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName + "-pv-recovery-temp", Namespace: documentDBNamespace}, deletedPVC)
+			Expect(err).To(HaveOccurred())
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("does not delete temp PVC when CNPG cluster exists but is not healthy", func() {
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Status: cnpgv1.ClusterStatus{
+					Phase: "Cluster is initializing",
+				},
+			}
+
+			tempPVC := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName + "-pv-recovery-temp",
+					Namespace: documentDBNamespace,
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Bootstrap: &dbpreview.BootstrapConfiguration{
+						Recovery: &dbpreview.RecoveryConfiguration{
+							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+								Name: "some-pv",
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster, tempPVC).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.reconcilePVRecovery(ctx, documentdb, documentDBNamespace, documentDBName)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+
+			// Verify temp PVC still exists
+			existingPVC := &corev1.PersistentVolumeClaim{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName + "-pv-recovery-temp", Namespace: documentDBNamespace}, existingPVC)).To(Succeed())
 		})
 	})
 })

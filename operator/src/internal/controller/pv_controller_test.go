@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,6 +45,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+		Expect(storagev1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Describe("containsAllMountOptions", func() {
@@ -81,25 +83,20 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(result).To(ContainElements("rw", "nodev", "nosuid", "noexec"))
 		})
 
-		It("returns sorted result for deterministic output", func() {
-			current := []string{"zz", "aa"}
-			desired := []string{"mm", "bb"}
-			result := mergeMountOptions(current, desired)
-			Expect(result).To(Equal([]string{"aa", "bb", "mm", "zz"}))
-		})
-
 		It("handles empty current slice", func() {
 			current := []string{}
 			desired := []string{"nodev", "nosuid"}
 			result := mergeMountOptions(current, desired)
-			Expect(result).To(Equal([]string{"nodev", "nosuid"}))
+			Expect(result).To(HaveLen(2))
+			Expect(result).To(ContainElements("nodev", "nosuid"))
 		})
 
 		It("handles empty desired slice", func() {
 			current := []string{"rw", "nodev"}
 			desired := []string{}
 			result := mergeMountOptions(current, desired)
-			Expect(result).To(Equal([]string{"nodev", "rw"}))
+			Expect(result).To(HaveLen(2))
+			Expect(result).To(ContainElements("nodev", "rw"))
 		})
 	})
 
@@ -314,6 +311,127 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
 			Expect(needsUpdate).To(BeFalse())
+		})
+	})
+
+	Describe("provisionerSupportsMountOptions", func() {
+		It("returns true when PV has no storage class", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeTrue())
+		})
+
+		It("returns true when StorageClass is not found", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "non-existent-sc",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeTrue())
+		})
+
+		It("returns false for kind local-path-provisioner", func() {
+			storageClass := &storagev1.StorageClass{
+				ObjectMeta:  metav1.ObjectMeta{Name: "local-path"},
+				Provisioner: "rancher.io/local-path",
+			}
+
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "local-path",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(storageClass).
+				Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeFalse())
+		})
+
+		It("returns false for minikube hostpath provisioner", func() {
+			storageClass := &storagev1.StorageClass{
+				ObjectMeta:  metav1.ObjectMeta{Name: "standard"},
+				Provisioner: "k8s.io/minikube-hostpath",
+			}
+
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "standard",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(storageClass).
+				Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeFalse())
+		})
+
+		It("returns true for Azure Disk provisioner", func() {
+			storageClass := &storagev1.StorageClass{
+				ObjectMeta:  metav1.ObjectMeta{Name: "managed-premium"},
+				Provisioner: "disk.csi.azure.com",
+			}
+
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "managed-premium",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(storageClass).
+				Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeTrue())
+		})
+
+		It("returns true when Get StorageClass fails with non-NotFound error", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				Spec: corev1.PersistentVolumeSpec{
+					StorageClassName: "some-sc",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*storagev1.StorageClass); ok {
+							return fmt.Errorf("api timeout")
+						}
+						return client.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			// Should return true (safe default) when API error occurs
+			Expect(reconciler.provisionerSupportsMountOptions(ctx, pv)).To(BeTrue())
 		})
 	})
 
@@ -989,6 +1107,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			pv := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{Name: pvName},
 				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimDelete,
 					ClaimRef: &corev1.ObjectReference{
 						Name:      "non-existent-pvc",
 						Namespace: testNamespace,

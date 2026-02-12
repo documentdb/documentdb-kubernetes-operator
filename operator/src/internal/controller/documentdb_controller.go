@@ -154,7 +154,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Handle PV recovery lifecycle (create temp PVC before CNPG, cleanup after healthy)
 	if result, err := r.reconcilePVRecovery(ctx, documentdb, req.Namespace, desiredCnpgCluster.Name); err != nil {
 		logger.Error(err, "Failed to reconcile PV recovery")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		return result, err
 	} else if result.Requeue || result.RequeueAfter > 0 {
 		return result, nil
 	}
@@ -677,7 +677,7 @@ func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, document
 	}
 
 	if !util.IsPVAvailableForRecovery(pv) {
-		return ctrl.Result{}, fmt.Errorf("PV %s must be Available or Released, current phase: %s", pvName, pv.Status.Phase)
+		return ctrl.Result{}, fmt.Errorf("PV %s must be Available or Released for recovery, current phase: %s.", pvName, pv.Status.Phase)
 	}
 
 	// Clear claimRef if PV is Released

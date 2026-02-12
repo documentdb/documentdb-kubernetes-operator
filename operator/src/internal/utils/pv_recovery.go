@@ -26,18 +26,12 @@ func TempPVCNameForPVRecovery(documentdbName string) string {
 // The PVC uses the PV's storage class, access modes, and capacity to ensure successful binding.
 // This temp PVC is used as a data source for CNPG to clone data during recovery.
 func BuildTempPVCForPVRecovery(documentdbName, namespace string, pv *corev1.PersistentVolume) *corev1.PersistentVolumeClaim {
-	// Get storage class name - handle both pointer and empty string cases.
-	// When the source PV has no storage class, we must explicitly set an empty string
-	// (not nil) to prevent the PVC from using the cluster's default StorageClass,
-	// which would cause binding to fail for PVs without a storage class.
-	var storageClassName *string
-	emptyClassName := ""
-	if pv.Spec.StorageClassName != "" {
-		storageClassName = &pv.Spec.StorageClassName
-	} else {
-		// Explicitly set empty storage class to match PVs without a storage class
-		storageClassName = &emptyClassName
-	}
+	// Use the PV's storage class directly. All PVs in DocumentDB are dynamically provisioned
+	// by a StorageClass, so we can safely assume the storage class is always set.
+	// Note: If PVs without a storage class need to be supported in the future,
+	// set storageClassName to &"" (empty string pointer) instead of nil to prevent
+	// Kubernetes from using the default StorageClass.
+	storageClassName := &pv.Spec.StorageClassName
 
 	// Get capacity from PV
 	storageCapacity := pv.Spec.Capacity[corev1.ResourceStorage]

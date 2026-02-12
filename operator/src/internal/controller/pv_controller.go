@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"slices"
-	"sort"
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -91,12 +90,6 @@ func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		logger.Error(err, "Failed to get PersistentVolume")
 		return ctrl.Result{}, err
-	}
-
-	// Skip if PV is not bound to a PVC
-	if pv.Spec.ClaimRef == nil {
-		logger.V(1).Info("PV has no claimRef, skipping", "pv", pv.Name)
-		return ctrl.Result{}, nil
 	}
 
 	// Find the associated DocumentDB through the ownership chain:
@@ -217,7 +210,6 @@ func containsAllMountOptions(current, desired []string) bool {
 }
 
 // mergeMountOptions merges desired mount options into current, avoiding duplicates.
-// Returns a sorted slice for deterministic output.
 func mergeMountOptions(current, desired []string) []string {
 	optSet := make(map[string]struct{}, len(current)+len(desired))
 	for _, opt := range current {
@@ -231,7 +223,6 @@ func mergeMountOptions(current, desired []string) []string {
 	for opt := range optSet {
 		result = append(result, opt)
 	}
-	sort.Strings(result)
 	return result
 }
 

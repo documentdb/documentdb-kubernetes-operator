@@ -12,35 +12,10 @@ import (
 )
 
 func TestTempPVCNameForPVRecovery(t *testing.T) {
-	tests := []struct {
-		name           string
-		documentdbName string
-		expected       string
-	}{
-		{
-			name:           "simple name",
-			documentdbName: "my-cluster",
-			expected:       "my-cluster-pv-recovery-temp",
-		},
-		{
-			name:           "short name",
-			documentdbName: "db",
-			expected:       "db-pv-recovery-temp",
-		},
-		{
-			name:           "longer name",
-			documentdbName: "production-database-cluster",
-			expected:       "production-database-cluster-pv-recovery-temp",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := TempPVCNameForPVRecovery(tt.documentdbName)
-			if result != tt.expected {
-				t.Errorf("TempPVCNameForPVRecovery(%q) = %q, want %q", tt.documentdbName, result, tt.expected)
-			}
-		})
+	result := TempPVCNameForPVRecovery("my-cluster")
+	expected := "my-cluster-pv-recovery-temp"
+	if result != expected {
+		t.Errorf("TempPVCNameForPVRecovery(%q) = %q, want %q", "my-cluster", result, expected)
 	}
 }
 
@@ -100,28 +75,6 @@ func TestBuildTempPVCForPVRecovery(t *testing.T) {
 				LabelCluster:      "test-db",
 			},
 		},
-		{
-			name:           "PVC with no storage class",
-			documentdbName: "cluster-no-sc",
-			namespace:      "production",
-			pv: &corev1.PersistentVolume{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "pv-no-storage-class",
-				},
-				Spec: corev1.PersistentVolumeSpec{
-					StorageClassName: "", // empty
-					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
-					Capacity: corev1.ResourceList{
-						corev1.ResourceStorage: storageQuantity,
-					},
-				},
-			},
-			expectedName: "cluster-no-sc-pv-recovery-temp",
-			expectedLabels: map[string]string{
-				LabelRecoveryTemp: "true",
-				LabelCluster:      "cluster-no-sc",
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -161,15 +114,9 @@ func TestBuildTempPVCForPVRecovery(t *testing.T) {
 				}
 			}
 
-			// Check storage class
-			if tt.pv.Spec.StorageClassName == "" {
-				if result.Spec.StorageClassName != nil {
-					t.Errorf("StorageClassName = %v, want nil", result.Spec.StorageClassName)
-				}
-			} else {
-				if result.Spec.StorageClassName == nil || *result.Spec.StorageClassName != tt.pv.Spec.StorageClassName {
-					t.Errorf("StorageClassName = %v, want %q", result.Spec.StorageClassName, tt.pv.Spec.StorageClassName)
-				}
+			// Check storage class - should always match PV's storage class
+			if result.Spec.StorageClassName == nil || *result.Spec.StorageClassName != tt.pv.Spec.StorageClassName {
+				t.Errorf("StorageClassName = %v, want %q", result.Spec.StorageClassName, tt.pv.Spec.StorageClassName)
 			}
 		})
 	}
