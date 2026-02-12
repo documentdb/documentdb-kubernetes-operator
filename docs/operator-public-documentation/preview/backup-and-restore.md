@@ -330,8 +330,11 @@ To restore a DocumentDB cluster from a retained PV:
 # List PVs in Released state
 kubectl get pv | grep Released
 
-# Or find PVs associated with your deleted cluster
-kubectl get pv -l cnpg.io/cluster=<old-cluster-name>
+# Find PVCs that belonged to your deleted cluster (PVCs carry the cnpg.io/cluster label)
+kubectl get pvc -n <namespace> -l cnpg.io/cluster=<old-cluster-name>
+
+# For a given PVC, find the bound PV name
+kubectl get pvc <pvc-name> -n <namespace> -o jsonpath='{.spec.volumeName}'
 ```
 
 **Step 2: Create a new DocumentDB cluster with PV recovery**
