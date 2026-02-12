@@ -7,10 +7,21 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - persistentvolumeclaims
   - secrets
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - cert-manager.io
@@ -47,3 +58,11 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch

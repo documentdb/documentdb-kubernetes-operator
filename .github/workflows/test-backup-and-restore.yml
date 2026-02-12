@@ -293,6 +293,30 @@ jobs:
                 name: $backup_name
         EOF
 
+    - name: Wait for restored DocumentDB cluster to become healthy
+      shell: bash
+      run: |
+        echo "Waiting for restored DocumentDB cluster to become healthy..."
+        MAX_RETRIES=60
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          status=$(kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }} -o jsonpath='{.status.status}' 2>/dev/null || echo "")
+          if [ "$status" == "Cluster in healthy state" ]; then
+            echo "✓ DocumentDB cluster ${{ env.DB_RESTORE_NAME }} is healthy."
+            exit 0
+          else
+            echo "Current status: $status. Waiting..."
+            kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }} || true
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        echo "❌ DocumentDB cluster ${{ env.DB_RESTORE_NAME }} did not become healthy within expected time."
+        kubectl -n ${{ env.DB_NS }} describe documentdb ${{ env.DB_RESTORE_NAME }} || true
+        kubectl -n ${{ env.DB_NS }} get pods -l cnpg.io/cluster=${{ env.DB_RESTORE_NAME }} || true
+        exit 1
+
     - name: Setup port forwarding for comprehensive tests
       uses: ./.github/actions/setup-port-forwarding
       with:
@@ -355,3 +379,197 @@ jobs:
         done
         echo "❌ Expired backup was not cleaned up within expected time."
         exit 1  
+     
+    - name: Test PV retention after DocumentDB deletion
+      id: test-pv-retention
+      shell: bash
+      run: |
+        echo "Testing PV retention after DocumentDB deletion..."
+        
+        # Get the PVC name and PV name before deleting the DocumentDB
+        # PVCs are created by CNPG and labeled with cnpg.io/cluster
+        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_RESTORE_NAME }} -o jsonpath='{.items[0].metadata.name}')
+        echo "PVC name: $pvc_name"
+        
+        if [ -z "$pvc_name" ]; then
+          echo "❌ Failed to find PVC for cluster ${{ env.DB_RESTORE_NAME }}"
+          exit 1
+        fi
+        
+        # Get the PV name bound to this PVC
+        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
+        echo "PV name: $pv_name"
+        
+        if [ -z "$pv_name" ]; then
+          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          exit 1
+        fi
+        
+        # Check current PV reclaim policy - should be Retain by default
+        current_policy=$(kubectl get pv $pv_name -o jsonpath='{.spec.persistentVolumeReclaimPolicy}')
+        echo "Current PV reclaim policy: $current_policy"
+        
+        if [ "$current_policy" != "Retain" ]; then
+          echo "❌ Expected PV reclaim policy to be 'Retain' (default), but got '$current_policy'"
+          exit 1
+        fi
+        echo "✓ PV reclaim policy is correctly set to Retain (default)"
+        
+        # Delete the restored DocumentDB cluster
+        kubectl -n ${{ env.DB_NS }} delete documentdb ${{ env.DB_RESTORE_NAME }} --wait=false
+        
+        # Wait for DocumentDB to be deleted
+        echo "Waiting for DocumentDB to be deleted..."
+        MAX_RETRIES=30
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          db_exists=$(kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }} --ignore-not-found)
+          if [ -z "$db_exists" ]; then
+            echo "✓ DocumentDB deleted successfully."
+            break
+          else
+            echo "DocumentDB still exists. Waiting..."
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        
+        # Verify PV still exists (because reclaim policy is Retain)
+        pv_exists=$(kubectl get pv $pv_name --ignore-not-found)
+        if [ -n "$pv_exists" ]; then
+          echo "✓ PV $pv_name retained after DocumentDB deletion"
+        else
+          echo "❌ PV $pv_name was deleted unexpectedly"
+          exit 1
+        fi
+        
+        # Verify pv_name is not empty before writing to GITHUB_OUTPUT
+        if [ -z "$pv_name" ]; then
+          echo "❌ Error: PV name is empty, cannot proceed with recovery test"
+          exit 1
+        fi
+        
+        # Store PV name for later steps using GitHub Actions output (more robust than temp files)
+        echo "pv_name=$pv_name" >> $GITHUB_OUTPUT
+
+    - name: Restore DocumentDB from retained PV
+      shell: bash
+      run: |
+        pv_name="${{ steps.test-pv-retention.outputs.pv_name }}"
+        echo "Restoring DocumentDB from retained PV: $pv_name"
+        
+        # Create DocumentDB resource with PV recovery
+        echo "Creating DocumentDB with PV recovery from $pv_name"
+        cat <<EOF | kubectl apply -f -
+        apiVersion: documentdb.io/preview
+        kind: DocumentDB
+        metadata:
+          name: ${{ env.DB_RESTORE_NAME }}-from-pv
+          namespace: ${{ env.DB_NS }}
+        spec:
+          nodeCount: ${{ matrix.node_count }}
+          instancesPerNode: ${{ matrix.instances_per_node }}
+          documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          resource:
+            storage:
+              pvcSize: 5Gi
+              storageClass: csi-hostpath-sc
+          exposeViaService:
+            serviceType: ClusterIP
+          bootstrap:
+            recovery:
+              persistentVolume:
+                name: $pv_name
+        EOF
+
+    - name: Wait for PV restored DocumentDB cluster to become healthy
+      shell: bash
+      run: |
+        echo "Waiting for PV restored DocumentDB cluster to become healthy..."
+        MAX_RETRIES=60
+        SLEEP_INTERVAL=10
+        ITER=0
+        while [ $ITER -lt $MAX_RETRIES ]; do
+          status=$(kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }}-from-pv -o jsonpath='{.status.status}' 2>/dev/null || echo "")
+          if [ "$status" == "Cluster in healthy state" ]; then
+            echo "✓ DocumentDB cluster ${{ env.DB_RESTORE_NAME }}-from-pv is healthy."
+            exit 0
+          else
+            echo "Current status: $status. Waiting..."
+            kubectl -n ${{ env.DB_NS }} get documentdb ${{ env.DB_RESTORE_NAME }}-from-pv || true
+            sleep $SLEEP_INTERVAL
+          fi
+          ((++ITER))
+        done
+        echo "❌ DocumentDB cluster ${{ env.DB_RESTORE_NAME }}-from-pv did not become healthy within expected time."
+        kubectl -n ${{ env.DB_NS }} describe documentdb ${{ env.DB_RESTORE_NAME }}-from-pv || true
+        kubectl -n ${{ env.DB_NS }} get pods -l cnpg.io/cluster=${{ env.DB_RESTORE_NAME }}-from-pv || true
+        exit 1
+
+    - name: Setup port forwarding for PV restored cluster
+      uses: ./.github/actions/setup-port-forwarding
+      with:
+        namespace: ${{ env.DB_NS }}
+        cluster-name: ${{ env.DB_RESTORE_NAME }}-from-pv
+        port: ${{ env.DB_PORT }}
+        architecture: ${{ matrix.architecture }}
+        test-type: 'comprehensive'
+
+    - name: Validate data exists after PV restoration
+      run: |
+        echo "Validating data exists after PV restoration..."
+        
+        # Validate that the restored cluster has the expected data
+        count=$(mongosh 127.0.0.1:$DB_PORT --quiet --eval "db.testCollection.countDocuments({})" -u $DB_USERNAME -p $DB_PASSWORD --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates)
+        if [ "$count" -eq 100 ]; then
+          echo "✓ Data validation completed successfully after PV restoration on ${{ matrix.architecture }}"
+        else
+          echo "❌ Data validation failed after PV restoration on ${{ matrix.architecture }}. Count: $count"
+          exit 1
+        fi
+
+    - name: Verify temporary recovery PVC is cleaned up
+      shell: bash
+      run: |
+        echo "Verifying temporary recovery PVC is cleaned up after cluster is healthy..."
+
+        # The temp PVC name follows the pattern: <documentdbName>-pv-recovery-temp
+        temp_pvc_name="${{ env.DB_RESTORE_NAME }}-from-pv-pv-recovery-temp"
+        
+        # Wait a bit for cleanup to happen
+        sleep 10
+        
+        # Check if temporary PVC still exists
+        temp_pvc_exists=$(kubectl -n ${{ env.DB_NS }} get pvc $temp_pvc_name --ignore-not-found -o name)
+        if [ -z "$temp_pvc_exists" ]; then
+          echo "✓ Temporary recovery PVC $temp_pvc_name was cleaned up successfully"
+        else
+          echo "❌ Temporary recovery PVC $temp_pvc_name still exists after cluster is healthy"
+          kubectl -n ${{ env.DB_NS }} get pvc $temp_pvc_name
+          exit 1
+        fi
+
+    - name: Cleanup PV restored cluster port forwarding
+      if: always()
+      run: |
+        # Stop port-forward if it exists
+        if [ -f /tmp/pf_pid ]; then
+          PF_PID=$(cat /tmp/pf_pid)
+          kill $PF_PID 2>/dev/null || true
+          rm -f /tmp/pf_pid
+        fi
+        
+        # Clean up output log
+        rm -f /tmp/pf_output.log
+
+    - name: Collect logs on failure
+      if: failure()
+      uses: ./.github/actions/collect-logs
+      with:
+        architecture: ${{ matrix.architecture }}
+        operator-namespace: ${{ env.OPERATOR_NS }}
+        db-namespace: ${{ env.DB_NS }}
+        db-cluster-name: ${{ env.DB_NAME }}
+        cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}

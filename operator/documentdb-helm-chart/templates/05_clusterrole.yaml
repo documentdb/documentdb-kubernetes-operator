@@ -56,3 +56,15 @@ rules:
 - apiGroups: ["snapshot.storage.k8s.io"]
   resources: ["volumesnapshotclasses"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# PersistentVolume permissions for PV controller
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+# StorageClass permissions for PV controller (needed to check provisioner capabilities)
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+# Events permissions for PV retention warnings
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]

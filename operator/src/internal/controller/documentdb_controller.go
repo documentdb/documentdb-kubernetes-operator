@@ -23,10 +23,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/remotecommand"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -39,6 +41,16 @@ import (
 const (
 	RequeueAfterShort = 10 * time.Second
 	RequeueAfterLong  = 30 * time.Second
+
+	// documentDBFinalizer ensures we can emit PV retention warnings before deletion completes
+	documentDBFinalizer = "documentdb.io/pv-retention-finalizer"
+
+	// CNPG label used to identify PVCs belonging to a cluster
+	cnpgClusterLabel = "cnpg.io/cluster"
+
+	// cnpgClusterHealthyPhase is the CNPG cluster status phase indicating a healthy cluster.
+	// This value is from CNPG's internal status representation.
+	cnpgClusterHealthyPhase = "Cluster in healthy state"
 )
 
 // DocumentDBReconciler reconciles a DocumentDB object
@@ -47,6 +59,8 @@ type DocumentDBReconciler struct {
 	Scheme    *runtime.Scheme
 	Config    *rest.Config
 	Clientset kubernetes.Interface
+	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
+	Recorder record.EventRecorder
 }
 
 var reconcileMutex sync.Mutex
@@ -54,6 +68,9 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
+// +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
@@ -74,6 +91,11 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
 		return ctrl.Result{}, err
+	}
+
+	// Handle finalizer lifecycle (add on create, remove on delete)
+	if done, result, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
+		return result, err
 	}
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
@@ -127,6 +149,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			logger.Error(err, "Failed to add physical replication features cnpg Cluster spec")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 		}
+	}
+
+	// Handle PV recovery lifecycle (create temp PVC before CNPG, cleanup after healthy)
+	if result, err := r.reconcilePVRecovery(ctx, documentdb, req.Namespace, desiredCnpgCluster.Name); err != nil {
+		logger.Error(err, "Failed to reconcile PV recovery")
+		return result, err
+	} else if result.Requeue || result.RequeueAfter > 0 {
+		return result, nil
 	}
 
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
@@ -283,6 +313,109 @@ func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Re
 
 	log.Info("Cleanup process completed", "DocumentDB", req.Name, "Namespace", req.Namespace)
 	return nil
+}
+
+// reconcileFinalizer handles the finalizer lifecycle:
+//   - If resource is being deleted: process deletion and remove finalizer
+//   - If finalizer is missing: add it
+//   - Otherwise: continue with normal reconciliation
+//
+// Returns (done, result, error) where done=true means reconciliation should stop.
+func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentdb *dbpreview.DocumentDB) (bool, ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Handle deletion
+	if !documentdb.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
+			// Finalizer already removed, nothing to do
+			return true, ctrl.Result{}, nil
+		}
+
+		// Check if PVs will be retained and emit warning
+		if documentdb.ShouldWarnAboutRetainedPVs() {
+			if err := r.emitPVRetentionWarning(ctx, documentdb); err != nil {
+				// Log but don't block deletion
+				logger.Error(err, "Failed to emit PV retention warning, continuing with deletion")
+			}
+		}
+
+		// Remove finalizer to allow deletion to proceed
+		controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
+		if err := r.Update(ctx, documentdb); err != nil {
+			logger.Error(err, "Failed to remove finalizer")
+			return true, ctrl.Result{}, err
+		}
+
+		logger.Info("Removed finalizer, deletion will proceed")
+		return true, ctrl.Result{}, nil
+	}
+
+	// Ensure finalizer is present for non-deleting resources
+	if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
+		controllerutil.AddFinalizer(documentdb, documentDBFinalizer)
+		if err := r.Update(ctx, documentdb); err != nil {
+			logger.Error(err, "Failed to add finalizer")
+			return true, ctrl.Result{}, err
+		}
+		logger.Info("Added finalizer to DocumentDB")
+		return true, ctrl.Result{Requeue: true}, nil
+	}
+
+	// Finalizer is present and resource is not being deleted, continue reconciliation
+	return false, ctrl.Result{}, nil
+}
+
+// emitPVRetentionWarning emits a warning event listing PVs that will be retained after deletion
+func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, documentdb *dbpreview.DocumentDB) error {
+	logger := log.FromContext(ctx)
+
+	if r.Recorder == nil {
+		logger.Info("Event recorder not configured, skipping PV retention warning")
+		return nil
+	}
+
+	// Find PVs associated with this DocumentDB
+	pvNames, err := r.findPVsForDocumentDB(ctx, documentdb)
+	if err != nil {
+		return fmt.Errorf("failed to find PVs: %w", err)
+	}
+
+	if len(pvNames) == 0 {
+		logger.V(1).Info("No PVs found for DocumentDB")
+		return nil
+	}
+
+	// Emit actionable warning event
+	message := fmt.Sprintf(
+		"PersistentVolumes retained after cluster deletion (policy=Retain). "+
+			"To delete when no longer needed: kubectl delete pv %s",
+		strings.Join(pvNames, " "))
+
+	r.Recorder.Event(documentdb, corev1.EventTypeWarning, "PVsRetained", message)
+	logger.Info("Emitted PV retention warning", "pvCount", len(pvNames), "pvNames", pvNames)
+
+	return nil
+}
+
+// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster using CNPG labels
+func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
+	// CNPG cluster name matches DocumentDB name
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList,
+		client.InNamespace(documentdb.Namespace),
+		client.MatchingLabels{cnpgClusterLabel: documentdb.Name},
+	); err != nil {
+		return nil, err
+	}
+
+	pvNames := make([]string, 0, len(pvcList.Items))
+	for _, pvc := range pvcList.Items {
+		if pvc.Status.Phase == corev1.ClaimBound && pvc.Spec.VolumeName != "" {
+			pvNames = append(pvNames, pvc.Spec.VolumeName)
+		}
+	}
+
+	return pvNames, nil
 }
 
 func (r *DocumentDBReconciler) EnsureServiceAccountRoleAndRoleBinding(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
@@ -468,4 +601,105 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 	}
 
 	return stdout.String(), nil
+}
+
+// reconcilePVRecovery handles recovery from a retained PersistentVolume.
+//
+// CNPG only supports recovery from PVC (via VolumeSnapshots.Storage with Kind: PersistentVolumeClaim),
+// not directly from PV. To bridge this gap, we create a temporary PVC that binds to the retained PV
+// via spec.volumeName. CNPG then clones the data from this temp PVC to new cluster PVCs.
+// After recovery completes (cluster healthy), we delete the temp PVC to release the source PV
+// back to the user for manual cleanup or reuse.
+//
+// Flow:
+//   - If no PV recovery configured, return immediately
+//   - If CNPG exists and healthy, delete temp PVC (recovery complete)
+//   - If CNPG doesn't exist, validate PV and create temp PVC bound to it
+func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace, cnpgClusterName string) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Skip if PV recovery is not configured
+	if !documentdb.IsPVRecoveryConfigured() {
+		return ctrl.Result{}, nil
+	}
+
+	pvName := documentdb.GetPVNameForRecovery()
+	tempPVCName := util.TempPVCNameForPVRecovery(documentdb.Name)
+
+	// Check if CNPG cluster exists
+	cnpgCluster := &cnpgv1.Cluster{}
+	cnpgErr := r.Get(ctx, types.NamespacedName{Name: cnpgClusterName, Namespace: namespace}, cnpgCluster)
+
+	if cnpgErr == nil {
+		// CNPG exists - check if healthy and cleanup temp PVC
+		if cnpgCluster.Status.Phase == cnpgClusterHealthyPhase {
+			tempPVC := &corev1.PersistentVolumeClaim{}
+			if err := r.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: namespace}, tempPVC); err == nil {
+				logger.Info("Deleting temp PVC after successful recovery", "pvc", tempPVCName)
+				if err := r.Delete(ctx, tempPVC); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to delete temp PVC %s: %w", tempPVCName, err)
+				}
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if !errors.IsNotFound(cnpgErr) {
+		return ctrl.Result{}, fmt.Errorf("failed to get CNPG cluster: %w", cnpgErr)
+	}
+
+	// CNPG doesn't exist - prepare temp PVC for recovery
+
+	// Check if temp PVC already exists
+	tempPVC := &corev1.PersistentVolumeClaim{}
+	tempPVCErr := r.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: namespace}, tempPVC)
+	if tempPVCErr == nil {
+		// Temp PVC exists, check if bound
+		if tempPVC.Status.Phase != corev1.ClaimBound {
+			logger.Info("Waiting for temp PVC to bind to PV", "pvc", tempPVCName, "phase", tempPVC.Status.Phase)
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+		// PVC is bound, ready to proceed with CNPG creation
+		return ctrl.Result{}, nil
+	}
+
+	if !errors.IsNotFound(tempPVCErr) {
+		return ctrl.Result{}, fmt.Errorf("failed to get temp PVC %s: %w", tempPVCName, tempPVCErr)
+	}
+
+	// Verify PV exists and is available
+	pv := &corev1.PersistentVolume{}
+	if err := r.Get(ctx, types.NamespacedName{Name: pvName}, pv); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("PV %s not found for recovery", pvName)
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to get PV %s: %w", pvName, err)
+	}
+
+	if !util.IsPVAvailableForRecovery(pv) {
+		return ctrl.Result{}, fmt.Errorf("PV %s must be Available or Released for recovery, current phase: %s.", pvName, pv.Status.Phase)
+	}
+
+	// Clear claimRef if PV is Released
+	if util.NeedsToClearClaimRef(pv) {
+		logger.Info("Clearing claimRef on Released PV", "pv", pvName)
+		pv.Spec.ClaimRef = nil
+		if err := r.Update(ctx, pv); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to clear claimRef on PV %s: %w", pvName, err)
+		}
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	// Create temp PVC
+	newPVC := util.BuildTempPVCForPVRecovery(documentdb.Name, namespace, pv)
+	if err := controllerutil.SetControllerReference(documentdb, newPVC, r.Scheme); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to set owner reference on temp PVC: %w", err)
+	}
+
+	if err := r.Create(ctx, newPVC); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create temp PVC %s: %w", tempPVCName, err)
+	}
+
+	logger.Info("Created temp PVC for PV recovery", "pvc", tempPVCName, "pv", pvName)
+	return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 }
