@@ -24,16 +24,19 @@ param sshPublicKey string
 param adminUsername string = 'azureuser'
 
 @description('Kubernetes version for AKS (empty string uses region default)')
-param kubernetesVersion string = '1.32'
+param kubernetesVersion string = ''
 
 @description('k3s version')
 param k3sVersion string = 'v1.30.4+k3s1'
 
-@description('Allowed source IP for Kube API access (default: any). Set to your IP/CIDR for security.')
+@description('Allowed source IP for Kube API (port 6443) access. WARNING: Default \'*\' opens the Kubernetes API to the public internet. For production, restrict to your IP/CIDR (e.g., \'203.0.113.0/24\').')
 param allowedSourceIP string = '*'
 
 @description('Per-cluster Istio CA certificates (base64-encoded PEM). Array of objects with rootCert, caCert, caKey, certChain.')
 param istioCerts array = []
+
+// Optionally include kubernetesVersion in cluster properties
+var maybeK8sVersion = empty(kubernetesVersion) ? {} : { kubernetesVersion: kubernetesVersion }
 
 // Variables
 var aksClusterName = 'hub-${hubLocation}'
@@ -180,9 +183,8 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
   identity: {
     type: 'SystemAssigned'
   }
-  properties: {
+  properties: union({
     dnsPrefix: aksClusterName
-    kubernetesVersion: kubernetesVersion
     enableRBAC: true
     networkProfile: {
       networkPlugin: 'azure'
@@ -205,7 +207,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
       managed: true
       enableAzureRBAC: true
     }
-  }
+  }, maybeK8sVersion)
   dependsOn: [
     aksVnet
   ]
