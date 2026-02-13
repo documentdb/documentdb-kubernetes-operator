@@ -4,6 +4,8 @@
 package cnpg
 
 import (
+	"testing"
+
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 var _ = Describe("getBootstrapConfiguration", func() {
@@ -308,4 +311,149 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result).ToNot(BeNil())
 		Expect(result.Spec.StorageConfiguration.StorageClass).To(BeNil())
 	})
+
+	It("includes TLS secret in plugin parameters when TLS is ready", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 3,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+			Status: dbpreview.DocumentDBStatus{
+				TLS: &dbpreview.TLSStatus{
+					Ready:      true,
+					SecretName: "my-tls-secret",
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Plugins).To(HaveLen(1))
+		Expect(result.Spec.Plugins[0].Parameters).To(HaveKey("gatewayTLSSecret"))
+		Expect(result.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("my-tls-secret"))
+	})
 })
+
+// Standard Go tests for additional coverage
+
+func TestGetInheritedMetadataLabels(t *testing.T) {
+	tests := []struct {
+		name     string
+		appName  string
+		expected map[string]string
+	}{
+		{
+			name:    "standard app name",
+			appName: "my-documentdb",
+			expected: map[string]string{
+				util.LABEL_APP:          "my-documentdb",
+				util.LABEL_REPLICA_TYPE: "primary",
+			},
+		},
+		{
+			name:    "app name with special characters",
+			appName: "test-db-123",
+			expected: map[string]string{
+				util.LABEL_APP:          "test-db-123",
+				util.LABEL_REPLICA_TYPE: "primary",
+			},
+		},
+		{
+			name:    "empty app name",
+			appName: "",
+			expected: map[string]string{
+				util.LABEL_APP:          "",
+				util.LABEL_REPLICA_TYPE: "primary",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getInheritedMetadataLabels(tt.appName)
+
+			if result == nil {
+				t.Fatal("Expected non-nil result")
+			}
+
+			if result.Labels == nil {
+				t.Fatal("Expected non-nil labels map")
+			}
+
+			for key, expectedValue := range tt.expected {
+				if actualValue, exists := result.Labels[key]; !exists {
+					t.Errorf("Expected label %q to exist", key)
+				} else if actualValue != expectedValue {
+					t.Errorf("Expected label %q = %q, got %q", key, expectedValue, actualValue)
+				}
+			}
+		})
+	}
+}
+
+func TestGetMaxStopDelayOrDefault(t *testing.T) {
+	tests := []struct {
+		name       string
+		documentdb *dbpreview.DocumentDB
+		expected   int32
+	}{
+		{
+			name: "returns default when StopDelay is 0",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					Timeouts: dbpreview.Timeouts{
+						StopDelay: 0,
+					},
+				},
+			},
+			expected: util.CNPG_DEFAULT_STOP_DELAY,
+		},
+		{
+			name: "returns custom StopDelay when set",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					Timeouts: dbpreview.Timeouts{
+						StopDelay: 60,
+					},
+				},
+			},
+			expected: 60,
+		},
+		{
+			name: "returns max StopDelay",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					Timeouts: dbpreview.Timeouts{
+						StopDelay: 1800,
+					},
+				},
+			},
+			expected: 1800,
+		},
+		{
+			name: "returns default when Timeouts is empty",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{},
+			},
+			expected: util.CNPG_DEFAULT_STOP_DELAY,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getMaxStopDelayOrDefault(tt.documentdb)
+
+			if result != tt.expected {
+				t.Errorf("Expected %d, got %d", tt.expected, result)
+			}
+		})
+	}
+}
