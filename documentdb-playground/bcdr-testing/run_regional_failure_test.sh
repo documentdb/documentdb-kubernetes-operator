@@ -11,6 +11,7 @@ SERVICE_NAME="${SERVICE_NAME:-documentdb-service-documentdb-preview}"
 CHAOS_NAMESPACE="${CHAOS_NAMESPACE:-chaos-mesh}"
 TOTAL_DURATION_SECONDS="${TOTAL_DURATION_SECONDS:-360}"
 CHAOS_DELAY_SECONDS="${CHAOS_DELAY_SECONDS:-30}"
+FAILOVER_DELAY_SECONDS="${FAILOVER_DELAY_SECONDS:-10}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 PRIMARY_CONTEXT="${PRIMARY_CONTEXT:-}"
 USE_DNS_ENDPOINTS="${USE_DNS_ENDPOINTS:-false}"
@@ -136,6 +137,8 @@ sleep "$CHAOS_DELAY_SECONDS"
 
 echo "Applying chaos..."
 kubectl --context "$primary_context" apply -n "$CHAOS_NAMESPACE" -f "$CHAOS_FILE"
+
+sleep "$FAILOVER_DELAY_SECONDS"
 
 # Perform manual failover
 kubectl documentdb promote \
