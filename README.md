@@ -50,3 +50,4 @@ For security concerns, please review our [Security Policy](SECURITY.md).
 
 - Create an [issue](https://github.com/documentdb/documentdb-kubernetes-operator/issues) for bug reports and feature requests
 - Check our [documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/) for common questions
+- Contact us on [Discord](https://discordapp.com/channels/1374170121219866635/1435045191156236458)
