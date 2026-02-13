@@ -2,8 +2,15 @@
 set -euo pipefail
 
 # Install DocumentDB operator on all clusters
-# - AKS hub: installed via Helm from local chart package
+# - AKS hub: installed via Helm (from OCI registry or local chart)
 # - k3s VMs: installed via Azure VM Run Command (CNPG from upstream, operator manifests via base64)
+#
+# Environment variables:
+#   BUILD_CHART  - "true" (default) builds from local source; "false" pulls from OCI registry
+#   CHART_REGISTRY - OCI registry URL (default: oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator)
+#   CHART_VERSION  - Chart version when using OCI registry (default: 0.0.1)
+#   VERSION        - Local chart version number (default: 200)
+#   VALUES_FILE    - Optional Helm values file path
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -18,6 +25,9 @@ fi
 CHART_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)/operator/documentdb-helm-chart"
 VERSION="${VERSION:-200}"
 VALUES_FILE="${VALUES_FILE:-}"
+BUILD_CHART="${BUILD_CHART:-true}"
+CHART_REGISTRY="${CHART_REGISTRY:-oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator}"
+CHART_VERSION="${CHART_VERSION:-0.0.1}"
 HUB_CLUSTER_NAME="${HUB_CLUSTER_NAME:-hub-${HUB_REGION}}"
 
 echo "======================================="
@@ -44,11 +54,17 @@ echo "======================================="
 kubectl config use-context "$HUB_CLUSTER_NAME"
 
 CHART_PKG="$SCRIPT_DIR/documentdb-operator-0.0.${VERSION}.tgz"
-rm -f "$CHART_PKG"
 
-echo "Packaging Helm chart..."
-helm dependency update "$CHART_DIR"
-helm package "$CHART_DIR" --version "0.0.${VERSION}" --destination "$SCRIPT_DIR"
+if [ "$BUILD_CHART" = "true" ]; then
+  rm -f "$CHART_PKG"
+  echo "Packaging Helm chart from local source..."
+  helm dependency update "$CHART_DIR"
+  helm package "$CHART_DIR" --version "0.0.${VERSION}" --destination "$SCRIPT_DIR"
+  CHART_REF="$CHART_PKG"
+else
+  echo "Installing from OCI registry: $CHART_REGISTRY (version $CHART_VERSION)..."
+  CHART_REF="$CHART_REGISTRY --version $CHART_VERSION"
+fi
 
 echo ""
 echo "Installing operator..."
@@ -60,7 +76,8 @@ HELM_ARGS=(
 if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
   HELM_ARGS+=(--values "$VALUES_FILE")
 fi
-helm upgrade --install documentdb-operator "$CHART_PKG" "${HELM_ARGS[@]}"
+# shellcheck disable=SC2086
+helm upgrade --install documentdb-operator $CHART_REF "${HELM_ARGS[@]}"
 echo "✓ Operator installed on $HUB_CLUSTER_NAME"
 
 # ─── Step 2: Install on k3s clusters via Run Command ───
@@ -71,6 +88,14 @@ echo "======================================="
 
 # Generate DocumentDB-specific manifests (excluding CNPG subchart)
 echo "Generating DocumentDB operator manifests..."
+
+# k3s VMs need a local chart package for helm template, even when AKS uses OCI
+if [ "$BUILD_CHART" != "true" ] && [ ! -f "$CHART_PKG" ]; then
+  echo "Building local chart package for k3s manifest generation..."
+  helm dependency update "$CHART_DIR"
+  helm package "$CHART_DIR" --version "0.0.${VERSION}" --destination "$SCRIPT_DIR"
+fi
+
 DOCDB_MANIFESTS=$(mktemp)
 
 # Add documentdb-operator namespace
