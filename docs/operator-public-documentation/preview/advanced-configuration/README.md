@@ -7,6 +7,7 @@ This section covers advanced configuration options for the DocumentDB Kubernetes
 - [TLS Configuration](#tls-configuration)
 - [High Availability](#high-availability)
 - [Storage Configuration](#storage-configuration)
+- [Scheduling](#scheduling)
 - [Resource Management](#resource-management)
 - [Security](#security)
 
@@ -363,6 +364,17 @@ spec:
 **Recommendation**: For production deployments on EKS, always create a StorageClass with `encrypted: "true"` to ensure data at rest is protected.
 
 ---
+
+## Scheduling
+
+Configure pod affinity for a documentdb cluster's database pods. This replicates
+the cnpg operator's scheduling framework. See <https://cloudnative-pg.io/docs/1.28/scheduling/>
+
+```yaml
+spec:
+  affinity:
+  ...
+```
 
 ## Resource Management
 
