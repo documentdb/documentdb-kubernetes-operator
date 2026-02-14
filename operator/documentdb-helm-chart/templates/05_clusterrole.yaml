@@ -25,7 +25,7 @@ rules:
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["networking.fleet.azure.com"] # fleet permissions for multi-cluster services
-  resources: ["serviceexports", "multiclusterservices"]
+  resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["secrets"]

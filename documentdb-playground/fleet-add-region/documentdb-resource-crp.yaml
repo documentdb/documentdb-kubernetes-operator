@@ -26,8 +26,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   resource:
     storage:
       pvcSize: 10Gi
@@ -78,20 +76,12 @@ spec:
       kind: Secret
       name: documentdb-credentials
   policy:
-    placementType: PickAll
-    affinity:
-      clusterAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          clusterSelectorTerms:
-            - labelSelector:
-                matchExpressions:
-                  - key: documentdb.io/fleet-hub
-                    operator: DoesNotExist
-            - labelSelector:
-                matchExpressions:
-                  - key: documentdb.io/fleet-hub
-                    operator: NotIn
-                    values:
-                      - "true"
+    placementType: PickFixed
+    clusterNames:
+{{CLUSTER_LIST_CRP}}
   strategy:
     type: RollingUpdate
+    applyStrategy:
+      type: ServerSideApply
+      serverSideApplyConfig:
+        force: true

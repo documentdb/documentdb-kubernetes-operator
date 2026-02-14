@@ -1,0 +1,13 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-documentdb
+spec:
+  action: pod-failure
+  mode: all
+  duration: "5m"
+  selector:
+    namespaces:
+      - documentdb-preview-ns
+      - documentdb-operator
+      - cnpg-system

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -21,8 +22,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	demotionTokenPollInterval = 5 * time.Second
+	demotionTokenWaitTimeout  = 10 * time.Minute
 )
 
 func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
@@ -44,13 +51,13 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 
 	// No more errors possible, so we can safely edit the spec
-	cnpgCluster.Name = replicationContext.Self
+	cnpgCluster.Name = replicationContext.CNPGClusterName
 
 	if !replicationContext.IsPrimary() {
 		cnpgCluster.Spec.InheritedMetadata.Labels[util.LABEL_REPLICATION_CLUSTER_TYPE] = "replica"
 		cnpgCluster.Spec.Bootstrap = &cnpgv1.BootstrapConfiguration{
 			PgBaseBackup: &cnpgv1.BootstrapPgBaseBackup{
-				Source:   replicationContext.PrimaryCluster,
+				Source:   replicationContext.PrimaryCNPGClusterName,
 				Database: "postgres",
 				Owner:    "postgres",
 			},
@@ -93,8 +100,8 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 
 	cnpgCluster.Spec.ReplicaCluster = &cnpgv1.ReplicaClusterConfiguration{
 		Source:  replicationContext.GetReplicationSource(),
-		Primary: replicationContext.PrimaryCluster,
-		Self:    replicationContext.Self,
+		Primary: replicationContext.PrimaryCNPGClusterName,
+		Self:    replicationContext.CNPGClusterName,
 	}
 
 	if replicationContext.IsAzureFleetNetworking() {
@@ -116,10 +123,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 				})
 		}
 	}
-	selfHost := replicationContext.Self + "-rw." + documentdb.Namespace + ".svc"
+	selfHost := replicationContext.CNPGClusterName + "-rw." + documentdb.Namespace + ".svc"
 	cnpgCluster.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
 		{
-			Name: replicationContext.Self,
+			Name: replicationContext.CNPGClusterName,
 			ConnectionParameters: map[string]string{
 				"host":   selfHost,
 				"port":   "5432",
@@ -147,7 +154,7 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 	// Create dummy -rw services for remote clusters so DNS resolution works
 	// These services have non-matching selectors, so they have no local endpoints
 	// Istio will automatically route traffic through the east-west gateway
-	for _, remoteCluster := range replicationContext.Others {
+	for _, remoteCluster := range replicationContext.OtherCNPGClusterNames {
 		// Create the -rw (read-write/primary) service for each remote cluster
 		serviceNameRW := remoteCluster + "-rw"
 		foundServiceRW := &corev1.Service{}
@@ -196,37 +203,95 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 }
 
 func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
-	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
-		foundServiceExport := &fleetv1alpha1.ServiceExport{}
-		err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: documentdb.Namespace}, foundServiceExport)
-		if err != nil && errors.IsNotFound(err) {
-			log.Log.Info("Service Export not found. Creating a new Service Export " + serviceName)
+	labels := map[string]string{
+		util.LABEL_DOCUMENTDB_NAME: documentdb.Name,
+	}
 
-			// Service Export
+	// List all existing ServiceExports in the namespace
+	existingServiceExports := &fleetv1alpha1.ServiceExportList{}
+	if err := r.Client.List(ctx, existingServiceExports, client.InNamespace(documentdb.Namespace), client.MatchingLabels(labels)); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to list ServiceExports: %w", err)
+		}
+	}
+
+	// Build a map of existing ServiceExports that are tagged for this DocumentDB
+	existingExports := make(map[string]*fleetv1alpha1.ServiceExport)
+	for i := range existingServiceExports.Items {
+		export := &existingServiceExports.Items[i]
+		existingExports[export.Name] = export
+	}
+
+	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
+		_, exists := existingExports[serviceName]
+		if !exists {
 			ringServiceExport := &fleetv1alpha1.ServiceExport{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serviceName,
 					Namespace: documentdb.Namespace,
+					Labels:    labels,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         documentdb.APIVersion,
+							Kind:               documentdb.Kind,
+							Name:               documentdb.Name,
+							UID:                documentdb.UID,
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
 				},
 			}
-			err = r.Create(ctx, ringServiceExport)
-			if err != nil {
+			if err := r.Create(ctx, ringServiceExport); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
+		} else { // if exists then we don't want to remove it
+			delete(existingExports, serviceName)
 		}
 	}
 
-	// Below is true because this function is only called if we are fleet enabled
+	// If it's still in the existingExports map, it means it's no longer needed and should be deleted
+	for serviceName, export := range existingExports {
+		if err := r.Client.Delete(ctx, export); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete ServiceExport %s: %w", serviceName, err)
+		}
+	}
+
+	// List all existing MultiClusterServices in the namespace
+	existingMCSList := &fleetv1alpha1.MultiClusterServiceList{}
+	if err := r.Client.List(ctx, existingMCSList, client.InNamespace(documentdb.Namespace), client.MatchingLabels(labels)); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to list MultiClusterServices: %w", err)
+		}
+	}
+
+	// Build a map of existing MultiClusterServices that are tagged for this DocumentDB
+	existingMCS := make(map[string]*fleetv1alpha1.MultiClusterService)
+	for i := range existingMCSList.Items {
+		mcs := &existingMCSList.Items[i]
+		existingMCS[mcs.Name] = mcs
+	}
+
+	// Below is valid because this function is only called if fleet-networking is enabled
 	for sourceServiceName := range replicationContext.GenerateIncomingServiceNames(documentdb.Name, documentdb.Namespace) {
-		foundMCS := &fleetv1alpha1.MultiClusterService{}
-		err := r.Get(ctx, types.NamespacedName{Name: sourceServiceName, Namespace: documentdb.Namespace}, foundMCS)
-		if err != nil && errors.IsNotFound(err) {
-			log.Log.Info("Multi Cluster Service not found. Creating a new Multi Cluster Service")
-			// Multi Cluster Service
-			foundMCS = &fleetv1alpha1.MultiClusterService{
+		_, exists := existingMCS[sourceServiceName]
+		if !exists {
+			// Multi Cluster Service with owner reference to ensure cleanup
+			newMCS := &fleetv1alpha1.MultiClusterService{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      sourceServiceName,
 					Namespace: documentdb.Namespace,
+					Labels:    labels,
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         documentdb.APIVersion,
+							Kind:               documentdb.Kind,
+							Name:               documentdb.Name,
+							UID:                documentdb.UID,
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
 				},
 				Spec: fleetv1alpha1.MultiClusterServiceSpec{
 					ServiceImport: fleetv1alpha1.ServiceImportRef{
@@ -234,10 +299,18 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 					},
 				},
 			}
-			err = r.Create(ctx, foundMCS)
-			if err != nil {
+			if err := r.Create(ctx, newMCS); err != nil && !errors.IsAlreadyExists(err) {
 				return err
 			}
+		} else { // if exists then we don't want to remove it
+			delete(existingMCS, sourceServiceName)
+		}
+	}
+
+	// If it's still in the existingMCS map, it means it's no longer needed and should be deleted
+	for serviceName, mcs := range existingMCS {
+		if err := r.Client.Delete(ctx, mcs); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete MultiClusterService %s: %w", serviceName, err)
 		}
 	}
 
@@ -250,14 +323,6 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 		return nil, -1
 	}
 
-	// Update the primary if it has changed
-	primaryChanged := current.Spec.ReplicaCluster.Primary != desired.Spec.ReplicaCluster.Primary
-
-	tokenNeedsUpdate, err := r.PromotionTokenNeedsUpdate(ctx, current.Namespace)
-	if err != nil {
-		return err, time.Second * 10
-	}
-
 	if current.Spec.ReplicaCluster.Self != desired.Spec.ReplicaCluster.Self {
 		return fmt.Errorf("self cannot be changed"), time.Second * 60
 	}
@@ -265,10 +330,49 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 	// Create JSON patch operations for all replica cluster updates
 	var patchOps []util.JSONPatch
 
-	if tokenNeedsUpdate || primaryChanged && current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
+	// Update if the primary has changed
+	primaryChanged := current.Spec.ReplicaCluster.Primary != desired.Spec.ReplicaCluster.Primary
+	if primaryChanged {
+		err, refreshTime := r.getPrimaryChangePatchOps(ctx, &patchOps, current, desired, documentdb, replicationContext)
+		if refreshTime > 0 || err != nil {
+			return err, refreshTime
+		}
+	}
+
+	// Update if the cluster list has changed
+	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
+	if replicasChanged {
+		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
+	}
+
+	if len(patchOps) > 0 {
+		patch, err := json.Marshal(patchOps)
+		if err != nil {
+			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
+		}
+		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
+		if err != nil {
+			return err, time.Second * 10
+		}
+	}
+
+	return nil, -1
+}
+
+func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]util.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+
+	// Remove old bootstrap method if present
+	if current.Spec.Bootstrap != nil {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:   util.JSON_PATCH_OP_REMOVE,
+			Path: util.JSON_PATCH_PATH_BOOTSTRAP,
+		})
+	}
+
+	if current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Primary => replica
 		// demote
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: desired.Spec.ReplicaCluster,
@@ -279,61 +383,50 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 			// Only add remove operation if synchronous field exists, otherwise there's an error
 			// TODO this wouldn't be true if our "wait for token" logic wasn't reliant on a failure
 			if current.Spec.PostgresConfiguration.Synchronous != nil {
-				patchOps = append(patchOps, util.JSONPatch{
+				*patchOps = append(*patchOps, util.JSONPatch{
 					Op:   util.JSON_PATCH_OP_REMOVE,
 					Path: util.JSON_PATCH_PATH_POSTGRES_CONFIG_SYNC,
 				})
 			}
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_INSTANCES,
 				Value: desired.Spec.Instances,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_PLUGINS,
 				Value: desired.Spec.Plugins,
 			})
 		}
 
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
+		log.Log.Info("Applying patch for Primary => Replica transition", "cluster", current.Name)
 
-		log.Log.Info("Applying patch for Primary => Replica transition", "patch", string(patch), "cluster", current.Name)
+		// push out the  promotion token when it's available
+		nn := types.NamespacedName{Name: current.Name, Namespace: current.Namespace}
+		go r.waitForDemotionTokenAndCreateService(nn, replicationContext)
 
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
-
-		// push out the  promotion token
-		err = r.CreateTokenService(ctx, current.Status.DemotionToken, documentdb.Namespace, replicationContext)
-		if err != nil {
-			return err, time.Second * 10
-		}
-	} else if primaryChanged && desired.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
+	} else if desired.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Replica => primary
 		// Look for the token if this is a managed failover
 		oldPrimaryAvailable := slices.Contains(
-			replicationContext.Others,
+			replicationContext.OtherCNPGClusterNames,
 			current.Spec.ReplicaCluster.Primary)
 
 		replicaClusterConfig := desired.Spec.ReplicaCluster
 		// If the old primary is available, we can read the token from it
 		if oldPrimaryAvailable {
-			token, err, refreshTime := r.ReadToken(ctx, documentdb.Namespace, replicationContext)
+			token, err, refreshTime := r.ReadToken(ctx, documentdb, replicationContext)
 			if err != nil || refreshTime > 0 {
 				return err, refreshTime
 			}
-			log.Log.Info("Token read successfully", "token", token)
+			log.Log.Info("Token read successfully")
 
 			// Update the configuration with the token
 			replicaClusterConfig.PromotionToken = token
 		}
 
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: replicaClusterConfig,
@@ -341,65 +434,91 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 
 		if documentdb.Spec.ClusterReplication.HighAvailability {
 			// need to add second instance and wal replica
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_POSTGRES_CONFIG,
 				Value: desired.Spec.PostgresConfiguration,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_INSTANCES,
 				Value: desired.Spec.Instances,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_PLUGINS,
 				Value: desired.Spec.Plugins,
 			})
-			patchOps = append(patchOps, util.JSONPatch{
+			*patchOps = append(*patchOps, util.JSONPatch{
 				Op:    util.JSON_PATCH_OP_REPLACE,
 				Path:  util.JSON_PATCH_PATH_REPLICATION_SLOTS,
 				Value: desired.Spec.ReplicationSlots,
 			})
 		}
-
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
-
-		log.Log.Info("Applying patch for Replica => Primary transition", "patch", string(patch), "cluster", current.Name, "hasToken", replicaClusterConfig.PromotionToken != "")
-
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
-	} else if primaryChanged {
+		log.Log.Info("Applying patch for Replica => Primary transition", "cluster", current.Name, "hasToken", replicaClusterConfig.PromotionToken != "")
+	} else {
 		// Replica => replica
-		patchOps = append(patchOps, util.JSONPatch{
+		*patchOps = append(*patchOps, util.JSONPatch{
 			Op:    util.JSON_PATCH_OP_REPLACE,
 			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
 			Value: desired.Spec.ReplicaCluster,
 		})
 
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
-
-		log.Log.Info("Applying patch for Replica => Replica transition", "patch", string(patch), "cluster", current.Name)
-
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
+		log.Log.Info("Applying patch for Replica => Replica transition", "cluster", current.Name)
 	}
 
 	return nil, -1
 }
 
-func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
+func externalClusterNamesChanged(currentClusters, desiredClusters []cnpgv1.ExternalCluster) bool {
+	if len(currentClusters) != len(desiredClusters) {
+		return true
+	}
+
+	if len(currentClusters) == 0 {
+		return false
+	}
+
+	nameSet := make(map[string]bool, len(currentClusters))
+	for _, cluster := range currentClusters {
+		nameSet[cluster.Name] = true
+	}
+
+	for _, cluster := range desiredClusters {
+		if found := nameSet[cluster.Name]; !found {
+			return true
+		}
+		delete(nameSet, cluster.Name)
+	}
+
+	return len(nameSet) != 0
+}
+
+func getReplicasChangePatchOps(patchOps *[]util.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
+	*patchOps = append(*patchOps, util.JSONPatch{
+		Op:    util.JSON_PATCH_OP_REPLACE,
+		Path:  util.JSON_PATCH_PATH_EXTERNAL_CLUSTERS,
+		Value: desired.Spec.ExternalClusters,
+	})
+	if replicationContext.IsAzureFleetNetworking() {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:    util.JSON_PATCH_OP_REPLACE,
+			Path:  util.JSON_PATCH_PATH_MANAGED_SERVICES,
+			Value: desired.Spec.Managed.Services.Additional,
+		})
+	}
+	if replicationContext.IsPrimary() {
+		*patchOps = append(*patchOps, util.JSONPatch{
+			Op:    util.JSON_PATCH_OP_REPLACE,
+			Path:  util.JSON_PATCH_PATH_SYNCHRONOUS,
+			Value: desired.Spec.PostgresConfiguration.Synchronous,
+		})
+	}
+}
+
+func (r *DocumentDBReconciler) ReadToken(ctx context.Context, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
 	tokenServiceName := "promotion-token"
+	namespace := documentdb.Namespace
 
 	// If we are not using cross-cloud networking, we only need to read the token from the configmap
 	if !replicationContext.IsAzureFleetNetworking() && !replicationContext.IsIstioNetworking() {
@@ -476,6 +595,16 @@ func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tokenServiceName,
 				Namespace: namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         documentdb.APIVersion,
+						Kind:               documentdb.Kind,
+						Name:               documentdb.Name,
+						UID:                documentdb.UID,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
 			},
 			Spec: fleetv1alpha1.MultiClusterServiceSpec{
 				ServiceImport: fleetv1alpha1.ServiceImportRef{
@@ -506,24 +635,157 @@ func (r *DocumentDBReconciler) ReadToken(ctx context.Context, namespace string, 
 	return string(token[:]), nil, -1
 }
 
-// TODO make this not have to check the configmap twice
-// RETURN true if we have a configmap with a blank token
-func (r *DocumentDBReconciler) PromotionTokenNeedsUpdate(ctx context.Context, namespace string) (bool, error) {
-	tokenServiceName := "promotion-token"
-	configMap := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, configMap)
-	if err != nil {
-		// If we don't find the map, we don't need to update
-		if errors.IsNotFound(err) {
-			return false, nil
+func (r *DocumentDBReconciler) waitForDemotionTokenAndCreateService(clusterNN types.NamespacedName, replicationContext *util.ReplicationContext) {
+	ctx := context.Background()
+	ticker := time.NewTicker(demotionTokenPollInterval)
+	timeout := time.NewTimer(demotionTokenWaitTimeout)
+	defer ticker.Stop()
+	defer timeout.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			done, err := r.ensureTokenServiceResources(ctx, clusterNN, replicationContext)
+			if err != nil {
+				log.Log.Error(err, "Failed to create token service resources", "cluster", clusterNN.Name)
+			}
+			if done {
+				return
+			}
+		case <-timeout.C:
+			log.Log.Info("Timed out waiting for demotion token", "cluster", clusterNN.Name, "timeout", demotionTokenWaitTimeout)
+			return
 		}
-		return false, err
 	}
-	// Otherwise, we need to update if the value is blank
-	return configMap.Data["index.html"] == "", nil
 }
 
-func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token string, namespace string, replicationContext *util.ReplicationContext) error {
+// CleanupMismatchedServiceImports finds and removes ServiceImports that have no ownerReferences
+// and are marked as "in-use-by" the current cluster.
+// RETURNS: Whether or not a deletion occurred, and error if any error occurs during the process
+//
+// There is currently an incompatibility when you use fleet-networking with a cluster that
+// is both a hub and a member. The ServiceImport that is generated on the hub will sometimes
+// be interpreted as a member-side ServiceImport and attach itself to the export, thus preventing
+// the intended MCS from attaching to it. This function finds those offending ServiceImports and
+// removes them.
+func (r *DocumentDBReconciler) CleanupMismatchedServiceImports(ctx context.Context, namespace string, replicationContext *util.ReplicationContext) (bool, *fleetv1alpha1.ServiceImportList, error) {
+	deleted := false
+
+	// List all ServiceImports in the namespace
+	serviceImportList := &fleetv1alpha1.ServiceImportList{}
+	if err := r.Client.List(ctx, serviceImportList, client.InNamespace(namespace)); err != nil {
+		// If the CRD doesn't exist, skip cleanup
+		if errors.IsNotFound(err) {
+			return deleted, nil, nil
+		}
+		return deleted, nil, fmt.Errorf("failed to list ServiceImports: %w", err)
+	}
+
+	for i := range serviceImportList.Items {
+		badServiceImport := &serviceImportList.Items[i]
+		// If it has an OwnerReference, then it is properly being used by the cluster's MCS
+		if len(badServiceImport.OwnerReferences) > 0 {
+			continue
+		}
+
+		annotations := badServiceImport.GetAnnotations()
+		if annotations == nil {
+			continue
+		}
+
+		inUseBy, exists := annotations[util.FLEET_IN_USE_BY_ANNOTATION]
+		// If it has its own name as the cluster name, then it has erroneously attached itself to the export
+		if !exists || !containsClusterName(inUseBy, replicationContext.FleetMemberName) {
+			continue
+		}
+
+		if err := r.Client.Delete(ctx, badServiceImport); err != nil && !errors.IsNotFound(err) {
+			log.Log.Error(err, "Failed to delete ServiceImport", "name", badServiceImport.Name)
+			continue
+		}
+		deleted = true
+	}
+
+	return deleted, serviceImportList, nil
+}
+
+// ForceReconcileInternalServiceExports finds InternalServiceExports that don't have a matching
+// ServiceImport with proper owner references in the target namespace, and annotates them to
+// trigger reconciliation so the fleet-networking controller can recreate the ServiceImports properly.
+// Returns whether any InternalServiceExports were annotated for reconciliation, and error if any occurs.
+func (r *DocumentDBReconciler) ForceReconcileInternalServiceExports(ctx context.Context, namespace string, replicationContext *util.ReplicationContext, imports *fleetv1alpha1.ServiceImportList) (bool, error) {
+	reconciled := false
+
+	// Extract all serviceImport names for easy lookup
+	serviceImportNames := make(map[string]bool)
+	for i := range imports.Items {
+		serviceImportNames[imports.Items[i].Name] = true
+	}
+
+	for fleetMemberName := range replicationContext.GenerateFleetMemberNames() {
+		// List all InternalServiceExports in each fleet member namespace
+		fleetMemberNamespace := "fleet-member-" + fleetMemberName
+		iseList := &fleetv1alpha1.InternalServiceExportList{}
+		if err := r.Client.List(ctx, iseList, client.InNamespace(fleetMemberNamespace)); err != nil {
+			// If the CRD doesn't exist or namespace doesn't exist, skip
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return reconciled, fmt.Errorf("failed to list InternalServiceExports: %w", err)
+		}
+
+		// Check each InternalServiceExport for a matching ServiceImport
+		for i := range iseList.Items {
+			ise := &iseList.Items[i]
+
+			// ISE name format is: <namespace>-<service-name>
+			// Extract the service name by removing the namespace prefix
+			prefix := namespace + "-"
+			if !strings.HasPrefix(ise.Name, prefix) {
+				continue
+			}
+			serviceName := strings.TrimPrefix(ise.Name, prefix)
+
+			// Check if there's a valid ServiceImport for this ISE
+			if serviceImportNames[serviceName] {
+				continue
+			}
+
+			// Add reconcile annotation with current timestamp to trigger reconciliation
+			if ise.Annotations == nil {
+				ise.Annotations = make(map[string]string)
+			}
+			ise.Annotations["reconcile"] = fmt.Sprintf("%d", time.Now().Unix())
+
+			if err := r.Client.Update(ctx, ise); err != nil {
+				log.Log.Error(err, "Failed to annotate InternalServiceExport", "name", ise.Name, "namespace", fleetMemberNamespace)
+				continue
+			}
+
+			reconciled = true
+		}
+	}
+	return reconciled, nil
+}
+
+// containsClusterName checks if the inUseBy string contains the cluster name
+func containsClusterName(inUseBy, clusterName string) bool {
+	// The annotation value typically contains the cluster name
+	return strings.Contains(inUseBy, clusterName)
+}
+
+// Returns true when token service resources are ready
+func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, clusterNN types.NamespacedName, replicationContext *util.ReplicationContext) (bool, error) {
+	cluster := &cnpgv1.Cluster{}
+	if err := r.Client.Get(ctx, clusterNN, cluster); err != nil {
+		return false, err
+	}
+
+	token := cluster.Status.DemotionToken
+	if token == "" {
+		return false, nil
+	}
+
 	tokenServiceName := "promotion-token"
 	labels := map[string]string{
 		"app": tokenServiceName,
@@ -533,7 +795,7 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 		},
 		Data: map[string]string{
 			"index.html": token,
@@ -546,27 +808,23 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 			configMap.Data["index.html"] = token
 			err = r.Client.Update(ctx, configMap)
 			if err != nil {
-				return fmt.Errorf("failed to update token ConfigMap: %w", err)
+				return false, fmt.Errorf("failed to update token ConfigMap: %w", err)
 			}
 		} else {
-			return fmt.Errorf("failed to create token ConfigMap: %w", err)
+			return false, fmt.Errorf("failed to create token ConfigMap: %w", err)
 		}
-	}
-
-	if token == "" {
-		return fmt.Errorf("No token found yet")
 	}
 
 	// When not using cross-cloud networking, just transfer with the configmap
 	if !replicationContext.IsAzureFleetNetworking() && !replicationContext.IsIstioNetworking() {
-		return nil
+		return true, nil
 	}
 
 	// Create nginx Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.PodSpec{
@@ -605,14 +863,14 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 
 	err = r.Client.Create(ctx, pod)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create nginx Pod: %w", err)
+		return false, fmt.Errorf("failed to create nginx Pod: %w", err)
 	}
 
 	// Create Service
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
-			Namespace: namespace,
+			Namespace: clusterNN.Namespace,
 			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
@@ -629,7 +887,7 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 
 	err = r.Client.Create(ctx, service)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create Service: %w", err)
+		return false, fmt.Errorf("failed to create Service: %w", err)
 	}
 
 	// Create ServiceExport only for fleet networking
@@ -637,15 +895,25 @@ func (r *DocumentDBReconciler) CreateTokenService(ctx context.Context, token str
 		serviceExport := &fleetv1alpha1.ServiceExport{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      tokenServiceName,
-				Namespace: namespace,
+				Namespace: clusterNN.Namespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         cluster.APIVersion,
+						Kind:               cluster.Kind,
+						Name:               cluster.Name,
+						UID:                cluster.UID,
+						Controller:         ptr.To(true),
+						BlockOwnerDeletion: ptr.To(true),
+					},
+				},
 			},
 		}
 
 		err = r.Client.Create(ctx, serviceExport)
 		if err != nil && !errors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to create ServiceExport: %w", err)
+			return false, fmt.Errorf("failed to create ServiceExport: %w", err)
 		}
 	}
 
-	return nil
+	return true, nil
 }

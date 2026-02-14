@@ -104,6 +104,17 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if replicationContext.IsNotPresent() {
+		logger.Info("DocumentDB instance is not part of the replication setup; skipping reconciliation and deleting any present resources")
+		if err := r.cleanupResources(ctx, req); err != nil {
+			return ctrl.Result{}, err
+		}
+		if err := util.DeleteOwnedResources(ctx, r.Client, documentdb.ObjectMeta); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	var documentDbServiceIp string
 
 	// Only create/manage the service if ExposeViaService is configured
@@ -284,6 +295,28 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if err := r.Status().Update(ctx, documentdb); err != nil {
 				logger.Error(err, "Failed to update DocumentDB status")
 			}
+		}
+	}
+
+	// Check for fleet-networking issues and attempt to remediate
+	if replicationContext.IsAzureFleetNetworking() {
+		deleted, imports, err := r.CleanupMismatchedServiceImports(ctx, documentdb.Namespace, replicationContext)
+		if err != nil {
+			log.Log.Error(err, "Failed to cleanup ServiceImports")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+		if deleted {
+			log.Log.Info("Deleted mismatched ServiceImports; requeuing to allow for proper recreation")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+		reconciled, err := r.ForceReconcileInternalServiceExports(ctx, documentdb.Namespace, replicationContext, imports)
+		if err != nil {
+			log.Log.Error(err, "Failed to force reconcile InternalServiceExports")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+		if reconciled {
+			log.Log.Info("Annotated InternalServiceExports for reconciliation; requeuing to allow fleet-networking to recreate ServiceImports")
+			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 	}
 
