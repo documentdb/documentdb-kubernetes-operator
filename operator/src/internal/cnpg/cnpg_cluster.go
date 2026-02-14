@@ -63,7 +63,10 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				},
 				InheritedMetadata: getInheritedMetadataLabels(documentdb.Name),
 				Plugins: func() []cnpgv1.PluginConfiguration {
-					params := map[string]string{"gatewayImage": gatewayImage}
+					params := map[string]string{
+						"gatewayImage":               gatewayImage,
+						"documentDbCredentialSecret": credentialSecretName,
+					}
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName

@@ -138,7 +138,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
      apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 6B827C12C2D425E227EDCA75089EBE08314DF160) && \
     apt-get update && \
     apt-get install -qy \
-    libproj22 \
+    libproj-dev \
     libxml2 \
     libjson-c5 \
     libgeos-c1v5 \
