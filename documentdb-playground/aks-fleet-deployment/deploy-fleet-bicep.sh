@@ -129,7 +129,7 @@ echo "Pods ($HUB_CLUSTER):"
 kubectl get pods -n cert-manager -o wide || true
 
 export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
-export TAG=$(curl "https://api.github.com/repos/kubefleet-dev/kubefleet/tags" | jq -r '.[0].name') # Gets latest tag
+export TAG="v0.2"
 # Install the helm chart for running Fleet agents on the hub cluster.
 helm upgrade --install hub-agent ./charts/hub-agent/ \
         --set image.pullPolicy=Always \
@@ -156,7 +156,7 @@ fleetNetworkingDir=$(mktemp -d)
 git clone https://github.com/Azure/fleet-networking.git $fleetNetworkingDir
 pushd $fleetNetworkingDir
 # Set up HUB_CLUSTER as the hub
-NETWORKING_TAG=$(curl "https://api.github.com/repos/Azure/fleet-networking/tags" | jq -r '.[0].name') # Gets latest tag
+NETWORKING_TAG="v0.3.28"
 
 # Install the helm chart for running Fleet agents on the hub cluster.
 kubectl config use-context $HUB_CLUSTER
