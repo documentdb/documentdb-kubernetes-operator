@@ -555,13 +555,29 @@ def main():
     setup_logging(config)
     logger = logging.getLogger(__name__)
     
+    # Validate required configuration fields (reject empty or placeholder values)
+    _PLACEHOLDER_SOURCE = "<SOURCE_CONNECTION_STRING>"
+    _PLACEHOLDER_TARGET = "<TARGET_CONNECTION_STRING>"
+    _PLACEHOLDER_COLL = "<database>.<collection>"
+
+    errors = []
+    source_uri = config.get("source", {}).get("uri", "")
+    target_uri = config.get("target", {}).get("uri", "")
+    collections = config.get("watch", {}).get("collections", [])
+    if not source_uri or source_uri == _PLACEHOLDER_SOURCE:
+        errors.append(f"source.uri is required (update it in config.yaml, current placeholder: {_PLACEHOLDER_SOURCE})")
+    if not target_uri or target_uri == _PLACEHOLDER_TARGET:
+        errors.append(f"target.uri is required (update it in config.yaml, current placeholder: {_PLACEHOLDER_TARGET})")
+    if not collections or collections == [_PLACEHOLDER_COLL]:
+        errors.append(f"watch.collections is required (update it in config.yaml, current placeholder: {_PLACEHOLDER_COLL})")
+    if errors:
+        for e in errors:
+            logger.error(e)
+        sys.exit(1)
+    
     logger.info("=" * 60)
     logger.info("DocumentDB to Azure DocumentDB (with MongoDB compatibility) Sync Service")
     logger.info("=" * 60)
-    
-    # Initialize state manager with auto-generated or configured path
-    source_uri = config["source"]["uri"]
-    target_uri = config["target"]["uri"]
     
     state_file = generate_state_file_path(source_uri, target_uri)
     logger.info(f"State file: {state_file}")
