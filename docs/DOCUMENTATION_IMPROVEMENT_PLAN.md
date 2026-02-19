@@ -12,7 +12,8 @@ docs/operator-public-documentation/
 ├── index.md                              # Landing page
 ├── getting-started/
 │   ├── before-you-start.md               # Terminology, prerequisites
-│   ├── quickstart.md                     # Current preview/index.md
+│   ├── quickstart-kind.md                # Quick start with Kind (local dev)
+│   ├── quickstart-k3s.md                 # Quick start with K3s (lightweight)
 │   ├── installation.md                   # Detailed installation
 │   ├── deploy-on-aks.md                  # Azure AKS deployment guide
 │   ├── deploy-on-eks.md                  # AWS EKS deployment guide
@@ -31,15 +32,19 @@ docs/operator-public-documentation/
 │   ├── scaling.md                        # Scaling procedures
 │   ├── upgrades.md                       # Operator and cluster upgrades
 │   ├── failover.md                       # Failover procedures
+│   ├── restore-deleted-cluster.md        # Restore a deleted cluster
 │   └── maintenance.md                    # Node maintenance, rolling updates
 ├── high-availability/
-│   ├── overview.md                       # HA concepts and setup
-│   └── multi-instance-clusters.md        # Local HA configuration
-├── disaster-recovery/
-│   ├── overview.md                       # DR planning and concepts
-│   ├── multi-region.md                   # Cross-region deployment
-│   ├── multi-cloud.md                    # Cross-cloud deployment
-│   └── recovery-procedures.md            # Recovery runbooks
+│   ├── overview.md                       # HA concepts, types (local, multi-region, multi-cloud)
+│   └── local-ha.md                       # Local HA configuration
+├── multi-region-deployment/
+│   ├── overview.md                       # Multi-region concepts and planning
+│   ├── setup.md                          # Multi-region setup guide
+│   └── failover-procedures.md            # Cross-region failover runbooks
+├── multi-cloud-deployment/
+│   ├── overview.md                       # Multi-cloud concepts and planning
+│   ├── setup.md                          # Multi-cloud setup guide (AKS + GKE + EKS)
+│   └── failover-procedures.md            # Cross-cloud failover runbooks
 ├── security/
 │   ├── overview.md                       # Security model
 │   ├── rbac.md                           # RBAC configuration
@@ -48,6 +53,8 @@ docs/operator-public-documentation/
 ├── monitoring/
 │   ├── overview.md                       # Monitoring setup
 │   └── metrics.md                        # Prometheus metrics reference
+├── tuning/
+│   └── tuning-guide.md                   # Performance tuning guide
 ├── troubleshooting/
 │   ├── diagnostic-tools.md               # Logs, events, debugging
 │   └── common-issues.md                  # Known issues and solutions
@@ -56,7 +63,11 @@ docs/operator-public-documentation/
 │   ├── kubectl-plugin.md                 # Existing plugin docs
 │   └── labels-annotations.md             # Labels/annotations reference
 ├── faq.md                                # Expanded FAQ
-└── release-notes.md                      # Version history
+├── release-notes.md                      # Version history
+├── support.md                            # Get help and support
+├── privacy.md                            # Data collection and privacy
+├── contributing.md                       # How to contribute (links to GitHub)
+└── security-reporting.md                 # How to report security issues
 ```
 
 ---
@@ -71,7 +82,6 @@ docs/operator-public-documentation/
 Create a terminology page covering:
 - Kubernetes concepts (Pod, Service, PVC, StorageClass, Namespace, CRD, Operator)
 - DocumentDB concepts (Instance, Primary, Replica, Gateway, Cluster)
-- MongoDB compatibility concepts
 - Cloud concepts (Region, Availability Zone)
 - Prerequisites checklist with version requirements
 
@@ -93,16 +103,17 @@ Create architecture documentation including:
 
 Expand FAQ from 1 to 15+ entries covering:
 - What is DocumentDB Kubernetes Operator?
-- How does DocumentDB differ from MongoDB?
+- What Kubernetes distributions are supported? (AKS, EKS, GKE, Kind, K3s, etc.)
 - Can I run DocumentDB in production on Kubernetes?
-- What Kubernetes distributions are supported?
-- How do I connect my application?
+- What are the minimum resource requirements?
 - What happens during a failover?
-- How do I scale my cluster?
 - How do backups work?
-- How do I enable TLS?
-- What are the resource requirements?
-- How do I migrate from existing MongoDB?
+- What storage classes are recommended?
+- How does the operator handle upgrades?
+- What is the difference between HA and DR?
+- How do I report a bug or request a feature?
+
+*Note: Avoid questions better answered by dedicated guides (e.g., "How do I connect my app?" → see connecting-to-documentdb.md)*
 
 ---
 
@@ -159,6 +170,32 @@ Document GCP GKE deployment:
 - Troubleshooting common GKE issues
 
 *Note: Create `documentdb-playground/gke-setup` scripts as prerequisite or reference manual steps.*
+
+---
+
+#### 1.8 Quick Start with Kind
+**File:** `getting-started/quickstart-kind.md`
+
+Document local development quick start using Kind:
+- Prerequisites (Docker, Kind CLI)
+- Create Kind cluster
+- Install operator
+- Deploy DocumentDB instance
+- Connect and verify
+- Cleanup
+
+---
+
+#### 1.9 Quick Start with K3s
+**File:** `getting-started/quickstart-k3s.md`
+
+Document lightweight quick start using K3s:
+- Prerequisites
+- Install K3s
+- Install operator
+- Deploy DocumentDB instance
+- Connect and verify
+- Cleanup
 
 ---
 
@@ -229,14 +266,16 @@ Document resource configuration:
 
 Document HA concepts:
 - What is high availability in DocumentDB context
+- Types of HA: Local HA, Multi-Region, Multi-Cloud
+- When to use each type
 - HA architecture diagram
 - RTO/RPO concepts
 - Trade-offs and considerations
 
 ---
 
-#### 3.2 Multi-Instance Clusters Page
-**File:** `high-availability/multi-instance-clusters.md`
+#### 3.2 Local HA Page
+**File:** `high-availability/local-ha.md`
 
 Document local HA setup:
 - Instance count configuration
@@ -247,56 +286,80 @@ Document local HA setup:
 
 ---
 
-### Phase 4: Disaster Recovery Documentation
+### Phase 4: Multi-Region Deployment Documentation
 
-#### 4.1 Disaster Recovery Overview
-**File:** `disaster-recovery/overview.md`
+#### 4.1 Multi-Region Overview
+**File:** `multi-region-deployment/overview.md`
 
-Document DR concepts:
-- Difference between HA and DR
-- DR planning considerations
-- Backup strategies for DR
-- RTO/RPO planning guidance
-
----
-
-#### 4.2 Multi-Region Deployment Page
-**File:** `disaster-recovery/multi-region.md`
-
-Document multi-region deployment:
-- Architecture for multi-region
+Document multi-region concepts:
+- What is multi-region deployment
+- Use cases (DR, latency reduction, compliance)
+- Architecture overview
 - Network connectivity requirements
-- Data replication options
-- Failover procedures
+- RTO/RPO considerations
+
+---
+
+#### 4.2 Multi-Region Setup Guide
+**File:** `multi-region-deployment/setup.md`
+
+Document multi-region setup:
+- Prerequisites and planning
+- Step-by-step deployment guide
+- Data replication configuration
 - Reference AKS Fleet deployment examples in playground
+- Verification steps
 
 ---
 
-#### 4.3 Multi-Cloud Deployment Page
-**File:** `disaster-recovery/multi-cloud.md`
+#### 4.3 Multi-Region Failover Procedures
+**File:** `multi-region-deployment/failover-procedures.md`
 
-Document multi-cloud deployment:
-- Architecture for multi-cloud (AKS + GKE + EKS)
+Document failover procedures:
+- Planned failover steps
+- Unplanned failover runbook
+- Verification and rollback
+
+---
+
+### Phase 5: Multi-Cloud Deployment Documentation
+
+#### 5.1 Multi-Cloud Overview
+**File:** `multi-cloud-deployment/overview.md`
+
+Document multi-cloud concepts:
+- What is multi-cloud deployment
+- Use cases (vendor independence, compliance, DR)
+- Architecture overview (AKS + GKE + EKS)
 - Network connectivity (service mesh, VPN)
-- Cross-cloud replication
+
+---
+
+#### 5.2 Multi-Cloud Setup Guide
+**File:** `multi-cloud-deployment/setup.md`
+
+Document multi-cloud setup:
+- Prerequisites and planning
+- Step-by-step deployment guide
+- Cross-cloud replication configuration
 - Reference multi-cloud-deployment examples in playground
+- Verification steps
 
 ---
 
-#### 4.4 Recovery Procedures Page
-**File:** `disaster-recovery/recovery-procedures.md`
+#### 5.3 Multi-Cloud Failover Procedures
+**File:** `multi-cloud-deployment/failover-procedures.md`
 
-Document recovery procedures:
-- Point-in-time recovery (PITR)
-- Full cluster recovery from backup
-- Cross-region failover runbook
-- Verification and rollback procedures
+Document failover procedures:
+- Cross-cloud failover runbook
+- Recovery verification
+- Rollback procedures
 
 ---
 
-### Phase 5: Security Documentation
+### Phase 6: Security Documentation
 
-#### 5.1 Security Overview Page
+#### 6.1 Security Overview Page
 **File:** `security/overview.md`
 
 Document security model:
@@ -306,7 +369,7 @@ Document security model:
 
 ---
 
-#### 5.2 RBAC Configuration Page
+#### 6.2 RBAC Configuration Page
 **File:** `security/rbac.md`
 
 Document RBAC setup:
@@ -317,7 +380,7 @@ Document RBAC setup:
 
 ---
 
-#### 5.3 Network Policies Page
+#### 6.3 Network Policies Page
 **File:** `security/network-policies.md`
 
 Document network security:
@@ -328,7 +391,7 @@ Document network security:
 
 ---
 
-#### 5.4 Secrets Management Page
+#### 6.4 Secrets Management Page
 **File:** `security/secrets-management.md`
 
 Document secrets handling:
@@ -339,9 +402,9 @@ Document secrets handling:
 
 ---
 
-### Phase 6: Operations Documentation
+### Phase 7: Operations Documentation
 
-#### 6.1 Enhance Backup and Restore Page
+#### 7.1 Enhance Backup and Restore Page
 **File:** `operations/backup-and-restore.md`
 
 Enhance existing backup documentation:
@@ -352,7 +415,7 @@ Enhance existing backup documentation:
 
 ---
 
-#### 6.2 Scaling Documentation
+#### 7.2 Scaling Documentation
 **File:** `operations/scaling.md`
 
 Document scaling procedures:
@@ -363,7 +426,7 @@ Document scaling procedures:
 
 ---
 
-#### 6.3 Upgrades Documentation
+#### 7.3 Upgrades Documentation
 **File:** `operations/upgrades.md`
 
 Document upgrade procedures:
@@ -375,7 +438,7 @@ Document upgrade procedures:
 
 ---
 
-#### 6.4 Failover Documentation
+#### 7.4 Failover Documentation
 **File:** `operations/failover.md`
 
 Document failover procedures:
@@ -386,7 +449,18 @@ Document failover procedures:
 
 ---
 
-#### 6.5 Maintenance Documentation
+#### 7.5 Restore Deleted Cluster
+**File:** `operations/restore-deleted-cluster.md`
+
+Document how to restore a deleted cluster:
+- Prerequisites (existing backup)
+- Step-by-step restoration process
+- Verification steps
+- Common pitfalls
+
+---
+
+#### 7.6 Maintenance Documentation
 **File:** `operations/maintenance.md`
 
 Document maintenance procedures:
@@ -397,9 +471,9 @@ Document maintenance procedures:
 
 ---
 
-### Phase 7: Monitoring & Troubleshooting
+### Phase 8: Monitoring, Tuning & Troubleshooting
 
-#### 7.1 Monitoring Overview Page
+#### 8.1 Monitoring Overview Page
 **File:** `monitoring/overview.md`
 
 Document monitoring setup:
@@ -411,7 +485,7 @@ Document monitoring setup:
 
 ---
 
-#### 7.2 Metrics Reference Page
+#### 8.2 Metrics Reference Page
 **File:** `monitoring/metrics.md`
 
 Document available metrics:
@@ -422,7 +496,19 @@ Document available metrics:
 
 ---
 
-#### 7.3 Diagnostic Tools Page
+#### 8.3 Tuning Guide
+**File:** `tuning/tuning-guide.md`
+
+Document performance tuning:
+- Resource sizing recommendations
+- Storage performance optimization
+- Connection pooling tuning
+- Query optimization tips
+- Benchmarking guidance
+
+---
+
+#### 8.4 Diagnostic Tools Page
 **File:** `troubleshooting/diagnostic-tools.md`
 
 Document diagnostic procedures:
@@ -434,7 +520,7 @@ Document diagnostic procedures:
 
 ---
 
-#### 7.4 Common Issues Page
+#### 8.5 Common Issues Page
 **File:** `troubleshooting/common-issues.md`
 
 Document common issues and solutions (minimum 10):
@@ -451,9 +537,9 @@ Each issue should include: symptoms, cause, solution, prevention tips.
 
 ---
 
-### Phase 8: Reference & Examples
+### Phase 9: Reference & Community
 
-#### 8.1 Labels and Annotations Reference
+#### 9.1 Labels and Annotations Reference
 **File:** `reference/labels-annotations.md`
 
 Document all labels and annotations:
@@ -464,7 +550,7 @@ Document all labels and annotations:
 
 ---
 
-#### 8.2 Application Connection Guide
+#### 9.2 Application Connection Guide
 **File:** `getting-started/connecting-to-documentdb.md`
 
 Document how to connect applications:
@@ -476,7 +562,7 @@ Document how to connect applications:
 
 ---
 
-#### 8.3 Release Notes Page
+#### 9.3 Release Notes Page
 **File:** `release-notes.md`
 
 Create release notes page:
@@ -486,19 +572,63 @@ Create release notes page:
 
 ---
 
-### Phase 9: Final Review
+#### 9.4 Support Page
+**File:** `support.md`
 
-#### 9.1 Navigation and Structure Implementation
+Create support and help page:
+- How to get help (GitHub Discussions, Issues)
+- Discord community link
+- Community resources
+- Links to documentation sections
+
+---
+
+#### 9.5 Privacy Page
+**File:** `privacy.md`
+
+Document data collection and privacy:
+- What data the operator collects (if any)
+- Telemetry information
+- How to opt out
+- Data retention policies
+
+---
+
+#### 9.6 Contributing Page
+**File:** `contributing.md`
+
+Link to contribution resources:
+- Link to GitHub [CONTRIBUTING.md](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/CONTRIBUTING.md)
+- Link to [ADOPTERS.md](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/ADOPTERS.md)
+- Development setup overview
+- How to submit PRs
+
+---
+
+#### 9.7 Security Reporting Page
+**File:** `security-reporting.md`
+
+Document how to report security issues:
+- Security vulnerability reporting process
+- Link to GitHub Security tab
+- Responsible disclosure guidelines
+- Link to [SECURITY.md](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/SECURITY.md)
+
+---
+
+### Phase 10: Final Review
+
+#### 10.1 Navigation and Structure Implementation
 Update mkdocs.yml to implement the new documentation structure with proper navigation.
 
 ---
 
-#### 9.2 Cross-linking and Consistency Review
+#### 10.2 Cross-linking and Consistency Review
 Review all documentation for consistent terminology, working cross-links, and consistent formatting.
 
 ---
 
-#### 9.3 Technical Review
+#### 10.3 Technical Review
 Technical review: verify accuracy of all procedures, test code examples, validate YAML configurations.
 
 ---
@@ -507,16 +637,17 @@ Technical review: verify accuracy of all procedures, test code examples, validat
 
 | Phase | Focus Area | Tasks |
 |-------|------------|-------|
-| Phase 1 | Foundation | 7 |
+| Phase 1 | Foundation | 9 |
 | Phase 2 | Configuration | 5 |
 | Phase 3 | High Availability | 2 |
-| Phase 4 | Disaster Recovery | 4 |
-| Phase 5 | Security | 4 |
-| Phase 6 | Operations | 5 |
-| Phase 7 | Monitoring & Troubleshooting | 4 |
-| Phase 8 | Reference & Examples | 3 |
-| Phase 9 | Final Review | 3 |
-| **Total** | | **37** |
+| Phase 4 | Multi-Region Deployment | 3 |
+| Phase 5 | Multi-Cloud Deployment | 3 |
+| Phase 6 | Security | 4 |
+| Phase 7 | Operations | 6 |
+| Phase 8 | Monitoring, Tuning & Troubleshooting | 5 |
+| Phase 9 | Reference & Community | 7 |
+| Phase 10 | Final Review | 3 |
+| **Total** | | **47** |
 
 ---
 
