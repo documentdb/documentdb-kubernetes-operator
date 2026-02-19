@@ -199,6 +199,9 @@ def sync_change(
             if full_document:
                 doc_to_write = {k: v for k, v in full_document.items() if k != "_id"}
                 doc_id = extract_document_id(document_key, full_document)
+                if not doc_id:
+                    logging.warning(f"INSERT without valid document ID: {document_key}")
+                    return True
                 result = target_collection.replace_one(
                     {"_id": doc_id},
                     doc_to_write,
@@ -215,6 +218,9 @@ def sync_change(
             if full_document:
                 doc_to_write = {k: v for k, v in full_document.items() if k != "_id"}
                 doc_id = extract_document_id(document_key, full_document)
+                if not doc_id:
+                    logging.warning(f"UPDATE without valid document ID: {document_key}")
+                    return True
                 result = target_collection.replace_one(
                     {"_id": doc_id},
                     doc_to_write,
@@ -264,8 +270,7 @@ def sync_change(
     except OperationFailure as e:
         logging.error(f"Operation failed for {operation} on {db_name}.{coll_name}: {e}")
         state.record_operation("error")
-        # Don't fail the whole sync for individual doc failures
-        return True
+        return False
         
     except Exception as e:
         logging.error(f"Unexpected error syncing change: {e}")

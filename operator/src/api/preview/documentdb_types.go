@@ -88,9 +88,9 @@ type DocumentDBSpec struct {
 	// Example: {"ChangeStreams": true}
 	//
 	// IMPORTANT: When adding a new feature gate, update ALL of the following:
-	// 1. Add a new FeatureGate* constant in this file
+	// 1. Add a new FeatureGate* constant in documentdb_types.go
 	// 2. Add the key name to the XValidation CEL rule's allowed list below
-	// 3. Add a default entry in the featureGateDefaults map in this file
+	// 3. Add a default entry in the featureGateDefaults map in documentdb_types.go
 	//
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
