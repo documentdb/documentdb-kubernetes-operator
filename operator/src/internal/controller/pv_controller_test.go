@@ -130,52 +130,6 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 	})
 
-	Describe("isOwnedByDocumentDB", func() {
-		It("returns true when cluster is owned by the specified DocumentDB", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: "documentdb.io/v1",
-							Kind:       "DocumentDB",
-							Name:       documentdbName,
-						},
-					},
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeTrue())
-		})
-
-		It("returns false when cluster is owned by a different DocumentDB", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: "documentdb.io/v1",
-							Kind:       "DocumentDB",
-							Name:       "other-documentdb",
-						},
-					},
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeFalse())
-		})
-
-		It("returns false when cluster has no owner references", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeFalse())
-		})
-	})
-
 	Describe("getDesiredReclaimPolicy", func() {
 		var reconciler *PersistentVolumeReconciler
 
@@ -252,7 +206,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -266,6 +220,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(needsUpdate).To(BeTrue())
 			Expect(pv.Spec.PersistentVolumeReclaimPolicy).To(Equal(corev1.PersistentVolumeReclaimRetain))
 			Expect(pv.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(pv.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns true and updates PV when mount options are missing", func() {
@@ -277,7 +232,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -291,6 +246,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(needsUpdate).To(BeTrue())
 			Expect(pv.Spec.MountOptions).To(ContainElements("nodev", "noexec", "nosuid", "rw"))
 			Expect(pv.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(pv.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns false when no changes are needed", func() {
@@ -298,7 +254,8 @@ var _ = Describe("PersistentVolume Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pvName,
 					Labels: map[string]string{
-						util.LabelCluster: documentdbName,
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
 					},
 				},
 				Spec: corev1.PersistentVolumeSpec{
@@ -307,7 +264,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -593,6 +550,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(updatedPV.Spec.PersistentVolumeReclaimPolicy).To(Equal(corev1.PersistentVolumeReclaimRetain))
 			Expect(updatedPV.Spec.MountOptions).To(ContainElements("nodev", "noexec", "nosuid"))
 			Expect(updatedPV.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(updatedPV.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns empty result when PV not found", func() {
@@ -776,7 +734,8 @@ var _ = Describe("PersistentVolume Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pvName,
 					Labels: map[string]string{
-						util.LabelCluster: documentdbName,
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
 					},
 				},
 			}
@@ -806,7 +765,38 @@ var _ = Describe("PersistentVolume Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pvName,
 					Labels: map[string]string{
-						util.LabelCluster: "different-cluster",
+						util.LabelCluster:   "different-cluster",
+						util.LabelNamespace: testNamespace,
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(requests).To(BeEmpty())
+		})
+
+		It("returns empty when PV has same cluster name but different namespace", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentdbName,
+					Namespace: testNamespace,
+				},
+			}
+
+			// PV belongs to a same-named DocumentDB in a different namespace
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pvName,
+					Labels: map[string]string{
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: "other-namespace",
 					},
 				},
 			}

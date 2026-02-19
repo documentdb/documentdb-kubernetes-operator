@@ -50,7 +50,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-abc123",
 					Labels: map[string]string{
-						util.LabelCluster: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}
@@ -58,7 +59,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-def456",
 					Labels: map[string]string{
-						util.LabelCluster: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}
@@ -92,7 +94,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-match",
 					Labels: map[string]string{
-						util.LabelCluster: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}
@@ -100,7 +103,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-other",
 					Labels: map[string]string{
-						util.LabelCluster: "other-cluster",
+						util.LabelCluster:   "other-cluster",
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}
@@ -127,6 +131,40 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(pvNames).To(HaveLen(1))
 			Expect(pvNames).To(ContainElement("pv-match"))
+		})
+
+		It("excludes PVs with same cluster name but different namespace", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pv-other-ns",
+					Labels: map[string]string{
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: "other-namespace",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pv).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			}
+
+			pvNames, err := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pvNames).To(BeEmpty())
 		})
 
 		It("returns empty slice when no PVs have the label", func() {
@@ -159,7 +197,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-test123",
 					Labels: map[string]string{
-						util.LabelCluster: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}
@@ -323,7 +362,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pv-will-be-deleted",
 					Labels: map[string]string{
-						util.LabelCluster: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
 				},
 			}

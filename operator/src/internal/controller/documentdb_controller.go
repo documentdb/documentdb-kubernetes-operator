@@ -395,13 +395,16 @@ func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, docum
 }
 
 // findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster.
-// Uses the documentdb.io/cluster label on PVs, which is set by the PV controller.
+// Uses the documentdb.io/cluster and documentdb.io/namespace labels on PVs, which is set by the PV controller.
 // This works correctly in both single and multi-cluster scenarios where CNPG
 // cluster names may differ from the DocumentDB name.
 func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
 	pvList := &corev1.PersistentVolumeList{}
 	if err := r.List(ctx, pvList,
-		client.MatchingLabels{util.LabelCluster: documentdb.Name},
+		client.MatchingLabels{
+			util.LabelCluster:   documentdb.Name,
+			util.LabelNamespace: documentdb.Namespace,
+		},
 	); err != nil {
 		return nil, err
 	}

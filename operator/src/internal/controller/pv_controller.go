@@ -136,6 +136,10 @@ func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Con
 		pv.Labels[util.LabelCluster] = documentdb.Name
 		needsUpdate = true
 	}
+	if pv.Labels[util.LabelNamespace] != documentdb.Namespace {
+		pv.Labels[util.LabelNamespace] = documentdb.Namespace
+		needsUpdate = true
+	}
 
 	// Check if reclaim policy needs update
 	desiredPolicy := r.getDesiredReclaimPolicy(documentdb)
@@ -336,16 +340,6 @@ func isCNPGClusterOwnerRef(ownerRef metav1.OwnerReference) bool {
 	return ownerRef.Kind == ownerRefKindCluster && strings.Contains(ownerRef.APIVersion, cnpgAPIVersionPrefix)
 }
 
-// isOwnedByDocumentDB checks if a CNPG Cluster is owned by a specific DocumentDB
-func isOwnedByDocumentDB(cluster *cnpgv1.Cluster, documentdbName string) bool {
-	for _, ownerRef := range cluster.OwnerReferences {
-		if ownerRef.Kind == ownerRefKindDocumentDB && ownerRef.Name == documentdbName {
-			return true
-		}
-	}
-	return false
-}
-
 // getDesiredReclaimPolicy returns the reclaim policy based on DocumentDB configuration
 func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbpreview.DocumentDB) corev1.PersistentVolumeReclaimPolicy {
 	switch documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy {
@@ -428,7 +422,7 @@ func documentDBReclaimPolicyPredicate() predicate.Predicate {
 }
 
 // findPVsForDocumentDB finds all PVs associated with a DocumentDB and returns reconcile requests for them.
-// Uses the documentdb.io/cluster label on PVs, which is set by the PV controller.
+// Uses the documentdb.io/cluster and documentdb.io/namespace labels on PVs, which is set by the PV controller.
 // This works correctly in both single and multi-cluster scenarios where CNPG
 // cluster names may differ from the DocumentDB name.
 func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -440,7 +434,10 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 
 	pvList := &corev1.PersistentVolumeList{}
 	if err := r.List(ctx, pvList,
-		client.MatchingLabels{util.LabelCluster: documentdb.Name},
+		client.MatchingLabels{
+			util.LabelCluster:   documentdb.Name,
+			util.LabelNamespace: documentdb.Namespace,
+		},
 	); err != nil {
 		logger.Error(err, "Failed to list PVs for DocumentDB")
 		return nil
