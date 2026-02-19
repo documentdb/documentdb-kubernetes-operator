@@ -92,7 +92,7 @@ the Linux instructions inside WSL2.
 
 | Component | Minimum version | Notes |
 | --------- | --------------- | ----- |
-| Go | 1.23.x | Matches `go.mod`; install via package manager or [go.dev](https://go.dev/dl) |
+| Go | 1.25.0 | Matches `go.mod`. Install via package manager or [go.dev](https://go.dev/dl) |
 | Docker Engine | 24.x | Needed for image builds and kind |
 | kind | 0.22+ | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
 | kubectl | 1.30+ | Align with the Kubernetes version you test against |
@@ -106,7 +106,7 @@ the Linux instructions inside WSL2.
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential curl git jq make tar gzip
-sudo snap install go --channel=1.23/stable
+sudo snap install go --channel=1.25/stable
 curl -Lo kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -117,7 +117,7 @@ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/insta
 
 ```bash
 brew update
-brew install go@1.23 docker kind kubectl helm jq make coreutils findutils
+brew install go@1.25 docker kind kubectl helm jq make coreutils findutils
 brew install golangci-lint
 ```
 
@@ -162,7 +162,7 @@ operator through Helm.
 | [`cmd/`](../../cmd/) | Operator entry point (main.go) |
 | [`internal/`](../../internal/) | Controller logic, utilities, replication code |
 | [`api/`](../../api/) | CRD types and generated DeepCopy files |
-| [`documentdb-chart/`](../../documentdb-chart/) | Helm chart used for deployments |
+| [`documentdb-helm-chart/`](../../documentdb-helm-chart/) | Helm chart for operator deployment |
 | [`scripts/development/`](../../scripts/development/) | Local dev tooling (kind setup, deployment helpers) |
 | [`scripts/operator/`](../../scripts/operator/) | Helm install/uninstall automation |
 | [`scripts/deployment-examples/`](../../scripts/deployment-examples/) | Sample manifests (including mongosh client) |

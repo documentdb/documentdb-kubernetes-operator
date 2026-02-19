@@ -12,48 +12,35 @@ This section covers advanced configuration options for the DocumentDB Kubernetes
 
 ## TLS Configuration
 
-The DocumentDB Kubernetes Operator supports comprehensive TLS configuration for secure gateway connections. We provide three TLS modes to support different operational requirements:
+The operator supports three TLS modes for secure gateway connections, each suited to different operational requirements.
 
 ### TLS Modes
 
-1. **SelfSigned Mode** - Automatic certificate management using cert-manager with self-signed certificates
-   - Best for: Development, testing, and environments without external PKI
-   - Zero external dependencies
-   - Automatic certificate rotation
+1. **SelfSigned** — Automatic certificate management using cert-manager with self-signed certificates
+    - Best for: Development, testing, and environments without external PKI
+    - Zero external dependencies
+    - Automatic certificate rotation
 
-2. **Provided Mode** - Use certificates from Azure Key Vault via Secrets Store CSI driver
-   - Best for: Production environments with centralized certificate management
-   - Enterprise PKI integration
-   - Azure Key Vault integration
+2. **Provided** — Use certificates from Azure Key Vault via Secrets Store CSI driver
+    - Best for: Production environments with centralized certificate management
+    - Enterprise PKI integration
+    - Azure Key Vault integration
 
-3. **CertManager Mode** - Use custom cert-manager issuers (e.g., Let's Encrypt, corporate CA)
-   - Best for: Production environments with existing cert-manager infrastructure
-   - Flexible issuer support
-   - Industry-standard certificates
+3. **CertManager** — Use custom cert-manager issuers (for example, Let's Encrypt or a corporate CA)
+    - Best for: Production environments with existing cert-manager infrastructure
+    - Flexible issuer support
+    - Industry-standard certificates
 
 ### Getting Started with TLS
 
 For comprehensive TLS setup and testing documentation, see:
 
-**📖 [Complete TLS Setup Guide](../../../../documentdb-playground/tls/README.md)**
-
-This guide includes:
-- Quick start with automated scripts (5-minute setup)
-- Detailed configuration for each TLS mode
-- Troubleshooting and best practices
-- Complete script reference
-
-**🧪 [E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md)**
-
-This guide covers:
-- Automated E2E testing with scripts
-- Manual step-by-step testing
-- Validation and verification procedures
-- CI/CD integration examples
+- **[Complete TLS Setup Guide](../../../../documentdb-playground/tls/README.md)** — Quick start with automated scripts, detailed configuration for each TLS mode, troubleshooting, and best practices
+- **[E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md)** — Automated and manual testing, validation procedures, and CI/CD integration examples
 
 ### Quick TLS Setup
 
-For the fastest TLS setup, use our automated script:
+For the fastest TLS setup, use the automated script:
 
 ```bash
 cd documentdb-playground/tls/scripts
@@ -64,96 +51,100 @@ cd documentdb-playground/tls/scripts
   --subscription-id <your-subscription-id>
 ```
 
-This single command will:
-- ✅ Create AKS cluster with all required addons
-- ✅ Install cert-manager and CSI driver
-- ✅ Deploy DocumentDB operator
-- ✅ Configure and validate both SelfSigned and Provided TLS modes
+This command will:
 
-**Duration**: ~25-30 minutes
+- Create an AKS cluster with all required addons
+- Install cert-manager and the CSI driver
+- Deploy the DocumentDB operator
+- Configure and validate both SelfSigned and Provided TLS modes
+
+**Duration**: ~25–30 minutes
 
 ### TLS Configuration Examples
 
-#### Example 1: SelfSigned Mode
+#### SelfSigned Mode
+
+SelfSigned mode requires no additional configuration beyond setting the mode:
 
 ```yaml
-apiVersion: documentdb.io/v1
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-selfsigned
   namespace: default
 spec:
-  version: "16"
-  instances: 3
-  storage:
-    size: 10Gi
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
   tls:
-    mode: SelfSigned
-    selfSigned:
-      issuerName: documentdb-selfsigned-issuer
-      certificateName: documentdb-gateway-cert
+    gateway:
+      mode: SelfSigned
 ```
 
-#### Example 2: Provided Mode (Azure Key Vault)
+#### Provided Mode (Azure Key Vault)
 
 ```yaml
-apiVersion: documentdb.io/v1
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-provided
   namespace: default
 spec:
-  version: "16"
-  instances: 3
-  storage:
-    size: 10Gi
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
   tls:
-    mode: Provided
-    provided:
-      secretName: documentdb-tls-akv
-      secretProviderClass: azure-kv-documentdb
+    gateway:
+      mode: Provided
+      provided:
+        secretName: documentdb-tls-akv
 ```
 
-#### Example 3: CertManager Mode with Let's Encrypt
+#### CertManager Mode with a custom issuer
 
 ```yaml
-apiVersion: documentdb.io/v1
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
-  name: documentdb-letsencrypt
+  name: documentdb-certmanager
   namespace: default
 spec:
-  version: "16"
-  instances: 3
-  storage:
-    size: 10Gi
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
   tls:
-    mode: CertManager
-    certManager:
-      issuerRef:
-        name: letsencrypt-prod
-        kind: ClusterIssuer
-      commonName: documentdb.example.com
-      dnsNames:
-        - documentdb.example.com
-        - "*.documentdb.example.com"
+    gateway:
+      mode: CertManager
+      certManager:
+        issuerRef:
+          name: letsencrypt-prod
+          kind: ClusterIssuer
+        dnsNames:
+          - documentdb.example.com
+          - "*.documentdb.example.com"
 ```
 
 ### TLS Status and Monitoring
 
-Check TLS status of your DocumentDB instance:
+Check the TLS status of your DocumentDB instance:
 
 ```bash
-# Get TLS status
 kubectl get documentdb <name> -n <namespace> -o jsonpath='{.status.tls}' | jq
+```
 
-# Example output:
+Example output:
+
+```json
 {
   "ready": true,
-  "mode": "SelfSigned",
-  "certificateName": "documentdb-gateway-cert",
   "secretName": "documentdb-gateway-cert-tls",
-  "expirationTime": "2025-02-04T10:00:00Z"
+  "message": ""
 }
 ```
 
@@ -161,8 +152,8 @@ kubectl get documentdb <name> -n <namespace> -o jsonpath='{.status.tls}' | jq
 
 The operator handles certificate rotation automatically:
 
-- **SelfSigned & CertManager**: cert-manager rotates certificates before expiration
-- **Provided Mode**: Sync certificates from Azure Key Vault on rotation
+- **SelfSigned and CertManager modes**: cert-manager rotates certificates before expiration
+- **Provided mode**: Sync certificates from Azure Key Vault on rotation
 
 Monitor certificate expiration:
 
@@ -170,7 +161,7 @@ Monitor certificate expiration:
 # Check certificate expiration
 kubectl get certificate -n <namespace> <cert-name> -o jsonpath='{.status.notAfter}'
 
-# Check TLS secret
+# Inspect the TLS secret directly
 kubectl get secret -n <namespace> <tls-secret-name> -o jsonpath='{.data.tls\.crt}' | \
   base64 -d | openssl x509 -noout -dates
 ```
@@ -181,9 +172,9 @@ For comprehensive troubleshooting, see the [E2E Testing Guide](../../../../docum
 
 Common issues:
 
-1. **Certificate not ready**: Check cert-manager logs and certificate status
-2. **Connection failures**: Verify service endpoints and TLS handshake
-3. **Azure Key Vault access denied**: Check managed identity and RBAC permissions
+1. **Certificate not ready** — Check cert-manager logs and certificate status
+2. **Connection failures** — Verify service endpoints and TLS handshake
+3. **Azure Key Vault access denied** — Check managed identity and RBAC permissions
 
 Quick diagnostics:
 
@@ -206,28 +197,32 @@ openssl s_client -connect $EXTERNAL_IP:10260
 
 ## High Availability
 
-Configuration for high availability DocumentDB deployments.
+Deploy multiple instances for automatic failover and read scalability.
 
 ### Multi-Instance Setup
 
+Set `instancesPerNode` to 3 to create a primary with two replicas:
+
 ```yaml
-apiVersion: documentdb.io/v1
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-ha
+  namespace: default
 spec:
-  version: "16"
-  instances: 3  # Number of replicas
-  storage:
-    size: 100Gi
-    storageClass: premium-ssd
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: premium-ssd
 ```
 
 ### Recommended Settings
 
-- **Minimum instances**: 3 for production
+- **Minimum instances**: 3 for production workloads
 - **Storage class**: Use premium SSDs for production
-- **Resource requests**: Set appropriate CPU/memory limits
+- **Resource requests**: Set appropriate CPU and memory limits
 
 ---
 
@@ -239,11 +234,10 @@ Configure persistent storage for DocumentDB instances.
 
 ```yaml
 spec:
-  storage:
-    size: 100Gi
-    storageClass: premium-ssd  # Azure Premium SSD
-    # or: managed-csi-premium
-    # or: azurefile-premium
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: premium-ssd  # Azure Premium SSD
 ```
 
 ### Volume Expansion
@@ -254,7 +248,7 @@ kubectl get storageclass <storage-class> -o jsonpath='{.allowVolumeExpansion}'
 
 # Patch DocumentDB for larger storage
 kubectl patch documentdb <name> -n <namespace> --type='json' \
-  -p='[{"op": "replace", "path": "/spec/storage/size", "value":"200Gi"}]'
+  -p='[{"op": "replace", "path": "/spec/resource/storage/pvcSize", "value":"200Gi"}]'
 ```
 
 ---
@@ -266,27 +260,24 @@ Configure resource requests and limits for optimal performance.
 ### Example Configuration
 
 ```yaml
-apiVersion: documentdb.io/v1
+apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-resources
+  namespace: default
 spec:
-  version: "16"
-  instances: 3
-  resources:
-    limits:
-      cpu: "4"
-      memory: "8Gi"
-    requests:
-      cpu: "2"
-      memory: "4Gi"
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 100Gi
 ```
 
 ### Recommendations
 
-- **Development**: 1 CPU, 2Gi memory
-- **Production**: 2-4 CPUs, 4-8Gi memory
-- **High-load**: 4-8 CPUs, 8-16Gi memory
+- **Development**: 1 CPU, 2 GiB memory
+- **Production**: 2–4 CPUs, 4–8 GiB memory
+- **High-load**: 4–8 CPUs, 8–16 GiB memory
 
 ---
 
@@ -326,12 +317,9 @@ The operator requires specific permissions to manage DocumentDB resources. The H
 
 ### Secrets Management
 
-Credentials are automatically stored in Kubernetes secrets:
+Retrieve credentials from the Kubernetes Secret you created:
 
 ```bash
-# View credentials (base64 encoded)
-kubectl get secret documentdb-credentials -n <namespace> -o yaml
-
 # Decode username
 kubectl get secret documentdb-credentials -n <namespace> \
   -o jsonpath='{.data.username}' | base64 -d
@@ -342,20 +330,16 @@ kubectl get secret documentdb-credentials -n <namespace> \
 ```
 
 For production, consider using:
+
 - Azure Key Vault for secrets (via Secrets Store CSI driver)
 - HashiCorp Vault integration
-- External secrets operator
+- External Secrets Operator
 
 ---
 
 ## Additional Resources
 
-- [Main Documentation](https://microsoft.github.io/documentdb-kubernetes-operator)
+- [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/)
 - [TLS Setup Guide](../../../../documentdb-playground/tls/README.md)
 - [E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md)
-- [GitHub Repository](https://github.com/microsoft/documentdb-kubernetes-operator)
-
----
-
-**Last Updated**: November 2025  
-**Version**: v1
+- [GitHub Repository](https://github.com/documentdb/documentdb-kubernetes-operator)

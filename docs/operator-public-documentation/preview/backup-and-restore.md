@@ -138,7 +138,7 @@ Scheduled backups automatically create backups at regular intervals using a cron
 
 ### Creating a Scheduled Backup
 
-Create a `ScheduledBackup` resource on yaml file scheduledbackup.yaml
+Save the following `ScheduledBackup` resource to `scheduledbackup.yaml`:
 
 ```yaml
 apiVersion: documentdb.io/preview
