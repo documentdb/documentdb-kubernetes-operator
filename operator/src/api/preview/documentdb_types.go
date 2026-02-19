@@ -8,6 +8,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Feature gate constants. PascalCase names following the Kubernetes feature gate convention.
+const (
+	// FeatureGateChangeStreams enables change stream support by setting wal_level=logical.
+	FeatureGateChangeStreams = "ChangeStreams"
+)
+
 // DocumentDBSpec defines the desired state of DocumentDB.
 type DocumentDBSpec struct {
 	// NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.
@@ -76,6 +82,19 @@ type DocumentDBSpec struct {
 	// Backup configures backup settings for DocumentDB.
 	// +optional
 	Backup *BackupConfiguration `json:"backup,omitempty"`
+
+	// FeatureGates enables or disables optional DocumentDB features.
+	// Keys are PascalCase feature names following the Kubernetes feature gate convention.
+	// Example: {"ChangeStreams": true}
+	//
+	// IMPORTANT: When adding a new feature gate, update ALL of the following:
+	// 1. Add a new FeatureGate* constant in this file
+	// 2. Add the key name to the XValidation CEL rule's allowed list below
+	// 3. Add a default entry in the featureGateDefaults map in this file
+	//
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 
 	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
 	// +optional

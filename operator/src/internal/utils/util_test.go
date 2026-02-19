@@ -382,6 +382,52 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 	}
 }
 
+func TestGetDocumentDBImageForInstance(t *testing.T) {
+	tests := []struct {
+		name     string
+		spec     dbpreview.DocumentDBSpec
+		expected string
+	}{
+		{
+			name:     "default image when no overrides",
+			spec:     dbpreview.DocumentDBSpec{},
+			expected: DEFAULT_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "explicit image takes precedence over everything",
+			spec: dbpreview.DocumentDBSpec{
+				DocumentDBImage: "custom-registry/custom-image:v1",
+				FeatureGates:    map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			},
+			expected: "custom-registry/custom-image:v1",
+		},
+		{
+			name: "changestream image when feature gate is enabled",
+			spec: dbpreview.DocumentDBSpec{
+				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			},
+			expected: CHANGESTREAM_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "default image when feature gate is explicitly disabled",
+			spec: dbpreview.DocumentDBSpec{
+				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
+			},
+			expected: DEFAULT_DOCUMENTDB_IMAGE,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := &dbpreview.DocumentDB{Spec: tt.spec}
+			got := GetDocumentDBImageForInstance(db)
+			if got != tt.expected {
+				t.Errorf("GetDocumentDBImageForInstance() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGetPortFor(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -427,32 +473,34 @@ func TestGetPortFor(t *testing.T) {
 
 func TestGetGatewayImageForDocumentDB(t *testing.T) {
 	tests := []struct {
-		name       string
-		documentdb *dbpreview.DocumentDB
-		expected   string
+		name     string
+		spec     dbpreview.DocumentDBSpec
+		expected string
 	}{
 		{
-			name: "uses custom gateway image when specified",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					GatewayImage: "custom-registry/gateway:v1.0.0",
-				},
-			},
-			expected: "custom-registry/gateway:v1.0.0",
-		},
-		{
-			name: "returns default gateway image when not specified",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					GatewayImage: "",
-				},
-			},
+			name:     "default image when no overrides",
+			spec:     dbpreview.DocumentDBSpec{},
 			expected: DEFAULT_GATEWAY_IMAGE,
 		},
 		{
-			name: "returns default when spec has empty gateway image",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			name: "explicit image takes precedence over everything",
+			spec: dbpreview.DocumentDBSpec{
+				GatewayImage: "custom-registry/custom-gateway:v1",
+				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			},
+			expected: "custom-registry/custom-gateway:v1",
+		},
+		{
+			name: "changestream image when feature gate is enabled",
+			spec: dbpreview.DocumentDBSpec{
+				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			},
+			expected: CHANGESTREAM_GATEWAY_IMAGE,
+		},
+		{
+			name: "default image when feature gate is explicitly disabled",
+			spec: dbpreview.DocumentDBSpec{
+				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
 			},
 			expected: DEFAULT_GATEWAY_IMAGE,
 		},
@@ -460,52 +508,10 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetGatewayImageForDocumentDB(tt.documentdb)
-			if result != tt.expected {
-				t.Errorf("GetGatewayImageForDocumentDB() = %q, expected %q", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestGetDocumentDBImageForInstance(t *testing.T) {
-	tests := []struct {
-		name       string
-		documentdb *dbpreview.DocumentDB
-		expected   string
-	}{
-		{
-			name: "uses custom documentdb image when specified",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					DocumentDBImage: "custom-registry/documentdb:v2.0.0",
-				},
-			},
-			expected: "custom-registry/documentdb:v2.0.0",
-		},
-		{
-			name: "returns default documentdb image when not specified",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					DocumentDBImage: "",
-				},
-			},
-			expected: DEFAULT_DOCUMENTDB_IMAGE,
-		},
-		{
-			name: "returns default when spec has empty documentdb image",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
-			},
-			expected: DEFAULT_DOCUMENTDB_IMAGE,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GetDocumentDBImageForInstance(tt.documentdb)
-			if result != tt.expected {
-				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
+			db := &dbpreview.DocumentDB{Spec: tt.spec}
+			got := GetGatewayImageForDocumentDB(db)
+			if got != tt.expected {
+				t.Errorf("GetGatewayImageForDocumentDB() = %q, want %q", got, tt.expected)
 			}
 		})
 	}

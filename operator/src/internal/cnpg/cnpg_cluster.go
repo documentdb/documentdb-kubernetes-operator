@@ -78,11 +78,18 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-					Parameters: map[string]string{
-						"cron.database_name":    "postgres",
-						"max_replication_slots": "10",
-						"max_wal_senders":       "10",
-					},
+					Parameters: func() map[string]string {
+						params := map[string]string{
+							"cron.database_name":    "postgres",
+							"max_replication_slots": "10",
+							"max_wal_senders":       "10",
+						}
+					// TODO: once DocumentDB supports change streams natively, additional GUC parameters may be needed here.
+						if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
+							params["wal_level"] = "logical"
+						}
+						return params
+					}(),
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 trust",
 						"host all all ::0/0 trust",

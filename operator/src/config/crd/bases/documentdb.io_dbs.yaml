@@ -1184,6 +1184,22 @@ spec:
                 required:
                 - serviceType
                 type: object
+              featureGates:
+                additionalProperties:
+                  type: boolean
+                description: |-
+                  FeatureGates enables or disables optional DocumentDB features.
+                  Keys are PascalCase feature names following the Kubernetes feature gate convention.
+                  Example: {"ChangeStreams": true}
+
+                  IMPORTANT: When adding a new feature gate, update ALL of the following:
+                  1. Add a new FeatureGate* constant in this file
+                  2. Add the key name to the XValidation CEL rule's allowed list below
+                  3. Add a default entry in the featureGateDefaults map in this file
+                type: object
+                x-kubernetes-validations:
+                - message: 'unsupported feature gate key; allowed keys: ChangeStreams'
+                  rule: self.all(key, key in ['ChangeStreams'])
               gatewayImage:
                 description: |-
                   GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
