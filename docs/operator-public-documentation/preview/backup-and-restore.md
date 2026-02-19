@@ -316,9 +316,10 @@ spec:
 ### How PV Retention Works
 
 1. When `persistentVolumeReclaimPolicy` is `Retain` (the default), the operator updates the underlying PersistentVolume's reclaim policy
-2. When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state
-3. The operator emits a warning event listing the retained PVs for visibility
-4. The retained PV contains all the database data and can be used to recover the cluster
+2. The PV controller labels each PV with `documentdb.io/cluster` and `documentdb.io/namespace` for easy identification
+3. When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state
+4. The operator emits a warning event listing the retained PVs for visibility
+5. The retained PV contains all the database data and can be used to recover the cluster
 
 ### Recovering from a Retained PV
 
@@ -327,14 +328,8 @@ To restore a DocumentDB cluster from a retained PV:
 **Step 1: Identify the retained PV**
 
 ```bash
-# List PVs in Released state
-kubectl get pv | grep Released
-
-# Find PVCs that belonged to your deleted cluster (PVCs carry the cnpg.io/cluster label)
-kubectl get pvc -n <namespace> -l cnpg.io/cluster=<old-cluster-name>
-
-# For a given PVC, find the bound PV name
-kubectl get pvc <pvc-name> -n <namespace> -o jsonpath='{.spec.volumeName}'
+# Find PVs by DocumentDB cluster labels 
+kubectl get pv -l documentdb.io/cluster=<cluster-name>,documentdb.io/namespace=<namespace>
 ```
 
 **Step 2: Create a new DocumentDB cluster with PV recovery**
@@ -376,8 +371,8 @@ spec:
 After successful recovery (or when you no longer need the data), delete the retained PV:
 
 ```bash
-# View retention warning events
-kubectl get events -n <namespace> --field-selector reason=PVsRetained
+# Find retained PVs for a cluster
+kubectl get pv -l documentdb.io/cluster=<cluster-name>,documentdb.io/namespace=<namespace>
 
 # Delete the retained PV when no longer needed
 kubectl delete pv <pv-name>

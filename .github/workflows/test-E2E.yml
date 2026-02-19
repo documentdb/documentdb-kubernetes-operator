@@ -284,15 +284,12 @@ jobs:
       run: |
         echo "Verifying PV mount options are set by the PV controller..."
         
-        # Get the PVC and PV names from the existing cluster
-        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_NAME }} -o jsonpath='{.items[0].metadata.name}')
-        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
-        
-        echo "PVC name: $pvc_name"
+        # Find PV directly using documentdb.io labels set by the PV controller
+        pv_name=$(kubectl get pv -l documentdb.io/cluster=${{ env.DB_NAME }},documentdb.io/namespace=${{ env.DB_NS }} -o jsonpath='{.items[0].metadata.name}')
         echo "PV name: $pv_name"
         
         if [ -z "$pv_name" ]; then
-          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          echo "❌ Failed to find PV with documentdb.io/cluster=${{ env.DB_NAME }} and documentdb.io/namespace=${{ env.DB_NS }}"
           exit 1
         fi
         
@@ -318,15 +315,12 @@ jobs:
         # Test 1: Verify default policy is Retain on the existing cluster
         echo "=== Test 1: Verify default PV reclaim policy is Retain ==="
         
-        # Get the PVC and PV names from the existing cluster
-        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_NAME }} -o jsonpath='{.items[0].metadata.name}')
-        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
-        
-        echo "PVC name: $pvc_name"
+        # Find PV directly using documentdb.io labels set by the PV controller
+        pv_name=$(kubectl get pv -l documentdb.io/cluster=${{ env.DB_NAME }},documentdb.io/namespace=${{ env.DB_NS }} -o jsonpath='{.items[0].metadata.name}')
         echo "PV name: $pv_name"
         
         if [ -z "$pv_name" ]; then
-          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          echo "❌ Failed to find PV with documentdb.io/cluster=${{ env.DB_NAME }} and documentdb.io/namespace=${{ env.DB_NS }}"
           exit 1
         fi
         
