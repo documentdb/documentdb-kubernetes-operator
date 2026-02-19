@@ -1,0 +1,27 @@
+# DocumentDB to Azure DocumentDB (with MongoDB compatibility) Sync Configuration
+
+# Source: DocumentDB instance created by the DocumentDB Kubernetes Operator
+source:
+  uri: "<SOURCE_CONNECTION_STRING>"
+
+# Target: Azure DocumentDB (with MongoDB compatibility)
+target:
+  uri: "<TARGET_CONNECTION_STRING>"
+
+# Watch configuration - collections to sync
+watch:
+  # List of collections to watch in "database.collection" format
+  collections:
+    - <database>.<collection>
+    # - mydb.orders
+    # - mydb.users
+
+# State management
+state:
+  # How often to persist state to disk (number of changes)
+  # Tokens are also flushed when the stream is idle, so no changes are lost.
+  persist_interval: 10
+
+# Logging
+logging:
+  level: INFO

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -339,6 +340,101 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).To(HaveKey("gatewayTLSSecret"))
 		Expect(result.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("my-tls-secret"))
+	})
+
+	Context("wal_level parameter", func() {
+		It("does not include wal_level when featureGates is nil", func() {
+			req := ctrl.Request{}
+			req.Name = "test-cluster"
+			req.Namespace = "default"
+
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "10Gi",
+						},
+					},
+				},
+			}
+
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, logr.Discard())
+			_, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
+			Expect(exists).To(BeFalse())
+		})
+
+		It("sets wal_level to logical when ChangeStreams feature gate is enabled", func() {
+			req := ctrl.Request{}
+			req.Name = "test-cluster"
+			req.Namespace = "default"
+
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "10Gi",
+						},
+					},
+					FeatureGates: map[string]bool{
+						dbpreview.FeatureGateChangeStreams: true,
+					},
+				},
+			}
+
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, logr.Discard())
+			walLevel, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
+			Expect(exists).To(BeTrue())
+			Expect(walLevel).To(Equal("logical"))
+		})
+
+		It("does not include wal_level when ChangeStreams feature gate is explicitly disabled", func() {
+			req := ctrl.Request{}
+			req.Name = "test-cluster"
+			req.Namespace = "default"
+
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "10Gi",
+						},
+					},
+					FeatureGates: map[string]bool{
+						dbpreview.FeatureGateChangeStreams: false,
+					},
+				},
+			}
+
+			cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, logr.Discard())
+			_, exists := cluster.Spec.PostgresConfiguration.Parameters["wal_level"]
+			Expect(exists).To(BeFalse())
+		})
+	})
+
+	It("always includes default PostgreSQL parameters", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, logr.Discard())
+		params := cluster.Spec.PostgresConfiguration.Parameters
+		Expect(params).To(HaveKeyWithValue("cron.database_name", "postgres"))
+		Expect(params).To(HaveKeyWithValue("max_replication_slots", "10"))
+		Expect(params).To(HaveKeyWithValue("max_wal_senders", "10"))
 	})
 })
 

@@ -345,6 +345,12 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
 	// }
 
+	// Use changestream-enabled image when the ChangeStreams feature gate is on.
+	// TODO: remove this override once change stream support is included in the official images.
+	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
+		return CHANGESTREAM_GATEWAY_IMAGE
+	}
+
 	// Fall back to default
 	return DEFAULT_GATEWAY_IMAGE
 }
@@ -366,6 +372,12 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 	// if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
 	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
 	// }
+
+	// Use changestream-enabled image when the ChangeStreams feature gate is on.
+	// TODO: remove this override once change stream support is included in the official images.
+	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
+		return CHANGESTREAM_DOCUMENTDB_IMAGE
+	}
 
 	// Fall back to default
 	return DEFAULT_DOCUMENTDB_IMAGE
