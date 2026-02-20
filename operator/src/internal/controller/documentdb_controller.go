@@ -6,6 +6,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -317,7 +318,13 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// Don't reque again unless there is a change
+	// Check if documentdb extension needs to be upgraded (image update + ALTER EXTENSION)
+	if err := r.upgradeDocumentDBExtensionIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
+		logger.Error(err, "Failed to upgrade DocumentDB extension")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	// Don't requeue again unless there is a change
 	return ctrl.Result{}, nil
 }
 
@@ -734,4 +741,185 @@ func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, document
 
 	logger.Info("Created temp PVC for PV recovery", "pvc", tempPVCName, "pv", pvName)
 	return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+}
+
+// parseExtensionVersionsFromOutput parses the output of pg_available_extensions query
+// Returns defaultVersion, installedVersion, and a boolean indicating if parsing was successful
+// Expected output format:
+//
+//	 default_version | installed_version
+//	-----------------+-------------------
+//	 0.110-0         | 0.110-0
+func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedVersion string, ok bool) {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 3 {
+		return "", "", false
+	}
+
+	// Parse the data row (3rd line, index 2)
+	dataLine := strings.TrimSpace(lines[2])
+	parts := strings.Split(dataLine, "|")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	defaultVersion = strings.TrimSpace(parts[0])
+	installedVersion = strings.TrimSpace(parts[1])
+	return defaultVersion, installedVersion, true
+}
+
+// upgradeDocumentDBExtensionIfNeeded handles the complete DocumentDB extension upgrade process:
+// 1. Updates the extension image in CNPG cluster spec if needed (triggers rolling restart)
+// 2. Runs ALTER EXTENSION documentdb UPDATE if the installed version differs from default
+// 3. Updates the DocumentDB status with the new extension version
+func (r *DocumentDBReconciler) upgradeDocumentDBExtensionIfNeeded(ctx context.Context, currentCluster, desiredCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
+	logger := log.FromContext(ctx)
+
+	// Refetch documentdb to avoid potential race conditions with status updates
+	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
+		return fmt.Errorf("failed to refetch DocumentDB resource: %w", err)
+	}
+
+	// Step 1: Check if extension image needs to be updated in CNPG cluster spec
+	imageUpdated, err := r.updateExtensionImageIfNeeded(ctx, currentCluster, desiredCluster)
+	if err != nil {
+		return fmt.Errorf("failed to update extension image: %w", err)
+	}
+
+	// If image was updated, CNPG will trigger a rolling restart.
+	// Wait for pod to become healthy before running ALTER EXTENSION.
+	if imageUpdated {
+		logger.Info("Extension image updated, waiting for pod to become healthy before running ALTER EXTENSION")
+		return nil
+	}
+
+	// Step 2: Check if primary pod is healthy before running ALTER EXTENSION
+	if !slices.Contains(currentCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCluster.Status.CurrentPrimary) {
+		logger.Info("Current primary pod is not healthy; skipping DocumentDB extension upgrade")
+		return nil
+	}
+
+	// Step 3: Check if ALTER EXTENSION UPDATE is needed
+	checkVersionSQL := "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'documentdb'"
+	output, err := r.executeSQLCommand(ctx, currentCluster, checkVersionSQL)
+	if err != nil {
+		return fmt.Errorf("failed to check documentdb extension versions: %w", err)
+	}
+
+	defaultVersion, installedVersion, ok := parseExtensionVersionsFromOutput(output)
+	if !ok {
+		logger.Info("DocumentDB extension not found or not installed yet", "output", output)
+		return nil
+	}
+
+	if installedVersion == "" {
+		logger.Info("DocumentDB extension is not installed yet")
+		return nil
+	}
+
+	// Step 4: Update DocumentDB version in status (even if no upgrade needed)
+	if documentdb.Status.DocumentDBVersion != installedVersion {
+		documentdb.Status.DocumentDBVersion = installedVersion
+		if err := r.Status().Update(ctx, documentdb); err != nil {
+			logger.Error(err, "Failed to update DocumentDB status with extension version")
+			return fmt.Errorf("failed to update DocumentDB status with extension version: %w", err)
+		}
+	}
+
+	// If versions match, no upgrade needed
+	if defaultVersion == installedVersion {
+		logger.V(1).Info("DocumentDB extension is up to date", "version", installedVersion)
+		return nil
+	}
+
+	// Step 5: Run ALTER EXTENSION to upgrade
+	logger.Info("Upgrading DocumentDB extension",
+		"fromVersion", installedVersion,
+		"toVersion", defaultVersion)
+
+	updateSQL := "ALTER EXTENSION documentdb UPDATE"
+	if _, err := r.executeSQLCommand(ctx, currentCluster, updateSQL); err != nil {
+		return fmt.Errorf("failed to run ALTER EXTENSION documentdb UPDATE: %w", err)
+	}
+
+	logger.Info("Successfully upgraded DocumentDB extension",
+		"fromVersion", installedVersion,
+		"toVersion", defaultVersion)
+
+	// Step 6: Update DocumentDB version in status after upgrade
+	documentdb.Status.DocumentDBVersion = defaultVersion
+	if err := r.Status().Update(ctx, documentdb); err != nil {
+		logger.Error(err, "Failed to update DocumentDB status after extension upgrade")
+		return fmt.Errorf("failed to update DocumentDB status after extension upgrade: %w", err)
+	}
+
+	return nil
+}
+
+// updateExtensionImageIfNeeded checks if the CNPG cluster's extension image differs from the desired one
+// and updates it using JSON patch if needed. Returns true if the image was updated.
+func (r *DocumentDBReconciler) updateExtensionImageIfNeeded(ctx context.Context, currentCluster, desiredCluster *cnpgv1.Cluster) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	// Get current documentdb extension image
+	var currentImage string
+	for _, ext := range currentCluster.Spec.PostgresConfiguration.Extensions {
+		if ext.Name == "documentdb" {
+			currentImage = ext.ImageVolumeSource.Reference
+			break
+		}
+	}
+
+	// Get desired documentdb extension image
+	var desiredExtImage string
+	for _, ext := range desiredCluster.Spec.PostgresConfiguration.Extensions {
+		if ext.Name == "documentdb" {
+			desiredExtImage = ext.ImageVolumeSource.Reference
+			break
+		}
+	}
+
+	// If images are the same, no update needed
+	if currentImage == desiredExtImage {
+		return false, nil
+	}
+
+	logger.Info("Updating DocumentDB extension image in CNPG cluster",
+		"currentImage", currentImage,
+		"desiredImage", desiredExtImage,
+		"clusterName", currentCluster.Name)
+
+	// Find the index of the documentdb extension
+	extIndex := -1
+	for i, ext := range currentCluster.Spec.PostgresConfiguration.Extensions {
+		if ext.Name == "documentdb" {
+			extIndex = i
+			break
+		}
+	}
+
+	if extIndex == -1 {
+		return false, fmt.Errorf("documentdb extension not found in CNPG cluster spec")
+	}
+
+	// Use JSON patch to update the extension image
+	patch := []map[string]interface{}{
+		{
+			"op":    "replace",
+			"path":  fmt.Sprintf("/spec/postgresql/extensions/%d/image/reference", extIndex),
+			"value": desiredExtImage,
+		},
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal patch: %w", err)
+	}
+
+	if err := r.Client.Patch(ctx, currentCluster, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
+		return false, fmt.Errorf("failed to patch CNPG cluster with new extension image: %w", err)
+	}
+
+	logger.Info("Successfully updated DocumentDB extension image in CNPG cluster")
+	return true, nil
 }

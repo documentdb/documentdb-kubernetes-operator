@@ -1221,6 +1221,12 @@ spec:
                 maximum: 1
                 minimum: 1
                 type: integer
+              postgresImage:
+                default: ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm
+                description: |-
+                  PostgresImage is the container image to use for the PostgreSQL server.
+                  If not specified, defaults to "ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm".
+                type: string
               resource:
                 description: Resource specifies the storage resources for DocumentDB.
                 properties:
@@ -1355,6 +1361,10 @@ spec:
             description: DocumentDBStatus defines the observed state of DocumentDB.
             properties:
               connectionString:
+                type: string
+              documentDBVersion:
+                description: DocumentDBVersion is the currently installed version
+                  of the DocumentDB extension.
                 type: string
               localPrimary:
                 type: string
