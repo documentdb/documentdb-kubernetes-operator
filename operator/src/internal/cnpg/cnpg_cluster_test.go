@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -114,7 +114,7 @@ var _ = Describe("getBootstrapConfiguration", func() {
 		// Temp PVC name is based on documentdb name
 		Expect(result.Recovery.VolumeSnapshots.Storage.Name).To(Equal("test-cluster-pv-recovery-temp"))
 		Expect(result.Recovery.VolumeSnapshots.Storage.Kind).To(Equal("PersistentVolumeClaim"))
-		Expect(result.Recovery.VolumeSnapshots.Storage.APIGroup).To(Equal(pointer.String("")))
+		Expect(result.Recovery.VolumeSnapshots.Storage.APIGroup).To(Equal(ptr.To("")))
 		Expect(result.Recovery.Backup).To(BeNil())
 		Expect(result.InitDB).To(BeNil())
 	})

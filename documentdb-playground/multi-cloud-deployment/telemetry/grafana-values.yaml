@@ -1,0 +1,22 @@
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-server.documentdb-preview-ns.svc.cluster.local
+      access: proxy
+      isDefault: true
+      
+adminPassword: admin123
+
+service:
+  type: LoadBalancer
+  port: 3000
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  size: 1Gi

@@ -133,7 +133,7 @@ func (impl Implementation) reconcileMetadata(
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-			Value: "http://localhost:4412",
+			Value: "http://" + cluster.Name + "-collector." + cluster.Namespace + ".svc.cluster.local:4317",
 		},
 	}
 
