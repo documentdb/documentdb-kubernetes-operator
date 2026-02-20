@@ -62,8 +62,8 @@ var securityMountOptions = []string{"nodev", "noexec", "nosuid"}
 // When a PV uses one of these provisioners, security mount options will be skipped
 // to avoid PV binding failures.
 var unsupportedMountOptionsProvisioners = []string{
-	"rancher.io/local-path",      // kind default local-path-provisioner
-	"k8s.io/minikube-hostpath",   // minikube default hostpath provisioner
+	"rancher.io/local-path",    // kind default local-path-provisioner
+	"k8s.io/minikube-hostpath", // minikube default hostpath provisioner
 }
 
 // PersistentVolumeReconciler reconciles PersistentVolume objects
@@ -133,10 +133,20 @@ func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Con
 		pv.Labels = make(map[string]string)
 	}
 	if pv.Labels[util.LabelCluster] != documentdb.Name {
+		logger.Info("PV cluster label needs update",
+			"pv", pv.Name,
+			"currentLabel", pv.Labels[util.LabelCluster],
+			"desiredLabel", documentdb.Name,
+			"documentdb", documentdb.Name)
 		pv.Labels[util.LabelCluster] = documentdb.Name
 		needsUpdate = true
 	}
 	if pv.Labels[util.LabelNamespace] != documentdb.Namespace {
+		logger.Info("PV namespace label needs update",
+			"pv", pv.Name,
+			"currentLabel", pv.Labels[util.LabelNamespace],
+			"desiredLabel", documentdb.Namespace,
+			"documentdb", documentdb.Name)
 		pv.Labels[util.LabelNamespace] = documentdb.Namespace
 		needsUpdate = true
 	}
