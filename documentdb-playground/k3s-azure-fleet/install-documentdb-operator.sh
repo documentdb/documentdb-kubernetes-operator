@@ -2,14 +2,13 @@
 set -euo pipefail
 
 # Install DocumentDB operator on all clusters
-# - AKS hub: installed via Helm (from OCI registry or local chart)
+# - AKS hub: installed via Helm (from published chart or local source)
 # - k3s VMs: installed via Azure VM Run Command (CNPG from upstream, operator manifests via base64)
 #
 # Environment variables:
-#   BUILD_CHART  - "true" (default) builds from local source; "false" pulls from OCI registry
-#   CHART_REGISTRY - OCI registry URL (default: oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator)
-#   CHART_VERSION  - Chart version when using OCI registry (default: 0.0.1)
-#   VERSION        - Local chart version number (default: 200)
+#   BUILD_CHART    - "true" builds from local source; "false" (default) uses published Helm chart
+#   CHART_VERSION  - Chart version when using published chart (default: latest)
+#   VERSION        - Local chart version number when BUILD_CHART=true (default: 200)
 #   VALUES_FILE    - Optional Helm values file path
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,16 +24,20 @@ fi
 CHART_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)/operator/documentdb-helm-chart"
 VERSION="${VERSION:-200}"
 VALUES_FILE="${VALUES_FILE:-}"
-BUILD_CHART="${BUILD_CHART:-true}"
-CHART_REGISTRY="${CHART_REGISTRY:-oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator}"
-CHART_VERSION="${CHART_VERSION:-0.0.1}"
+BUILD_CHART="${BUILD_CHART:-false}"
+HELM_REPO_URL="https://documentdb.github.io/documentdb-kubernetes-operator"
+CHART_VERSION="${CHART_VERSION:-}"
 HUB_CLUSTER_NAME="${HUB_CLUSTER_NAME:-hub-${HUB_REGION}}"
 
 echo "======================================="
 echo "DocumentDB Operator Installation"
 echo "======================================="
 echo "Hub Cluster: $HUB_CLUSTER_NAME"
-echo "Chart Directory: $CHART_DIR"
+if [ "$BUILD_CHART" = "true" ]; then
+  echo "Chart Source: local ($CHART_DIR)"
+else
+  echo "Chart Source: published (documentdb/documentdb-operator${CHART_VERSION:+ v$CHART_VERSION})"
+fi
 echo "======================================="
 
 # Check prerequisites
@@ -62,8 +65,17 @@ if [ "$BUILD_CHART" = "true" ]; then
   helm package "$CHART_DIR" --version "0.0.${VERSION}" --destination "$SCRIPT_DIR"
   CHART_REF="$CHART_PKG"
 else
-  echo "Installing from OCI registry: $CHART_REGISTRY (version $CHART_VERSION)..."
-  CHART_REF="$CHART_REGISTRY --version $CHART_VERSION"
+  echo "Using published Helm chart..."
+  helm repo add documentdb "$HELM_REPO_URL" --force-update 2>/dev/null
+  helm repo update documentdb
+  CHART_REF="documentdb/documentdb-operator"
+  if [ -n "$CHART_VERSION" ]; then
+    CHART_REF="$CHART_REF --version $CHART_VERSION"
+  fi
+  # Pull chart locally (needed for k3s manifest generation in Step 2)
+  rm -f "$SCRIPT_DIR"/documentdb-operator-*.tgz
+  helm pull documentdb/documentdb-operator ${CHART_VERSION:+--version "$CHART_VERSION"} --destination "$SCRIPT_DIR"
+  CHART_PKG=$(ls "$SCRIPT_DIR"/documentdb-operator-*.tgz 2>/dev/null | head -1)
 fi
 
 echo ""
@@ -89,11 +101,10 @@ echo "======================================="
 # Generate DocumentDB-specific manifests (excluding CNPG subchart)
 echo "Generating DocumentDB operator manifests..."
 
-# k3s VMs need a local chart package for helm template, even when AKS uses OCI
-if [ "$BUILD_CHART" != "true" ] && [ ! -f "$CHART_PKG" ]; then
-  echo "Building local chart package for k3s manifest generation..."
-  helm dependency update "$CHART_DIR"
-  helm package "$CHART_DIR" --version "0.0.${VERSION}" --destination "$SCRIPT_DIR"
+# k3s VMs need a local chart package for helm template
+if [ ! -f "$CHART_PKG" ]; then
+  echo "Error: Chart package not found at $CHART_PKG"
+  exit 1
 fi
 
 DOCDB_MANIFESTS=$(mktemp)
