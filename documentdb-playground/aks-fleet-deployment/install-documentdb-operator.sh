@@ -10,6 +10,7 @@ set -euo pipefail
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 HUB_REGION="${HUB_REGION:-westus3}"
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/operator/documentdb-helm-chart"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="${VERSION:-200}"
 VALUES_FILE="${VALUES_FILE:-}"
 BUILD_CHART="${BUILD_CHART:-true}"
@@ -76,7 +77,7 @@ else
   fi
 fi
 
-kubectl --context "$HUB_CLUSTER" apply -f ./documentdb-operator-crp.yaml
+kubectl --context "$HUB_CLUSTER" apply -f $SCRIPT_DIR/documentdb-operator-crp.yaml
 
 # Get all member clusters
 

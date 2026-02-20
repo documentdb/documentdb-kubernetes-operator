@@ -29,6 +29,9 @@ const (
 	LABEL_NODE_INDEX               = "node_index"
 	LABEL_SERVICE_TYPE             = "service_type"
 	LABEL_REPLICATION_CLUSTER_TYPE = "replication_cluster_type"
+	LABEL_DOCUMENTDB_NAME          = "documentdb.io/name"
+	LABEL_DOCUMENTDB_COMPONENT     = "documentdb.io/component"
+	FLEET_IN_USE_BY_ANNOTATION     = "networking.fleet.azure.com/service-in-use-by"
 
 	DOCUMENTDB_SERVICE_PREFIX = "documentdb-service-"
 
@@ -47,6 +50,9 @@ const (
 	JSON_PATCH_PATH_INSTANCES            = "/spec/instances"
 	JSON_PATCH_PATH_PLUGINS              = "/spec/plugins"
 	JSON_PATCH_PATH_REPLICATION_SLOTS    = "/spec/replicationSlots"
+	JSON_PATCH_PATH_EXTERNAL_CLUSTERS    = "/spec/externalClusters"
+	JSON_PATCH_PATH_MANAGED_SERVICES     = "/spec/managed/services/additional"
+	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
 
 	// JSON Patch operations
 	JSON_PATCH_OP_REPLACE = "replace"
