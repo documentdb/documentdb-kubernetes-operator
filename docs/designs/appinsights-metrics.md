@@ -32,15 +32,15 @@ This document specifies all telemetry data points to be collected by Application
 - **Description**: Total number of active DocumentDB clusters managed by the operator
 - **Dimensions**:
   - `namespace_hash`: SHA-256 hash of the Kubernetes namespace
-  - `cloud_provider`: `aks`, `eks`, `gke`
-  - `environment`: `aks`, `eks`, `gke` (from spec.environment)
+  - `cloud_provider`: Detected infrastructure provider (`aks`, `eks`, `gke`, `unknown`)
+  - `environment`: Logical deployment environment (e.g., `dev`, `staging`, `prod`) from `spec.environment`, distinct from `cloud_provider`
 
 ### Cluster Size Metrics
 - **Metric**: `documentdb.cluster.configuration`
 - **Properties per cluster**:
   - `cluster_id`: Auto-generated GUID for the DocumentDB cluster (for correlation without PII)
   - `namespace_hash`: SHA-256 hash of the Kubernetes namespace
-  - `node_count`: Number of nodes (currently always 1)
+  - `node_count` (optional): Number of nodes in the cluster; omit this property while the operator only supports a single node
   - `instances_per_node`: Number of instances per node (1-3)
   - `total_instances`: node_count × instances_per_node
   - `pvc_size_category`: PVC size category (`small` <50Gi, `medium` 50-200Gi, `large` >200Gi)
@@ -51,7 +51,7 @@ This document specifies all telemetry data points to be collected by Application
 - **Value**: `1` (enabled) or `0` (disabled)
 - **Properties**:
   - `cluster_id`: Auto-generated GUID for the DocumentDB cluster
-  - `cross_cloud_networking_strategy`: `AzureFleet`, `Istio`, `None`
+  - `multi_cluster_networking_strategy`: `AzureFleet`, `Istio`, `None`
   - `primary_cluster_id`: GUID of the primary cluster
   - `replica_count`: Number of clusters in replication list
   - `high_availability`: Boolean indicating HA replicas on primary
@@ -111,7 +111,7 @@ This document specifies all telemetry data points to be collected by Application
   - `retention_days`: Configured retention period
   - `backup_phase`: `starting`, `running`, `completed`, `failed`, `skipped`
   - `cloud_provider`: Environment where backup was taken
-  - `is_primary_cluster`: Boolean indicating if backup from primary
+  - `from_primary_cluster`: Boolean indicating if backup was taken from primary cluster
 
 - **Event**: `BackupDeleted`
 - **Properties**:
@@ -142,7 +142,7 @@ This document specifies all telemetry data points to be collected by Application
   - `namespace_hash`: SHA-256 hash of the Kubernetes namespace
   - `restore_duration_seconds`: Time to restore from backup
   - `backup_age_hours`: Age of backup at restore time
-  - `restore_phase`: `starting`, `running`, `completed`, `failed`
+  - `restore_phase`: `starting`, `running`, `completed`, `failed`, `skipped`
 
 ---
 
@@ -154,8 +154,8 @@ This document specifies all telemetry data points to be collected by Application
   - `cluster_id`: Auto-generated GUID for the cluster
   - `namespace_hash`: SHA-256 hash of the Kubernetes namespace
   - `failover_type`: `automatic`, `manual`, `switchover`
-  - `old_primary_index`: Index of the previous primary instance (e.g., 0, 1, 2)
-  - `new_primary_index`: Index of the new primary instance
+  - `old_primary_index`: Zero-based index (instance ordinal) of the previous primary instance (`0..instances_per_node-1`, e.g., `0, 1, 2` for 3 instances)
+  - `new_primary_index`: Zero-based index (instance ordinal) of the new primary instance (`0..instances_per_node-1`, e.g., `0, 1, 2` for 3 instances)
   - `failover_duration_seconds`: Time to complete failover
   - `downtime_seconds`: Observed downtime during failover
   - `replication_lag_bytes`: Replication lag before failover
@@ -163,7 +163,7 @@ This document specifies all telemetry data points to be collected by Application
 
 ### Replication Health
 - **Metric**: `documentdb.replication.lag.bytes`
-- **Description**: Replication lag in bytes (aggregated over 2-hour windows)
+- **Description**: Replication lag in bytes (aggregated over 2-hour windows). Note: The 2-hour aggregation window is chosen to balance operational visibility with telemetry cost. For real-time alerting on replication issues, use Kubernetes-native monitoring (e.g., Prometheus metrics exposed by CNPG). This telemetry metric is intended for trend analysis and capacity planning rather than incident detection.
 - **Dimensions**: `cluster_id`, `replica_cluster_id`, `namespace_hash`
 - **Statistics**: min, max, avg (reported as tuple)
 - **Frequency**: Every 2 hours (aggregated)
@@ -183,7 +183,11 @@ This document specifies all telemetry data points to be collected by Application
   - `resource_id`: Auto-generated GUID of the resource
   - `namespace_hash`: SHA-256 hash of the Kubernetes namespace
   - `error_type`: `cluster-creation`, `backup-failure`, `restore-failure`, `volume-snapshot`, `replication-config`, `tls-cert`
-  - `error_message`: Sanitized error message (no PII)
+  - `error_message`: Sanitized error message (no PII). The message MUST:
+    - avoid including raw Kubernetes resource names, namespaces, node names, IP addresses, hostnames, file paths, usernames, email addresses, cloud account IDs, or any token/secret values
+    - be derived from a stable error category and high-level description (for example, "PVC provisioning failed" or "TLS certificate validation error") rather than raw provider/library error strings
+    - be safe to log in multi-tenant environments
+    - when in doubt, prefer mapping to a coarse-grained description based on `error_type` and `error_code`
   - `error_code`: Standard error code
   - `retry_count`: Number of retry attempts
   - `resolution_status`: `pending`, `resolved`, `failed`
@@ -225,9 +229,10 @@ This document specifies all telemetry data points to be collected by Application
 
 ### Plugin Usage
 - **Metric**: `documentdb.plugin.usage.count`
+- **Description**: Tracks usage of optional operator plugins that extend core functionality.
 - **Properties**:
-  - `sidecar_injector_plugin_enabled`: Boolean indicating if plugin is used
-  - `wal_replica_plugin_enabled`: Boolean indicating if plugin is used
+  - `sidecar_injector_plugin_enabled`: Boolean indicating whether the sidecar injector plugin is enabled for the operator (e.g., for injecting supporting sidecars into DocumentDB pods).
+  - `wal_replica_plugin_enabled`: Boolean indicating whether the WAL replica plugin is enabled. This is reserved for a future/experimental plugin that manages write-ahead-log (WAL) replication behavior; in operator versions where this plugin is not implemented, this flag MUST remain `false`.
 
 ---
 
@@ -304,3 +309,4 @@ This document specifies all telemetry data points to be collected by Application
 |------|---------|---------|
 | 2026-01-08 | 1.0 | Initial specification |
 | 2026-01-29 | 1.1 | Address PII concerns: replaced cluster/backup names with GUIDs, hashed namespaces, removed storage class and container image names, categorized errors instead of raw messages, added more kubernetes distributions |
+| 2026-02-20 | 1.2 | Address PR review feedback: clarified environment vs cloud_provider distinction, made node_count optional, renamed cross_cloud_networking_strategy to multi_cluster_networking_strategy, renamed is_primary_cluster to from_primary_cluster, added skipped state to restore_phase, clarified zero-based indexing for primary indices, added rationale for 2-hour replication lag aggregation, expanded error_message sanitization guidance, documented WAL replica plugin as future/experimental |
