@@ -11,11 +11,14 @@ import (
 	"github.com/spf13/cobra"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/documentdb/documentdb-operator/api/preview"
 )
 
 const (
@@ -31,6 +34,7 @@ type promoteOptions struct {
 	targetCluster  string
 	targetContext  string
 	skipWait       bool
+	failover       bool
 	waitTimeout    time.Duration
 	pollInterval   time.Duration
 }
@@ -55,6 +59,7 @@ func newPromoteCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.targetCluster, "target-cluster", opts.targetCluster, "Name of the cluster that should become primary (required)")
 	cmd.Flags().StringVar(&opts.targetContext, "cluster-context", opts.targetContext, "Kubeconfig context for verifying member status (defaults to current context)")
 	cmd.Flags().BoolVar(&opts.skipWait, "skip-wait", opts.skipWait, "Return immediately after submitting the promotion request")
+	cmd.Flags().BoolVar(&opts.failover, "failover", opts.failover, "Perform a failover promotion (may result in data loss)")
 	cmd.Flags().DurationVar(&opts.waitTimeout, "wait-timeout", 10*time.Minute, "Maximum time to wait for the promotion to complete")
 	cmd.Flags().DurationVar(&opts.pollInterval, "poll-interval", 10*time.Second, "Polling interval while waiting for the promotion to complete")
 
@@ -148,11 +153,41 @@ func (o *promoteOptions) run(ctx context.Context, cmd *cobra.Command) error {
 func (o *promoteOptions) patchDocumentDB(ctx context.Context, dyn dynamic.Interface) error {
 	gvr := schema.GroupVersionResource{Group: documentDBGVRGroup, Version: documentDBGVRVersion, Resource: documentDBGVRResource}
 
+	clusterReplicationPatch := map[string]any{
+		"primary": o.targetCluster,
+	}
+
+	// If failover is true, remove the old primary from clusterList
+	if o.failover {
+		unstructuredDoc, err := dyn.Resource(gvr).Namespace(o.namespace).Get(ctx, o.documentDBName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get DocumentDB %q: %w", o.documentDBName, err)
+		}
+
+		var doc preview.DocumentDB
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredDoc.Object, &doc); err != nil {
+			return fmt.Errorf("failed to convert DocumentDB %q to typed object: %w", o.documentDBName, err)
+		}
+
+		if doc.Spec.ClusterReplication == nil {
+			return fmt.Errorf("DocumentDB %q does not have clusterReplication configured", o.documentDBName)
+		}
+
+		oldPrimary := doc.Spec.ClusterReplication.Primary
+		if oldPrimary != "" && len(doc.Spec.ClusterReplication.ClusterList) > 0 {
+			var newClusterList []preview.MemberCluster
+			for _, cluster := range doc.Spec.ClusterReplication.ClusterList {
+				if cluster.Name != oldPrimary {
+					newClusterList = append(newClusterList, cluster)
+				}
+			}
+			clusterReplicationPatch["clusterList"] = newClusterList
+		}
+	}
+
 	patch := map[string]any{
 		"spec": map[string]any{
-			"clusterReplication": map[string]any{
-				"primary": o.targetCluster,
-			},
+			"clusterReplication": clusterReplicationPatch,
 		},
 	}
 
