@@ -181,13 +181,16 @@ Installs cert-manager on all clusters:
 ### 5. `install-documentdb-operator.sh`
 
 Deploys DocumentDB operator on all clusters:
-- Packages and installs the operator Helm chart on the AKS hub
+- Installs the operator from the published Helm chart on the AKS hub
 - Installs CNPG from upstream release + DocumentDB manifests on k3s via Run Command
 - Verifies deployment across all clusters
 
 ```bash
-# Build from local chart (default)
+# Default: install from published chart
 ./install-documentdb-operator.sh
+
+# Build from local source (for development)
+BUILD_CHART=true ./install-documentdb-operator.sh
 
 # With custom values file
 VALUES_FILE=custom-values.yaml ./install-documentdb-operator.sh
