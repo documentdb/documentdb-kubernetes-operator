@@ -23,6 +23,7 @@ The DocumentDB Kubernetes Operator follows a time-based release schedule with se
 - Clear support windows for production deployments
 - Backward compatibility within minor versions
 - Roll-forward strategy for bug and security fixes
+- Easy to identify which versions of underlying components are used
 
 ---
 
@@ -48,7 +49,7 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/):
 | Stage | Version Pattern | Description |
 |-------|-----------------|-------------|
 | Preview | `0.x.x` | API may change, not recommended for production |
-| GA (General Availability) | `1.x.x+` | Stable API, production-ready |
+| Stable | `1.x.x+` | Stable API, production-ready |
 
 ---
 
@@ -56,20 +57,25 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/):
 
 | Release Type | Frequency | Description |
 |--------------|-----------|-------------|
-| **Minor Release** | Every 3 months | New features, enhancements |
+| **Minor Release** | Every 3 months | New features, enhancements, dependency updates |
 | **Patch Release** | As needed | Bug fixes, security patches |
 | **Security Patch** | ASAP after CVE disclosure | Security fixes only |
 | **Release Candidate** | 1-2 weeks before minor release | Preview testing |
 
+**Dependency and Component Updates:**
+- Updates to CNPG, PostgreSQL, DocumentDB extension, and gateway versions are introduced in **minor releases**
+- Patch releases do not include dependency version changes unless required for security fixes
+
 ### Release Schedule (Planned)
 
-> **Note:** Dates are approximate and subject to change. Updates will be communicated in [GitHub Discussions](https://github.com/documentdb/documentdb-kubernetes-operator/discussions).
+> **Note:** Dates are approximate and subject to change. We aim to align releases with major industry events. Updates will be communicated in [GitHub Discussions](https://github.com/documentdb/documentdb-kubernetes-operator/discussions).
 
-| Version | Target Date | Feature Freeze |
-|---------|-------------|----------------|
-| v0.2.0 | ~ Mar 2026 | Feb 2026 |
-| v0.3.0 | ~ Jun 2026 | May 2026 |
-| v0.4.0 | ~ Sep 2026 | Aug 2026 |
+| Version | Target Date | Event Alignment | Feature Freeze |
+|---------|-------------|-----------------|----------------|
+| v0.2.0 | Mar 2026 | KubeCon EU | Early Mar 2026 |
+| v0.3.0 | May 2026 | Microsoft Build | Early May 2026 |
+| v0.4.0 | Aug 2026 | Pre-conference prep | Early Aug 2026 |
+| v0.5.0 | Nov 2026 | Microsoft Ignite / KubeCon NA | Early Nov 2026 |
 
 ---
 
@@ -126,7 +132,7 @@ v0.1.0 released -----> v0.2.0 released -----> v0.1.x EOL (3 months later)
 ### What "Support" Means
 
 **Technical Support:**
-- Community support via [GitHub Discussions](https://github.com/documentdb/documentdb-kubernetes-operator/discussions)
+- Community support via [Discord](https://discordapp.com/channels/1374170121219866635/1435045191156236458) and [GitHub Discussions](https://github.com/documentdb/documentdb-kubernetes-operator/discussions)
 - Issue tracking and triage
 - Best-effort response (no SLA for community version)
 
@@ -181,7 +187,20 @@ We follow a **roll forward** strategy rather than backporting:
 |------------------|------------|----------------------|--------------------|
 | v0.1.x | 16.x | 1.x | 1.x |
 
-> **Note:** The operator bundles compatible versions of PostgreSQL, the DocumentDB Postgres extension (`pg_documentdb`), and the DocumentDB Gateway. Image tags follow the format `<postgres-version>-v<extension-version>` (e.g., `16.3-v1.3.0`).
+> **Note:** The operator bundles compatible versions of PostgreSQL, the DocumentDB Postgres extension (`pg_documentdb`), and the DocumentDB Gateway. Image tags follow the format `<postgres-version>-v<extension-version>` (e.g., `16.3-v1.3.0`). Our goal is to use CNPG [Image Catalog](https://cloudnative-pg.io/documentation/current/image_catalog/) to manage these versions in the future.
+
+### Dependency Versioning Policy
+
+**CloudNative-PG (CNPG):**
+- We only bundle **stable releases** of CloudNative-PG
+- CNPG version is updated when a new stable release provides required features or critical fixes
+- CNPG upgrades are tested before being included in an operator release
+
+**DocumentDB Components (PostgreSQL, Extension, Gateway):**
+- We bundle **stable, tested versions** of DocumentDB components
+- The operator is validated against specific version combinations before release
+- We do not automatically track the latest DocumentDB releases; we deliberately select and test compatible versions
+- Users cannot mix arbitrary versions—the operator manages compatible combinations
 
 ### Container Image Support
 
@@ -189,6 +208,8 @@ We follow a **roll forward** strategy rather than backporting:
 |--------------|-----------|
 | linux/amd64 | ✅ |
 | linux/arm64 | ✅ |
+
+> **Note:** Additional architectures (e.g., ppc64le, s390x) may be added based on community interest. Please open a [GitHub Issue](https://github.com/documentdb/documentdb-kubernetes-operator/issues) to request support for other platforms.
 
 ---
 
