@@ -272,7 +272,7 @@ This document specifies all telemetry data points to be collected by Application
 
 ### Cluster Environment
 - **Properties** (collected once at startup, attached to all events):
-  - `kubernetes_distribution`: `aks`, `eks`, `gke`, `openshift`, `rancher`, `vmware-tanzu`, `other`
+  - `kubernetes_distribution`: `aks`, `eks`, `gke`, `openshift`, `rancher`, `tanzu`, `other`
   - `kubernetes_version`: K8s version
   - `region`: Cloud region (from `topology.kubernetes.io/region` label if available)
   - `operator_namespace_hash`: SHA-256 hash of the namespace where operator runs
