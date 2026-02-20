@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: wal-replica
+    cnpg.io/pluginName: cnpg-i-wal-replica.documentdb.io
+  annotations:
+    cnpg.io/pluginClientSecret: walreplica-client-tls
+    cnpg.io/pluginServerSecret: walreplica-server-tls
+    cnpg.io/pluginPort: "9090"
+  name: wal-replica
+spec:
+  ports:
+  - port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    app: wal-replica
