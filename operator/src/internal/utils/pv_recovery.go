@@ -13,7 +13,10 @@ import (
 const (
 	// Label for identifying temporary PVCs created for PV recovery
 	LabelRecoveryTemp = "documentdb.io/recovery-temp"
+	
+	// Label for identifying the DocumentDB cluster a PV/PVC belongs to
 	LabelCluster      = "documentdb.io/cluster"
+	LabelNamespace    = "documentdb.io/namespace"
 )
 
 // TempPVCNameForPVRecovery generates the name for a temporary PVC used during PV recovery.

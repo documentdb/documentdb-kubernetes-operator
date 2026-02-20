@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 var _ = Describe("DocumentDB Controller", func() {
@@ -44,41 +45,29 @@ var _ = Describe("DocumentDB Controller", func() {
 	})
 
 	Describe("findPVsForDocumentDB", func() {
-		It("returns PV names for bound PVCs with matching cluster label", func() {
-			pvc1 := &corev1.PersistentVolumeClaim{
+		It("returns PV names for PVs with matching documentdb.io/cluster label", func() {
+			pv1 := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-1",
-					Namespace: documentDBNamespace,
+					Name: "pv-abc123",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-abc123",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
 				},
 			}
-			pvc2 := &corev1.PersistentVolumeClaim{
+			pv2 := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-2",
-					Namespace: documentDBNamespace,
+					Name: "pv-def456",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-def456",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
 				},
 			}
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(pvc1, pvc2).
+				WithObjects(pv1, pv2).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -100,97 +89,29 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(pvNames).To(ContainElements("pv-abc123", "pv-def456"))
 		})
 
-		It("excludes PVCs that are not bound", func() {
-			boundPVC := &corev1.PersistentVolumeClaim{
+		It("excludes PVs labeled for a different DocumentDB cluster", func() {
+			matchingPV := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-bound",
-					Namespace: documentDBNamespace,
+					Name: "pv-match",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-bound",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
 				},
 			}
-			pendingPVC := &corev1.PersistentVolumeClaim{
+			otherPV := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-pending",
-					Namespace: documentDBNamespace,
+					Name: "pv-other",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   "other-cluster",
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-pending",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimPending,
 				},
 			}
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(boundPVC, pendingPVC).
-				Build()
-
-			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-			}
-
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName,
-					Namespace: documentDBNamespace,
-				},
-			}
-
-			pvNames, err := reconciler.findPVsForDocumentDB(ctx, documentdb)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(pvNames).To(HaveLen(1))
-			Expect(pvNames).To(ContainElement("pv-bound"))
-		})
-
-		It("excludes PVCs from different clusters", func() {
-			matchingPVC := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-match",
-					Namespace: documentDBNamespace,
-					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-match",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
-				},
-			}
-			otherClusterPVC := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "other-cluster-pvc",
-					Namespace: documentDBNamespace,
-					Labels: map[string]string{
-						cnpgClusterLabel: "other-cluster",
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-other",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
-				},
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(matchingPVC, otherClusterPVC).
+				WithObjects(matchingPV, otherPV).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -212,7 +133,41 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(pvNames).To(ContainElement("pv-match"))
 		})
 
-		It("returns empty slice when no PVCs exist", func() {
+		It("excludes PVs with same cluster name but different namespace", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "pv-other-ns",
+					Labels: map[string]string{
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: "other-namespace",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(pv).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			}
+
+			pvNames, err := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pvNames).To(BeEmpty())
+		})
+
+		It("returns empty slice when no PVs have the label", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
@@ -237,26 +192,20 @@ var _ = Describe("DocumentDB Controller", func() {
 	})
 
 	Describe("emitPVRetentionWarning", func() {
-		It("emits warning event with PV names when PVCs exist", func() {
-			pvc := &corev1.PersistentVolumeClaim{
+		It("emits warning event with PV names when labeled PVs exist", func() {
+			pv := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-1",
-					Namespace: documentDBNamespace,
+					Name: "pv-test123",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-test123",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
 				},
 			}
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(pvc).
+				WithObjects(pv).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -279,7 +228,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Eventually(recorder.Events).Should(Receive(ContainSubstring("PVsRetained")))
 		})
 
-		It("does not emit event when no PVCs exist", func() {
+		It("does not emit event when no labeled PVs exist", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				Build()
@@ -409,19 +358,13 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("does not emit warning when policy is Delete", func() {
-			pvc := &corev1.PersistentVolumeClaim{
+			pv := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentDBName + "-1",
-					Namespace: documentDBNamespace,
+					Name: "pv-will-be-deleted",
 					Labels: map[string]string{
-						cnpgClusterLabel: documentDBName,
+						util.LabelCluster:   documentDBName,
+						util.LabelNamespace: documentDBNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "pv-will-be-deleted",
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Phase: corev1.ClaimBound,
 				},
 			}
 
@@ -443,7 +386,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(documentdb, pvc).
+				WithObjects(documentdb, pv).
 				Build()
 
 			// Create a new recorder to verify no events are emitted during this test

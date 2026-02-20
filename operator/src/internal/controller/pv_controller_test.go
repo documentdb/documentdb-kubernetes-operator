@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 var _ = Describe("PersistentVolume Controller", func() {
@@ -129,52 +130,6 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 	})
 
-	Describe("isOwnedByDocumentDB", func() {
-		It("returns true when cluster is owned by the specified DocumentDB", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: "documentdb.io/v1",
-							Kind:       "DocumentDB",
-							Name:       documentdbName,
-						},
-					},
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeTrue())
-		})
-
-		It("returns false when cluster is owned by a different DocumentDB", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion: "documentdb.io/v1",
-							Kind:       "DocumentDB",
-							Name:       "other-documentdb",
-						},
-					},
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeFalse())
-		})
-
-		It("returns false when cluster has no owner references", func() {
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: testNamespace,
-				},
-			}
-			Expect(isOwnedByDocumentDB(cluster, documentdbName)).To(BeFalse())
-		})
-	})
-
 	Describe("getDesiredReclaimPolicy", func() {
 		var reconciler *PersistentVolumeReconciler
 
@@ -251,7 +206,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -264,6 +219,8 @@ var _ = Describe("PersistentVolume Controller", func() {
 			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
 			Expect(needsUpdate).To(BeTrue())
 			Expect(pv.Spec.PersistentVolumeReclaimPolicy).To(Equal(corev1.PersistentVolumeReclaimRetain))
+			Expect(pv.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(pv.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns true and updates PV when mount options are missing", func() {
@@ -275,7 +232,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -288,18 +245,26 @@ var _ = Describe("PersistentVolume Controller", func() {
 			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
 			Expect(needsUpdate).To(BeTrue())
 			Expect(pv.Spec.MountOptions).To(ContainElements("nodev", "noexec", "nosuid", "rw"))
+			Expect(pv.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(pv.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns false when no changes are needed", func() {
 			pv := &corev1.PersistentVolume{
-				ObjectMeta: metav1.ObjectMeta{Name: pvName},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pvName,
+					Labels: map[string]string{
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
+					},
+				},
 				Spec: corev1.PersistentVolumeSpec{
 					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
 					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
 				},
 			}
 			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{Name: documentdbName},
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				Spec: dbpreview.DocumentDBSpec{
 					Resource: dbpreview.Resource{
 						Storage: dbpreview.StorageConfiguration{
@@ -584,6 +549,8 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: pvName}, updatedPV)).To(Succeed())
 			Expect(updatedPV.Spec.PersistentVolumeReclaimPolicy).To(Equal(corev1.PersistentVolumeReclaimRetain))
 			Expect(updatedPV.Spec.MountOptions).To(ContainElements("nodev", "noexec", "nosuid"))
+			Expect(updatedPV.Labels[util.LabelCluster]).To(Equal(documentdbName))
+			Expect(updatedPV.Labels[util.LabelNamespace]).To(Equal(testNamespace))
 		})
 
 		It("returns empty result when PV not found", func() {
@@ -754,7 +721,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 	})
 
 	Describe("findPVsForDocumentDB", func() {
-		It("returns reconcile requests for PVs associated with DocumentDB using CNPG cluster label", func() {
+		It("returns reconcile requests for PVs with matching documentdb.io/cluster label", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
@@ -763,23 +730,19 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 
-			// PVC with CNPG cluster label (this is how CNPG labels its PVCs)
-			pvc := &corev1.PersistentVolumeClaim{
+			pv := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: testNamespace,
+					Name: pvName,
 					Labels: map[string]string{
-						"cnpg.io/cluster": documentdbName, // CNPG cluster name matches DocumentDB name
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: pvName,
 				},
 			}
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(documentdb, pvc).
+				WithObjects(documentdb, pv).
 				Build()
 
 			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
@@ -789,7 +752,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(requests[0].Name).To(Equal(pvName))
 		})
 
-		It("returns empty when no PVCs have matching CNPG cluster label", func() {
+		It("returns empty when no PVs have matching label", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
@@ -797,23 +760,50 @@ var _ = Describe("PersistentVolume Controller", func() {
 				},
 			}
 
-			// PVC without CNPG cluster label or with different label value
-			pvc := &corev1.PersistentVolumeClaim{
+			// PV labeled for a different DocumentDB cluster
+			pv := &corev1.PersistentVolume{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: testNamespace,
+					Name: pvName,
 					Labels: map[string]string{
-						"cnpg.io/cluster": "different-cluster",
+						util.LabelCluster:   "different-cluster",
+						util.LabelNamespace: testNamespace,
 					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: pvName,
 				},
 			}
 
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
-				WithObjects(documentdb, pvc).
+				WithObjects(documentdb, pv).
+				Build()
+
+			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
+
+			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
+			Expect(requests).To(BeEmpty())
+		})
+
+		It("returns empty when PV has same cluster name but different namespace", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentdbName,
+					Namespace: testNamespace,
+				},
+			}
+
+			// PV belongs to a same-named DocumentDB in a different namespace
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pvName,
+					Labels: map[string]string{
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: "other-namespace",
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, pv).
 				Build()
 
 			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
@@ -840,7 +830,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 			Expect(requests).To(BeNil())
 		})
 
-		It("returns nil when listing PVCs fails", func() {
+		It("returns nil when listing PVs fails", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
@@ -853,8 +843,8 @@ var _ = Describe("PersistentVolume Controller", func() {
 				WithObjects(documentdb).
 				WithInterceptorFuncs(interceptor.Funcs{
 					List: func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-						if _, ok := list.(*corev1.PersistentVolumeClaimList); ok {
-							return fmt.Errorf("pvc list error")
+						if _, ok := list.(*corev1.PersistentVolumeList); ok {
+							return fmt.Errorf("pv list error")
 						}
 						return client.List(ctx, list, opts...)
 					},
@@ -865,39 +855,6 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
 			Expect(requests).To(BeNil())
-		})
-
-		It("skips PVCs without volume name", func() {
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      documentdbName,
-					Namespace: testNamespace,
-				},
-			}
-
-			// PVC with CNPG cluster label but no volume name yet (not bound)
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: testNamespace,
-					Labels: map[string]string{
-						"cnpg.io/cluster": documentdbName,
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					VolumeName: "", // Not yet bound
-				},
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(documentdb, pvc).
-				Build()
-
-			reconciler := &PersistentVolumeReconciler{Client: fakeClient}
-
-			requests := reconciler.findPVsForDocumentDB(ctx, documentdb)
-			Expect(requests).To(BeEmpty())
 		})
 	})
 

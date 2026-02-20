@@ -386,22 +386,13 @@ jobs:
       run: |
         echo "Testing PV retention after DocumentDB deletion..."
         
-        # Get the PVC name and PV name before deleting the DocumentDB
-        # PVCs are created by CNPG and labeled with cnpg.io/cluster
-        pvc_name=$(kubectl -n ${{ env.DB_NS }} get pvc -l cnpg.io/cluster=${{ env.DB_RESTORE_NAME }} -o jsonpath='{.items[0].metadata.name}')
-        echo "PVC name: $pvc_name"
-        
-        if [ -z "$pvc_name" ]; then
-          echo "❌ Failed to find PVC for cluster ${{ env.DB_RESTORE_NAME }}"
-          exit 1
-        fi
-        
-        # Get the PV name bound to this PVC
-        pv_name=$(kubectl -n ${{ env.DB_NS }} get pvc $pvc_name -o jsonpath='{.spec.volumeName}')
+        # Find PV directly using documentdb.io labels set by the PV controller
+        # PVs are cluster-scoped and labeled with documentdb.io/cluster and documentdb.io/namespace
+        pv_name=$(kubectl get pv -l documentdb.io/cluster=${{ env.DB_RESTORE_NAME }},documentdb.io/namespace=${{ env.DB_NS }} -o jsonpath='{.items[0].metadata.name}')
         echo "PV name: $pv_name"
         
         if [ -z "$pv_name" ]; then
-          echo "❌ Failed to find PV bound to PVC $pvc_name"
+          echo "❌ Failed to find PV with documentdb.io/cluster=${{ env.DB_RESTORE_NAME }} and documentdb.io/namespace=${{ env.DB_NS }}"
           exit 1
         fi
         

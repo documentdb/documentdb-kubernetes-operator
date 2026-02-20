@@ -45,9 +45,6 @@ const (
 	// documentDBFinalizer ensures we can emit PV retention warnings before deletion completes
 	documentDBFinalizer = "documentdb.io/pv-retention-finalizer"
 
-	// CNPG label used to identify PVCs belonging to a cluster
-	cnpgClusterLabel = "cnpg.io/cluster"
-
 	// cnpgClusterHealthyPhase is the CNPG cluster status phase indicating a healthy cluster.
 	// This value is from CNPG's internal status representation.
 	cnpgClusterHealthyPhase = "Cluster in healthy state"
@@ -397,22 +394,24 @@ func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, docum
 	return nil
 }
 
-// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster using CNPG labels
+// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster.
+// Uses the documentdb.io/cluster and documentdb.io/namespace labels on PVs, which is set by the PV controller.
+// This works correctly in both single and multi-cluster scenarios where CNPG
+// cluster names may differ from the DocumentDB name.
 func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
-	// CNPG cluster name matches DocumentDB name
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList,
-		client.InNamespace(documentdb.Namespace),
-		client.MatchingLabels{cnpgClusterLabel: documentdb.Name},
+	pvList := &corev1.PersistentVolumeList{}
+	if err := r.List(ctx, pvList,
+		client.MatchingLabels{
+			util.LabelCluster:   documentdb.Name,
+			util.LabelNamespace: documentdb.Namespace,
+		},
 	); err != nil {
 		return nil, err
 	}
 
-	pvNames := make([]string, 0, len(pvcList.Items))
-	for _, pvc := range pvcList.Items {
-		if pvc.Status.Phase == corev1.ClaimBound && pvc.Spec.VolumeName != "" {
-			pvNames = append(pvNames, pvc.Spec.VolumeName)
-		}
+	pvNames := make([]string, 0, len(pvList.Items))
+	for _, pv := range pvList.Items {
+		pvNames = append(pvNames, pv.Name)
 	}
 
 	return pvNames, nil

@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 const (
@@ -41,10 +42,6 @@ const (
 
 	// reclaimPolicyDelete is the string value for Delete policy in DocumentDB spec
 	reclaimPolicyDelete = "Delete"
-
-	// cnpgClusterLabel is the label used by CNPG to identify PVCs belonging to a cluster.
-	// This is defined here to avoid coupling with documentdb_controller.go.
-	cnpgClusterLabelPV = "cnpg.io/cluster"
 )
 
 // securityMountOptions defines the mount options applied to PVs for security hardening:
@@ -65,8 +62,8 @@ var securityMountOptions = []string{"nodev", "noexec", "nosuid"}
 // When a PV uses one of these provisioners, security mount options will be skipped
 // to avoid PV binding failures.
 var unsupportedMountOptionsProvisioners = []string{
-	"rancher.io/local-path",      // kind default local-path-provisioner
-	"k8s.io/minikube-hostpath",   // minikube default hostpath provisioner
+	"rancher.io/local-path",    // kind default local-path-provisioner
+	"k8s.io/minikube-hostpath", // minikube default hostpath provisioner
 }
 
 // PersistentVolumeReconciler reconciles PersistentVolume objects
@@ -123,11 +120,36 @@ func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-// applyDesiredPVConfiguration applies the desired reclaim policy and mount options to a PV.
+// applyDesiredPVConfiguration applies the desired reclaim policy, mount options, and labels to a PV.
 // Returns true if any changes were made.
 func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Context, pv *corev1.PersistentVolume, documentdb *dbpreview.DocumentDB) bool {
 	logger := log.FromContext(ctx)
 	needsUpdate := false
+
+	// Ensure PV is labeled with the DocumentDB cluster name.
+	// This label is stable across single and multi-cluster scenarios (where the
+	// CNPG cluster name may differ from the DocumentDB name due to hashing).
+	if pv.Labels == nil {
+		pv.Labels = make(map[string]string)
+	}
+	if pv.Labels[util.LabelCluster] != documentdb.Name {
+		logger.Info("PV cluster label needs update",
+			"pv", pv.Name,
+			"currentLabel", pv.Labels[util.LabelCluster],
+			"desiredLabel", documentdb.Name,
+			"documentdb", documentdb.Name)
+		pv.Labels[util.LabelCluster] = documentdb.Name
+		needsUpdate = true
+	}
+	if pv.Labels[util.LabelNamespace] != documentdb.Namespace {
+		logger.Info("PV namespace label needs update",
+			"pv", pv.Name,
+			"currentLabel", pv.Labels[util.LabelNamespace],
+			"desiredLabel", documentdb.Namespace,
+			"documentdb", documentdb.Name)
+		pv.Labels[util.LabelNamespace] = documentdb.Namespace
+		needsUpdate = true
+	}
 
 	// Check if reclaim policy needs update
 	desiredPolicy := r.getDesiredReclaimPolicy(documentdb)
@@ -328,16 +350,6 @@ func isCNPGClusterOwnerRef(ownerRef metav1.OwnerReference) bool {
 	return ownerRef.Kind == ownerRefKindCluster && strings.Contains(ownerRef.APIVersion, cnpgAPIVersionPrefix)
 }
 
-// isOwnedByDocumentDB checks if a CNPG Cluster is owned by a specific DocumentDB
-func isOwnedByDocumentDB(cluster *cnpgv1.Cluster, documentdbName string) bool {
-	for _, ownerRef := range cluster.OwnerReferences {
-		if ownerRef.Kind == ownerRefKindDocumentDB && ownerRef.Name == documentdbName {
-			return true
-		}
-	}
-	return false
-}
-
 // getDesiredReclaimPolicy returns the reclaim policy based on DocumentDB configuration
 func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbpreview.DocumentDB) corev1.PersistentVolumeReclaimPolicy {
 	switch documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy {
@@ -420,7 +432,9 @@ func documentDBReclaimPolicyPredicate() predicate.Predicate {
 }
 
 // findPVsForDocumentDB finds all PVs associated with a DocumentDB and returns reconcile requests for them.
-// Uses CNPG's cluster label (cnpg.io/cluster) for efficient PVC filtering instead of listing all resources.
+// Uses the documentdb.io/cluster and documentdb.io/namespace labels on PVs, which is set by the PV controller.
+// This works correctly in both single and multi-cluster scenarios where CNPG
+// cluster names may differ from the DocumentDB name.
 func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := log.FromContext(ctx)
 	documentdb, ok := obj.(*dbpreview.DocumentDB)
@@ -428,27 +442,24 @@ func (r *PersistentVolumeReconciler) findPVsForDocumentDB(ctx context.Context, o
 		return nil
 	}
 
-	// Use CNPG's cluster label to efficiently find PVCs belonging to this DocumentDB.
-	// CNPG automatically labels PVCs with "cnpg.io/cluster" set to the cluster name,
-	// and CNPG cluster name matches DocumentDB name by convention.
-	pvcList := &corev1.PersistentVolumeClaimList{}
-	if err := r.List(ctx, pvcList,
-		client.InNamespace(documentdb.Namespace),
-		client.MatchingLabels{cnpgClusterLabelPV: documentdb.Name},
+	pvList := &corev1.PersistentVolumeList{}
+	if err := r.List(ctx, pvList,
+		client.MatchingLabels{
+			util.LabelCluster:   documentdb.Name,
+			util.LabelNamespace: documentdb.Namespace,
+		},
 	); err != nil {
-		logger.Error(err, "Failed to list PVCs for DocumentDB")
+		logger.Error(err, "Failed to list PVs for DocumentDB")
 		return nil
 	}
 
-	var requests []reconcile.Request
-	for _, pvc := range pvcList.Items {
-		if pvc.Spec.VolumeName != "" {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name: pvc.Spec.VolumeName,
-				},
-			})
-		}
+	requests := make([]reconcile.Request, 0, len(pvList.Items))
+	for _, pv := range pvList.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name: pv.Name,
+			},
+		})
 	}
 
 	logger.Info("Found PVs to reconcile for DocumentDB update",
