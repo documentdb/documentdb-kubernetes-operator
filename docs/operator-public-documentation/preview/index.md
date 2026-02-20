@@ -1,70 +1,73 @@
 # DocumentDB Kubernetes Operator
 
-The DocumentDB Kubernetes Operator is an open-source project to run and manage [DocumentDB](https://github.com/microsoft/documentdb) on Kubernetes. `DocumentDB` is the engine powering vCore-based Azure Cosmos DB for MongoDB. It is built on top of PostgreSQL and offers a native implementation of document-oriented NoSQL database, enabling CRUD operations on BSON data types.
+The DocumentDB Kubernetes Operator is an open-source operator that runs and manages [DocumentDB](https://github.com/microsoft/documentdb) on Kubernetes.
 
-As part of a DocumentDB cluster installation, the operator deploys and manages a set of PostgreSQL instance(s), the [DocumentDB Gateway](https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw), as well as other Kubernetes resources. While PostgreSQL is used as the underlying storage engine, the gateway ensures that you can connect to the DocumentDB cluster using MongoDB-compatible drivers, APIs, and tools.
+DocumentDB is the engine powering vCore-based Azure Cosmos DB for MongoDB. Built on PostgreSQL, it provides a native document-oriented NoSQL database with support for CRUD operations on BSON data types.
 
-> **Note:** This project is under active development but not yet recommended for production use. We welcome your feedback and contributions!
+When you deploy a DocumentDB cluster, the operator creates and manages PostgreSQL instances, the [DocumentDB Gateway](https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw), and supporting Kubernetes resources. The gateway enables you to connect with MongoDB-compatible drivers, APIs, and tools, while PostgreSQL serves as the underlying storage engine.
+
+!!! note
+    This project is under active development but not yet recommended for production use. We welcome your feedback and contributions!
 
 ## Quickstart
 
-This quickstart guide will walk you through the steps to install the operator, deploy a DocumentDB cluster, access it using `mongosh`, and perform basic operations.
+Follow these steps to install the operator, deploy a DocumentDB cluster, and connect using `mongosh`.
 
 ### Prerequisites
 
-- [Helm](https://helm.sh/docs/intro/install/) installed.
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) installed.
-- A local Kubernetes cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/), or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) installed. You are free to use any other Kubernetes cluster, but that's not a requirement for this quickstart.
-- Install [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) to connect to the DocumentDB cluster.
+- [Helm](https://helm.sh/docs/intro/install/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+- A Kubernetes cluster — a local cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/) or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) works well for this quickstart. You can also use any existing cluster.
+- [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) to connect to the DocumentDB cluster
 
 ### Start a local Kubernetes cluster
 
-If you are using `minikube`, use the following command:
+If you're using `minikube`:
 
-```sh
+```bash
 minikube start
 ```
 
-If you are using `kind`, use the following command:
+If you're using `kind`:
 
-```sh
+```bash
 kind create cluster
 ```
 
-### Install `cert-manager`
+### Install cert-manager
 
-[cert-manager](https://cert-manager.io/docs/) is used to manage TLS certificates for the DocumentDB cluster.
+The operator uses [cert-manager](https://cert-manager.io/docs/) to manage TLS certificates for the DocumentDB cluster.
 
-> If you already have `cert-manager` installed, you can skip this step.
+!!! tip
+    If you already have cert-manager installed, skip this step.
 
-```sh
+```bash
 helm repo add jetstack https://charts.jetstack.io
 helm repo update
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
 ```
 
-Verify that `cert-manager` is installed correctly:
+Verify that cert-manager is running:
 
-```sh
+```bash
 kubectl get pods -n cert-manager
 ```
-
-Output:
 
 ```text
 NAMESPACE           NAME                                            READY   STATUS    RESTARTS
 cert-manager        cert-manager-6794b8d569-d7lwd                   1/1     Running   0
-cert-manager        cert-manager-cainjector-7f69cd69f7-pd9bc        1/1     Running   0          
-cert-manager        cert-manager-webhook-6cc5dccc4b-7jmrh           1/1     Running   0          
+cert-manager        cert-manager-cainjector-7f69cd69f7-pd9bc        1/1     Running   0
+cert-manager        cert-manager-webhook-6cc5dccc4b-7jmrh           1/1     Running   0
 ```
 
-### Install `documentdb-operator` using the Helm chart
+### Install the DocumentDB operator
 
-> The DocumentDB operator utilizes the [CloudNativePG operator](https://cloudnative-pg.io/docs/) behind the scenes, and installs it in the `cnpg-system` namespace. At this point, it is assumed that the CloudNativePG operator is **not** pre-installed in your cluster.
+The operator Helm chart automatically installs the [CloudNativePG operator](https://cloudnative-pg.io/docs/) as a dependency in the `cnpg-system` namespace.
 
-Use the following command to install the DocumentDB operator:
+!!! warning
+    If CloudNativePG is already installed in your cluster, you may experience conflicts. See the Helm chart documentation for options to skip the CNPG dependency.
 
-```sh
+```bash
 # Add the Helm repository
 helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
 helm repo update
@@ -76,57 +79,38 @@ helm install documentdb-operator documentdb/documentdb-operator \
   --wait
 ```
 
-This will install the operator in the `documentdb-operator` namespace. Verify that it is running:
+Verify the operator is running:
 
-```sh
+```bash
 kubectl get deployment -n documentdb-operator
 ```
-
-Output:
 
 ```text
 NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
 documentdb-operator   1/1     1            1           113s
 ```
 
-You should also see the DocumentDB operator CRDs installed in the cluster:
+Confirm the DocumentDB CRDs are installed:
 
-```sh
+```bash
 kubectl get crd | grep documentdb
 ```
-
-Output:
 
 ```text
 dbs.documentdb.io
 ```
 
-### Store DocumentDB credentials in K8s Secret
+### Store DocumentDB credentials in a Kubernetes Secret
 
-Before deploying the DocumentDB cluster, create a Kubernetes secret to store the DocumentDB credentials. The sidecar injector plugin will automatically inject these credentials as environment variables into the DocumentDB gateway container.
+Before deploying a cluster, create a Secret with the credentials that the DocumentDB gateway will use. The operator's sidecar injector automatically projects these values as environment variables into the gateway container.
 
-Create the secret with your desired username and password:
-
-```sh
+```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Namespace
 metadata:
   name: documentdb-preview-ns
 ---
-# DocumentDB Credentials Secret
-# 
-# Login credentials:
-# Username: k8s_secret_user
-# Password: K8sSecret100
-#
-# Connect using mongosh (port-forward):
-# mongosh 127.0.0.1:10260 -u k8s_secret_user -p K8sSecret100 --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates
-#
-# Connect using connection string (port-forward):
-# mongosh "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
-#
-
 apiVersion: v1
 kind: Secret
 metadata:
@@ -134,38 +118,31 @@ metadata:
   namespace: documentdb-preview-ns
 type: Opaque
 stringData:
-  username: k8s_secret_user     
-  password: K8sSecret100        
+  username: k8s_secret_user
+  password: K8sSecret100
 EOF
 ```
 
-Verify the secret is created:
+Verify the Secret:
 
-```sh
+```bash
 kubectl get secret documentdb-credentials -n documentdb-preview-ns
 ```
-
-Output:
 
 ```text
 NAME                     TYPE     DATA   AGE
 documentdb-credentials   Opaque   2      10s
 ```
 
-> **Note:** By default the operator expects a credentials secret named `documentdb-credentials` containing `username` and `password` keys. You can override the secret name by setting `spec.documentDbCredentialSecret` in your `DocumentDB` resource. Whatever name you configure (or the default) will be used by the sidecar injector to project the values as `USERNAME` and `PASSWORD` environment variables into the gateway sidecar container.
-
+!!! note
+    By default, the operator expects a Secret named `documentdb-credentials` with `username` and `password` keys. To use a different Secret name, set `spec.documentDbCredentialSecret` in your DocumentDB resource.
 
 ### Deploy a DocumentDB cluster
 
 Create a single-node DocumentDB cluster:
 
-```sh
+```bash
 cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: documentdb-preview-ns
----
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
@@ -183,61 +160,63 @@ spec:
 EOF
 ```
 
-Wait for the DocumentDB cluster to be fully initialized. Verify that it is running:
+Wait for the cluster to initialize, then verify it's running:
 
-```sh
+```bash
 kubectl get pods -n documentdb-preview-ns
 ```
-
-Output:
 
 ```text
 NAME                   READY   STATUS    RESTARTS   AGE
 documentdb-preview-1   2/2     Running   0          26m
 ```
 
-You can also check the DocumentDB CRD instance:
+Check the DocumentDB resource status:
 
-```sh
+```bash
 kubectl get DocumentDB -n documentdb-preview-ns
 ```
 
-Output:
-
 ```text
 NAME                 STATUS                     CONNECTION STRING
-documentdb-preview   Cluster in healthy state   mongodb://$(kubectl get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.username}' | base64 -d):$(kubectl get secret documentdb-credentials -n documentdb-preview-ns -o jsonpath='{.data.password}' | base64 -d)@10.0.29.01:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
+documentdb-preview   Cluster in healthy state   mongodb://...
 ```
 
 ### Connect to the DocumentDB cluster
 
-Once you have deployed your DocumentDB cluster, you can connect using different methods depending on your service type. Choose the approach that best fits your deployment strategy:
+Choose a connection method based on your service type.
 
-#### Option 1: ClusterIP Service (Default - for local development)
-
-The default deployment uses `ClusterIP` service type. To connect from your local machine, use port forwarding:
+#### Option 1: ClusterIP service (default — for local development)
 
 **Step 1:** Set up port forwarding (keep this terminal open):
-```sh
+
+```bash
 kubectl port-forward pod/documentdb-preview-1 10260:10260 -n documentdb-preview-ns
 ```
 
-**Step 2:** In a **new terminal**, connect using [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/):
+**Step 2:** In a new terminal, connect with [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/):
 
-```sh
-# Traditional format (via port-forward)
-mongosh 127.0.0.1:10260 -u k8s_secret_user -p K8sSecret100 --authenticationMechanism SCRAM-SHA-256 --tls --tlsAllowInvalidCertificates
+```bash
+mongosh 127.0.0.1:10260 \
+  -u k8s_secret_user \
+  -p K8sSecret100 \
+  --authenticationMechanism SCRAM-SHA-256 \
+  --tls --tlsAllowInvalidCertificates
+```
 
-# Or connection string format (via port-forward)
+Or use a connection string:
+
+```bash
 mongosh "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
-#### Option 2: LoadBalancer Service (For cloud deployments)
+#### Option 2: LoadBalancer service (for cloud deployments)
 
-If you prefer direct external access (recommended for cloud environments like Azure AKS), deploy with `LoadBalancer` service type:
+For direct external access in cloud environments (AKS, EKS, GKE), deploy with a `LoadBalancer` service type:
 
-**Step 1:** Deploy DocumentDB with LoadBalancer service:
-```sh
+**Step 1:** Deploy DocumentDB with LoadBalancer:
+
+```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: documentdb.io/preview
 kind: DocumentDB
@@ -256,33 +235,35 @@ spec:
 EOF
 ```
 
-**Step 2:** Wait for the external IP to be assigned:
-```sh
+**Step 2:** Wait for the external IP:
+
+```bash
 kubectl get services -n documentdb-preview-ns -w
 ```
 
-You should see something like:
 ```text
 NAME                                    TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)           AGE
 documentdb-service-documentdb-preview   LoadBalancer   10.0.228.243   52.149.56.216   10260:30312/TCP   2m
 ```
 
-**Step 3:** Connect directly using the external IP:
-```sh
-# Get the connection string with external IP automatically populated
+**Step 3:** Connect using the external IP:
+
+```bash
+# Get the connection string
 kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.status.connectionString}'
 
-# Copy the output and use it directly with mongosh
-mongosh "PASTE_CONNECTION_STRING_HERE"
+# Connect with mongosh
+mongosh "<connection-string>"
 ```
 
-> **Note:** `LoadBalancer` service is supported in cloud environments (Azure AKS, AWS EKS, GCP GKE), as well as local development with [minikube](https://minikube.sigs.k8s.io/docs/handbook/accessing/) and [kind](https://kind.sigs.k8s.io/docs/user/loadbalancer).
+!!! note
+    LoadBalancer services are supported in cloud environments (AKS, EKS, GKE) and in local development with [minikube](https://minikube.sigs.k8s.io/docs/handbook/accessing/) and [kind](https://kind.sigs.k8s.io/docs/user/loadbalancer).
 
-### Work with Data
+### Work with data
 
-Once connected, execute the following commands to create a database and a collection, and insert some documents:
+Once connected, create a database, a collection, and insert some documents:
 
-```sh
+```bash
 use testdb
 
 db.createCollection("test_collection")
@@ -295,8 +276,6 @@ db.test_collection.insertMany([
 
 db.test_collection.find()
 ```
-
-Output:
 
 ```text
 [direct: mongos] test> use testdb
@@ -328,13 +307,11 @@ switched to db testdb
 ]
 ```
 
-### Other options: Try the sample Python app
+### Try the sample Python app
 
-#### Connect to DocumentDB using a Python app
+You can also connect using the sample Python program (PyMongo) in the repository. It inserts a document into a `movies` collection in the `sample_mflix` database.
 
-In addition to `mongosh`, you can also use the sample Python program (that uses the PyMongo client) in the GitHub repository to execute operations on the DocumentDB instance. It inserts a sample document to a `movies` collection inside the `sample_mflix` database.
-
-```sh
+```bash
 git clone https://github.com/documentdb/documentdb-kubernetes-operator
 cd documentdb-kubernetes-operator/operator/src/scripts/test-scripts
 
@@ -342,8 +319,6 @@ pip3 install pymongo
 
 python3 mongo-python-data-pusher.py
 ```
-
-Output:
 
 ```text
 Inserted document ID: 682c54f9505b85fba77ed154
@@ -358,19 +333,17 @@ Inserted document ID: 682c54f9505b85fba77ed154
  'year': 2018}
 ```
 
-You can verify this using the `mongosh` shell:
+Verify using `mongosh`:
 
-```sh
+```bash
 use sample_mflix
 db.movies.find()
 ```
 
-Output:
-
 ```text
 [direct: mongos] testdb> use sample_mflix
 switched to db sample_mflix
-[direct: mongos] sample_mflix> 
+[direct: mongos] sample_mflix>
 
 [direct: mongos] sample_mflix> db.movies.find()
 [
@@ -388,40 +361,33 @@ switched to db sample_mflix
 ]
 ```
 
-> If you are using the Python program to connect to DocumentDB, make sure to update the script's `host` variable with the appropriate IP address based on your service type (127.0.0.1 for ClusterIP with port-forward, or the external IP for LoadBalancer service). Additionally, ensure that you update the default `password` in the script or, preferably, use environment variables to securely manage sensitive information like passwords.
+!!! tip
+    Update the script's `host` variable to match your service type (`127.0.0.1` for ClusterIP with port-forward, or the external IP for LoadBalancer). Use environment variables for credentials instead of hardcoding them.
 
-## Configuration and Advanced Topics
+## Configuration and advanced topics
 
-Now that you have a basic DocumentDB cluster running, you may want to explore advanced configuration options and operational guides:
+### Sidecar injector plugin configuration
 
-### Sidecar Injector Plugin Configuration
+The operator uses a sidecar injector plugin to automatically inject the DocumentDB Gateway container into PostgreSQL pods. You can customize the gateway image, pod labels, and annotations.
 
-The DocumentDB operator uses a sidecar injector plugin to automatically inject the DocumentDB Gateway container into PostgreSQL pods. This plugin supports multiple configuration parameters including:
+For details, see [Sidecar Injector Plugin Configuration](../../developer-guides/sidecar-injector-plugin-configuration.md).
 
-- **Gateway Image Configuration**: Customize which DocumentDB Gateway container image is used
-- **Pod Labels and Annotations**: Add custom metadata to injected pods
+### Local high-availability (HA)
 
-For detailed information on configuring the sidecar injector plugin, see: [Sidecar Injector Plugin Configuration](../../developer-guides/sidecar-injector-plugin-configuration.md)
+Deploy multiple DocumentDB instances with automatic failover by setting `instancesPerNode` to a value greater than 1.
 
+#### Enable local HA
 
-### Local High-Availability (HA)
-
-The DocumentDB operator supports local high-availability by deploying multiple DocumentDB instances with automatic failover capabilities. This is achieved by setting `instancesPerNode` to a value greater than 1, which creates a cluster of DocumentDB instances with built-in redundancy.
-
-#### Enable Local HA
-
-To enable local HA, set `instancesPerNode: 3` in your DocumentDB resource:
-
-```sh
+```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
   name: documentdb-ha
-  namespace: your-namespace
+  namespace: <your-namespace>
 spec:
   nodeCount: 1
-  instancesPerNode: 3  # Creates 3 DocumentDB instances for HA
+  instancesPerNode: 3
   documentDbCredentialSecret: documentdb-credentials
   resource:
     storage:
@@ -432,42 +398,41 @@ EOF
 ```
 
 This configuration creates:
-- **1 Primary instance**: Handles all write operations
-- **2 Replica instances**: Provide read scalability and automatic failover capability
 
+- **1 primary instance** — handles all write operations
+- **2 replica instances** — provide read scalability and automatic failover
 
-### Multi-Cloud Deployment
+### Multi-cloud deployment
 
-The DocumentDB operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance on multi-cloud deployments, see: [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-clould-setup/multi-cloud-deployment-guide.md)
+The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-cloud-deployment/README.md).
 
-### TLS Setup
+### TLS setup
 
 For advanced TLS configuration and testing:
 
-- [TLS Setup Guide](../../../documentdb-playground/tls/README.md) - Complete TLS configuration guide
-- [E2E Testing](../../../documentdb-playground/tls/E2E-TESTING.md) - Comprehensive testing procedures
+- [TLS Setup Guide](../../../documentdb-playground/tls/README.md) — Complete TLS configuration guide
+- [E2E Testing](../../../documentdb-playground/tls/E2E-TESTING.md) — Comprehensive testing procedures
 
 
-## Clean Up
-### Delete the DocumentDB cluster and other resources
+## Clean up
 
-```sh
+### Delete the DocumentDB cluster
+
+```bash
 kubectl delete DocumentDB documentdb-preview -n documentdb-preview-ns
 ```
 
-The `Pod` should now be terminated:
+Verify the pod is terminated:
 
-```sh
+```bash
 kubectl get pods -n documentdb-preview-ns
 ```
 
-Uninstall the DocumentDB operator:
+### Uninstall the operator
 
-```sh
+```bash
 helm uninstall documentdb-operator --namespace documentdb-operator
 ```
-
-Output:
 
 ```text
 These resources were kept due to the resource policy:
@@ -484,15 +449,9 @@ These resources were kept due to the resource policy:
 release "documentdb-operator" uninstalled
 ```
 
-Verify that the `Pod` is removed:
+### Delete the namespace and CRDs
 
-```sh
-kubectl get pods -n documentdb-preview-ns
-```
-
-Delete namespace, and CRDs:
-
-```sh
+```bash
 kubectl delete namespace documentdb-operator
 
 kubectl delete crd backups.postgresql.cnpg.io \
