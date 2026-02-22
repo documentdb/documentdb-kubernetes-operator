@@ -17,7 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion, useImageVolume bool, log logr.Logger) *cnpgv1.Cluster {
 	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
@@ -117,6 +117,16 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				Affinity: documentdb.Spec.Affinity,
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
+
+			// Combined mode (K8s < 1.35): use the all-in-one image directly and clear ImageVolume fields.
+			if !useImageVolume {
+				spec.ImageName = documentdbImage
+				spec.PostgresUID = util.COMBINED_IMAGE_POSTGRES_UID
+				spec.PostgresGID = util.COMBINED_IMAGE_POSTGRES_GID
+				spec.PostgresConfiguration.Extensions = nil
+				log.Info("Using combined image mode (K8s < 1.35)", "imageName", documentdbImage)
+			}
+
 			return spec
 		}(),
 	}

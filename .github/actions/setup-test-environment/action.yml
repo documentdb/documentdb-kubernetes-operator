@@ -64,6 +64,10 @@ inputs:
   repository-owner:
     description: 'GitHub repository owner'
     required: true
+  kubernetes-version:
+    description: 'Kubernetes version for Kind cluster (e.g., v1.35.0, v1.34.0)'
+    required: false
+    default: 'v1.35.0'
 
 runs:
   using: 'composite'
@@ -206,17 +210,15 @@ runs:
         cat > /tmp/kind-config.yaml <<EOF
         kind: Cluster
         apiVersion: kind.x-k8s.io/v1alpha4
-        featureGates:
-          ImageVolume: true
         EOF
-        echo "Kind config file created:"
+        echo "Kind config file created (K8s ${{ inputs.kubernetes-version }}):"
         cat /tmp/kind-config.yaml
 
     - name: Create kind cluster
       uses: helm/kind-action@v1.12.0
       with:
         version: v0.31.0
-        node_image: kindest/node:v1.35.0
+        node_image: kindest/node:${{ inputs.kubernetes-version }}
         cluster_name: documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}
         config: /tmp/kind-config.yaml
 

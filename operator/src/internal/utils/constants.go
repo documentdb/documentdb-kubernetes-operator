@@ -14,7 +14,10 @@ const (
 	// DocumentDB image repository
 	DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/microsoft/documentdb/documentdb-local"
 
-	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
+	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode (K8s >= 1.35).
+	DEFAULT_DOCUMENTDB_IMAGE = "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+	// DEFAULT_COMBINED_DOCUMENTDB_IMAGE is the all-in-one image used in combined mode (K8s < 1.35).
+	DEFAULT_COMBINED_DOCUMENTDB_IMAGE     = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
 	DEFAULT_GATEWAY_IMAGE                 = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
@@ -42,6 +45,15 @@ const (
 	CNPG_DEFAULT_STOP_DELAY = 30
 
 	CNPG_MAX_CLUSTER_NAME_LENGTH = 50
+
+	// Combined image mode constants (K8s < 1.35, no ImageVolume support)
+	// The documentdb-local combined image uses UID 105 / GID 108 for the postgres user.
+	COMBINED_IMAGE_POSTGRES_UID int64 = 105
+	COMBINED_IMAGE_POSTGRES_GID int64 = 108
+
+	// MinK8sMinorVersionForImageVolume is the minimum Kubernetes minor version where
+	// ImageVolume is GA (always enabled). K8s 1.35+ has ImageVolume GA.
+	MinK8sMinorVersionForImageVolume = 35
 
 	// JSON Patch paths
 	JSON_PATCH_PATH_REPLICA_CLUSTER      = "/spec/replica"

@@ -124,6 +124,7 @@ jobs:
         use-external-images: ${{ github.event_name != 'pull_request' && github.event.inputs.image_tag != '' && github.event.inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
+        kubernetes-version: 'v1.35.0'
 
     - name: Test connection with mongosh
       run: |

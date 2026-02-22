@@ -15,6 +15,9 @@ corev1 "k8s.io/api/core/v1"
 metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 "k8s.io/apimachinery/pkg/runtime"
 "k8s.io/apimachinery/pkg/types"
+"k8s.io/apimachinery/pkg/version"
+fakediscovery "k8s.io/client-go/discovery/fake"
+kubefake "k8s.io/client-go/kubernetes/fake"
 "k8s.io/client-go/tools/record"
 "sigs.k8s.io/controller-runtime/pkg/client"
 "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1695,6 +1698,73 @@ Expect(corev1.AddToScheme(scheme)).To(Succeed())
 			// Verify temp PVC still exists
 			existingPVC := &corev1.PersistentVolumeClaim{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName + "-pv-recovery-temp", Namespace: documentDBNamespace}, existingPVC)).To(Succeed())
+		})
+	})
+
+	Describe("detectImageVolumeSupport", func() {
+		It("should return true for K8s >= 1.35", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeTrue())
+		})
+
+		It("should return false for K8s < 1.35", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "34"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return true for K8s 1.36+", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "36"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeTrue())
+		})
+
+		It("should return false when Clientset is nil", func() {
+			reconciler := &DocumentDBReconciler{
+				Clientset: nil,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeFalse())
+		})
+
+		It("should handle minor version with + suffix", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35+"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeTrue())
 		})
 	})
 })

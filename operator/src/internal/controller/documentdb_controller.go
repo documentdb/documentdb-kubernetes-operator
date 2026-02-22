@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,10 @@ type DocumentDBReconciler struct {
 	Clientset kubernetes.Interface
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
+	// ImageVolumeSupported indicates whether the Kubernetes cluster supports ImageVolume (K8s >= 1.35).
+	// When true, the operator uses separate PostgreSQL + extension images via CNPG Extensions.
+	// When false, it falls back to a combined image containing both (legacy mode for K8s < 1.35).
+	ImageVolumeSupported bool
 }
 
 var reconcileMutex sync.Mutex
@@ -147,10 +152,10 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// create the CNPG Cluster
-	documentdbImage := util.GetDocumentDBImageForInstance(documentdb)
+	documentdbImage := util.GetDocumentDBImageForInstance(documentdb, r.ImageVolumeSupported)
 
 	currentCnpgCluster := &cnpgv1.Cluster{}
-	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
+	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), r.ImageVolumeSupported, logger)
 
 	if replicationContext.IsReplicating() {
 		err = r.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, desiredCnpgCluster)
@@ -319,9 +324,12 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if documentdb extension needs to be upgraded (image update + ALTER EXTENSION)
-	if err := r.upgradeDocumentDBExtensionIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
-		logger.Error(err, "Failed to upgrade DocumentDB extension")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	// This only applies when using separate images via ImageVolume (K8s >= 1.35)
+	if r.ImageVolumeSupported {
+		if err := r.upgradeDocumentDBExtensionIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
+			logger.Error(err, "Failed to upgrade DocumentDB extension")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
 	}
 
 	// Don't requeue again unless there is a change
@@ -529,6 +537,16 @@ func documentDBServicePredicate() predicate.Predicate {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.ImageVolumeSupported = r.detectImageVolumeSupport()
+	setupLog := ctrl.Log.WithName("setup")
+	if r.ImageVolumeSupported {
+		setupLog.Info("ImageVolume support detected (K8s >= 1.35), using separate PostgreSQL and extension images")
+	} else {
+		setupLog.Info("DEPRECATION WARNING: "+
+			"Support for Kubernetes < 1.35 will be removed in a future release. "+
+			"Please upgrade your cluster to Kubernetes 1.35 or later.")
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&dbpreview.DocumentDB{}).
 		Owns(&corev1.Service{}, builder.WithPredicates(documentDBServicePredicate())).
@@ -537,6 +555,29 @@ func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&cnpgv1.Subscription{}).
 		Named("documentdb-controller").
 		Complete(r)
+}
+
+// detectImageVolumeSupport checks if the Kubernetes cluster supports ImageVolume (K8s >= 1.35).
+// Returns true if the server minor version is >= MinK8sMinorVersionForImageVolume.
+func (r *DocumentDBReconciler) detectImageVolumeSupport() bool {
+	if r.Clientset == nil {
+		return false
+	}
+
+	serverVersion, err := r.Clientset.Discovery().ServerVersion()
+	if err != nil {
+		ctrl.Log.WithName("setup").Error(err, "Failed to detect Kubernetes version, defaulting to combined image mode")
+		return false
+	}
+
+	minor, err := strconv.Atoi(strings.TrimSuffix(serverVersion.Minor, "+"))
+	if err != nil {
+		ctrl.Log.WithName("setup").Error(err, "Failed to parse Kubernetes minor version", "minor", serverVersion.Minor)
+		return false
+	}
+
+	ctrl.Log.WithName("setup").Info("Detected Kubernetes version", "major", serverVersion.Major, "minor", serverVersion.Minor)
+	return minor >= util.MinK8sMinorVersionForImageVolume
 }
 
 // COPIED FROM https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.25/internal/cmd/plugin/promote/promote.go

@@ -57,8 +57,6 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
-  DOCUMENTDB_OLD_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0
-  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -71,7 +69,7 @@ jobs:
     secrets: inherit
 
   e2e-test:
-    name: Run E2E Tests
+    name: E2E (${{ matrix.architecture }}, K8s ${{ matrix.kubernetes_version }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: build
@@ -80,16 +78,40 @@ jobs:
     strategy:
       matrix:
         include:
+          # ImageVolume mode (K8s >= 1.35) - uses separate PostgreSQL + extension images
           - architecture: amd64
             runner: ubuntu-22.04
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
+            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+            documentdb_old_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0"
           - architecture: arm64
             runner: ubuntu-22.04-arm
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
+            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+            documentdb_old_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0"
+          # Combined mode (K8s < 1.35) - uses single all-in-one image
+          - architecture: amd64
+            runner: ubuntu-22.04
+            test_scenario_name: "single-node"
+            node_count: 1
+            instances_per_node: 1
+            kubernetes_version: "v1.34.0"
+            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
+            documentdb_old_image: ""
+          - architecture: arm64
+            runner: ubuntu-22.04-arm
+            test_scenario_name: "single-node"
+            node_count: 1
+            instances_per_node: 1
+            kubernetes_version: "v1.34.0"
+            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
+            documentdb_old_image: ""
     
     env:
       # Use built image tag on PR or when no external tag provided
@@ -126,6 +148,7 @@ jobs:
           echo "- **Source**: Local build pipeline" >> $GITHUB_STEP_SUMMARY
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: \`${{ matrix.kubernetes_version }}\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment
@@ -145,17 +168,19 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
-        documentdb-image: ${{ env.DOCUMENTDB_OLD_IMAGE }}
+        documentdb-image: ${{ matrix.documentdb_old_image || matrix.documentdb_image }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
+        kubernetes-version: ${{ matrix.kubernetes_version }}
 
     - name: Test DocumentDB Image Upgrade
+      if: matrix.documentdb_old_image != ''
       run: |
         echo "Testing DocumentDB extension image upgrade on ${{ matrix.architecture }}..."
         
-        OLD_IMAGE="${{ env.DOCUMENTDB_OLD_IMAGE }}"
-        NEW_IMAGE="${{ env.DOCUMENTDB_IMAGE }}"
+        OLD_IMAGE="${{ matrix.documentdb_old_image }}"
+        NEW_IMAGE="${{ matrix.documentdb_image }}"
         
         # Verify current image is the old image
         CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
@@ -507,10 +532,11 @@ jobs:
     - name: Test completion summary
       if: always()
       run: |
-        echo "## E2E Test Summary for ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
+        echo "## E2E Test Summary for ${{ matrix.architecture }} (K8s ${{ matrix.kubernetes_version }})" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Architecture**: ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Runner**: ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: ${{ matrix.kubernetes_version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Test Scenario**: ${{ matrix.test_scenario_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Node Count**: ${{ matrix.node_count }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Image Tag**: ${{ env.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
