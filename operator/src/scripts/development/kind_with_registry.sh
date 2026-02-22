@@ -12,6 +12,10 @@ fi
 
 # 2. Create kind cluster with containerd registry config dir enabled
 #
+# Kubernetes node image version — override via K8S_VERSION env var.
+# Default: v1.35.0 (ImageVolume GA). Use v1.34.0 to test combined mode.
+K8S_VERSION="${K8S_VERSION:-v1.35.0}"
+
 # NOTE: the containerd config patch is not necessary with images from kind v0.27.0+
 # It may enable some older images to work similarly.
 # If you're only supporting newer relases, you can just use `kind create cluster` here.
@@ -20,7 +24,7 @@ fi
 # https://github.com/kubernetes-sigs/kind/issues/2875
 # https://github.com/containerd/containerd/blob/main/docs/cri/config.md#registry-configuration
 # See: https://github.com/containerd/containerd/blob/main/docs/hosts.md
-cat <<EOF | kind create cluster --config=-
+cat <<EOF | kind create cluster --image "kindest/node:${K8S_VERSION}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 containerdConfigPatches:

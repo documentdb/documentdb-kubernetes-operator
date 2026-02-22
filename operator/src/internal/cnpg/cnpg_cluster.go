@@ -17,7 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdb_image, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion, useImageVolume bool, log logr.Logger) *cnpgv1.Cluster {
 	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
@@ -56,7 +56,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
 				Instances: documentdb.Spec.InstancesPerNode,
-				ImageName: documentdb_image,
+				ImageName: documentdb.Spec.PostgresImage,
 				StorageConfiguration: cnpgv1.StorageConfiguration{
 					StorageClass: storageClassPointer, // Use configured storage class or default
 					Size:         documentdb.Spec.Resource.Storage.PvcSize,
@@ -77,9 +77,16 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						Parameters: params,
 					}}
 				}(),
-				PostgresUID: 105,
-				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Extensions: []cnpgv1.ExtensionConfiguration{
+						{
+							Name: "documentdb",
+							ImageVolumeSource: corev1.ImageVolumeSource{
+								Reference: documentdbImage,
+							},
+							LdLibraryPath: []string{"lib"},
+						},
+					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
 					Parameters: func() map[string]string {
 						params := map[string]string{
@@ -110,6 +117,16 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				Affinity: documentdb.Spec.Affinity,
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
+
+			// Combined mode (K8s < 1.35): use the all-in-one image directly and clear ImageVolume fields.
+			if !useImageVolume {
+				spec.ImageName = documentdbImage
+				spec.PostgresUID = util.COMBINED_IMAGE_POSTGRES_UID
+				spec.PostgresGID = util.COMBINED_IMAGE_POSTGRES_GID
+				spec.PostgresConfiguration.Extensions = nil
+				log.Info("Using combined image mode (K8s < 1.35)", "imageName", documentdbImage)
+			}
+
 			return spec
 		}(),
 	}

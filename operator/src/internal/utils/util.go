@@ -456,7 +456,10 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 
 // GetDocumentDBImageForInstance returns the documentdb engine image.
 // Priority: spec.documentDBImage > spec.documentDBVersion > env.DOCUMENTDB_VERSION > default
-func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
+// The default depends on the deployment mode:
+//   - ImageVolume mode (useImageVolume=true): returns DEFAULT_DOCUMENTDB_IMAGE (extension image)
+//   - Combined mode (useImageVolume=false): returns DEFAULT_COMBINED_DOCUMENTDB_IMAGE (all-in-one image)
+func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB, useImageVolume bool) string {
 	if documentdb.Spec.DocumentDBImage != "" {
 		return documentdb.Spec.DocumentDBImage
 	}
@@ -478,8 +481,11 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 		return CHANGESTREAM_DOCUMENTDB_IMAGE
 	}
 
-	// Fall back to default
-	return DEFAULT_DOCUMENTDB_IMAGE
+	// Fall back to mode-appropriate default
+	if useImageVolume {
+		return DEFAULT_DOCUMENTDB_IMAGE
+	}
+	return DEFAULT_COMBINED_DOCUMENTDB_IMAGE
 }
 
 func GenerateServiceName(source, target, resourceGroup string) string {

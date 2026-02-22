@@ -44,6 +44,12 @@ type DocumentDBSpec struct {
 	// If not specified, defaults to a version that matches the DocumentDB operator version.
 	GatewayImage string `json:"gatewayImage,omitempty"`
 
+	// PostgresImage is the container image to use for the PostgreSQL server.
+	// If not specified, defaults to "ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm".
+	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm"
+	// +optional
+	PostgresImage string `json:"postgresImage,omitempty"`
+
 	// DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
 	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
 	// a default secret name `documentdb-credentials` is used.
@@ -273,6 +279,9 @@ type DocumentDBStatus struct {
 	ConnectionString string `json:"connectionString,omitempty"`
 	TargetPrimary    string `json:"targetPrimary,omitempty"`
 	LocalPrimary     string `json:"localPrimary,omitempty"`
+
+	// DocumentDBVersion is the currently installed version of the DocumentDB extension.
+	DocumentDBVersion string `json:"documentDBVersion,omitempty"`
 
 	// TLS reports gateway TLS provisioning status (Phase 1).
 	TLS *TLSStatus `json:"tls,omitempty"`

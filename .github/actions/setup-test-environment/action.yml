@@ -54,6 +54,9 @@ inputs:
     description: 'Whether to use external images instead of loading from artifacts'
     required: false
     default: 'false'
+  documentdb-image:
+    description: 'DocumentDB image to use for the cluster'
+    required: true
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -61,6 +64,10 @@ inputs:
   repository-owner:
     description: 'GitHub repository owner'
     required: true
+  kubernetes-version:
+    description: 'Kubernetes version for Kind cluster (e.g., v1.35.0, v1.34.0)'
+    required: false
+    default: 'v1.35.0'
 
 runs:
   using: 'composite'
@@ -197,10 +204,23 @@ runs:
         mongosh --version
         echo "✓ mongosh installed successfully for ${{ inputs.architecture }}"
 
+    - name: Create kind config file
+      shell: bash
+      run: |
+        cat > /tmp/kind-config.yaml <<EOF
+        kind: Cluster
+        apiVersion: kind.x-k8s.io/v1alpha4
+        EOF
+        echo "Kind config file created (K8s ${{ inputs.kubernetes-version }}):"
+        cat /tmp/kind-config.yaml
+
     - name: Create kind cluster
-      uses: helm/kind-action@v1.8.0
+      uses: helm/kind-action@v1.12.0
       with:
+        version: v0.31.0
+        node_image: kindest/node:${{ inputs.kubernetes-version }}
         cluster_name: documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}
+        config: /tmp/kind-config.yaml
 
     - name: Load Docker images into kind cluster (local build)
       if: inputs.use-external-images == 'false'
@@ -578,7 +598,7 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          documentDBImage: ${{ inputs.documentdb-image }}
           gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
           resource:
             storage:

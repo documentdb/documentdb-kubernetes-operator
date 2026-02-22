@@ -517,6 +517,81 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 	}
 }
 
+func TestGetDocumentDBImageForInstance(t *testing.T) {
+	tests := []struct {
+		name           string
+		documentdb     *dbpreview.DocumentDB
+		useImageVolume bool
+		expected       string
+	}{
+		{
+			name: "uses custom documentdb image when specified (ImageVolume mode)",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "custom-registry/documentdb:v2.0.0",
+				},
+			},
+			useImageVolume: true,
+			expected:       "custom-registry/documentdb:v2.0.0",
+		},
+		{
+			name: "uses custom documentdb image when specified (combined mode)",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "custom-registry/documentdb:v2.0.0",
+				},
+			},
+			useImageVolume: false,
+			expected:       "custom-registry/documentdb:v2.0.0",
+		},
+		{
+			name: "returns extension image default in ImageVolume mode",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "",
+				},
+			},
+			useImageVolume: true,
+			expected:       DEFAULT_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "returns combined image default in combined mode",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					DocumentDBImage: "",
+				},
+			},
+			useImageVolume: false,
+			expected:       DEFAULT_COMBINED_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "returns extension image default when spec is empty (ImageVolume mode)",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{},
+			},
+			useImageVolume: true,
+			expected:       DEFAULT_DOCUMENTDB_IMAGE,
+		},
+		{
+			name: "returns combined image default when spec is empty (combined mode)",
+			documentdb: &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{},
+			},
+			useImageVolume: false,
+			expected:       DEFAULT_COMBINED_DOCUMENTDB_IMAGE,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetDocumentDBImageForInstance(tt.documentdb, tt.useImageVolume)
+			if result != tt.expected {
+				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGetEnvironmentSpecificAnnotations(t *testing.T) {
 	tests := []struct {
 		name                string

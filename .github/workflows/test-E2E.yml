@@ -69,7 +69,7 @@ jobs:
     secrets: inherit
 
   e2e-test:
-    name: Run E2E Tests
+    name: E2E (${{ matrix.architecture }}, K8s ${{ matrix.kubernetes_version }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: build
@@ -78,16 +78,40 @@ jobs:
     strategy:
       matrix:
         include:
+          # ImageVolume mode (K8s >= 1.35) - uses separate PostgreSQL + extension images
           - architecture: amd64
             runner: ubuntu-22.04
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
+            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+            documentdb_old_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0"
           - architecture: arm64
             runner: ubuntu-22.04-arm
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
+            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
+            documentdb_old_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0"
+          # Combined mode (K8s < 1.35) - uses single all-in-one image
+          - architecture: amd64
+            runner: ubuntu-22.04
+            test_scenario_name: "single-node"
+            node_count: 1
+            instances_per_node: 1
+            kubernetes_version: "v1.34.0"
+            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
+            documentdb_old_image: ""
+          - architecture: arm64
+            runner: ubuntu-22.04-arm
+            test_scenario_name: "single-node"
+            node_count: 1
+            instances_per_node: 1
+            kubernetes_version: "v1.34.0"
+            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
+            documentdb_old_image: ""
     
     env:
       # Use built image tag on PR or when no external tag provided
@@ -124,6 +148,7 @@ jobs:
           echo "- **Source**: Local build pipeline" >> $GITHUB_STEP_SUMMARY
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: \`${{ matrix.kubernetes_version }}\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment
@@ -143,9 +168,93 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ matrix.documentdb_old_image || matrix.documentdb_image }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
+        kubernetes-version: ${{ matrix.kubernetes_version }}
+
+    - name: Test DocumentDB Image Upgrade
+      if: matrix.documentdb_old_image != ''
+      run: |
+        echo "Testing DocumentDB extension image upgrade on ${{ matrix.architecture }}..."
+        
+        OLD_IMAGE="${{ matrix.documentdb_old_image }}"
+        NEW_IMAGE="${{ matrix.documentdb_image }}"
+        
+        # Verify current image is the old image
+        CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        echo "Current DocumentDB image: $CURRENT_IMAGE"
+        
+        if [[ "$CURRENT_IMAGE" != "$OLD_IMAGE" ]]; then
+          echo "❌ Expected old image $OLD_IMAGE but found $CURRENT_IMAGE"
+          exit 1
+        fi
+        echo "✓ Cluster deployed with old image"
+        
+        # Check DocumentDB version in status before upgrade
+        DOCUMENTDB_VERSION_BEFORE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.documentDBVersion}')
+        echo "DocumentDB version before upgrade: $DOCUMENTDB_VERSION_BEFORE"
+        
+        echo ""
+        echo "Upgrading DocumentDB image to $NEW_IMAGE..."
+        kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' -p "{\"spec\":{\"documentDBImage\":\"$NEW_IMAGE\"}}"
+        
+        echo "Waiting for cluster to be healthy with new image..."
+        
+        # Extract expected version from image tag (e.g., "0.110.0" -> "0.110-0")
+        # NOTE: This parsing assumes semver format "X.Y.Z" where the last component becomes
+        # hyphen-separated in the extension version. Pre-release tags (e.g., "0.110.0-beta")
+        # are not currently supported and would not be converted correctly.
+        NEW_VERSION_TAG="${NEW_IMAGE##*:}"
+        EXPECTED_VERSION=$(echo "$NEW_VERSION_TAG" | sed 's/\.\([^.]*\)$/-\1/')
+        echo "Expected DocumentDB version after upgrade: $EXPECTED_VERSION"
+        
+        timeout 600 bash -c '
+        
+        while true; do
+          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          
+          # Check DocumentDB version in status
+          DOCUMENTDB_VERSION=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.documentDBVersion}" 2>/dev/null || echo "N/A")
+          
+          echo "DocumentDB status: $DB_STATUS, CNPG Cluster phase: $CLUSTER_STATUS, DocumentDB version: $DOCUMENTDB_VERSION"
+          
+          if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
+            if [[ "$DOCUMENTDB_VERSION" == "'"$EXPECTED_VERSION"'" ]]; then
+              HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+              if [[ "$HEALTHY_PODS" -ge "1" ]]; then
+                echo "✓ Cluster is healthy with new image and $HEALTHY_PODS healthy pods"
+                break
+              fi
+            fi
+          fi
+          
+          sleep 10
+        done
+        '
+        
+        echo "Verifying new image is applied..."
+        FINAL_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        echo "Final DocumentDB image in spec: $FINAL_IMAGE"
+        
+        if [[ "$FINAL_IMAGE" != "$NEW_IMAGE" ]]; then
+          echo "❌ New image not applied to DocumentDB spec"
+          kubectl get documentdb $DB_NAME -n $DB_NS -o yaml
+          exit 1
+        fi
+        
+        echo "✓ New image applied successfully"
+        
+        # Check DocumentDB version in status after upgrade
+        DOCUMENTDB_VERSION_AFTER=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.documentDBVersion}')
+        echo "DocumentDB version before upgrade: $DOCUMENTDB_VERSION_BEFORE"
+        echo "DocumentDB version after upgrade: $DOCUMENTDB_VERSION_AFTER"
+        
+        echo ""
+        echo "✅ DocumentDB image upgrade test completed successfully!"
+        echo "Upgraded from $OLD_IMAGE to $NEW_IMAGE"
 
     - name: Setup port forwarding for comprehensive tests
       uses: ./.github/actions/setup-port-forwarding
@@ -423,10 +532,11 @@ jobs:
     - name: Test completion summary
       if: always()
       run: |
-        echo "## E2E Test Summary for ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
+        echo "## E2E Test Summary for ${{ matrix.architecture }} (K8s ${{ matrix.kubernetes_version }})" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Architecture**: ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Runner**: ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: ${{ matrix.kubernetes_version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Test Scenario**: ${{ matrix.test_scenario_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Node Count**: ${{ matrix.node_count }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Image Tag**: ${{ env.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
