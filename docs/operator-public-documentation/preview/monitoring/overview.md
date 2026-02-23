@@ -30,7 +30,7 @@ The recommended monitoring stack collects infrastructure metrics from these cont
 └──────────────────┬───────────────────────────────────┘
                    │ remote write
 ┌──────────────────┴───────────────────────────────────┐
-│        OpenTelemetry Collector (DaemonSet)            │
+│        OpenTelemetry Collector                        │
 │  Receivers: kubeletstats, k8s_cluster, prometheus     │
 │  Processors: resource detection, attribute enrichment │
 │  Exporters: prometheusremotewrite                     │
@@ -45,15 +45,15 @@ The recommended monitoring stack collects infrastructure metrics from these cont
 └──────────────────────────────────────────────────────┘
 ```
 
-### Why DaemonSet over sidecar
+### Collector deployment modes
 
-The OpenTelemetry Collector runs as a **DaemonSet** (one collector per node) rather than as a sidecar per pod. This provides:
+The [telemetry design document](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) recommends the OpenTelemetry Collector as a **DaemonSet** (one collector per node) for single-tenant clusters. This provides:
 
 - Lower resource overhead — one collector per node instead of one per pod
 - Node-level metrics visibility (CPU, memory, filesystem)
 - Simpler configuration and management
 
-For multi-tenant setups requiring per-namespace isolation, a **Deployment** per namespace is used instead. See the [telemetry playground](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) for both patterns.
+The [telemetry playground](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) implements a **Deployment** (one collector per namespace) instead, which is better suited for multi-tenant setups requiring per-namespace metric isolation. Choose the mode that fits your isolation requirements.
 
 ## Prometheus Integration
 
@@ -104,9 +104,9 @@ spec:
 
 | Metric | Description | Container |
 |--------|-------------|-----------|
-| `container_cpu_usage_seconds_total` | Cumulative CPU time consumed | postgres, gateway |
-| `container_memory_working_set_bytes` | Current memory usage | postgres, gateway |
-| `container_spec_memory_limit_bytes` | Memory limit | postgres, gateway |
+| `container_cpu_usage_seconds_total` | Cumulative CPU time consumed | postgres, documentdb-gateway |
+| `container_memory_working_set_bytes` | Current memory usage | postgres, documentdb-gateway |
+| `container_spec_memory_limit_bytes` | Memory limit | postgres, documentdb-gateway |
 | `container_network_receive_bytes_total` | Network bytes received | pod-level |
 | `container_fs_reads_bytes_total` | Filesystem read bytes | postgres |
 
@@ -144,11 +144,11 @@ groups:
       - alert: DocumentDBHighCPU
         expr: |
           (rate(container_cpu_usage_seconds_total{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }[5m])
           / on(pod, container) container_spec_cpu_quota{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           } * 1e5) > 0.8
         for: 5m
@@ -160,11 +160,11 @@ groups:
       - alert: DocumentDBHighMemory
         expr: |
           (container_memory_working_set_bytes{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }
           / container_spec_memory_limit_bytes{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }) > 0.85
         for: 5m
@@ -186,7 +186,7 @@ groups:
       - alert: DocumentDBReconcileErrors
         expr: |
           rate(controller_runtime_reconcile_errors_total{
-            controller="documentdb"
+            controller="documentdb-controller"
           }[5m]) > 0
         for: 10m
         labels:
@@ -206,14 +206,14 @@ groups:
       - record: documentdb:cpu_usage_rate5m
         expr: |
           rate(container_cpu_usage_seconds_total{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }[5m])
 
       - record: documentdb:memory_usage_bytes
         expr: |
           container_memory_working_set_bytes{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }
 
@@ -221,7 +221,7 @@ groups:
         expr: |
           (documentdb:memory_usage_bytes
           / container_spec_memory_limit_bytes{
-            container=~"postgres|gateway",
+            container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }) * 100
 ```

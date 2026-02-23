@@ -4,7 +4,7 @@ This page documents the key metrics available when monitoring a DocumentDB clust
 
 ## Container Resource Metrics
 
-These metrics are collected via the kubelet/cAdvisor interface (or the OpenTelemetry `kubeletstats` receiver). They cover CPU, memory, network, and filesystem for the **postgres** and **gateway** containers in each DocumentDB pod.
+These metrics are collected via the kubelet/cAdvisor interface (or the OpenTelemetry `kubeletstats` receiver). They cover CPU, memory, network, and filesystem for the **postgres** and **documentdb-gateway** containers in each DocumentDB pod.
 
 ### CPU
 
@@ -22,7 +22,7 @@ CPU usage rate per container over 5 minutes:
 
 ```promql
 rate(container_cpu_usage_seconds_total{
-  container=~"postgres|gateway",
+  container=~"postgres|documentdb-gateway",
   pod=~".*documentdb.*"
 }[5m])
 ```
@@ -46,7 +46,7 @@ Compare gateway vs. postgres CPU across all pods:
 ```promql
 sum by (container) (
   rate(container_cpu_usage_seconds_total{
-    container=~"postgres|gateway",
+    container=~"postgres|documentdb-gateway",
     pod=~".*documentdb.*"
   }[5m])
 )
@@ -69,7 +69,7 @@ Memory usage in MiB per container:
 
 ```promql
 container_memory_working_set_bytes{
-  container=~"postgres|gateway",
+  container=~"postgres|documentdb-gateway",
   pod=~".*documentdb.*"
 } / 1024 / 1024
 ```
@@ -78,11 +78,11 @@ Memory utilization as a percentage of limit:
 
 ```promql
 (container_memory_working_set_bytes{
-  container=~"postgres|gateway",
+  container=~"postgres|documentdb-gateway",
   pod=~".*documentdb.*"
 }
 / container_spec_memory_limit_bytes{
-  container=~"postgres|gateway",
+  container=~"postgres|documentdb-gateway",
   pod=~".*documentdb.*"
 }) * 100
 ```
@@ -93,7 +93,7 @@ Top 5 pods by memory usage:
 topk(5,
   sum by (pod) (
     container_memory_working_set_bytes{
-      container=~"postgres|gateway",
+      container=~"postgres|documentdb-gateway",
       pod=~".*documentdb.*"
     }
   )
@@ -157,7 +157,7 @@ The DocumentDB operator binary exposes standard controller-runtime metrics on it
 | `controller_runtime_reconcile_errors_total` | Counter | Total reconciliation errors |
 | `controller_runtime_reconcile_time_seconds` | Histogram | Time spent in reconciliation |
 
-**Common labels:** `controller` (e.g., `documentdb`, `backup`, `scheduledbackup`, `certificate`, `persistentvolume`), `result` (`success`, `error`, `requeue`, `requeue_after`)
+**Common labels:** `controller` (e.g., `documentdb-controller`, `backup`, `scheduledbackup`, `certificate-controller`, `persistentvolume`), `result` (`success`, `error`, `requeue`, `requeue_after`)
 
 #### Example Queries
 
@@ -175,7 +175,7 @@ P95 reconciliation latency for the DocumentDB controller:
 histogram_quantile(0.95,
   sum by (le) (
     rate(controller_runtime_reconcile_time_seconds_bucket{
-      controller="documentdb"
+      controller="documentdb-controller"
     }[5m])
   )
 )
@@ -206,14 +206,14 @@ sum by (controller) (
 Work queue depth by controller:
 
 ```promql
-workqueue_depth{name=~"documentdb|backup|scheduledbackup|certificate"}
+workqueue_depth{name=~"documentdb-controller|backup|scheduledbackup|certificate-controller"}
 ```
 
 Average time items spend waiting in queue:
 
 ```promql
-rate(workqueue_queue_duration_seconds_sum{name="documentdb"}[5m])
-/ rate(workqueue_queue_duration_seconds_count{name="documentdb"}[5m])
+rate(workqueue_queue_duration_seconds_sum{name="documentdb-controller"}[5m])
+/ rate(workqueue_queue_duration_seconds_count{name="documentdb-controller"}[5m])
 ```
 
 ## CNPG / PostgreSQL Metrics
