@@ -454,7 +454,7 @@ jobs:
         spec:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
-          documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
           gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
           resource:
             storage:
