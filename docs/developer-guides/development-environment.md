@@ -65,9 +65,9 @@ Common tasks:
 | Spin up a kind cluster, push images, deploy operator & sample | `DEPLOY=true DEPLOY_CLUSTER=true ./scripts/development/deploy.sh` |
 | View operator logs | `stern documentdb-operator -n documentdb-operator` |
 
-> **Tip**: The devcontainer bind-mounts `/lib/modules` from the host to support
-> kind’s IPVS mode. Ensure Docker Desktop (or your Linux Docker service)
-> exposes this path if you modify the configuration.
+> **Tip**: The devcontainer uses Debian bookworm as its base image. Kind falls
+> back to iptables mode for kube-proxy, which is sufficient for local
+> development.
 
 ### Useful scripts
 
