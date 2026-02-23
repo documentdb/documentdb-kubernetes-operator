@@ -38,7 +38,11 @@ CPU utilization as a percentage of limit:
 (container_spec_cpu_quota{
   container="postgres",
   pod=~".*documentdb.*"
-} / 1e5)) * 100
+}
+/ container_spec_cpu_period{
+  container="postgres",
+  pod=~".*documentdb.*"
+})) * 100
 ```
 
 Compare gateway vs. postgres CPU across all pods:
@@ -294,7 +298,7 @@ The DocumentDB Gateway does not currently expose application-level metrics. When
 | `documentdb_gateway_write_operations_total` | Counter | Write operations (labels: `database`, `collection`) |
 | `documentdb_gateway_errors_total` | Counter | Error count (labels: `error_type`, `operation`) |
 
-These will be collected via Prometheus scraping (`/metrics` endpoint) or OTLP push. See the [telemetry design document](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) for the planned implementation.
+These will be collected via Prometheus scraping (`/metrics` endpoint) or OTLP push. See the [telemetry design document](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) for the planned implementation.
 
 ## OpenTelemetry Metric Names
 

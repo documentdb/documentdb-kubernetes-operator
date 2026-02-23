@@ -7,6 +7,7 @@ This guide describes how to monitor DocumentDB clusters running on Kubernetes us
 - A running Kubernetes cluster with the DocumentDB operator installed
 - [Helm 3](https://helm.sh/docs/intro/install/) for deploying Prometheus and Grafana
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) configured for your cluster
+- [`jq`](https://jqlang.github.io/jq/) for processing JSON in verification commands
 - (Optional) [OpenTelemetry Operator](https://opentelemetry.io/docs/kubernetes/operator/) for managed collector deployments
 
 ## Architecture
@@ -47,13 +48,13 @@ The recommended monitoring stack collects infrastructure metrics from these cont
 
 ### Collector deployment modes
 
-The [telemetry design document](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) recommends the OpenTelemetry Collector as a **DaemonSet** (one collector per node) for single-tenant clusters. This provides:
+The [telemetry design document](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) recommends the OpenTelemetry Collector as a **DaemonSet** (one collector per node) for single-tenant clusters. This provides:
 
 - Lower resource overhead — one collector per node instead of one per pod
 - Node-level metrics visibility (CPU, memory, filesystem)
 - Simpler configuration and management
 
-The [telemetry playground](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) implements a **Deployment** (one collector per namespace) instead, which is better suited for multi-tenant setups requiring per-namespace metric isolation. Choose the mode that fits your isolation requirements.
+The [telemetry playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) implements a **Deployment** (one collector per namespace) instead, which is better suited for multi-tenant setups requiring per-namespace metric isolation. Choose the mode that fits your isolation requirements.
 
 ## Prometheus Integration
 
@@ -79,9 +80,24 @@ The underlying CloudNative-PG cluster exposes PostgreSQL metrics on each pod. Th
 
 ### ServiceMonitor / PodMonitor
 
-If you use the Prometheus Operator, create a `ServiceMonitor` targeting the operator's metrics service:
+The operator does not ship a metrics `Service` or `ServiceMonitor` by default. If you use the Prometheus Operator and want to scrape controller-runtime metrics, create a `Service` and `ServiceMonitor` matching your deployment. For example, with a Helm release named `documentdb`:
 
 ```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-operator-metrics
+  namespace: documentdb-operator
+  labels:
+    app: documentdb
+spec:
+  selector:
+    app: documentdb            # must match your Helm release name
+  ports:
+    - name: metrics
+      port: 8443
+      targetPort: 8443
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -90,13 +106,16 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: documentdb-operator
+      app: documentdb          # must match the Service labels above
   endpoints:
     - port: metrics
       scheme: https
       tlsConfig:
-        insecureSkipVerify: true
+        insecureSkipVerify: true   # use a proper CA bundle in production
 ```
+
+!!! note
+    Adjust the `app` label to match your Helm release name. The operator must be started with `--metrics-bind-address=:8443` for the endpoint to be available.
 
 ## Key Metrics
 
@@ -147,10 +166,15 @@ groups:
             container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
           }[5m])
-          / on(pod, container) container_spec_cpu_quota{
+          / on(pod, container)
+          (container_spec_cpu_quota{
             container=~"postgres|documentdb-gateway",
             pod=~".*documentdb.*"
-          } * 1e5) > 0.8
+          }
+          / container_spec_cpu_period{
+            container=~"postgres|documentdb-gateway",
+            pod=~".*documentdb.*"
+          })) > 0.8
         for: 5m
         labels:
           severity: warning
@@ -228,7 +252,7 @@ groups:
 
 ## Telemetry Playground
 
-The [`documentdb-playground/telemetry/`](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) directory contains a complete reference implementation with:
+The [`documentdb-playground/telemetry/`](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) directory contains a complete reference implementation with:
 
 - Multi-tenant namespace isolation (separate Prometheus + Grafana per team)
 - OpenTelemetry Collector configurations for cAdvisor metric scraping
@@ -251,7 +275,7 @@ cd documentdb-playground/telemetry/scripts/
 
 # Access Grafana
 kubectl port-forward -n sales-namespace svc/grafana-sales 3001:3000 &
-# Open http://localhost:3001 (admin / admin123)
+# Open http://localhost:3001 (playground default: admin / admin123 — change in production)
 ```
 
 See the [telemetry design document](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) for the full architecture rationale including DaemonSet vs. sidecar trade-offs, OTLP receiver plans, and future application-level metrics.
