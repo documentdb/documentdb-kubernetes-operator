@@ -760,11 +760,11 @@ func TestGetDocumentDBServiceDefinition_LoadBalancerAnnotations(t *testing.T) {
 			service := GetDocumentDBServiceDefinition(documentdb, replicationContext, "default", tt.serviceType)
 
 			if tt.expectAnnotations {
-				if service.Annotations == nil || len(service.Annotations) == 0 {
+				if len(service.Annotations) == 0 {
 					t.Error("Expected annotations to be set for LoadBalancer service")
 				}
 			} else {
-				if service.Annotations != nil && len(service.Annotations) > 0 {
+				if len(service.Annotations) > 0 {
 					t.Errorf("Expected no annotations for %v service, got %v", tt.serviceType, service.Annotations)
 				}
 			}
