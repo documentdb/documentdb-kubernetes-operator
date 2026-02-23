@@ -254,7 +254,7 @@ kubectl port-forward -n sales-namespace svc/grafana-sales 3001:3000 &
 # Open http://localhost:3001 (admin / admin123)
 ```
 
-See the [telemetry design document](https://github.com/microsoft/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) for the full architecture rationale including DaemonSet vs. sidecar trade-offs, OTLP receiver plans, and future application-level metrics.
+See the [telemetry design document](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/telemetry-design.md) for the full architecture rationale including DaemonSet vs. sidecar trade-offs, OTLP receiver plans, and future application-level metrics.
 
 ## Verification
 
