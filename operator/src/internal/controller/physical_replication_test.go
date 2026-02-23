@@ -96,6 +96,10 @@ var _ = Describe("Physical Replication", func() {
 
 		reconciler := buildDocumentDBReconciler(documentdb, ownedService, ownedCluster, clusterNameConfigMap)
 
+		// Handle finalizer
+		_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: documentdb.Name, Namespace: namespace}})
+		Expect(err).ToNot(HaveOccurred())
+
 		result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: documentdb.Name, Namespace: namespace}})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(result).To(Equal(ctrl.Result{}))

@@ -125,7 +125,7 @@ func (r ReplicationContext) String() string {
 		stateStr = "NotPresent"
 	}
 
-	return fmt.Sprintf("ReplicationContext{CNPGClusterName: %s, State: %s, Others: %v, PrimaryRegion: %s, CurrentLocalPrimary: %s, TargetLocalPrimary: %s}",
+	return fmt.Sprintf("ReplicationContext{CNPGClusterName: %s, State: %s, OtherClusterNames: %v, PrimaryRegion: %s, CurrentLocalPrimary: %s, TargetLocalPrimary: %s}",
 		r.CNPGClusterName, stateStr, r.OtherCNPGClusterNames, r.PrimaryCNPGClusterName, r.currentLocalPrimary, r.targetLocalPrimary)
 }
 
@@ -217,7 +217,7 @@ func (r *ReplicationContext) CreateStandbyNamesList() []string {
 	standbyNames := make([]string, len(r.OtherCNPGClusterNames))
 	copy(standbyNames, r.OtherCNPGClusterNames)
 	/* TODO re-enable when we have a WAL replica image (also add one to length)
-	standbyNames[len(r.Others)] = "pg_receivewal"
+	standbyNames[len(r.OtherClusterNames)] = "pg_receivewal"
 	*/
 	return standbyNames
 }
