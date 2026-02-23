@@ -5,7 +5,7 @@
 ARG TARGETOS
 ARG TARGETARCH
 ARG ARCH
-FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/go/microsoft/golang:1.24-azurelinux3.0 AS builder
+FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/go/microsoft/golang:1.25-azurelinux3.0 AS builder
 
 
 # Cache the dependencies

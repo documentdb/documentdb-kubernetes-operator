@@ -10,6 +10,9 @@ on:
       - 'documentdb-kubectl-plugin/**/*.go'
       - 'documentdb-kubectl-plugin/go.mod'
       - 'documentdb-kubectl-plugin/go.sum'
+      - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
+      - 'operator/cnpg-plugins/sidecar-injector/go.mod'
+      - 'operator/cnpg-plugins/sidecar-injector/go.sum'
   pull_request:
     paths:
       - 'operator/src/**/*.go'
@@ -18,6 +21,9 @@ on:
       - 'documentdb-kubectl-plugin/**/*.go'
       - 'documentdb-kubectl-plugin/go.mod'
       - 'documentdb-kubectl-plugin/go.sum'
+      - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
+      - 'operator/cnpg-plugins/sidecar-injector/go.mod'
+      - 'operator/cnpg-plugins/sidecar-injector/go.sum'
   schedule:
     - cron: '22 10 * * *'
   workflow_dispatch:
