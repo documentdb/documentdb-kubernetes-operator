@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("read_host_2")
     parser.add_argument("username")
     parser.add_argument("password")
-    parser.add_argument("--use-srv", type=bool, default=False, help="Use srv connection string")
+    parser.add_argument("--use-srv", action="store_true" help="Use srv connection string")
     parser.add_argument("--duration-seconds", type=int, default=600)
     parser.add_argument("--sleep-seconds", type=float, default=0.2)
     parser.add_argument("--port", type=int, default=10260)

@@ -83,7 +83,7 @@ if [[ ${#read_clusters[@]} -lt 2 ]]; then
   fail "Need at least two non-primary clusters for read endpoints"
 fi
 
-use_srv=false
+use_srv=""
 if [[ "$USE_DNS_ENDPOINTS" == "true" ]]; then
   if [[ -z "$DNS_ZONE_FQDN" ]]; then
     fail "DNS_ZONE_FQDN must be set when USE_DNS_ENDPOINTS is true"
@@ -91,7 +91,7 @@ if [[ "$USE_DNS_ENDPOINTS" == "true" ]]; then
   insert_endpoint="${DNS_ZONE_FQDN}"
   read_endpoint_1="${read_clusters[0]}.${DNS_ZONE_FQDN}"
   read_endpoint_2="${read_clusters[1]}.${DNS_ZONE_FQDN}"
-  use_srv=true
+  use_srv="--use-srv"
 else
   insert_endpoint=$(get_service_endpoint "$primary_context") || fail "Failed to resolve insert endpoint on $primary_context"
   read_endpoint_1=$(get_service_endpoint "${read_clusters[0]}") || fail "Failed to resolve read endpoint on ${read_clusters[0]}"
@@ -130,7 +130,7 @@ echo "Starting workload..."
   "$insert_endpoint" "$read_endpoint_1" "$read_endpoint_2" \
   "$username" "$password" \
   --duration-seconds "$TOTAL_DURATION_SECONDS" \
-  --use-srv "$use_srv" &
+  "$use_srv" &
 python_pid=$!
 
 sleep "$CHAOS_DELAY_SECONDS"
