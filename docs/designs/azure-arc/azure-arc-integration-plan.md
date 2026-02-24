@@ -2,11 +2,13 @@
 
 ## Overview
 
-This document outlines a two-phase plan to integrate DocumentDB Kubernetes Operator with Azure extensions for deployment tracking and billing across **all** Kubernetes environments.
+This document outlines a two-phase plan to integrate DocumentDB Kubernetes Operator with Azure Kubernetes extensions for deployment tracking and billing across **all** Kubernetes environments.
 
 **Goal:** Enable customers to install DocumentDB on any Kubernetes cluster (AKS, EKS, GKE, on-premises) while providing visibility in Azure Portal and usage-based billing.
 
-**Key Insight:** Azure knows a cluster exists, but NOT what's installed on it. Extensions solve this tracking gap.
+**Key Insight:** Azure knows a cluster exists, but NOT what's installed on it. Kubernetes extensions solve this tracking gap.
+
+> **Note:** "Kubernetes extensions" (via `az k8s-extension`) are specific to Kubernetes clusters. Azure has separate extension mechanisms for VMs, Arc servers, etc.
 
 ### Cluster Type Support
 
@@ -17,7 +19,7 @@ This document outlines a two-phase plan to integrate DocumentDB Kubernetes Opera
 | **GKE** (GCP) | `connectedClusters` | ✅ Yes |
 | **On-premises** | `connectedClusters` | ✅ Yes |
 
-**Same extension type (`Microsoft.DocumentDB.Operator`) works for all cluster types.**
+**Same Kubernetes extension type (`Microsoft.DocumentDB.Operator`) works for all cluster types.**
 
 ---
 
@@ -51,11 +53,11 @@ This document outlines a two-phase plan to integrate DocumentDB Kubernetes Opera
 
 ## Deployment Options
 
-Two approaches are available for deploying DocumentDB via Azure Arc:
+Two approaches are available for deploying DocumentDB via Azure:
 
-### Option A: Azure Extension (Full Registration)
+### Option A: Kubernetes Extension (Full Registration)
 
-Deploy as an official Azure extension type. **Works for both AKS and Arc-enabled clusters.**
+Deploy as an official Azure Kubernetes extension type via `az k8s-extension`. **Works for both AKS and Arc-enabled clusters.**
 
 ```bash
 # For AKS clusters (no Arc agent needed)
@@ -113,8 +115,8 @@ az k8s-configuration flux create \
 
 ### Comparison
 
-| Feature | Option A: Azure Extension | Option B: Flux GitOps |
-|---------|--------------------------|----------------------|
+| Feature | Option A: K8s Extension | Option B: Flux GitOps |
+|---------|------------------------|----------------------|
 | **AKS support** | ✅ Yes (managedClusters) | ✅ Yes (managedClusters) |
 | **Arc cluster support** | ✅ Yes (connectedClusters) | ✅ Yes (connectedClusters) |
 | **Azure registration required** | ✅ Yes (approval process) | ❌ No |
@@ -130,14 +132,14 @@ az k8s-configuration flux create \
 
 ### Pros & Cons
 
-#### Option A: Arc Extension
+#### Option A: Kubernetes Extension
 
 **Pros:**
 - Official Azure Marketplace presence
 - Built-in health monitoring and status reporting
-- Native Arc metering for billing (Phase 2)
+- Native Azure metering for billing (Phase 2)
 - Enterprise support from Microsoft
-- Consistent experience with other Arc extensions
+- Consistent experience with other K8s extensions (Defender, Policy, etc.)
 
 **Cons:**
 - Requires Azure extension type registration (approval process)
@@ -164,27 +166,27 @@ az k8s-configuration flux create \
 | Scenario | Recommended Option |
 |----------|-------------------|
 | Need to deploy immediately | **Option B: Flux GitOps** |
-| Want Azure Marketplace presence | **Option A: Arc Extension** |
-| Require built-in Arc billing | **Option A: Arc Extension** |
+| Want Azure Marketplace presence | **Option A: K8s Extension** |
+| Require built-in Azure billing | **Option A: K8s Extension** |
 | Already using GitOps workflow | **Option B: Flux GitOps** |
-| Enterprise customers expecting official extension | **Option A: Arc Extension** |
+| Enterprise customers expecting official extension | **Option A: K8s Extension** |
 
 ---
 
-## Phase 1: Arc Extension + ARM Visibility
+## Phase 1: K8s Extension + ARM Visibility
 
 **Duration:** 3-4 weeks  
-**Goal:** Install DocumentDB via Arc, view in Azure Portal
+**Goal:** Install DocumentDB via `az k8s-extension`, view in Azure Portal
 
-> **Note:** This phase covers Option A (Arc Extension). For Option B (Flux GitOps), skip to the [Flux GitOps Setup](#flux-gitops-setup-option-b) section.
+> **Note:** This phase covers Option A (K8s Extension). For Option B (Flux GitOps), skip to the [Flux GitOps Setup](#flux-gitops-setup-option-b) section.
 
 ### What Gets Deployed
 
 | Component | Deployed By | Location |
 |-----------|-------------|----------|
-| Azure Arc Agent | Customer (one-time per cluster) | `azure-arc` namespace |
-| DocumentDB Operator | Arc Extension Manager | `documentdb-operator` namespace |
-| CloudNative-PG Operator | Helm dependency | `documentdb-operator` namespace |
+| Azure Arc Agent | Customer (one-time, non-AKS only) | `azure-arc` namespace |
+| DocumentDB Operator | K8s Extension Manager | `documentdb-operator` namespace |
+| CloudNative-PG Operator | Helm dependency | `cnpg-operator` namespace |
 
 ### Task Breakdown
 
@@ -196,7 +198,7 @@ Create `extension.yaml` that tells Arc how to deploy the operator.
 ```
 operator/
 └── arc-extension/
-    ├── extension.yaml       # Arc extension manifest
+    ├── extension.yaml       # K8s extension manifest
     ├── values-arc.yaml      # Arc-specific Helm overrides
     └── README.md            # Installation guide
 ```
@@ -249,13 +251,23 @@ kubectl get deployment documentdb-operator -n documentdb-operator
 
 #### Task 1.4: Register Extension Type with Azure (Week 3)
 
-Register `Microsoft.DocumentDB.Operator` as valid Arc extension type.
+Register `Microsoft.DocumentDB.Operator` as valid K8s extension type.
 
 **Steps:**
-1. Submit extension registration request to Azure Arc team
-2. Provide extension manifest and chart location
-3. Configure release trains (preview, stable)
-4. Wait for approval (may take several days)
+1. **Contact Azure Arc team** via one of:
+   - Internal: [Extension Registration (eng.ms)](https://eng.ms/docs/cloud-ai-platform/azure-edge-platform-aep/aep-arc-for-kubernetes/arc-for-k8s-developer-docs/extension-registration)
+   - External: [Arc K8s Extensions Feedback](https://aka.ms/arc-k8s-extensions-feedback)
+2. **Provide extension manifest** including:
+   - Extension type name: `Microsoft.DocumentDB.Operator`
+   - Helm chart OCI URL: `oci://ghcr.io/documentdb/documentdb-operator`
+   - Chart version(s): `0.1.3`
+   - Configuration settings schema
+   - Health check definitions
+3. **Configure release trains** (preview, stable)
+4. **Test in staging environment** (Azure provides test tenant)
+5. **Promote to production** after validation
+
+> **Note:** There's no self-service portal for extension registration. This requires manual coordination with the Azure Arc team.
 
 **Deliverable:** Registered extension type in Azure
 
@@ -656,7 +668,7 @@ func (r *Reporter) ReportToAzureMonitor(ctx context.Context, record *UsageRecord
 - Azure CLI with `connectedk8s` extension
 - Arc agent installed on cluster (`az connectedk8s connect`)
 
-**Additional for Option A (Azure Extension):**
+**Additional for Option A (K8s Extension):**
 - Extension type registration (requires Microsoft approval)
 - Azure Commerce onboarding (Phase 2 billing)
 
@@ -683,6 +695,15 @@ az graph query -q "
 
 ## References
 
+### Extension Development & Registration
+
+- [Cluster Extensions Conceptual Overview](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/conceptual-extensions) - How extensions work
+- [Extensions Release & Publishing](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/extensions-release) - Partner extension guide
+- [Extension Type Registration (Internal)](https://eng.ms/docs/cloud-ai-platform/azure-edge-platform-aep/aep-arc-for-kubernetes/arc-for-k8s-developer-docs/extension-registration) - Microsoft internal docs (requires corp access)
+- [Arc K8s Extensions Feedback](https://aka.ms/arc-k8s-extensions-feedback) - Request new extension registration
+
+### General Documentation
+
 - [AKS Cluster Extensions](https://learn.microsoft.com/en-us/azure/aks/cluster-extensions)
 - [Azure Arc-enabled Kubernetes](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/)
 - [Create Arc Extensions](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/extensions)
@@ -691,6 +712,16 @@ az graph query -q "
 - [Flux Documentation](https://fluxcd.io/flux/) (CNCF project)
 - [Azure Kubernetes Fleet Manager](https://learn.microsoft.com/en-us/azure/kubernetes-fleet/)
 - [Azure Resource Graph](https://learn.microsoft.com/en-us/azure/governance/resource-graph/)
+
+### Example Extensions (Reference Implementations)
+
+| Extension | Type | Docs |
+|-----------|------|------|
+| Azure Monitor | `Microsoft.AzureMonitor.Containers` | [Container Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/containers/container-insights-enable-arc-enabled-clusters) |
+| Azure Defender | `Microsoft.AzureDefender.Kubernetes` | [Defender for Containers](https://learn.microsoft.com/en-us/azure/defender-for-cloud/defender-for-kubernetes-azure-arc) |
+| Azure ML | `Microsoft.AzureML.Kubernetes` | [ML on Arc](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-attach-kubernetes-anywhere) |
+| Flux | `Microsoft.Flux` | [GitOps with Flux](https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/conceptual-gitops-flux2) |
+| Dapr | `Microsoft.Dapr` | [Dapr extension](https://learn.microsoft.com/en-us/azure/aks/dapr) |
 
 ---
 
@@ -751,9 +782,9 @@ Fleet uses:
 | **GKE** (GCP) | ✅ Yes | Arc provides Azure connectivity |
 | **On-premises** | ✅ Yes | Arc provides Azure connectivity |
 
-### Fleet vs Arc Extension: Different Use Cases
+### Fleet vs K8s Extension: Different Use Cases
 
-| Aspect | Arc Extension | Fleet Manager |
+| Aspect | K8s Extension | Fleet Manager |
 |--------|---------------|---------------|
 | **Primary purpose** | Per-cluster app lifecycle | Multi-cluster orchestration |
 | **Installation trigger** | `az k8s-extension create` | ClusterResourcePlacement (CRP) |
@@ -793,10 +824,10 @@ kubectl get clusterresourceplacement documentdb-operator \
 
 | Customer Profile | Recommended Approach |
 |------------------|---------------------|
-| Single cluster | Arc Extension (Option A or B) |
+| Single cluster | K8s Extension (Option A or B) |
 | Multiple AKS clusters | Fleet Manager (no Arc agents needed) |
 | Multi-cloud (AKS + EKS/GKE) | Fleet + Arc agents on non-AKS clusters |
-| Needs Azure Marketplace billing | Arc Extension (Option A) |
+| Needs Azure Marketplace billing | K8s Extension (Option A) |
 | Enterprise with existing Fleet | Fleet CRPs for deployment, custom metering for billing |
 
 ### Existing Fleet Implementation
