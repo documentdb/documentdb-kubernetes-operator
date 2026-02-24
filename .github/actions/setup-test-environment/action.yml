@@ -57,6 +57,10 @@ inputs:
   documentdb-image:
     description: 'DocumentDB image to use for the cluster'
     required: true
+  gateway-image:
+    description: 'Gateway image to use for the cluster (defaults to ghcr.io/microsoft/documentdb/documentdb-local:16)'
+    required: false
+    default: 'ghcr.io/microsoft/documentdb/documentdb-local:16'
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -599,7 +603,7 @@ runs:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
           documentDBImage: ${{ inputs.documentdb-image }}
-          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          gatewayImage: ${{ inputs.gateway-image }}
           resource:
             storage:
               pvcSize: 5Gi

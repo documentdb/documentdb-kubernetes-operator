@@ -844,6 +844,29 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 			"gatewayUpdated", gatewayUpdated,
 			"clusterName", currentCluster.Name)
 
+		// Gateway-only changes: CNPG does not auto-restart for plugin parameter changes
+		// (extension changes trigger restart via ImageVolume PodSpec divergence).
+		// Add a restart annotation to force rolling restart for gateway-only updates.
+		// Note: CNPG specifically handles kubectl.kubernetes.io/restartedAt for pod restarts.
+		if gatewayUpdated && !extensionUpdated {
+			// Use Merge Patch for the annotation to avoid conflicts and handle missing annotations field
+			restartAnnotation := map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"annotations": map[string]string{
+						"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339Nano),
+					},
+				},
+			}
+			annotationPatchBytes, err := json.Marshal(restartAnnotation)
+			if err != nil {
+				return fmt.Errorf("failed to marshal restart annotation patch: %w", err)
+			}
+			if err := r.Client.Patch(ctx, currentCluster, client.RawPatch(types.MergePatchType, annotationPatchBytes)); err != nil {
+				return fmt.Errorf("failed to add restart annotation for gateway update: %w", err)
+			}
+			logger.Info("Added restart annotation for gateway-only update", "clusterName", currentCluster.Name)
+		}
+
 		// Update image status fields to reflect what was just applied
 		if err := r.updateImageStatus(ctx, documentdb, desiredCluster); err != nil {
 			logger.Error(err, "Failed to update image status after patching CNPG cluster")
