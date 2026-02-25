@@ -70,28 +70,34 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
-func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	reconcileStart := time.Now()
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
 
 	logger := log.FromContext(ctx)
 
+	// Track reconciliation duration at the end using named return value
+	defer func() {
+		r.trackReconcileDuration(ctx, "DocumentDB", "reconcile", time.Since(reconcileStart).Seconds(), retErr == nil)
+	}()
+
 	// Fetch the DocumentDB instance
 	documentdb := &dbpreview.DocumentDB{}
-	err := r.Get(ctx, req.NamespacedName, documentdb)
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, documentdb); err != nil {
 		if errors.IsNotFound(err) {
 			// DocumentDB resource not found, handle cleanup
 			logger.Info("DocumentDB resource not found. Cleaning up associated resources.")
-			if err := r.cleanupResources(ctx, req); err != nil {
-				return ctrl.Result{}, err
+			if cleanupErr := r.cleanupResources(ctx, req); cleanupErr != nil {
+				retErr = cleanupErr
+				return result, retErr
 			}
-			return ctrl.Result{}, nil
+			return result, nil
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
 		r.trackReconcileError(ctx, "DocumentDB", req.Name, req.Namespace, "get-resource", err)
-		return ctrl.Result{}, err
+		retErr = err
+		return result, retErr
 	}
 
 	// Ensure cluster has telemetry ID
@@ -101,14 +107,12 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// Track reconciliation at the end
-	defer func() {
-		r.trackReconcileDuration(ctx, "DocumentDB", "reconcile", time.Since(reconcileStart).Seconds(), err == nil)
-	}()
-
 	// Handle finalizer lifecycle (add on create, remove on delete)
-	if done, result, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
-		return result, err
+	if done, res, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
+		if err != nil {
+			retErr = err
+		}
+		return res, retErr
 	}
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
@@ -658,14 +662,17 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 }
 
 // trackReconcileError tracks reconciliation errors to telemetry.
+// Note: ResourceID is omitted to avoid PII - errors are tracked by namespace hash and error type only.
 func (r *DocumentDBReconciler) trackReconcileError(ctx context.Context, resourceType, resourceName, namespace, errorType string, err error) {
 	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
 		return
 	}
 
+	// Do not include resourceName as it may contain PII (user-provided names)
+	// Errors can be correlated by namespace_hash + error_type + timestamp
 	r.TelemetryMgr.Events.TrackReconciliationError(telemetry.ReconciliationErrorEvent{
 		ResourceType:     resourceType,
-		ResourceID:       resourceName, // Will be replaced with GUID when available
+		ResourceID:       "", // Omitted to avoid PII - use namespace_hash for correlation
 		NamespaceHash:    telemetry.HashNamespace(namespace),
 		ErrorType:        errorType,
 		ErrorMessage:     sanitizeError(err),
@@ -749,17 +756,39 @@ func (r *DocumentDBReconciler) TrackClusterCreated(ctx context.Context, document
 	})
 }
 
-// sanitizeError removes potential PII from error messages.
+// sanitizeError returns a coarse, non-PII classification of the error.
+// Per telemetry spec, we do not include raw error text to avoid leaking PII or sensitive data.
 func sanitizeError(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
-	// Truncate long messages
-	if len(msg) > 200 {
-		msg = msg[:200] + "..."
+
+	// Map well-known Kubernetes/API error types to generic, non-PII messages.
+	switch {
+	case errors.IsNotFound(err):
+		return "resource not found"
+	case errors.IsAlreadyExists(err):
+		return "resource already exists"
+	case errors.IsForbidden(err):
+		return "forbidden"
+	case errors.IsUnauthorized(err):
+		return "unauthorized"
+	case errors.IsConflict(err):
+		return "conflict"
+	case errors.IsTimeout(err):
+		return "timeout"
+	case errors.IsInvalid(err):
+		return "invalid resource"
+	case errors.IsServerTimeout(err):
+		return "server timeout"
+	case errors.IsServiceUnavailable(err):
+		return "service unavailable"
+	default:
+		// Do not include the raw error text to avoid leaking PII or sensitive data.
+		return "unknown error"
 	}
-	return msg
+}
+
 // reconcilePVRecovery handles recovery from a retained PersistentVolume.
 //
 // CNPG only supports recovery from PVC (via VolumeSnapshots.Storage with Kind: PersistentVolumeClaim),

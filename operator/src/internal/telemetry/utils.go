@@ -55,18 +55,33 @@ func CategorizeScheduleFrequency(cronExpr string) ScheduleFrequency {
 	// Simple heuristics for common patterns
 	minute, hour, dayOfMonth, _, dayOfWeek := parts[0], parts[1], parts[2], parts[3], parts[4]
 
-	// Hourly: runs every hour (e.g., "0 * * * *")
-	if minute != "*" && hour == "*" && dayOfMonth == "*" && dayOfWeek == "*" {
+	// Check for step expressions (e.g., */5) or ranges (e.g., 1-5) which indicate custom schedules
+	isSimpleValue := func(s string) bool {
+		// Returns true only for single numeric values (e.g., "0", "15", "23")
+		if s == "*" {
+			return false
+		}
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				return false // Contains */,-/ or other special chars
+			}
+		}
+		return len(s) > 0
+	}
+
+	// Hourly: runs every hour at a fixed minute (e.g., "0 * * * *" or "30 * * * *")
+	// Must be a simple numeric minute, not */5 or similar
+	if isSimpleValue(minute) && hour == "*" && dayOfMonth == "*" && dayOfWeek == "*" {
 		return ScheduleFrequencyHourly
 	}
 
-	// Daily: runs once per day (e.g., "0 2 * * *")
-	if minute != "*" && hour != "*" && dayOfMonth == "*" && dayOfWeek == "*" {
+	// Daily: runs once per day at a fixed time (e.g., "0 2 * * *")
+	if isSimpleValue(minute) && isSimpleValue(hour) && dayOfMonth == "*" && dayOfWeek == "*" {
 		return ScheduleFrequencyDaily
 	}
 
 	// Weekly: runs once per week (e.g., "0 2 * * 0")
-	if minute != "*" && hour != "*" && dayOfMonth == "*" && dayOfWeek != "*" {
+	if isSimpleValue(minute) && isSimpleValue(hour) && dayOfMonth == "*" && isSimpleValue(dayOfWeek) {
 		return ScheduleFrequencyWeekly
 	}
 

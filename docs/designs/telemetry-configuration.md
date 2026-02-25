@@ -26,9 +26,11 @@ When installing via Helm, you can configure telemetry in your values.yaml:
 # values.yaml
 telemetry:
   enabled: true
-  appInsightsInstrumentationKey: "YOUR-INSTRUMENTATION-KEY-HERE"
+  instrumentationKey: "YOUR-INSTRUMENTATION-KEY-HERE"
   # Or use connection string:
-  # appInsightsConnectionString: "InstrumentationKey=xxx;IngestionEndpoint=https://..."
+  # connectionString: "InstrumentationKey=xxx;IngestionEndpoint=https://..."
+  # Or use an existing secret containing APPINSIGHTS_INSTRUMENTATIONKEY / APPLICATIONINSIGHTS_CONNECTION_STRING:
+  # existingSecret: "documentdb-operator-telemetry"
 ```
 
 ### Kubernetes Secret

@@ -205,6 +205,8 @@ func parseInstrumentationKeyFromConnectionString(connStr string) string {
 
 	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=xxx;...
 	for _, part := range strings.Split(connStr, ";") {
+		// Trim whitespace to handle cases like "; InstrumentationKey=..." or copy-paste errors
+		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "InstrumentationKey=") {
 			return strings.TrimPrefix(part, "InstrumentationKey=")
 		}
@@ -221,6 +223,8 @@ func parseIngestionEndpointFromConnectionString(connStr string) string {
 
 	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=xxx;...
 	for _, part := range strings.Split(connStr, ";") {
+		// Trim whitespace to handle cases like "; IngestionEndpoint=..." or copy-paste errors
+		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "IngestionEndpoint=") {
 			return strings.TrimPrefix(part, "IngestionEndpoint=")
 		}

@@ -197,7 +197,14 @@ func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbprevi
 	r.Recorder.Event(backup, "Normal", "BackupInitialized", "Successfully initialized backup")
 
 	// Track backup creation telemetry
-	r.trackBackupCreated(ctx, backup, cluster, "on-demand")
+	// Determine backup type from labels - scheduled backups have the "scheduledbackup" label
+	backupType := "on-demand"
+	if backup.Labels != nil {
+		if v, ok := backup.Labels["scheduledbackup"]; ok && v != "" {
+			backupType = "scheduled"
+		}
+	}
+	r.trackBackupCreated(ctx, backup, cluster, backupType)
 
 	// Requeue to check status
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -292,6 +299,10 @@ func (r *BackupReconciler) trackBackupCreated(ctx context.Context, backup *dbpre
 	retentionDays := 30 // default
 	if cluster.Spec.Backup != nil && cluster.Spec.Backup.RetentionDays > 0 {
 		retentionDays = cluster.Spec.Backup.RetentionDays
+	}
+	// Check if backup has its own retention override
+	if backup.Spec.RetentionDays != nil && *backup.Spec.RetentionDays > 0 {
+		retentionDays = *backup.Spec.RetentionDays
 	}
 
 	r.TelemetryMgr.Events.TrackBackupCreated(telemetry.BackupCreatedEvent{
