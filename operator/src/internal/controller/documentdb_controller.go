@@ -949,7 +949,9 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 				"To resolve, update the extension image to a version that matches or exceeds %s.",
 			defaultVersion, installedVersion, installedVersion)
 		logger.Info(msg)
-		r.Recorder.Event(documentdb, corev1.EventTypeWarning, "ExtensionRollback", msg)
+		if r.Recorder != nil {
+			r.Recorder.Event(documentdb, corev1.EventTypeWarning, "ExtensionRollback", msg)
+		}
 		return nil
 	}
 
