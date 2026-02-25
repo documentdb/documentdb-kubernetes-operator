@@ -1,26 +1,32 @@
-# AKS Fleet Deployment
+# AKS Multi-Cluster Deployment with KubeFleet
 
-This directory contains templates for deploying an AKS Fleet with member clusters across different Azure regions with full mesh VNet peering, along with DocumentDB operator and multi-region database deployment capabilities.
+This directory contains templates for deploying AKS clusters across different
+Azure regions with full mesh VNet peering, managed by the open-source KubeFleet
+multi-cluster orchestration system, along with DocumentDB operator and
+multi-region database deployment capabilities.
 
 ## Architecture
 
-- **Fleet Resource**: Deployed in East US 2 (management only)
-- **Member Clusters**: Dynamically discovered and deployed across available regions
-- **Network**: Full mesh VNet peering between all member clusters
-- **VM Size**: Standard_D2ps_v6 (configurable)
-- **Node Count**: 1 node per cluster for cost optimization
+- **Hub Cluster**: West US 3 cluster serves as both hub and member (dual role)
+- **Member Clusters**: Dynamically discovered and deployed across available regions (westus3, uksouth, eastus2)
+- **Fleet Management**: KubeFleet open-source project for multi-cluster orchestration
+- **Network**: Full mesh VNet peering between all clusters
+- **VM Size**: Standard_DS2_v2 (configurable)
+- **Node Count**: 2 nodes per cluster 
 - **Kubernetes Version**: Uses region default GA version (configurable)
 - **DocumentDB**: Multi-region deployment with primary/replica architecture
 
 ## Prerequisites
 
 - Azure CLI installed and logged in
-- Fleet extension: `az extension install --name fleet`
 - Sufficient quota in target regions for AKS clusters
 - Contributor access to the subscription
 - kubelogin for Azure AD authentication: `az aks install-cli`
 - Helm 3.x installed
 - jq for JSON processing: `brew install jq` (macOS) or `apt-get install jq` (Linux)
+- docker (for building KubeFleet agent images)
+- git (for cloning KubeFleet repository)
+- base64 utility
 
 ## Deployment
 
@@ -37,13 +43,12 @@ export RESOURCE_GROUP=<resource group name>
 
 The script will:
 1. Create a resource group (default if not set: `documentdb-aks-fleet-rg`)
-2. Deploy the Fleet resource
-3. Create VNets with non-overlapping IP ranges
-4. Deploy member clusters in each region
-5. Configure full mesh VNet peering
-6. Set up RBAC access for the current user
-7. Export FLEET_ID and IDENTITY environment variables
-8. Set up kubectl aliases for easy cluster access
+2. Create VNets with non-overlapping IP ranges (including hub VNet at 10.0.0.0/16)
+3. Deploy clusters in each region
+4. Configure full mesh VNet peering between all clusters (hub + members)
+5. Install KubeFleet hub-agent on the westus3 cluster
+6. Install KubeFleet member-agent on all member clusters (including westus3)
+7. Set up kubectl aliases for easy cluster access
 
 ### 2. Install cert-manager
 
@@ -139,13 +144,14 @@ Default VNet ranges:
 - UK South VNet: 10.2.0.0/16
 - East US 2 VNet: 10.3.0.0/16
 
+All VNets are peered in a full mesh topology for direct cluster-to-cluster communication.
+
 ## kubectl Aliases
 
 After deployment, these aliases are available:
-- `k-hub`: Access to the hub (or first member if fleet hub unavailable)
-- `k-westus3`: Access to West US 3 member cluster
-- `k-uksouth`: Access to UK South member cluster
-- `k-eastus2`: Access to East US 2 member cluster
+- `k-westus3`: Access to West US 3 cluster
+- `k-uksouth`: Access to UK South cluster
+- `k-eastus2`: Access to East US 2 cluster
 
 Load aliases:
 ```bash
@@ -155,17 +161,20 @@ source ~/.bashrc
 ## Fleet Management
 
 ```bash
-# Show fleet details
-az fleet show --name aks-fleet-hub-fleet --resource-group $RESOURCE_GROUP
+# List member clusters
+k-westus3 get membercluster
 
-# List fleet members
-az fleet member list --fleet-name aks-fleet-hub-fleet --resource-group $RESOURCE_GROUP
+# Show member cluster details
+k-westus3 describe membercluster <cluster-name>
 
 # Check ClusterResourcePlacement status
-kubectl --context hub get clusterresourceplacement
+k-westus3 get clusterresourceplacement
 
 # View placement details
-kubectl --context hub describe clusterresourceplacement documentdb-crp
+k-westus3 describe clusterresourceplacement documentdb-crp
+
+# Check KubeFleet hub agent status
+k-westus3 get pods -n fleet-system-hub
 ```
 
 ## DocumentDB Management
@@ -173,13 +182,6 @@ kubectl --context hub describe clusterresourceplacement documentdb-crp
 ### Check Deployment Status
 
 ```bash
-# Quick status across all clusters (auto-generated command)
-for c in member-eastus2-xxx member-uksouth-xxx member-westus3-xxx; do 
-  echo "=== $c ==="
-  kubectl --context $c get documentdb,pods -n documentdb-preview-ns 2>/dev/null || echo 'Not deployed yet'
-  echo
-done
-
 # Check operator status on all clusters
 for cluster in $(az aks list -g $RESOURCE_GROUP -o json | jq -r '.[] | select(.name|startswith("member-")) | .name'); do
   echo "=== $cluster ==="
@@ -191,12 +193,12 @@ done
 ### Connect to Database
 
 ```bash
-# Port forward to primary (dynamically determined)
-kubectl --context <primary-cluster> port-forward \
+# Port forward to primary (default eastus2)
+k-eastus2 port-forward \
   -n documentdb-preview-ns svc/documentdb-preview 10260:10260
 
 # Get connection string (auto-displayed after deployment)
-kubectl --context <primary-cluster> get documentdb -n documentdb-preview-ns -A -o json | \
+k-eastus2 get documentdb -n documentdb-preview-ns -A -o json | \
   jq ".items[0].status.connectionString"
 ```
 
@@ -206,7 +208,7 @@ The deployment script generates failover commands for each region:
 
 ```bash
 # Example: Failover to westus3
-kubectl --context hub patch documentdb documentdb-preview -n documentdb-preview-ns \
+k-westus3 patch documentdb documentdb-preview -n documentdb-preview-ns \
   --type='merge' -p '{"spec":{"clusterReplication":{"primary":"member-westus3-xxx"}}}'
 ```
 
@@ -214,7 +216,7 @@ kubectl --context hub patch documentdb documentdb-preview -n documentdb-preview-
 
 ```bash
 # Watch ClusterResourcePlacement status
-watch 'kubectl --context hub get clusterresourceplacement documentdb-crp -o wide'
+watch 'k-westus3 get clusterresourceplacement documentdb-crp -o wide'
 
 # Monitor all DocumentDB instances
 watch 'for c in $(az aks list -g $RESOURCE_GROUP -o json | jq -r ".[] | select(.name|startswith(\"member-\")) | .name"); do \
@@ -224,17 +226,19 @@ watch 'for c in $(az aks list -g $RESOURCE_GROUP -o json | jq -r ".[] | select(.
 done'
 ```
 
-## RBAC Management
+## KubeFleet Management
 
-The deployment script automatically assigns the "Azure Kubernetes Fleet Manager RBAC Cluster Admin" role. To manage RBAC:
+KubeFleet uses standard Kubernetes RBAC on the hub cluster. To manage access:
 
 ```bash
-# View current role assignment
-az role assignment list --assignee $IDENTITY --scope $FLEET_ID
+# View KubeFleet components
+k-westus3 get all -n fleet-system
 
-# Add another user
-az role assignment create --role "Azure Kubernetes Fleet Manager RBAC Cluster Admin" \
-  --assignee <user-id> --scope $FLEET_ID
+# Check hub agent logs
+k-westus3 logs -n fleet-system -l app=hub-agent
+
+# Check member agent logs (on any member cluster)
+k-westus3 logs -n fleet-system -l app=member-agent
 ```
 
 ## Network Verification
@@ -293,7 +297,7 @@ Backups will be created on the primary cluster.
 
 Step 1: Identify Available Backups
 ```bash
-PRIMARY_CLUSTER=$(kubectl --context hub get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.primary}')
+PRIMARY_CLUSTER=$(k-westus3 get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.spec.clusterReplication.primary}')
 
 kubectl --context $PRIMARY_CLUSTER get backups -n documentdb-preview-ns
 ```
@@ -335,15 +339,11 @@ Run the deployment script:
 If you encounter authentication issues:
 
 ```bash
-# For web-based authentication (default)
-az fleet get-credentials --resource-group $RESOURCE_GROUP --name aks-fleet-hub-fleet
+# Get credentials for hub cluster
+az aks get-credentials --resource-group $RESOURCE_GROUP --name $HUB_CLUSTER --overwrite-existing
 
 # If web authentication is blocked, switch to Azure CLI authentication
 kubelogin convert-kubeconfig -l azurecli
-
-# For member clusters, use admin credentials
-az aks get-credentials --resource-group $RESOURCE_GROUP \
-  --name <cluster-name> --admin --overwrite-existing
 ```
 
 ### DocumentDB Operator Crashes
@@ -353,20 +353,22 @@ If the operator crashes with "exec format error":
 2. Review `operator/documentdb-helm-chart/values.yaml` for correct image settings
 3. Ensure `forceArch: amd64` is set in values.yaml
 
-### Fleet Resource Propagation
+### KubeFleet Resource Propagation
 
 If resources aren't propagating to member clusters:
 
 ```bash
 # Check ClusterResourcePlacement status
-kubectl --context hub get clusterresourceplacement documentdb-crp -o yaml
+k-westus3 get clusterresourceplacement documentdb-crp -o yaml
 
 # Check for placement conditions
-kubectl --context hub describe clusterresourceplacement documentdb-crp
+k-westus3 describe clusterresourceplacement documentdb-crp
 
 # Verify member clusters are joined
-az fleet member list --fleet-name aks-fleet-hub-fleet \
-  --resource-group $RESOURCE_GROUP -o table
+k-westus3 get membercluster
+
+# Check hub agent logs
+k-westus3 logs -n fleet-system -l app=hub-agent --tail=100
 ```
 
 ### Cluster List Formatting Issues
@@ -392,7 +394,8 @@ To delete all resources:
 
 ```bash
 # Delete DocumentDB resources first
-kubectl --context hub delete -f multi-region.yaml
+k-westus3 delete -f multi-region.yaml
+
 
 # Delete the entire resource group
 az group delete --name $RESOURCE_GROUP --yes --no-wait
@@ -400,11 +403,11 @@ az group delete --name $RESOURCE_GROUP --yes --no-wait
 
 ## Scripts in this Directory
 
-- `deploy-fleet-bicep.sh`: Main fleet deployment script
+- `deploy-fleet-bicep.sh`: Main deployment script (deploys AKS clusters, installs KubeFleet)
 - `install-cert-manager.sh`: Installs cert-manager on all member clusters
-- `install-documentdb-operator.sh`: Deploys DocumentDB operator via Fleet
+- `install-documentdb-operator.sh`: Deploys DocumentDB operator via KubeFleet
 - `deploy-multi-region.sh`: Deploys multi-region DocumentDB with dynamic cluster discovery
-- `main.bicep`: Bicep template for fleet and cluster deployment
+- `main.bicep`: Bicep template for cluster deployment
 - `parameters.bicepparam`: Parameter file for Bicep deployment
 - `multi-region.yaml`: Multi-region DocumentDB configuration template with placeholders
 
@@ -420,7 +423,8 @@ az group delete --name $RESOURCE_GROUP --yes --no-wait
 
 ## Additional Resources
 
-- [Azure AKS Fleet Documentation](https://learn.microsoft.com/en-us/azure/kubernetes-fleet/)
+- [KubeFleet Documentation](https://kubefleet.dev/docs/)
+- [KubeFleet Getting Started](https://kubefleet.dev/docs/getting-started/on-prem/)
+- [KubeFleet GitHub Repository](https://github.com/kubefleet-dev/kubefleet)
 - [AKS Authentication Guide](https://learn.microsoft.com/en-us/azure/aks/kubelogin-authentication)
-- [Fleet ClusterResourcePlacement API](https://learn.microsoft.com/en-us/azure/kubernetes-fleet/concepts-resource-propagation)
 - [DocumentDB Kubernetes Operator Documentation](../../README.md)

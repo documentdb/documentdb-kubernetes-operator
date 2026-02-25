@@ -1,0 +1,4 @@
+# Sync state files (auto-generated, contain resume tokens)
+.documentdb_sync_state_*.json
+
+__pycache__/

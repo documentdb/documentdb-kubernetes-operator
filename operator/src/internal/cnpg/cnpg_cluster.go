@@ -8,6 +8,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
@@ -62,7 +63,10 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				},
 				InheritedMetadata: getInheritedMetadataLabels(documentdb.Name),
 				Plugins: func() []cnpgv1.PluginConfiguration {
-					params := map[string]string{"gatewayImage": gatewayImage}
+					params := map[string]string{
+						"gatewayImage":               gatewayImage,
+						"documentDbCredentialSecret": credentialSecretName,
+					}
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
@@ -77,11 +81,18 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-					Parameters: map[string]string{
-						"cron.database_name":    "postgres",
-						"max_replication_slots": "10",
-						"max_wal_senders":       "10",
-					},
+					Parameters: func() map[string]string {
+						params := map[string]string{
+							"cron.database_name":    "postgres",
+							"max_replication_slots": "10",
+							"max_wal_senders":       "10",
+						}
+						// TODO: once DocumentDB supports change streams natively, additional GUC parameters may be needed here.
+						if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
+							params["wal_level"] = "logical"
+						}
+						return params
+					}(),
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 trust",
 						"host all all ::0/0 trust",
@@ -96,6 +107,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					},
 					Target: cnpgv1.BackupTarget("primary"),
 				},
+				Affinity: documentdb.Spec.Affinity,
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
 			return spec
@@ -113,18 +125,45 @@ func getInheritedMetadataLabels(appName string) *cnpgv1.EmbeddedObjectMetadata {
 }
 
 func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion bool, log logr.Logger) *cnpgv1.BootstrapConfiguration {
-	if isPrimaryRegion && documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil && documentdb.Spec.Bootstrap.Recovery.Backup.Name != "" {
-		backupName := documentdb.Spec.Bootstrap.Recovery.Backup.Name
-		log.Info("DocumentDB cluster will be bootstrapped from backup", "backupName", backupName)
-		return &cnpgv1.BootstrapConfiguration{
-			Recovery: &cnpgv1.BootstrapRecovery{
-				Backup: &cnpgv1.BackupSource{
-					LocalObjectReference: cnpgv1.LocalObjectReference{Name: backupName},
+	if isPrimaryRegion && documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil {
+		recovery := documentdb.Spec.Bootstrap.Recovery
+
+		// Handle backup recovery
+		if recovery.Backup.Name != "" {
+			backupName := recovery.Backup.Name
+			log.Info("DocumentDB cluster will be bootstrapped from backup", "backupName", backupName)
+			return &cnpgv1.BootstrapConfiguration{
+				Recovery: &cnpgv1.BootstrapRecovery{
+					Backup: &cnpgv1.BackupSource{
+						LocalObjectReference: recovery.Backup,
+					},
 				},
-			},
+			}
+		}
+
+		// Handle PV recovery (via temporary PVC created by the controller)
+		if recovery.PersistentVolume != nil && recovery.PersistentVolume.Name != "" {
+			tempPVCName := util.TempPVCNameForPVRecovery(documentdb.Name)
+			log.Info("DocumentDB cluster will be bootstrapped from PV via temp PVC",
+				"pvName", recovery.PersistentVolume.Name, "tempPVC", tempPVCName)
+			return &cnpgv1.BootstrapConfiguration{
+				Recovery: &cnpgv1.BootstrapRecovery{
+					VolumeSnapshots: &cnpgv1.DataSource{
+						Storage: corev1.TypedLocalObjectReference{
+							Name:     tempPVCName,
+							Kind:     "PersistentVolumeClaim",
+							APIGroup: pointer.String(""),
+						},
+					},
+				},
+			}
 		}
 	}
 
+	return getDefaultBootstrapConfiguration()
+}
+
+func getDefaultBootstrapConfiguration() *cnpgv1.BootstrapConfiguration {
 	return &cnpgv1.BootstrapConfiguration{
 		InitDB: &cnpgv1.BootstrapInitDB{
 			PostInitSQL: []string{

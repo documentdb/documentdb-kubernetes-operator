@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.1.3] - 2025-12-12
+
+### Major Features
+- **Change the CRD API version to match documentdb.io**
+
 ## [0.1.2] - 2025-12-05
 
 ### Major Features

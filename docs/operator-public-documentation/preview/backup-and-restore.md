@@ -138,7 +138,7 @@ Scheduled backups automatically create backups at regular intervals using a cron
 
 ### Creating a Scheduled Backup
 
-Create a `ScheduledBackup` resource on yaml file scheduledbackup.yaml
+Save the following `ScheduledBackup` resource to `scheduledbackup.yaml`:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -289,3 +289,100 @@ spec:
 - Failed backups still expire (timer starts at creation).
 - Deleting the cluster does NOT delete its Backup objects immediately—they still wait for expiration.
 - No "keep forever" mode—export externally if you need permanent archival.
+
+## PersistentVolume Retention and Recovery
+
+The DocumentDB operator supports retaining PersistentVolumes (PVs) after cluster deletion, allowing you to recover data by creating a new cluster from the retained PV.
+
+### Configuring PV Retention
+
+By default, PVs are retained when the DocumentDB cluster is deleted (policy is `Retain`). To delete the PV automatically, set the `persistentVolumeReclaimPolicy` to `Delete`:
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  resource:
+    storage:
+      pvcSize: 10Gi
+      persistentVolumeReclaimPolicy: Retain  # Default - keeps PV after cluster deletion
+      # persistentVolumeReclaimPolicy: Delete  # Deletes PV when cluster is deleted
+  # ... other configuration
+```
+
+### How PV Retention Works
+
+1. When `persistentVolumeReclaimPolicy` is `Retain` (the default), the operator updates the underlying PersistentVolume's reclaim policy
+2. The PV controller labels each PV with `documentdb.io/cluster` and `documentdb.io/namespace` for easy identification
+3. When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state
+4. The operator emits a warning event listing the retained PVs for visibility
+5. The retained PV contains all the database data and can be used to recover the cluster
+
+### Recovering from a Retained PV
+
+To restore a DocumentDB cluster from a retained PV:
+
+**Step 1: Identify the retained PV**
+
+```bash
+# Find PVs by DocumentDB cluster labels 
+kubectl get pv -l documentdb.io/cluster=<cluster-name>,documentdb.io/namespace=<namespace>
+```
+
+**Step 2: Create a new DocumentDB cluster with PV recovery**
+
+The operator automatically handles all the complexity of PV recovery:
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-recovered-cluster
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
+  exposeViaService:
+    serviceType: ClusterIP
+  bootstrap:
+    recovery:
+      persistentVolume:
+        name: <pv-name>  # Name of the retained PV to recover from
+```
+
+**What the operator does automatically:**
+
+1. Validates that the PV exists and is in `Available` or `Released` state
+2. If the PV is `Released`, clears the `claimRef` to make it available for binding
+3. Creates a temporary PVC bound to the retained PV
+4. Uses the temporary PVC as a data source for CNPG to clone the data
+5. After the cluster becomes healthy, deletes the temporary PVC
+6. The source PV is released back for manual cleanup or reuse
+
+### Cleaning Up Retained PVs
+
+After successful recovery (or when you no longer need the data), delete the retained PV:
+
+```bash
+# Find retained PVs for a cluster
+kubectl get pv -l documentdb.io/cluster=<cluster-name>,documentdb.io/namespace=<namespace>
+
+# Delete the retained PV when no longer needed
+kubectl delete pv <pv-name>
+```
+
+### Important Notes for PV Recovery
+
+- The PV must exist and be in `Available` or `Released` state
+- The PV must have been created with `persistentVolumeReclaimPolicy: Retain`
+- You cannot specify both `backup` and `persistentVolume` recovery at the same time
+- PV recovery preserves all data including users, roles, and collections
+- After successful recovery, consider setting up regular backups for the new cluster
+- The source PV remains after recovery and must be manually deleted when no longer needed

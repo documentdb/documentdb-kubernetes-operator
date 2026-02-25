@@ -14,9 +14,9 @@ to us!
 
 You can add your organization to this list in two ways:
 
-- [Open a pull request](TBD after move)
+- [Open a pull request](https://github.com/documentdb/documentdb-kubernetes-operator/edit/main/ADOPTERS.md)
   to directly update this file.
-- [Edit the file](TBD after move)
+- [Edit the file](https://github.com/documentdb/documentdb-kubernetes-operator/edit/main/ADOPTERS.md)
   directly on GitHub.
 
 Use the commit title: **"docs: add <ORGANIZATION_NAME> to `ADOPTERS.md`"** and
@@ -25,7 +25,7 @@ be sure to [sign off your work](contribute/README.md#sign-your-work).
 If you need any assistance, feel free to ask in our Slack chat—we’re here to
 help!
 
-## CloudNativePG Adopters
+## DocumentDB Kubernetes Operator Adopters
 
 This list is sorted in chronological order, based on the submission date.
 

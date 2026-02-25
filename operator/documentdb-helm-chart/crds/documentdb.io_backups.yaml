@@ -4,6 +4,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.2
+  labels:
+    app: documentdb-operator
   name: backups.documentdb.io
 spec:
   group: documentdb.io

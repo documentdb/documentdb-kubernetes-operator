@@ -1,0 +1,55 @@
+name: govulncheck
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'operator/src/**/*.go'
+      - 'operator/src/go.mod'
+      - 'operator/src/go.sum'
+      - 'documentdb-kubectl-plugin/**/*.go'
+      - 'documentdb-kubectl-plugin/go.mod'
+      - 'documentdb-kubectl-plugin/go.sum'
+      - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
+      - 'operator/cnpg-plugins/sidecar-injector/go.mod'
+      - 'operator/cnpg-plugins/sidecar-injector/go.sum'
+  pull_request:
+    paths:
+      - 'operator/src/**/*.go'
+      - 'operator/src/go.mod'
+      - 'operator/src/go.sum'
+      - 'documentdb-kubectl-plugin/**/*.go'
+      - 'documentdb-kubectl-plugin/go.mod'
+      - 'documentdb-kubectl-plugin/go.sum'
+      - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
+      - 'operator/cnpg-plugins/sidecar-injector/go.mod'
+      - 'operator/cnpg-plugins/sidecar-injector/go.sum'
+  schedule:
+    - cron: '22 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - operator/src
+          - documentdb-kubectl-plugin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+
+      - name: Run govulncheck
+        working-directory: ${{ matrix.module }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

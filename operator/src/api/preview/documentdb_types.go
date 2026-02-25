@@ -8,6 +8,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Feature gate constants. PascalCase names following the Kubernetes feature gate convention.
+const (
+	// FeatureGateChangeStreams enables change stream support by setting wal_level=logical.
+	FeatureGateChangeStreams = "ChangeStreams"
+)
+
 // DocumentDBSpec defines the desired state of DocumentDB.
 type DocumentDBSpec struct {
 	// NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.
@@ -76,6 +82,23 @@ type DocumentDBSpec struct {
 	// Backup configures backup settings for DocumentDB.
 	// +optional
 	Backup *BackupConfiguration `json:"backup,omitempty"`
+
+	// FeatureGates enables or disables optional DocumentDB features.
+	// Keys are PascalCase feature names following the Kubernetes feature gate convention.
+	// Example: {"ChangeStreams": true}
+	//
+	// IMPORTANT: When adding a new feature gate, update ALL of the following:
+	// 1. Add a new FeatureGate* constant in documentdb_types.go
+	// 2. Add the key name to the XValidation CEL rule's allowed list below
+	// 3. Add a default entry in the featureGateDefaults map in documentdb_types.go
+	//
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
+
+	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
+	// +optional
+	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`
 }
 
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
@@ -85,11 +108,27 @@ type BootstrapConfiguration struct {
 	Recovery *RecoveryConfiguration `json:"recovery,omitempty"`
 }
 
-// RecoveryConfiguration defines backup recovery settings.
+// RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
 	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
+
+	// PersistentVolume specifies the PV to restore from.
+	// The operator will create a temporary PVC bound to this PV, use it for CNPG recovery,
+	// and delete the temporary PVC after the cluster is healthy.
+	// Cannot be used together with Backup.
+	// +optional
+	PersistentVolume *PVRecoveryConfiguration `json:"persistentVolume,omitempty"`
+}
+
+// PVRecoveryConfiguration defines settings for recovering from a retained PersistentVolume.
+type PVRecoveryConfiguration struct {
+	// Name is the name of the PersistentVolume to recover from.
+	// The PV must exist and be in Available or Released state.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // BackupConfiguration defines backup settings for DocumentDB.
@@ -115,6 +154,27 @@ type StorageConfiguration struct {
 	// StorageClass specifies the storage class for DocumentDB persistent volumes.
 	// If not specified, the cluster's default storage class will be used.
 	StorageClass string `json:"storageClass,omitempty"`
+
+	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+	// the DocumentDB cluster is deleted.
+	//
+	// When a DocumentDB cluster is deleted, the following chain of deletions occurs:
+	// DocumentDB deletion → CNPG Cluster deletion → PVC deletion → PV deletion (based on this policy)
+	//
+	// Options:
+	//   - Retain (default): The PV is preserved after cluster deletion, allowing manual
+	//     data recovery or forensic analysis. Use for production workloads where data
+	//     safety is critical. Orphaned PVs must be manually deleted when no longer needed.
+	//   - Delete: The PV is automatically deleted when the PVC is deleted. Use for development,
+	//     testing, or ephemeral environments where data persistence is not required.
+	//
+	// WARNING: Setting this to "Delete" means all data will be permanently lost when
+	// the DocumentDB cluster is deleted. This cannot be undone.
+	//
+	// +kubebuilder:validation:Enum=Retain;Delete
+	// +kubebuilder:default=Retain
+	// +optional
+	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
 
 type ClusterReplication struct {
@@ -230,6 +290,7 @@ type TLSStatus struct {
 // +kubebuilder:resource:path=dbs,scope=Namespaced,singular=documentdb,shortName=documentdb
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:metadata:labels=app=documentdb-operator
 
 // DocumentDB is the Schema for the dbs API.
 type DocumentDB struct {

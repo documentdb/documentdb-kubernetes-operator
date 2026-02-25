@@ -59,6 +59,7 @@ type BackupStatus struct {
 // +kubebuilder:printcolumn:name="StoppedAt",type=string,JSONPath=".status.stoppedAt",description="Backup completion time"
 // +kubebuilder:printcolumn:name="ExpiredAt",type=string,JSONPath=".status.expiredAt",description="Backup expiration time"
 // +kubebuilder:printcolumn:name="Message",type=string,JSONPath=".status.message",description="Backup status message"
+// +kubebuilder:metadata:labels=app=documentdb-operator
 type Backup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

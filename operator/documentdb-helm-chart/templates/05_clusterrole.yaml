@@ -3,7 +3,7 @@ kind: ClusterRole
 metadata:
   name: documentdb-operator-cluster-role
   labels:
-    app.kubernetes.io/name: "documentdb-operator"
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
     app.kubernetes.io/managed-by: "Helm"
 rules:
 - apiGroups: ["documentdb.io"] # documentdb.io permissions
@@ -25,7 +25,7 @@ rules:
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["networking.fleet.azure.com"] # fleet permissions for multi-cluster services
-  resources: ["serviceexports", "multiclusterservices"]
+  resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["secrets"]
@@ -60,3 +60,15 @@ rules:
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "list"]
+# PersistentVolume permissions for PV controller
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+# StorageClass permissions for PV controller (needed to check provisioner capabilities)
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses"]
+  verbs: ["get", "list", "watch"]
+# Events permissions for PV retention warnings
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]

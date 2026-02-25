@@ -1,0 +1,91 @@
+name: Unit Test Coverage
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Only trigger on Go code changes in operator/src
+      - 'operator/src/**/*.go'
+      - 'operator/src/go.mod'
+      - 'operator/src/go.sum'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GO_VERSION: '1.25.7'
+
+jobs:
+  coverage:
+    name: Check Unit Test Coverage
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: operator/src
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for diff coverage analysis
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: operator/src/go.sum
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic \
+            -coverpkg=./... \
+            $(go list ./... | grep -v /test/e2e)
+          
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
+      - name: Check diff coverage (newly added lines must have >= 90% coverage)
+        run: |
+          # Install go-patch-cover
+          go install github.com/seriousben/go-patch-cover/cmd/go-patch-cover@v0.2.0
+
+          # Generate diff against base branch (--relative makes paths relative to working-directory
+          # so they match the Go module paths in coverage.out)
+          # Exclude generated files (zz_generated.*.go) — they shouldn't affect patch coverage.
+          git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+          git diff -U0 --no-color --relative origin/${{ github.base_ref }} -- '*.go' ':!**/zz_generated.*.go' > patch.diff
+
+          # Run patch coverage analysis with JSON output
+          RESULT=$($(go env GOPATH)/bin/go-patch-cover -o json coverage.out patch.diff)
+          echo "$RESULT" | jq .
+
+          # Extract patch coverage percentage
+          PATCH_COV=$(echo "$RESULT" | jq -r '.patch_coverage')
+          PATCH_STMTS=$(echo "$RESULT" | jq -r '.patch_num_stmt')
+          echo "Patch coverage: ${PATCH_COV}% (${PATCH_STMTS} changed statements)"
+          echo "## Diff Coverage: ${PATCH_COV}%" >> $GITHUB_STEP_SUMMARY
+
+          # Enforce threshold (skip if no changed statements)
+          THRESHOLD=90
+          if [ "$PATCH_STMTS" -gt 0 ]; then
+            PASS=$(echo "$PATCH_COV >= $THRESHOLD" | bc -l)
+            if [ "$PASS" -ne 1 ]; then
+              echo "::error::Patch coverage ${PATCH_COV}% is below threshold ${THRESHOLD}%"
+              exit 1
+            fi
+            echo "✅ Patch coverage ${PATCH_COV}% meets threshold ${THRESHOLD}%"
+          else
+            echo "ℹ️ No changed statements to cover, skipping threshold check"
+          fi
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: operator/src/coverage.out
+          retention-days: 7
