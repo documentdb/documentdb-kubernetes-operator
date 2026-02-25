@@ -19,8 +19,11 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
@@ -1849,6 +1852,431 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Only version-check call, no ALTER EXTENSION (skipped as safety measure)
 			Expect(sqlCallCount).To(Equal(1))
 		})
+
+		It("should return error when CNPG cluster patch fails for image update", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v2.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						return fmt.Errorf("patch conflict")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to patch CNPG cluster with new images"))
+		})
+
+		It("should return error when restart annotation patch fails for gateway-only update", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage": "gateway:v1.0.0",
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: "cnpg-i-sidecar-injector.documentdb.io",
+							Parameters: map[string]string{
+								"gatewayImage": "gateway:v2.0.0",
+							},
+						},
+					},
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+			}
+
+			patchCallCount := 0
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						patchCallCount++
+						if patchCallCount == 1 {
+							// First patch (JSONPatch for gateway image) succeeds
+							return c.Patch(ctx, obj, patch, opts...)
+						}
+						// Second patch (MergePatch for restart annotation) fails
+						return fmt.Errorf("restart annotation patch failed")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to add restart annotation for gateway update"))
+		})
+
+		It("should log error but return nil when updateImageStatus fails after patching", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			desiredCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v2.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return fmt.Errorf("status update failed")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			// Should return nil because updateImageStatus error is only logged, not returned
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should log error but continue when updateImageStatus fails in step 2b", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary:  "test-cluster-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{},
+				},
+			}
+
+			desiredCluster := cluster.DeepCopy()
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return fmt.Errorf("status update failed")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			// images match, primary not healthy => hits step 2b updateImageStatus (fails) then returns nil
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should return error when DocumentDB status update fails in version sync", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: "test-cluster-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {"test-cluster-1"},
+					},
+				},
+			}
+
+			desiredCluster := cluster.DeepCopy()
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+				Status: dbpreview.DocumentDBStatus{
+					// Images match cluster so updateImageStatus is a no-op
+					DocumentDBImage: "documentdb/documentdb:v1.0.0",
+					// DocumentDBVersion is stale — triggers step 5 status update
+					DocumentDBVersion: "0.109.0",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return fmt.Errorf("status update conflict")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, _ string) (string, error) {
+					// versions match, but DocumentDBVersion is stale
+					return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.110-0           \n", nil
+				},
+			}
+
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to update DocumentDB status with extension version"))
+		})
+
+		It("should return error when status update fails after ALTER EXTENSION upgrade", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: "test-cluster-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {"test-cluster-1"},
+					},
+				},
+			}
+
+			desiredCluster := cluster.DeepCopy()
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+				Status: dbpreview.DocumentDBStatus{
+					// Images match cluster so updateImageStatus is a no-op
+					DocumentDBImage: "documentdb/documentdb:v1.0.0",
+					// Version matches installed so step 5 is a no-op
+					DocumentDBVersion: "0.109.0",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return fmt.Errorf("status update conflict")
+					},
+				}).
+				Build()
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
+					sqlCalls = append(sqlCalls, sql)
+					if len(sqlCalls) == 1 {
+						// default > installed → triggers ALTER EXTENSION
+						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
+					}
+					return "ALTER EXTENSION", nil
+				},
+			}
+
+			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to update DocumentDB status after extension upgrade"))
+			Expect(sqlCalls).To(HaveLen(2))
+		})
 	})
 
 	Describe("updateImageStatus", func() {
@@ -2000,6 +2428,54 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal(""))
+		})
+
+		It("should return error when status update fails", func() {
+			cluster := &cnpgv1.Cluster{
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v2.0.0",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-documentdb",
+					Namespace: clusterNamespace,
+				},
+				Status: dbpreview.DocumentDBStatus{
+					// Different from cluster → triggers status update
+					DocumentDBImage: "documentdb/documentdb:v1.0.0",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+						return fmt.Errorf("status update failed")
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
+
+			err := reconciler.updateImageStatus(ctx, documentdb, cluster)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to update DocumentDB image status"))
 		})
 	})
 
@@ -2932,6 +3408,45 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 	})
 
+	Describe("SetupWithManager", func() {
+		It("should initialize SQLExecutor and detect ImageVolume before manager registration", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			// Passing nil manager: initialization runs first, then builder fails
+			err := reconciler.SetupWithManager(nil)
+			Expect(err).To(HaveOccurred())
+
+			// Verify defaults were initialized
+			Expect(reconciler.SQLExecutor).ToNot(BeNil())
+			Expect(reconciler.ImageVolumeSupported).To(BeTrue())
+		})
+
+		It("should not override pre-set SQLExecutor", func() {
+			customExecutor := func(_ context.Context, _ *cnpgv1.Cluster, _ string) (string, error) {
+				return "custom", nil
+			}
+
+			reconciler := &DocumentDBReconciler{
+				SQLExecutor: customExecutor,
+			}
+
+			// Passing nil manager: initialization runs, then builder fails
+			err := reconciler.SetupWithManager(nil)
+			Expect(err).To(HaveOccurred())
+
+			// Verify custom SQLExecutor was NOT overridden
+			output, _ := reconciler.SQLExecutor(context.Background(), nil, "")
+			Expect(output).To(Equal("custom"))
+		})
+	})
+
 	Describe("detectImageVolumeSupport", func() {
 		It("should return true for K8s >= 1.35", func() {
 			clientset := kubefake.NewSimpleClientset()
@@ -2996,6 +3511,36 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			result := reconciler.detectImageVolumeSupport()
 			Expect(result).To(BeTrue())
+		})
+
+		It("should return false when ServerVersion returns error", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.PrependReactor("*", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, fmt.Errorf("connection refused")
+			})
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeFalse())
+		})
+
+		It("should return false when minor version is not a number", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "abc"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			result := reconciler.detectImageVolumeSupport()
+			Expect(result).To(BeFalse())
 		})
 	})
 })
