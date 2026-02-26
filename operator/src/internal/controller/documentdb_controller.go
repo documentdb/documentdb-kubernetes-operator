@@ -798,6 +798,11 @@ func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, document
 //	 default_version | installed_version
 //	-----------------+-------------------
 //	 0.110-0         | 0.110-0
+//
+// TODO: This parsing is fragile as it relies on psql tabular output format which can vary
+// with locale or PostgreSQL version. Consider one of these improvements:
+// - Option 1: Add -t -A flags to SQLExecutor for unaligned, tuples-only output ("0.110-0|0.110-0")
+// - Option 2: Use json_build_object() in SQL and json.Unmarshal() in Go for robust parsing
 func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedVersion string, ok bool) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) < 3 {
@@ -917,6 +922,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
 	installedSemver := util.ExtensionVersionToSemver(installedVersion)
 	if documentdb.Status.SchemaVersion != installedSemver {
+		// Re-fetch to get latest resourceVersion before status update
+		if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
+			return fmt.Errorf("failed to refetch DocumentDB before schema version update: %w", err)
+		}
 		documentdb.Status.SchemaVersion = installedSemver
 		if err := r.Status().Update(ctx, documentdb); err != nil {
 			logger.Error(err, "Failed to update DocumentDB status with schema version")
@@ -970,6 +979,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		"toVersion", defaultVersion)
 
 	// Step 7: Update DocumentDB schema version in status after upgrade
+	// Re-fetch to get latest resourceVersion before status update
+	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
+		return fmt.Errorf("failed to refetch DocumentDB after schema upgrade: %w", err)
+	}
 	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
 	documentdb.Status.SchemaVersion = util.ExtensionVersionToSemver(defaultVersion)
 	if err := r.Status().Update(ctx, documentdb); err != nil {
@@ -1082,6 +1095,10 @@ func (r *DocumentDBReconciler) updateImageStatus(ctx context.Context, documentdb
 		return nil
 	}
 
+	// Re-fetch to get latest resourceVersion before status update
+	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
+		return fmt.Errorf("failed to refetch DocumentDB before image status update: %w", err)
+	}
 	documentdb.Status.DocumentDBImage = currentExtImage
 	documentdb.Status.GatewayImage = currentGwImage
 	if err := r.Status().Update(ctx, documentdb); err != nil {

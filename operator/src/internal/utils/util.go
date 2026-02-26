@@ -506,7 +506,12 @@ func GenerateServiceName(source, target, resourceGroup string) string {
 // ExtensionVersionToSemver converts a PostgreSQL extension version string from
 // the "Major.Minor-Patch" format (e.g., "0.110-0") returned by pg_available_extensions
 // to the standard dot-separated "Major.Minor.Patch" format (e.g., "0.110.0")
-// used in status.documentDBVersion and image tags.
+// used in status.schemaVersion and image tags.
+//
+// Note: This function uses strings.LastIndex to find the last hyphen, so versions
+// with multiple hyphens like "0.110-beta-0" would produce "0.110-beta.0" which may
+// not be the intended result. Current DocumentDB versions use the simple "X.Y-Z"
+// format, so this is not an issue in practice.
 func ExtensionVersionToSemver(v string) string {
 	if idx := strings.LastIndex(v, "-"); idx >= 0 {
 		return v[:idx] + "." + v[idx+1:]
