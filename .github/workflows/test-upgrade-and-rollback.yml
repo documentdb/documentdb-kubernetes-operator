@@ -132,6 +132,10 @@ jobs:
           USE_COMBINED=false
         fi
         
+        # Persist USE_COMBINED for later steps
+        # TODO: Remove once released version > 0.1.3
+        echo "USE_COMBINED=$USE_COMBINED" >> $GITHUB_ENV
+        
         # Set the initial image based on determination
         COMBINED_IMAGE="${{ env.DOCUMENTDB_COMBINED_IMAGE }}"
         EXTENSION_IMAGE="${{ env.DOCUMENTDB_OLD_IMAGE }}"
@@ -385,6 +389,140 @@ jobs:
           rm -f /tmp/pf_pid
         fi
         rm -f /tmp/pf_output.log
+
+    # ============================================================
+    # TODO: Remove the following 4 steps once released version > 0.1.3
+    # When the released operator uses combined mode, the cluster must be
+    # recreated under the upgraded operator to switch to ImageVolume mode.
+    # ============================================================
+
+    - name: "Recreate cluster for ImageVolume mode (combined → extension)"
+      if: env.USE_COMBINED == 'true'
+      run: |
+        echo "=== Recreating cluster: combined mode → ImageVolume mode ==="
+        echo "The released operator deployed in combined mode. After operator upgrade,"
+        echo "we must recreate the cluster so the new operator deploys it in ImageVolume mode."
+        
+        # Delete the combined-mode cluster
+        echo ""
+        echo "Deleting combined-mode cluster..."
+        kubectl delete documentdb $DB_NAME -n $DB_NS --wait=false
+        
+        echo "Waiting for DocumentDB to be deleted..."
+        timeout 300 bash -c '
+        while true; do
+          db_exists=$(kubectl -n '$DB_NS' get documentdb '$DB_NAME' --ignore-not-found -o name)
+          if [[ -z "$db_exists" ]]; then
+            echo "✓ DocumentDB deleted successfully."
+            break
+          fi
+          echo "DocumentDB still exists. Waiting..."
+          sleep 10
+        done
+        '
+        
+        echo "Waiting for cluster pods to be cleaned up..."
+        timeout 120 bash -c '
+        while true; do
+          pod_count=$(kubectl get pods -n '$DB_NS' -l cnpg.io/cluster='$DB_NAME' --no-headers 2>/dev/null | wc -l)
+          if [[ "$pod_count" -eq 0 ]]; then
+            echo "✓ All cluster pods cleaned up."
+            break
+          fi
+          echo "Still $pod_count pods remaining. Waiting..."
+          sleep 5
+        done
+        '
+        
+        # Create a fresh cluster with extension image under the upgraded operator
+        OLD_EXTENSION="${{ env.DOCUMENTDB_OLD_IMAGE }}"
+        OLD_GATEWAY="${{ env.GATEWAY_OLD_IMAGE }}"
+        echo ""
+        echo "Creating new cluster with ImageVolume mode..."
+        echo "  Extension image: $OLD_EXTENSION"
+        echo "  Gateway image:   $OLD_GATEWAY"
+        cat <<EOF | kubectl apply -f -
+        apiVersion: documentdb.io/preview
+        kind: DocumentDB
+        metadata:
+          name: $DB_NAME
+          namespace: $DB_NS
+        spec:
+          nodeCount: ${{ matrix.node_count }}
+          instancesPerNode: ${{ matrix.instances_per_node }}
+          documentDBImage: $OLD_EXTENSION
+          gatewayImage: $OLD_GATEWAY
+          resource:
+            storage:
+              pvcSize: 5Gi
+              storageClass: csi-hostpath-sc
+          exposeViaService:
+            serviceType: ClusterIP
+        EOF
+        
+        echo "Waiting for recreated cluster to become healthy..."
+        timeout 600 bash -c '
+        while true; do
+          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
+          if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
+            echo "✓ Recreated cluster is healthy"
+            break
+          fi
+          sleep 10
+        done
+        '
+        
+        # Update DOCUMENTDB_INITIAL_IMAGE so Step 2 baseline check uses the correct image
+        echo "DOCUMENTDB_INITIAL_IMAGE=$OLD_EXTENSION" >> $GITHUB_ENV
+        echo ""
+        echo "✅ Cluster recreated in ImageVolume mode"
+        echo "  DOCUMENTDB_INITIAL_IMAGE updated to: $OLD_EXTENSION"
+
+    - name: Setup port forwarding for re-seeding after recreation
+      if: env.USE_COMBINED == 'true'
+      uses: ./.github/actions/setup-port-forwarding
+      with:
+        namespace: ${{ env.DB_NS }}
+        cluster-name: ${{ env.DB_NAME }}
+        port: ${{ env.DB_PORT }}
+        architecture: ${{ matrix.architecture }}
+        test-type: 'comprehensive'
+
+    - name: Re-seed test data after cluster recreation
+      if: env.USE_COMBINED == 'true'
+      run: |
+        echo "=== Re-seeding test data after cluster recreation ==="
+        mongosh 127.0.0.1:$DB_PORT \
+          -u $DB_USERNAME \
+          -p $DB_PASSWORD \
+          --authenticationMechanism SCRAM-SHA-256 \
+          --tls \
+          --tlsAllowInvalidCertificates \
+          --eval '
+            db = db.getSiblingDB("upgrade_test_db");
+            db.test_collection.insertOne({ _id: "upgrade_marker", step: "pre-upgrade", timestamp: new Date().toISOString() });
+            db.test_collection.insertOne({ _id: "persistence_check", data: "this_must_survive_rollback", count: 42 });
+            var count = db.test_collection.countDocuments();
+            print("✓ Seed data written: " + count + " documents");
+            assert(count === 2, "Expected 2 documents but found " + count);
+          '
+        echo "✓ Seed data re-written after cluster recreation"
+
+    - name: Cleanup port forwarding after re-seeding
+      if: ${{ always() && env.USE_COMBINED == 'true' }}
+      run: |
+        if [ -f /tmp/pf_pid ]; then
+          PF_PID=$(cat /tmp/pf_pid)
+          kill $PF_PID 2>/dev/null || true
+          rm -f /tmp/pf_pid
+        fi
+        rm -f /tmp/pf_output.log
+
+    # ============================================================
+    # END TODO: Remove the above 4 steps once released version > 0.1.3
+    # ============================================================
 
     - name: "Step 2: Upgrade Both Extension and Gateway Images"
       run: |
