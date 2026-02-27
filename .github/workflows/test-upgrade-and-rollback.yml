@@ -69,6 +69,7 @@ jobs:
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
       DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
       DOCUMENTDB_OLD_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.109.0
+      DOCUMENTDB_COMBINED_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
       GATEWAY_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
       GATEWAY_OLD_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16 # TODO: update to actual old gateway image when available
       RELEASED_CHART_VERSION: 'latest'
@@ -98,8 +99,52 @@ jobs:
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Extension Image**: \`${{ env.DOCUMENTDB_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **New Extension Image**: \`${{ env.DOCUMENTDB_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Combined Image**: \`${{ env.DOCUMENTDB_COMBINED_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Gateway Image**: \`${{ env.GATEWAY_OLD_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **New Gateway Image**: \`${{ env.GATEWAY_IMAGE }}\`" >> $GITHUB_STEP_SUMMARY
+
+    - name: Determine initial DocumentDB image
+      run: |
+        echo "=== Determining DocumentDB image for initial deployment ==="
+        
+        # Add the public DocumentDB Helm repository
+        helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
+        helm repo update
+        
+        # Resolve the released chart version
+        CHART_VERSION="${{ env.RELEASED_CHART_VERSION }}"
+        if [[ "$CHART_VERSION" == "latest" ]]; then
+          RESOLVED_VERSION=$(helm search repo documentdb/documentdb-operator -o json | jq -r '.[0].version')
+        else
+          RESOLVED_VERSION="$CHART_VERSION"
+        fi
+        echo "Resolved released chart version: $RESOLVED_VERSION"
+        
+        # Check if the CRD in the released chart has postgresImage field
+        # This is the definitive check — postgresImage means the operator supports ImageVolume mode
+        CHART_VERSION_FLAG=""
+        if [[ "$CHART_VERSION" != "latest" ]]; then
+          CHART_VERSION_FLAG="--version $CHART_VERSION"
+        fi
+        CRD_OUTPUT=$(helm show crds documentdb/documentdb-operator $CHART_VERSION_FLAG 2>/dev/null || echo "")
+        if echo "$CRD_OUTPUT" | grep -q "postgresImage"; then
+          echo "CRD contains postgresImage field → operator supports ImageVolume mode"
+          USE_COMBINED=false
+        else
+          echo "CRD does not contain postgresImage field → combined image required"
+          USE_COMBINED=true
+        fi
+        
+        # Set the initial image based on determination
+        COMBINED_IMAGE="${{ env.DOCUMENTDB_COMBINED_IMAGE }}"
+        EXTENSION_IMAGE="${{ env.DOCUMENTDB_OLD_IMAGE }}"
+        if [[ "$USE_COMBINED" == "true" ]]; then
+          echo "DOCUMENTDB_INITIAL_IMAGE=$COMBINED_IMAGE" >> $GITHUB_ENV
+          echo "✓ Using combined image for initial deployment: $COMBINED_IMAGE"
+        else
+          echo "DOCUMENTDB_INITIAL_IMAGE=$EXTENSION_IMAGE" >> $GITHUB_ENV
+          echo "✓ Using extension image for initial deployment: $EXTENSION_IMAGE"
+        fi
 
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment
@@ -119,7 +164,7 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
-        documentdb-image: ${{ env.DOCUMENTDB_OLD_IMAGE }}
+        documentdb-image: ${{ env.DOCUMENTDB_INITIAL_IMAGE }}
         gateway-image: ${{ env.GATEWAY_OLD_IMAGE }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         released-chart-version: ${{ env.RELEASED_CHART_VERSION }}
@@ -349,16 +394,16 @@ jobs:
         echo "=== Step 2: Upgrade Both Extension and Gateway Images ==="
         echo "Testing simultaneous extension + gateway upgrade on ${{ matrix.architecture }}..."
         
-        OLD_EXTENSION="${{ env.DOCUMENTDB_OLD_IMAGE }}"
+        INITIAL_IMAGE="${{ env.DOCUMENTDB_INITIAL_IMAGE }}"
         NEW_EXTENSION="${{ env.DOCUMENTDB_IMAGE }}"
         OLD_GATEWAY="${{ env.GATEWAY_OLD_IMAGE }}"
         NEW_GATEWAY="${{ env.GATEWAY_IMAGE }}"
         
-        # Verify baseline: cluster deployed with old images
+        # Verify baseline: cluster deployed with initial images
         CURRENT_EXTENSION=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
         echo "Current extension image: $CURRENT_EXTENSION"
-        if [[ "$CURRENT_EXTENSION" != "$OLD_EXTENSION" ]]; then
-          echo "❌ Expected old extension image $OLD_EXTENSION but found $CURRENT_EXTENSION"
+        if [[ "$CURRENT_EXTENSION" != "$INITIAL_IMAGE" ]]; then
+          echo "❌ Expected initial image $INITIAL_IMAGE but found $CURRENT_EXTENSION"
           exit 1
         fi
         
@@ -368,29 +413,23 @@ jobs:
           echo "❌ Expected old gateway image $OLD_GATEWAY but found $CURRENT_GATEWAY"
           exit 1
         fi
-        echo "✓ Cluster deployed with old images"
+        echo "✓ Cluster deployed with initial images"
         
-        # Record and verify version before upgrade
+        # Record version before upgrade
+        # Note: When using combined image (tag like :16), schemaVersion won't match the image tag.
+        # Just verify it's set and record it.
         VERSION_BEFORE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
         echo "DocumentDB schema version before upgrade: $VERSION_BEFORE"
-
-        # The image tag (e.g., "0.110.0") now matches status.schemaVersion directly
-        OLD_VERSION_TAG="${OLD_EXTENSION##*:}"
-        EXPECTED_VERSION_BEFORE="$OLD_VERSION_TAG"
         if [[ -z "$VERSION_BEFORE" ]]; then
           echo "❌ status.schemaVersion is empty before upgrade"
           exit 1
         fi
-        if [[ "$VERSION_BEFORE" != "$EXPECTED_VERSION_BEFORE" ]]; then
-          echo "❌ Expected version $EXPECTED_VERSION_BEFORE before upgrade but found $VERSION_BEFORE"
-          exit 1
-        fi
-        echo "✓ DocumentDB version matches expected $EXPECTED_VERSION_BEFORE before upgrade"
+        echo "✓ DocumentDB schema version set before upgrade: $VERSION_BEFORE"
         
         # Patch both images simultaneously
         echo ""
         echo "Upgrading both images..."
-        echo "  Extension: $OLD_EXTENSION → $NEW_EXTENSION"
+        echo "  Extension: $INITIAL_IMAGE → $NEW_EXTENSION"
         echo "  Gateway:   $OLD_GATEWAY → $NEW_GATEWAY"
         kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
           -p "{\"spec\":{\"documentDBImage\":\"$NEW_EXTENSION\",\"gatewayImage\":\"$NEW_GATEWAY\"}}"
@@ -471,7 +510,7 @@ jobs:
         
         echo ""
         echo "✅ Step 2 passed: Both images upgraded successfully"
-        echo "  Extension: $OLD_EXTENSION → $NEW_EXTENSION"
+        echo "  Extension: $INITIAL_IMAGE → $NEW_EXTENSION"
         echo "  Gateway:   $OLD_GATEWAY → $NEW_GATEWAY"
 
     - name: Setup port forwarding for upgrade verification
@@ -813,6 +852,7 @@ jobs:
         echo "## Upgrade & Rollback Test Summary for ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Architecture**: ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Initial Image**: ${{ env.DOCUMENTDB_INITIAL_IMAGE }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Extension Image**: ${{ env.DOCUMENTDB_OLD_IMAGE }}" >> $GITHUB_STEP_SUMMARY
         echo "- **New Extension Image**: ${{ env.DOCUMENTDB_IMAGE }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Old Gateway Image**: ${{ env.GATEWAY_OLD_IMAGE }}" >> $GITHUB_STEP_SUMMARY

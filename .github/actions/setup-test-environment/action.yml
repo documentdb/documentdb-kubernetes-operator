@@ -547,7 +547,7 @@ runs:
         kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}'
         echo ""
         echo "Sidecar injector image (if present):"
-        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
+        kubectl get deployment sidecar-injector -n cnpg-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "No sidecar injector deployment found"
         echo ""
         
         echo "Checking operator pod status..."
@@ -557,7 +557,7 @@ runs:
         kubectl logs -n ${{ inputs.operator-namespace }} deployment/documentdb-operator --tail=20 || echo "Could not retrieve operator logs"
         
         echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
+        kubectl get crd dbs.documentdb.io || echo "DocumentDB CRD not found"
         
         echo "✓ DocumentDB Operator installation verified on ${{ inputs.architecture }}"
 
