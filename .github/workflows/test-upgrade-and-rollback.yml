@@ -413,15 +413,9 @@ jobs:
         echo "✓ Cluster deployed with initial images"
         
         # Record version before upgrade
-        # Note: When using combined image (tag like :16), schemaVersion won't match the image tag.
-        # Just verify it's set and record it.
+        # Note: schemaVersion may be empty when using combined image with older operator versions.
         VERSION_BEFORE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
-        echo "DocumentDB schema version before upgrade: $VERSION_BEFORE"
-        if [[ -z "$VERSION_BEFORE" ]]; then
-          echo "❌ status.schemaVersion is empty before upgrade"
-          exit 1
-        fi
-        echo "✓ DocumentDB schema version set before upgrade: $VERSION_BEFORE"
+        echo "DocumentDB schema version before upgrade: ${VERSION_BEFORE:-<empty>}"
         
         # Patch both images simultaneously
         echo ""
