@@ -6,11 +6,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +23,7 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -3436,6 +3439,118 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Verify custom SQLExecutor was NOT overridden
 			output, _ := reconciler.SQLExecutor(context.Background(), nil, "")
 			Expect(output).To(Equal("custom"))
+		})
+
+		It("should return error when K8s version validation fails", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "34"}
+
+			reconciler := &DocumentDBReconciler{
+				Clientset: clientset,
+			}
+
+			err := reconciler.SetupWithManager(nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not supported"))
+		})
+	})
+
+	Describe("Reconcile", func() {
+		It("should reconcile a DocumentDB with existing CNPG cluster through the full path", func() {
+			// Register rbacv1 for Role/RoleBinding creation in EnsureServiceAccountRoleAndRoleBinding
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			// Create DocumentDB with finalizer already present (skip finalizer-add requeue)
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "1Gi",
+						},
+					},
+				},
+			}
+
+			// Create existing CNPG cluster with matching images (no upgrade needed)
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: documentDBName + "-1",
+					TargetPrimary:  documentDBName + "-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+
+			// Mock SQLExecutor: permissions already granted, extension versions match
+			sqlExecutor := func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+				if strings.Contains(cmd, "pg_roles") {
+					return "(1 row)", nil
+				}
+				if strings.Contains(cmd, "pg_available_extensions") {
+					return " default_version | installed_version\n" +
+						"-----------------+-------------------\n" +
+						" 0.110-0         | 0.110-0\n(1 row)", nil
+				}
+				return "", nil
+			}
+
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: sqlExecutor,
+			}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			})
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
 		})
 	})
 
