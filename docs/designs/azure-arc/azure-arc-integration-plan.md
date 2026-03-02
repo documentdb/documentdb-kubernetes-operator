@@ -10,6 +10,8 @@ This document outlines a two-phase plan to integrate DocumentDB Kubernetes Opera
 
 > **Note:** "Kubernetes extensions" (via `az k8s-extension`) are specific to Kubernetes clusters. Azure has separate extension mechanisms for VMs, Arc servers, etc.
 
+> **Interim Solution:** For immediate portal visibility without extension registration or billing integration, see [arc-hybrid-setup-with-fleet](../../../documentdb-playground/arc-hybrid-setup-with-fleet/) which uses Azure Fleet Manager + direct Helm deployment. This provides cluster tracking today while the full integration is being developed.
+
 ### Cluster Type Support
 
 | Cluster Type | Extension Cluster Type | Arc Agent Required? |
