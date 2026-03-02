@@ -199,11 +199,13 @@ Create `extension.yaml` that tells Arc how to deploy the operator.
 **Files to create:**
 ```
 operator/
-└── arc-extension/
+└── arc-extension/           # To be created in future PR
     ├── extension.yaml       # K8s extension manifest
     ├── values-arc.yaml      # Arc-specific Helm overrides
     └── README.md            # Installation guide
 ```
+
+> **Status:** This folder will be created when extension registration begins. See [arc-hybrid-setup-with-fleet](../../../documentdb-playground/arc-hybrid-setup-with-fleet/) for current interim solution.
 
 **Deliverable:** Working extension manifest pointing to ghcr.io
 
@@ -343,8 +345,10 @@ oci://ghcr.io/documentdb/documentdb-operator:0.1.1
 
 ### Extension Manifest Example
 
+The following is a reference format for the extension manifest (to be created in future PR):
+
 ```yaml
-# operator/arc-extension/extension.yaml
+# operator/arc-extension/extension.yaml (planned)
 extensionType: Microsoft.DocumentDB.Operator
 version: 0.1.3
 
