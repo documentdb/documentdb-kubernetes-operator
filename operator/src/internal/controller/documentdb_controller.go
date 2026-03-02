@@ -534,10 +534,11 @@ func documentDBServicePredicate() predicate.Predicate {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clientset == nil {
+		return fmt.Errorf("Clientset must be configured: required for Kubernetes version detection and SQL execution")
+	}
+
 	if r.SQLExecutor == nil {
-		if r.Clientset == nil {
-			return fmt.Errorf("Clientset must be configured: the default SQLExecutor requires a valid Clientset")
-		}
 		r.SQLExecutor = r.executeSQLCommand
 	}
 
@@ -559,12 +560,8 @@ func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // validateK8sVersion checks that the Kubernetes cluster version is at least 1.35.
 // The operator requires ImageVolume (GA in K8s 1.35) to mount the DocumentDB extension image.
-// If the Clientset is nil (e.g. in unit tests), the check is skipped.
+// Callers must ensure Clientset is non-nil before calling this method.
 func (r *DocumentDBReconciler) validateK8sVersion() error {
-	if r.Clientset == nil {
-		return nil
-	}
-
 	serverVersion, err := r.Clientset.Discovery().ServerVersion()
 	if err != nil {
 		return fmt.Errorf("failed to detect Kubernetes version: %w", err)

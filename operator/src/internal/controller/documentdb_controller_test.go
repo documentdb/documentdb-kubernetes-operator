@@ -3439,6 +3439,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			reconciler := &DocumentDBReconciler{
 				SQLExecutor: customExecutor,
+				Clientset:   kubefake.NewSimpleClientset(),
 			}
 
 			// Passing nil manager: initialization runs, then builder fails
@@ -3604,11 +3605,6 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeDisc.FakedServerVersion = &version.Info{Major: "2", Minor: "0"}
 
 			reconciler := &DocumentDBReconciler{Clientset: clientset}
-			Expect(reconciler.validateK8sVersion()).To(Succeed())
-		})
-
-		It("should skip validation when Clientset is nil", func() {
-			reconciler := &DocumentDBReconciler{Clientset: nil}
 			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
