@@ -73,6 +73,10 @@ inputs:
     description: 'Kubernetes version for Kind cluster (e.g., v1.35.0, v1.34.0)'
     required: false
     default: 'v1.35.0'
+  released-chart-version:
+    description: 'Install operator from public Helm repo instead of built artifacts. Use "latest" for latest version or a specific version string.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -377,7 +381,7 @@ runs:
         fi
 
     - name: Install DocumentDB Operator (local chart)
-      if: inputs.use-external-images == 'false'
+      if: inputs.use-external-images == 'false' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Installing DocumentDB Operator on ${{ inputs.architecture }} using local chart version: ${{ inputs.chart-version }}"
@@ -439,36 +443,9 @@ runs:
           ls -la ./artifacts/ || echo "No artifacts directory found"
           exit 1
         fi
-        
-        # Verify operator installation
-        echo "Verifying DocumentDB operator installation..."
-        kubectl wait --for=condition=Available deployment/documentdb-operator -n ${{ inputs.operator-namespace }} --timeout=300s
-        
-        # Verify that our newly built images are being used
-        echo "Verifying operator deployment uses our newly built images on ${{ inputs.architecture }}..."
-        echo "Operator image:"
-        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}'
-        echo ""
-        echo "Sidecar injector image (if present):"
-        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
-        echo ""
-
-        # Additional verification - check that operator is actually running
-        echo "Checking operator pod status..."
-        kubectl get pods -n ${{ inputs.operator-namespace }} -l app.kubernetes.io/name=documentdb-operator
-        
-        # Verify operator logs for any immediate issues
-        echo "Checking operator logs for any startup issues..."
-        kubectl logs -n ${{ inputs.operator-namespace }} deployment/documentdb-operator --tail=20 || echo "Could not retrieve operator logs"
-        
-        # Check for CRDs installation
-        echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
-        
-        echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
 
     - name: Install DocumentDB Operator (external images)
-      if: inputs.use-external-images == 'true'
+      if: inputs.use-external-images == 'true' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Installing DocumentDB Operator on ${{ inputs.architecture }} using external images with tag: ${{ inputs.image-tag }}"
@@ -523,33 +500,66 @@ runs:
             --values /tmp/values-override.yaml \
             --wait --timeout=15m
         fi
+
+    - name: Install DocumentDB Operator (released chart)
+      if: inputs.released-chart-version != ''
+      shell: bash
+      run: |
+        echo "Installing DocumentDB Operator from public Helm repo..."
+        echo "Requested chart version: ${{ inputs.released-chart-version }}"
         
-        # Verify operator installation
-        echo "Verifying DocumentDB operator installation..."
+        # Add the public DocumentDB Helm repository
+        helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
+        helm repo update
+        
+        # Install the released chart
+        # If version is 'latest', omit --version to get the latest available
+        CHART_VERSION="${{ inputs.released-chart-version }}"
+        if [[ "$CHART_VERSION" == "latest" ]]; then
+          echo "Installing latest released version..."
+          helm install documentdb-operator documentdb/documentdb-operator \
+            --namespace ${{ inputs.operator-namespace }} \
+            --create-namespace \
+            --wait --timeout=15m
+        else
+          echo "Installing version $CHART_VERSION..."
+          helm install documentdb-operator documentdb/documentdb-operator \
+            --namespace ${{ inputs.operator-namespace }} \
+            --create-namespace \
+            --version "$CHART_VERSION" \
+            --wait --timeout=15m
+        fi
+        
+        # Log resolved version
+        echo "Installed Helm releases:"
+        helm list -n ${{ inputs.operator-namespace }}
+
+    - name: Verify operator installation
+      shell: bash
+      run: |
+        echo "Verifying DocumentDB operator installation on ${{ inputs.architecture }}..."
         kubectl wait --for=condition=Available deployment/documentdb-operator -n ${{ inputs.operator-namespace }} --timeout=300s
         
-        # Verify that the external images are being used with chart defaults
-        echo "Verifying operator deployment uses external images with chart default version..."
+        echo "Installed Helm releases:"
+        helm list -n ${{ inputs.operator-namespace }}
+        
         echo "Operator image:"
         kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}'
         echo ""
         echo "Sidecar injector image (if present):"
-        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
+        kubectl get deployment sidecar-injector -n cnpg-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "No sidecar injector deployment found"
         echo ""
         
-        # Additional verification - check that operator is actually running
         echo "Checking operator pod status..."
         kubectl get pods -n ${{ inputs.operator-namespace }} -l app.kubernetes.io/name=documentdb-operator
         
-        # Verify operator logs for any immediate issues
         echo "Checking operator logs for any startup issues..."
         kubectl logs -n ${{ inputs.operator-namespace }} deployment/documentdb-operator --tail=20 || echo "Could not retrieve operator logs"
         
-        # Check for CRDs installation
         echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
+        kubectl get crd dbs.documentdb.io || echo "DocumentDB CRD not found"
         
-        echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
+        echo "✓ DocumentDB Operator installation verified on ${{ inputs.architecture }}"
 
     - name: Create DocumentDB credentials secret
       shell: bash
