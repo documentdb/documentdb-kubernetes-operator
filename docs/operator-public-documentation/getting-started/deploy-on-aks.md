@@ -1,6 +1,7 @@
 # Deploy on Azure Kubernetes Service (AKS)
 
-This guide covers the general AKS deployment model for DocumentDB Kubernetes Operator.
+This guide covers the general AKS deployment model for the DocumentDB Kubernetes
+Operator.
 
 ## Quick Start
 
@@ -11,25 +12,26 @@ cd documentdb-playground/aks-setup/scripts
 ./create-cluster.sh --deploy-instance
 ```
 
-See [AKS Setup Scripts](/documentdb-playground/aks-setup/README.md) for options.
+For complete automation details, see the
+[AKS setup README](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-setup).
 
 ## Understanding the Configuration
 
 ### Azure LoadBalancer Annotations
 
-When using AKS, you'll want to specify in the documentDB CRD that "aks" is the
-environment in the spec as below
+When using AKS, set the `DocumentDB` `spec.environment` field to `aks`.
 
 ```yaml
 spec:
-    environment: "aks"
+  environment: "aks"
 ```
 
-The operator adds Azure-specific Service annotations when the cluster type is AKS:
+The operator adds Azure-specific Service annotations when the cluster type is
+AKS:
 
 ```yaml
 annotations:
-  service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  service.beta.kubernetes.io/azure-load-balancer-external: "true"
 ```
 
 This instructs kubernetes to assign the Load Balancer an IP which can be accessed
@@ -37,18 +39,19 @@ from outside the cluster.
 
 ### Storage Class
 
-AKS uses the built-in `managed-csi` storage class by default (`StandardSSD_LRS`).
-For production workloads, you can use a Premium SSD storage class such as `managed-csi-premium`
+AKS uses the built-in `managed-csi` storage class by default
+(`StandardSSD_LRS`). For production workloads, use a Premium SSD class such as
+`managed-csi-premium`.
 
 ```yaml
 spec:
-    resource:
-        storage:
-            storageClass: managed-csi-premium
+  resource:
+    storage:
+      storageClass: managed-csi-premium
 ```
 
-Other classes can be viewed at
-<https://learn.microsoft.com/en-us/azure/aks/concepts-storage#storage-classes>
+For available classes, see
+<https://learn.microsoft.com/azure/aks/concepts-storage#storage-classes>.
 
 ## Monitoring and Troubleshooting
 
@@ -77,11 +80,14 @@ kubectl get secret documentdb-credentials \
   -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Connection string format:
+Connection string format (for testing):
 
 ```text
 mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true
 ```
+
+For production, use trusted certificates and remove
+`tlsAllowInvalidCertificates=true`.
 
 ### Common Issues
 
@@ -120,7 +126,7 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator
 - TLS for database traffic
 - Azure RBAC integration
 
-### Hardening examples
+### Hardening Examples
 
 ```bash
 az aks enable-addons \
@@ -136,6 +142,6 @@ az aks enable-addons \
 
 ## Additional Resources
 
-- [AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
-- [Azure CNI Networking](https://docs.microsoft.com/en-us/azure/aks/configure-azure-cni)
-- [Azure Load Balancer](https://docs.microsoft.com/en-us/azure/load-balancer/)
+- [AKS documentation](https://learn.microsoft.com/azure/aks/)
+- [Azure CNI networking](https://learn.microsoft.com/azure/aks/configure-azure-cni)
+- [Azure Load Balancer](https://learn.microsoft.com/azure/load-balancer/)
