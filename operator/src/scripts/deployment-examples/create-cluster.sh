@@ -11,7 +11,7 @@ RESOURCE_GROUP="guanzhou-101401-rg"
 LOCATION="East US 2"
 NODE_COUNT=2
 NODE_SIZE="Standard_D8s_v5"
-KUBERNETES_VERSION="1.31.11"
+KUBERNETES_VERSION="1.35"
 
 # DocumentDB Operator Configuration
 # For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)
