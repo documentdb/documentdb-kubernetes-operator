@@ -1,0 +1,138 @@
+---
+# Service to expose gateway port 10260 on all DocumentDB pods
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-preview-gateway
+  namespace: documentdb-preview-ns
+spec:
+  selector:
+    cnpg.io/cluster: documentdb-preview
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: gateway
+      port: 10260
+      targetPort: 10260
+  type: ClusterIP
+---
+# Traffic generator Job - runs mongosh commands in a loop
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traffic-generator-script
+  namespace: documentdb-preview-ns
+data:
+  generate-traffic.js: |
+    // Traffic generator for DocumentDB telemetry demo
+    // Generates a mix of CRUD operations to produce traces, metrics, and logs
+
+    const DB_NAME = "telemetry_demo";
+    const COLLECTION = "events";
+    const BATCH_SIZE = 5;
+    const ITERATIONS = 500;
+    const SLEEP_MS = 800;
+
+    db = db.getSiblingDB(DB_NAME);
+
+    print("=== DocumentDB Traffic Generator ===");
+    print(`Target: ${DB_NAME}.${COLLECTION}`);
+    print(`Iterations: ${ITERATIONS}, Batch: ${BATCH_SIZE}, Sleep: ${SLEEP_MS}ms`);
+
+    const categories = ["auth", "api", "database", "network", "system"];
+    const severities = ["info", "warn", "error", "critical"];
+    const sources = ["web-server", "api-gateway", "worker", "scheduler", "monitor"];
+
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function generateEvent() {
+      return {
+        timestamp: new Date(),
+        category: randomChoice(categories),
+        severity: randomChoice(severities),
+        source: randomChoice(sources),
+        message: "Event " + Math.random().toString(36).substring(7),
+        duration_ms: Math.floor(Math.random() * 2000),
+        statusCode: randomChoice([200, 200, 200, 201, 400, 404, 500])
+      };
+    }
+
+    for (let i = 0; i < ITERATIONS; i++) {
+      try {
+        // Insert documents one at a time (insertMany can be slow)
+        for (let j = 0; j < BATCH_SIZE; j++) {
+          db[COLLECTION].insertOne(generateEvent());
+        }
+
+        // Find by category
+        db[COLLECTION].find({ category: randomChoice(categories) }).limit(5).toArray();
+
+        // Find with sort
+        db[COLLECTION].find({ severity: randomChoice(severities) }).sort({ timestamp: -1 }).limit(10).toArray();
+
+        // Count
+        db[COLLECTION].countDocuments({ source: randomChoice(sources) });
+
+        // Update
+        db[COLLECTION].updateMany(
+          { severity: "info", source: randomChoice(sources) },
+          { $set: { processed: true } }
+        );
+
+        // Periodic cleanup to prevent unbounded growth
+        if (i % 100 === 0 && i > 0) {
+          db[COLLECTION].deleteMany({ processed: true });
+          print(`[${i}/${ITERATIONS}] Cleanup done`);
+        }
+
+        if (i % 25 === 0) {
+          print(`[${i}/${ITERATIONS}] OK`);
+        }
+
+        sleep(SLEEP_MS);
+      } catch (e) {
+        print(`[${i}/${ITERATIONS}] Error: ${e.message}`);
+        sleep(2000);
+      }
+    }
+
+    print("=== Traffic generation complete ===");
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic-generator
+  namespace: documentdb-preview-ns
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: traffic-gen
+          image: mongodb/mongodb-community-server:latest
+          command:
+            - mongosh
+            - "--host"
+            - "documentdb-preview-gateway.documentdb-preview-ns.svc.cluster.local"
+            - "--port"
+            - "10260"
+            - "--tls"
+            - "--tlsAllowInvalidCertificates"
+            - "-u"
+            - "demo_user"
+            - "-p"
+            - "DemoPassword100"
+            - "--file"
+            - "/scripts/generate-traffic.js"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: traffic-generator-script
