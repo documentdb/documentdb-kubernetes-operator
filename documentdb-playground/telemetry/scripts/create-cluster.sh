@@ -11,7 +11,7 @@ RESOURCE_GROUP="ray-documentdb-rg"
 LOCATION="West US 2"
 NODE_COUNT=2
 NODE_SIZE="Standard_D4s_v5"
-KUBERNETES_VERSION="1.35"
+KUBERNETES_VERSION="1.35.0"
 
 # DocumentDB Operator Configuration
 # For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)

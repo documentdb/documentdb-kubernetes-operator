@@ -4,7 +4,7 @@ This directory contains comprehensive automation scripts for deploying DocumentD
 on Azure Kubernetes Service (AKS) with production-ready configurations.
 
 For general AKS guidance (architecture, configuration, troubleshooting, cost, and
-security), see our [public documentation](/docs/operator-public-documentation/getting-started/deploy-on-aks.md):w
+security), see our [public documentation](/docs/operator-public-documentation/getting-started/deploy-on-aks.md)
 
 ## 🚀 Quick Start
 
@@ -41,7 +41,6 @@ cd scripts
 - Managed identity integration
 
 ### Storage & Networking
-:w
 
 - Azure Disk CSI driver (uses StandardSSD_LRS by default)
 - Azure File CSI driver for shared storage
@@ -107,7 +106,7 @@ RESOURCE_GROUP="documentdb-rg"
 LOCATION="East US"
 NODE_COUNT=2
 NODE_SIZE="Standard_D2s_v3"
-KUBERNETES_VERSION="1.35"
+KUBERNETES_VERSION="1.35.0"
 ```
 
 ### Storage Configuration

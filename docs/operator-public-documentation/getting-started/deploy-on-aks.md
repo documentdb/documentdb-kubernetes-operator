@@ -55,40 +55,6 @@ For available classes, see
 
 ## Monitoring and Troubleshooting
 
-### Validate Cluster and Workloads
-
-```bash
-kubectl get nodes
-kubectl get pods --all-namespaces
-kubectl get documentdb -A
-kubectl get pvc -A
-kubectl get svc -A -w
-```
-
-### Access DocumentDB
-
-```bash
-# Get external IP
-kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns
-
-# Get credentials
-kubectl get secret documentdb-credentials \
-  -n documentdb-instance-ns \
-  -o jsonpath='{.data.username}' | base64 -d
-kubectl get secret documentdb-credentials \
-  -n documentdb-instance-ns \
-  -o jsonpath='{.data.password}' | base64 -d
-```
-
-Connection string format (for testing):
-
-```text
-mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true
-```
-
-For production, use trusted certificates and remove
-`tlsAllowInvalidCertificates=true`.
-
 ### Common Issues
 
 LoadBalancer pending:
@@ -102,12 +68,6 @@ PVC binding failures:
 ```bash
 kubectl get storageclass
 kubectl get pods -n kube-system | grep csi-azuredisk
-```
-
-Operator startup issues:
-
-```bash
-kubectl logs -n documentdb-operator deployment/documentdb-operator
 ```
 
 ## Cost and Security Considerations
