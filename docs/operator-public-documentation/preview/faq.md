@@ -45,4 +45,4 @@ Set `spec.instancesPerNode` to 3 to deploy one primary and two replicas. The ope
 
 ### Can I deploy across multiple clouds?
 
-Yes. The operator supports multi-cloud deployment with cross-cluster replication. See the [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-cloud-deployment/README.md) for setup instructions.
+Yes. The operator supports multi-cloud deployment with cross-cluster replication. See the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md) for setup instructions.
