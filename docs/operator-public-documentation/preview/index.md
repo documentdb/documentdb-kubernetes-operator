@@ -370,7 +370,7 @@ switched to db sample_mflix
 
 The operator uses a sidecar injector plugin to automatically inject the DocumentDB Gateway container into PostgreSQL pods. You can customize the gateway image, pod labels, and annotations.
 
-For details, see [Sidecar Injector Plugin Configuration](../../developer-guides/sidecar-injector-plugin-configuration.md).
+For details, see [Sidecar Injector Plugin Configuration](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/developer-guides/sidecar-injector-plugin-configuration.md).
 
 ### Local high-availability (HA)
 
@@ -404,14 +404,14 @@ This configuration creates:
 
 ### Multi-cloud deployment
 
-The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-cloud-deployment/README.md).
+The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md).
 
 ### TLS setup
 
 For advanced TLS configuration and testing:
 
-- [TLS Setup Guide](../../../documentdb-playground/tls/README.md) — Complete TLS configuration guide
-- [E2E Testing](../../../documentdb-playground/tls/E2E-TESTING.md) — Comprehensive testing procedures
+- [TLS Setup Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md) — Complete TLS configuration guide
+- [E2E Testing](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md) — Comprehensive testing procedures
 
 
 ## Clean up
