@@ -132,6 +132,9 @@ make generate
 
 # Both manifests and code generation
 make manifests generate
+
+# Generate CRD API reference documentation
+make api-docs
 ```
 
 ### Local Development

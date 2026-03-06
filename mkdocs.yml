@@ -23,6 +23,7 @@ nav:
       - Get Started: preview/index.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
+      - API Reference: preview/api-reference.md
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
