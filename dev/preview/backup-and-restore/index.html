@@ -1,0 +1,1397 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../advanced-configuration/">
+      
+      
+        <link rel="next" href="../faq/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
+    
+    
+      
+        <title>Backup and Restore - DocumentDB-Kubernetes-Operator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#backup-and-restore" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DocumentDB-Kubernetes-Operator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Backup and Restore
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    DocumentDB-Kubernetes-Operator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Preview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Preview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Get Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced-configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prerequisites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#for-kind-or-minikube" class="md-nav__link">
+    <span class="md-ellipsis">
+      For Kind or Minikube
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aks" class="md-nav__link">
+    <span class="md-ellipsis">
+      AKS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-providers-eks-gke-custom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other Providers (EKS / GKE / Custom)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#on-demand-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      On-Demand Backup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="On-Demand Backup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-an-on-demand-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creating an On-Demand Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-backup-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Backup Status
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduled-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduled Backups
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scheduled Backups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-a-scheduled-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creating a Scheduled Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cron-schedule-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cron Schedule Format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-scheduled-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Scheduled Backups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restore-from-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Restore from Backup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Restore from Backup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#list-available-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Available Backups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-a-new-cluster-with-backup-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create a New Cluster with Backup Recovery
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backup-retention-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backup Retention Policy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backup Retention Policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-the-retention-value-comes-from-priority-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where the Retention Value Comes From (priority order)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-its-calculated" class="md-nav__link">
+    <span class="md-ellipsis">
+      How it's calculated
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistentvolume-retention-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Retention and Recovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PersistentVolume Retention and Recovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-pv-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuring PV Retention
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-pv-retention-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How PV Retention Works
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recovering-from-a-retained-pv" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovering from a Retained PV
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cleaning-up-retained-pvs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cleaning Up Retained PVs
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes-for-pv-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes for PV Recovery
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubectl-plugin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Kubectl Plugin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prerequisites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#for-kind-or-minikube" class="md-nav__link">
+    <span class="md-ellipsis">
+      For Kind or Minikube
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#aks" class="md-nav__link">
+    <span class="md-ellipsis">
+      AKS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-providers-eks-gke-custom" class="md-nav__link">
+    <span class="md-ellipsis">
+      Other Providers (EKS / GKE / Custom)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#on-demand-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      On-Demand Backup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="On-Demand Backup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-an-on-demand-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creating an On-Demand Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-backup-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Backup Status
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduled-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduled Backups
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Scheduled Backups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-a-scheduled-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creating a Scheduled Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cron-schedule-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cron Schedule Format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-scheduled-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Scheduled Backups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#restore-from-backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Restore from Backup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Restore from Backup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#list-available-backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      List Available Backups
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create-a-new-cluster-with-backup-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Create a New Cluster with Backup Recovery
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backup-retention-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backup Retention Policy
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backup Retention Policy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-the-retention-value-comes-from-priority-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where the Retention Value Comes From (priority order)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-its-calculated" class="md-nav__link">
+    <span class="md-ellipsis">
+      How it's calculated
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Examples
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistentvolume-retention-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Retention and Recovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PersistentVolume Retention and Recovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-pv-retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuring PV Retention
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-pv-retention-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      How PV Retention Works
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recovering-from-a-retained-pv" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recovering from a Retained PV
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cleaning-up-retained-pvs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cleaning Up Retained PVs
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#important-notes-for-pv-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      Important Notes for PV Recovery
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="backup-and-restore">Backup and Restore<a class="headerlink" href="#backup-and-restore" title="Permanent link">&para;</a></h1>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<h3 id="for-kind-or-minikube">For Kind or Minikube<a class="headerlink" href="#for-kind-or-minikube" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Run the CSI driver deployment script <strong>before</strong> installing the documentdb-operator:</li>
+</ol>
+<pre><code class="language-bash">./operator/src/scripts/test-scripts/deploy-csi-driver.sh
+</code></pre>
+<ol>
+<li>Validate storage and snapshot components:</li>
+</ol>
+<pre><code class="language-bash">kubectl get storageclass
+kubectl get volumesnapshotclasses
+</code></pre>
+<p>You should see something like:</p>
+<p>StorageClasses:</p>
+<pre><code>NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+csi-hostpath-sc      hostpath.csi.k8s.io     Delete          Immediate              true                   5d20h
+standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  5d20h
+</code></pre>
+<p>VolumeSnapshotClasses:</p>
+<pre><code>NAME                     DRIVER                DELETIONPOLICY   AGE
+csi-hostpath-snapclass   hostpath.csi.k8s.io   Delete           5d19h
+</code></pre>
+<p>If <code>csi-hostpath-snapclass</code> isn't present, the deploy script didn’t finish correctly. Re-run it.</p>
+<ol>
+<li>When creating a cluster, ensure you set the appropriate storage class:</li>
+</ol>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  resource:
+    storage:
+      storageClass: csi-hostpath-sc  # Specify your CSI storage class
+  # ... other configuration
+</code></pre>
+<h3 id="aks">AKS<a class="headerlink" href="#aks" title="Permanent link">&para;</a></h3>
+<p>AKS already provides a CSI driver. </p>
+<p>To allow the documentdb-operator to auto-create a default <code>VolumeSnapshotClass</code>, set <code>spec.environment: aks</code> in your <code>DocumentDB</code> spec:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  environment: aks
+  # ... other configuration
+</code></pre>
+<h3 id="other-providers-eks-gke-custom">Other Providers (EKS / GKE / Custom)<a class="headerlink" href="#other-providers-eks-gke-custom" title="Permanent link">&para;</a></h3>
+<p>Support is emerging; you must manually ensure:
+- A CSI driver that supports snapshots
+- VolumeSnapshot CRDs installed
+- A default <code>VolumeSnapshotClass</code></p>
+<p>Example manual snapshot class (adjust DRIVER accordingly):</p>
+<pre><code class="language-yaml">apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: generic-snapclass
+  annotations:
+    snapshot.storage.kubernetes.io/is-default-class: &quot;true&quot;
+driver: ebs.csi.aws.com        # or pd.csi.storage.gke.io / other
+deletionPolicy: Delete
+</code></pre>
+<p>Apply:</p>
+<pre><code class="language-bash">kubectl apply -f volumesnapshotclass.yaml
+</code></pre>
+<h2 id="on-demand-backup">On-Demand Backup<a class="headerlink" href="#on-demand-backup" title="Permanent link">&para;</a></h2>
+<p>An on-demand backup creates a single backup of a DocumentDB cluster.</p>
+<h3 id="creating-an-on-demand-backup">Creating an On-Demand Backup<a class="headerlink" href="#creating-an-on-demand-backup" title="Permanent link">&para;</a></h3>
+<p>Create a <code>Backup</code> resource:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: Backup
+metadata:
+  name: my-backup
+  namespace: default # Same namespace as DocumentDB cluster
+spec:
+  cluster:
+    name: my-documentdb-cluster  # Must match the DocumentDB cluster name
+  retentionDays: 30  # Optional: backup retention period in days
+</code></pre>
+<p>Apply the resource:</p>
+<pre><code class="language-bash">kubectl apply -f backup.yaml
+</code></pre>
+<h3 id="monitoring-backup-status">Monitoring Backup Status<a class="headerlink" href="#monitoring-backup-status" title="Permanent link">&para;</a></h3>
+<p>Check the backup status:</p>
+<pre><code class="language-bash">kubectl get backups -n default
+</code></pre>
+<p>View detailed backup information:</p>
+<pre><code class="language-bash">kubectl describe backup my-backup -n default
+</code></pre>
+<h2 id="scheduled-backups">Scheduled Backups<a class="headerlink" href="#scheduled-backups" title="Permanent link">&para;</a></h2>
+<p>Scheduled backups automatically create backups at regular intervals using a cron schedule.</p>
+<h3 id="creating-a-scheduled-backup">Creating a Scheduled Backup<a class="headerlink" href="#creating-a-scheduled-backup" title="Permanent link">&para;</a></h3>
+<p>Save the following <code>ScheduledBackup</code> resource to <code>scheduledbackup.yaml</code>:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: ScheduledBackup
+metadata:
+  name: my-scheduled-backup
+  namespace: default # Same namespace as DocumentDB
+spec:
+  cluster:
+    name: my-documentdb-cluster  # Must match the DocumentDB cluster name
+  schedule: &quot;0 2 * * *&quot;  # Cron expression: daily at 2:00 AM
+  retentionDays: 30  # Optional: backup retention period in days
+</code></pre>
+<p>Apply the resource:</p>
+<pre><code class="language-bash">kubectl apply -f scheduledbackup.yaml
+</code></pre>
+<h3 id="cron-schedule-format">Cron Schedule Format<a class="headerlink" href="#cron-schedule-format" title="Permanent link">&para;</a></h3>
+<p>The schedule uses standard cron expression format. Common examples:</p>
+<table>
+<thead>
+<tr>
+<th>Schedule</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0 2 * * *</code></td>
+<td>Every day at 2:00 AM</td>
+</tr>
+<tr>
+<td><code>0 */6 * * *</code></td>
+<td>Every 6 hours</td>
+</tr>
+<tr>
+<td><code>0 0 * * 0</code></td>
+<td>Every Sunday at midnight</td>
+</tr>
+<tr>
+<td><code>*/15 * * * *</code></td>
+<td>Every 15 minutes</td>
+</tr>
+<tr>
+<td><code>0 2 1 * *</code></td>
+<td>First day of every month at 2:00 AM</td>
+</tr>
+</tbody>
+</table>
+<p>For more details, see <a href="https://pkg.go.dev/github.com/robfig/cron#hdr-CRON_Expression_Format">cron expression format</a>.</p>
+<h3 id="monitoring-scheduled-backups">Monitoring Scheduled Backups<a class="headerlink" href="#monitoring-scheduled-backups" title="Permanent link">&para;</a></h3>
+<p>List all ScheduledBackups:</p>
+<pre><code class="language-bash">kubectl get scheduledbackups -n default
+</code></pre>
+<p>Check the generated backups:</p>
+<pre><code class="language-bash">kubectl get backups -n default
+</code></pre>
+<h3 id="important-notes">Important Notes<a class="headerlink" href="#important-notes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>If a backup is currently running, the next backup will be queued and start after the current one completes</li>
+<li>The operator will automatically create <code>Backup</code> resources according to the schedule</li>
+<li>Failed backups do not prevent subsequent backups from being scheduled</li>
+<li>ScheduledBackups are automatically garbage collected when the source cluster is deleted</li>
+<li>Deleting a ScheduledBackup does NOT delete its created Backup objects; they remain until expiration</li>
+</ul>
+<h2 id="restore-from-backup">Restore from Backup<a class="headerlink" href="#restore-from-backup" title="Permanent link">&para;</a></h2>
+<p>You can restore a backup to a <strong>different DocumentDB cluster</strong>.</p>
+<h3 id="list-available-backups">List Available Backups<a class="headerlink" href="#list-available-backups" title="Permanent link">&para;</a></h3>
+<p>First, identify the backup you want to restore:</p>
+<pre><code class="language-bash">kubectl get backups -n default
+</code></pre>
+<h3 id="create-a-new-cluster-with-backup-recovery">Create a New Cluster with Backup Recovery<a class="headerlink" href="#create-a-new-cluster-with-backup-recovery" title="Permanent link">&para;</a></h3>
+<p>Create a new <code>DocumentDB</code> resource with recovery configuration:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-restored-cluster
+  namespace: default
+spec:
+  bootstrap:
+    recovery:
+      backup:
+        name: my-backup  # Reference the backup to restore from
+  #...... other configurations
+</code></pre>
+<p>Apply the resource:</p>
+<pre><code class="language-bash">kubectl apply -f restore.yaml
+</code></pre>
+<h2 id="backup-retention-policy">Backup Retention Policy<a class="headerlink" href="#backup-retention-policy" title="Permanent link">&para;</a></h2>
+<p>Backups don't live forever. Each one gets an expiration time. After that time passes, the operator deletes it automatically.</p>
+<h3 id="where-the-retention-value-comes-from-priority-order">Where the Retention Value Comes From (priority order)<a class="headerlink" href="#where-the-retention-value-comes-from-priority-order" title="Permanent link">&para;</a></h3>
+<ol>
+<li><code>Backup.spec.retentionDays</code> (per backup override)</li>
+<li><code>ScheduledBackup.spec.retentionDays</code> (copied into each created Backup)</li>
+<li><code>DocumentDB.spec.backup.retentionDays</code> (cluster default)</li>
+<li>Default (if none set): 30 days</li>
+</ol>
+<h3 id="how-its-calculated">How it's calculated<a class="headerlink" href="#how-its-calculated" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Success: retention starts at <code>status.stoppedAt</code></li>
+<li>Failure: retention starts at <code>metadata.creationTimestamp</code></li>
+<li>Expiration = start + retentionDays * 24h</li>
+</ul>
+<h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
+<p>Per-backup override:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: Backup
+metadata:
+  name: monthly-audit
+spec:
+  cluster:
+    name: prod-cluster
+  retentionDays: 90
+</code></pre>
+<p>Scheduled backups (14‑day retention):</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: ScheduledBackup
+metadata:
+  name: nightly
+spec:
+  cluster:
+    name: prod-cluster
+  schedule: &quot;0 2 * * *&quot;
+  retentionDays: 14
+</code></pre>
+<p>Cluster default (used when Backup doesn't set retention):</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: prod-cluster
+spec:
+  backup:
+    retentionDays: 30
+</code></pre>
+<h3 id="important-notes_1">Important Notes<a class="headerlink" href="#important-notes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Changing retention on a <code>ScheduledBackup</code> only affects new backups, not old ones.</li>
+<li>Changing <code>DocumentDB.spec.backup.retentionDays</code> doesn’t retroactively update existing backups.</li>
+<li>Failed backups still expire (timer starts at creation).</li>
+<li>Deleting the cluster does NOT delete its Backup objects immediately—they still wait for expiration.</li>
+<li>No "keep forever" mode—export externally if you need permanent archival.</li>
+</ul>
+<h2 id="persistentvolume-retention-and-recovery">PersistentVolume Retention and Recovery<a class="headerlink" href="#persistentvolume-retention-and-recovery" title="Permanent link">&para;</a></h2>
+<p>The DocumentDB operator supports retaining PersistentVolumes (PVs) after cluster deletion, allowing you to recover data by creating a new cluster from the retained PV.</p>
+<h3 id="configuring-pv-retention">Configuring PV Retention<a class="headerlink" href="#configuring-pv-retention" title="Permanent link">&para;</a></h3>
+<p>By default, PVs are retained when the DocumentDB cluster is deleted (policy is <code>Retain</code>). To delete the PV automatically, set the <code>persistentVolumeReclaimPolicy</code> to <code>Delete</code>:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  resource:
+    storage:
+      pvcSize: 10Gi
+      persistentVolumeReclaimPolicy: Retain  # Default - keeps PV after cluster deletion
+      # persistentVolumeReclaimPolicy: Delete  # Deletes PV when cluster is deleted
+  # ... other configuration
+</code></pre>
+<h3 id="how-pv-retention-works">How PV Retention Works<a class="headerlink" href="#how-pv-retention-works" title="Permanent link">&para;</a></h3>
+<ol>
+<li>When <code>persistentVolumeReclaimPolicy</code> is <code>Retain</code> (the default), the operator updates the underlying PersistentVolume's reclaim policy</li>
+<li>The PV controller labels each PV with <code>documentdb.io/cluster</code> and <code>documentdb.io/namespace</code> for easy identification</li>
+<li>When the DocumentDB cluster is deleted, the PVC is deleted but the PV is retained in a "Released" state</li>
+<li>The operator emits a warning event listing the retained PVs for visibility</li>
+<li>The retained PV contains all the database data and can be used to recover the cluster</li>
+</ol>
+<h3 id="recovering-from-a-retained-pv">Recovering from a Retained PV<a class="headerlink" href="#recovering-from-a-retained-pv" title="Permanent link">&para;</a></h3>
+<p>To restore a DocumentDB cluster from a retained PV:</p>
+<p><strong>Step 1: Identify the retained PV</strong></p>
+<pre><code class="language-bash"># Find PVs by DocumentDB cluster labels 
+kubectl get pv -l documentdb.io/cluster=&lt;cluster-name&gt;,documentdb.io/namespace=&lt;namespace&gt;
+</code></pre>
+<p><strong>Step 2: Create a new DocumentDB cluster with PV recovery</strong></p>
+<p>The operator automatically handles all the complexity of PV recovery:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-recovered-cluster
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
+  exposeViaService:
+    serviceType: ClusterIP
+  bootstrap:
+    recovery:
+      persistentVolume:
+        name: &lt;pv-name&gt;  # Name of the retained PV to recover from
+</code></pre>
+<p><strong>What the operator does automatically:</strong></p>
+<ol>
+<li>Validates that the PV exists and is in <code>Available</code> or <code>Released</code> state</li>
+<li>If the PV is <code>Released</code>, clears the <code>claimRef</code> to make it available for binding</li>
+<li>Creates a temporary PVC bound to the retained PV</li>
+<li>Uses the temporary PVC as a data source for CNPG to clone the data</li>
+<li>After the cluster becomes healthy, deletes the temporary PVC</li>
+<li>The source PV is released back for manual cleanup or reuse</li>
+</ol>
+<h3 id="cleaning-up-retained-pvs">Cleaning Up Retained PVs<a class="headerlink" href="#cleaning-up-retained-pvs" title="Permanent link">&para;</a></h3>
+<p>After successful recovery (or when you no longer need the data), delete the retained PV:</p>
+<pre><code class="language-bash"># Find retained PVs for a cluster
+kubectl get pv -l documentdb.io/cluster=&lt;cluster-name&gt;,documentdb.io/namespace=&lt;namespace&gt;
+
+# Delete the retained PV when no longer needed
+kubectl delete pv &lt;pv-name&gt;
+</code></pre>
+<h3 id="important-notes-for-pv-recovery">Important Notes for PV Recovery<a class="headerlink" href="#important-notes-for-pv-recovery" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The PV must exist and be in <code>Available</code> or <code>Released</code> state</li>
+<li>The PV must have been created with <code>persistentVolumeReclaimPolicy: Retain</code></li>
+<li>You cannot specify both <code>backup</code> and <code>persistentVolume</code> recovery at the same time</li>
+<li>PV recovery preserves all data including users, roles, and collections</li>
+<li>After successful recovery, consider setting up regular backups for the new cluster</li>
+<li>The source PV remains after recovery and must be manually deleted when no longer needed</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      
+    
+  </body>
+</html>

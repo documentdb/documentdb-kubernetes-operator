@@ -1,0 +1,1629 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../backup-and-restore/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
+    
+    
+      
+        <title>Advanced Configuration - DocumentDB-Kubernetes-Operator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#advanced-configuration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DocumentDB-Kubernetes-Operator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Advanced Configuration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    DocumentDB-Kubernetes-Operator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Preview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Preview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Get Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Table of Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tls-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Modes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getting-started-with-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Started with TLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-tls-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick TLS Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Configuration Examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS Configuration Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selfsigned-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      SelfSigned Mode
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provided-mode-azure-key-vault" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provided Mode (Azure Key Vault)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certmanager-mode-with-a-custom-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      CertManager Mode with a custom issuer
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-status-and-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Status and Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certificate-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Certificate Rotation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#troubleshooting-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting TLS
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#high-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      High Availability
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="High Availability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#multi-instance-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Instance Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recommended-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommended Settings
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Storage Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#storage-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Classes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#volume-expansion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Volume Expansion
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#persistentvolume-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disk-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disk Encryption
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disk Encryption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#azure-kubernetes-service-aks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Azure Kubernetes Service (AKS)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#google-kubernetes-engine-gke" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Kubernetes Engine (GKE)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#amazon-elastic-kubernetes-service-eks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Amazon Elastic Kubernetes Service (EKS)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#encryption-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Encryption Summary
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommendations
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#network-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Policies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rbac" class="md-nav__link">
+    <span class="md-ellipsis">
+      RBAC
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secrets Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional Resources
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubectl-plugin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Kubectl Plugin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Table of Contents
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tls-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Modes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#getting-started-with-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Getting Started with TLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-tls-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quick TLS Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Configuration Examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS Configuration Examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#selfsigned-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      SelfSigned Mode
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#provided-mode-azure-key-vault" class="md-nav__link">
+    <span class="md-ellipsis">
+      Provided Mode (Azure Key Vault)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certmanager-mode-with-a-custom-issuer" class="md-nav__link">
+    <span class="md-ellipsis">
+      CertManager Mode with a custom issuer
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-status-and-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS Status and Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certificate-rotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Certificate Rotation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#troubleshooting-tls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting TLS
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#high-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      High Availability
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="High Availability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#multi-instance-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Multi-Instance Setup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recommended-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommended Settings
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Storage Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#storage-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Classes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#volume-expansion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Volume Expansion
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#persistentvolume-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Security
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disk-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disk Encryption
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disk Encryption">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#azure-kubernetes-service-aks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Azure Kubernetes Service (AKS)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#google-kubernetes-engine-gke" class="md-nav__link">
+    <span class="md-ellipsis">
+      Google Kubernetes Engine (GKE)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#amazon-elastic-kubernetes-service-eks" class="md-nav__link">
+    <span class="md-ellipsis">
+      Amazon Elastic Kubernetes Service (EKS)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#encryption-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Encryption Summary
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scheduling
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#example-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Example Configuration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommendations
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#network-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network Policies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rbac" class="md-nav__link">
+    <span class="md-ellipsis">
+      RBAC
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secrets Management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional Resources
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="advanced-configuration">Advanced Configuration<a class="headerlink" href="#advanced-configuration" title="Permanent link">&para;</a></h1>
+<p>This section covers advanced configuration options for the DocumentDB Kubernetes Operator.</p>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#tls-configuration">TLS Configuration</a></li>
+<li><a href="#high-availability">High Availability</a></li>
+<li><a href="#storage-configuration">Storage Configuration</a></li>
+<li><a href="#scheduling">Scheduling</a></li>
+<li><a href="#resource-management">Resource Management</a></li>
+<li><a href="#security">Security</a></li>
+</ul>
+<h2 id="tls-configuration">TLS Configuration<a class="headerlink" href="#tls-configuration" title="Permanent link">&para;</a></h2>
+<p>The operator supports three TLS modes for secure gateway connections, each suited to different operational requirements.</p>
+<h3 id="tls-modes">TLS Modes<a class="headerlink" href="#tls-modes" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>SelfSigned</strong> — Automatic certificate management using cert-manager with self-signed certificates</p>
+<ul>
+<li>Best for: Development, testing, and environments without external PKI</li>
+<li>Zero external dependencies</li>
+<li>Automatic certificate rotation</li>
+</ul>
+</li>
+<li>
+<p><strong>Provided</strong> — Use certificates from Azure Key Vault via Secrets Store CSI driver</p>
+<ul>
+<li>Best for: Production environments with centralized certificate management</li>
+<li>Enterprise PKI integration</li>
+<li>Azure Key Vault integration</li>
+</ul>
+</li>
+<li>
+<p><strong>CertManager</strong> — Use custom cert-manager issuers (for example, Let's Encrypt or a corporate CA)</p>
+<ul>
+<li>Best for: Production environments with existing cert-manager infrastructure</li>
+<li>Flexible issuer support</li>
+<li>Industry-standard certificates</li>
+</ul>
+</li>
+</ol>
+<h3 id="getting-started-with-tls">Getting Started with TLS<a class="headerlink" href="#getting-started-with-tls" title="Permanent link">&para;</a></h3>
+<p>For comprehensive TLS setup and testing documentation, see:</p>
+<ul>
+<li><strong><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md">Complete TLS Setup Guide</a></strong> — Quick start with automated scripts, detailed configuration for each TLS mode, troubleshooting, and best practices</li>
+<li><strong><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md">E2E Testing Guide</a></strong> — Automated and manual testing, validation procedures, and CI/CD integration examples</li>
+</ul>
+<h3 id="quick-tls-setup">Quick TLS Setup<a class="headerlink" href="#quick-tls-setup" title="Permanent link">&para;</a></h3>
+<p>For the fastest TLS setup, use the automated script:</p>
+<pre><code class="language-bash">cd documentdb-playground/tls/scripts
+
+# Complete E2E setup (AKS + DocumentDB + TLS)
+./create-cluster.sh \
+  --suffix mytest \
+  --subscription-id &lt;your-subscription-id&gt;
+</code></pre>
+<p>This command will:</p>
+<ul>
+<li>Create an AKS cluster with all required addons</li>
+<li>Install cert-manager and the CSI driver</li>
+<li>Deploy the DocumentDB operator</li>
+<li>Configure and validate both SelfSigned and Provided TLS modes</li>
+</ul>
+<p><strong>Duration</strong>: ~25–30 minutes</p>
+<h3 id="tls-configuration-examples">TLS Configuration Examples<a class="headerlink" href="#tls-configuration-examples" title="Permanent link">&para;</a></h3>
+<h4 id="selfsigned-mode">SelfSigned Mode<a class="headerlink" href="#selfsigned-mode" title="Permanent link">&para;</a></h4>
+<p>SelfSigned mode requires no additional configuration beyond setting the mode:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-selfsigned
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
+  tls:
+    gateway:
+      mode: SelfSigned
+</code></pre>
+<h4 id="provided-mode-azure-key-vault">Provided Mode (Azure Key Vault)<a class="headerlink" href="#provided-mode-azure-key-vault" title="Permanent link">&para;</a></h4>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-provided
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
+  tls:
+    gateway:
+      mode: Provided
+      provided:
+        secretName: documentdb-tls-akv
+</code></pre>
+<h4 id="certmanager-mode-with-a-custom-issuer">CertManager Mode with a custom issuer<a class="headerlink" href="#certmanager-mode-with-a-custom-issuer" title="Permanent link">&para;</a></h4>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-certmanager
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
+  tls:
+    gateway:
+      mode: CertManager
+      certManager:
+        issuerRef:
+          name: letsencrypt-prod
+          kind: ClusterIssuer
+        dnsNames:
+          - documentdb.example.com
+          - &quot;*.documentdb.example.com&quot;
+</code></pre>
+<h3 id="tls-status-and-monitoring">TLS Status and Monitoring<a class="headerlink" href="#tls-status-and-monitoring" title="Permanent link">&para;</a></h3>
+<p>Check the TLS status of your DocumentDB instance:</p>
+<pre><code class="language-bash">kubectl get documentdb &lt;name&gt; -n &lt;namespace&gt; -o jsonpath='{.status.tls}' | jq
+</code></pre>
+<p>Example output:</p>
+<pre><code class="language-json">{
+  &quot;ready&quot;: true,
+  &quot;secretName&quot;: &quot;documentdb-gateway-cert-tls&quot;,
+  &quot;message&quot;: &quot;&quot;
+}
+</code></pre>
+<h3 id="certificate-rotation">Certificate Rotation<a class="headerlink" href="#certificate-rotation" title="Permanent link">&para;</a></h3>
+<p>The operator handles certificate rotation automatically:</p>
+<ul>
+<li><strong>SelfSigned and CertManager modes</strong>: cert-manager rotates certificates before expiration</li>
+<li><strong>Provided mode</strong>: Sync certificates from Azure Key Vault on rotation</li>
+</ul>
+<p>Monitor certificate expiration:</p>
+<pre><code class="language-bash"># Check certificate expiration
+kubectl get certificate -n &lt;namespace&gt; &lt;cert-name&gt; -o jsonpath='{.status.notAfter}'
+
+# Inspect the TLS secret directly
+kubectl get secret -n &lt;namespace&gt; &lt;tls-secret-name&gt; -o jsonpath='{.data.tls\.crt}' | \
+  base64 -d | openssl x509 -noout -dates
+</code></pre>
+<h3 id="troubleshooting-tls">Troubleshooting TLS<a class="headerlink" href="#troubleshooting-tls" title="Permanent link">&para;</a></h3>
+<p>For comprehensive troubleshooting, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md#troubleshooting">E2E Testing Guide</a>.</p>
+<p>Common issues:</p>
+<ol>
+<li><strong>Certificate not ready</strong> — Check cert-manager logs and certificate status</li>
+<li><strong>Connection failures</strong> — Verify service endpoints and TLS handshake</li>
+<li><strong>Azure Key Vault access denied</strong> — Check managed identity and RBAC permissions</li>
+</ol>
+<p>Quick diagnostics:</p>
+<pre><code class="language-bash"># Check DocumentDB TLS status
+kubectl describe documentdb &lt;name&gt; -n &lt;namespace&gt;
+
+# Check certificate status
+kubectl describe certificate -n &lt;namespace&gt;
+
+# Check cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager
+
+# Test TLS handshake
+EXTERNAL_IP=$(kubectl get svc -n &lt;namespace&gt; -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}')
+openssl s_client -connect $EXTERNAL_IP:10260
+</code></pre>
+<hr />
+<h2 id="high-availability">High Availability<a class="headerlink" href="#high-availability" title="Permanent link">&para;</a></h2>
+<p>Deploy multiple instances for automatic failover and read scalability.</p>
+<h3 id="multi-instance-setup">Multi-Instance Setup<a class="headerlink" href="#multi-instance-setup" title="Permanent link">&para;</a></h3>
+<p>Set <code>instancesPerNode</code> to 3 to create a primary with two replicas:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-ha
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: premium-ssd
+</code></pre>
+<h3 id="recommended-settings">Recommended Settings<a class="headerlink" href="#recommended-settings" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Minimum instances</strong>: 3 for production workloads</li>
+<li><strong>Storage class</strong>: Use premium SSDs for production</li>
+<li><strong>Resource requests</strong>: Set appropriate CPU and memory limits</li>
+</ul>
+<hr />
+<h2 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h2>
+<p>Configure persistent storage for DocumentDB instances.</p>
+<h3 id="storage-classes">Storage Classes<a class="headerlink" href="#storage-classes" title="Permanent link">&para;</a></h3>
+<pre><code class="language-yaml">spec:
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: premium-ssd  # Azure Premium SSD
+</code></pre>
+<h3 id="volume-expansion">Volume Expansion<a class="headerlink" href="#volume-expansion" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Ensure storage class allows volume expansion
+kubectl get storageclass &lt;storage-class&gt; -o jsonpath='{.allowVolumeExpansion}'
+
+# Patch DocumentDB for larger storage
+kubectl patch documentdb &lt;name&gt; -n &lt;namespace&gt; --type='json' \
+  -p='[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/resource/storage/pvcSize&quot;, &quot;value&quot;:&quot;200Gi&quot;}]'
+</code></pre>
+<h3 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h3>
+<p>The DocumentDB operator automatically applies security-hardening mount options to all PersistentVolumes associated with DocumentDB clusters:</p>
+<table>
+<thead>
+<tr>
+<th>Mount Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nodev</code></td>
+<td>Prevents device files from being interpreted on the filesystem</td>
+</tr>
+<tr>
+<td><code>nosuid</code></td>
+<td>Prevents setuid/setgid bits from taking effect</td>
+</tr>
+<tr>
+<td><code>noexec</code></td>
+<td>Prevents execution of binaries on the filesystem</td>
+</tr>
+</tbody>
+</table>
+<p>These options are automatically applied by the PV controller and require no additional configuration.</p>
+<h3 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h3>
+<p>Encryption at rest is essential for protecting sensitive database data. Here's how to configure disk encryption for each cloud provider:</p>
+<h4 id="azure-kubernetes-service-aks">Azure Kubernetes Service (AKS)<a class="headerlink" href="#azure-kubernetes-service-aks" title="Permanent link">&para;</a></h4>
+<p>AKS encrypts all managed disks by default using Azure Storage Service Encryption (SSE) with platform-managed keys. No additional configuration is required.</p>
+<p>For customer-managed keys (CMK), use Azure Disk Encryption:</p>
+<pre><code class="language-yaml">apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: managed-csi-encrypted
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Premium_LRS
+  # For customer-managed keys, specify the disk encryption set
+  diskEncryptionSetID: /subscriptions/&lt;sub-id&gt;/resourceGroups/&lt;rg&gt;/providers/Microsoft.Compute/diskEncryptionSets/&lt;des-name&gt;
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+</code></pre>
+<h4 id="google-kubernetes-engine-gke">Google Kubernetes Engine (GKE)<a class="headerlink" href="#google-kubernetes-engine-gke" title="Permanent link">&para;</a></h4>
+<p>GKE encrypts all persistent disks by default using Google-managed encryption keys. No additional configuration is required.</p>
+<p>For customer-managed encryption keys (CMEK):</p>
+<pre><code class="language-yaml">apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pd-ssd-encrypted
+provisioner: pd.csi.storage.gke.io
+parameters:
+  type: pd-ssd
+  # For CMEK, specify the key
+  disk-encryption-kms-key: projects/&lt;project&gt;/locations/&lt;region&gt;/keyRings/&lt;keyring&gt;/cryptoKeys/&lt;key&gt;
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+</code></pre>
+<h4 id="amazon-elastic-kubernetes-service-eks">Amazon Elastic Kubernetes Service (EKS)<a class="headerlink" href="#amazon-elastic-kubernetes-service-eks" title="Permanent link">&para;</a></h4>
+<p><strong>Important</strong>: Unlike AKS and GKE, EBS volumes on EKS are <strong>not encrypted by default</strong>. You must explicitly enable encryption in the StorageClass:</p>
+<pre><code class="language-yaml">apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-sc-encrypted
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: &quot;true&quot;  # Required for encryption
+  # Optional: specify a KMS key for customer-managed encryption
+  # kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+</code></pre>
+<p>To use the encrypted storage class with DocumentDB:</p>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-cluster
+  namespace: default
+spec:
+  environment: eks
+  resource:
+    storage:
+      pvcSize: 100Gi
+      storageClass: ebs-sc-encrypted  # Use the encrypted storage class
+  # ... other configuration
+</code></pre>
+<h3 id="encryption-summary">Encryption Summary<a class="headerlink" href="#encryption-summary" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Default Encryption</th>
+<th>Customer-Managed Keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AKS</td>
+<td>✅ Enabled (SSE)</td>
+<td>Optional via DiskEncryptionSet</td>
+</tr>
+<tr>
+<td>GKE</td>
+<td>✅ Enabled (Google-managed)</td>
+<td>Optional via CMEK</td>
+</tr>
+<tr>
+<td>EKS</td>
+<td>❌ <strong>Not enabled</strong></td>
+<td>Required: set <code>encrypted: "true"</code> in StorageClass</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recommendation</strong>: For production deployments on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
+<hr />
+<h2 id="scheduling">Scheduling<a class="headerlink" href="#scheduling" title="Permanent link">&para;</a></h2>
+<p>Configure pod affinity for a documentdb cluster's database pods. This replicates
+the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io/docs/1.28/scheduling/">https://cloudnative-pg.io/docs/1.28/scheduling/</a></p>
+<pre><code class="language-yaml">spec:
+  affinity:
+  ...
+</code></pre>
+<h2 id="resource-management">Resource Management<a class="headerlink" href="#resource-management" title="Permanent link">&para;</a></h2>
+<p>Configure resource requests and limits for optimal performance.</p>
+<h3 id="example-configuration">Example Configuration<a class="headerlink" href="#example-configuration" title="Permanent link">&para;</a></h3>
+<pre><code class="language-yaml">apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-resources
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 100Gi
+</code></pre>
+<h3 id="recommendations">Recommendations<a class="headerlink" href="#recommendations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Development</strong>: 1 CPU, 2 GiB memory</li>
+<li><strong>Production</strong>: 2–4 CPUs, 4–8 GiB memory</li>
+<li><strong>High-load</strong>: 4–8 CPUs, 8–16 GiB memory</li>
+</ul>
+<hr />
+<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
+<p>Security best practices for DocumentDB deployments.</p>
+<h3 id="network-policies">Network Policies<a class="headerlink" href="#network-policies" title="Permanent link">&para;</a></h3>
+<p>Restrict network access to DocumentDB:</p>
+<pre><code class="language-yaml">apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: documentdb-access
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: documentdb
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: app-namespace
+    ports:
+    - protocol: TCP
+      port: 10260
+</code></pre>
+<h3 id="rbac">RBAC<a class="headerlink" href="#rbac" title="Permanent link">&para;</a></h3>
+<p>The operator requires specific permissions to manage DocumentDB resources. The Helm chart automatically creates the necessary RBAC rules.</p>
+<h3 id="secrets-management">Secrets Management<a class="headerlink" href="#secrets-management" title="Permanent link">&para;</a></h3>
+<p>Retrieve credentials from the Kubernetes Secret you created:</p>
+<pre><code class="language-bash"># Decode username
+kubectl get secret documentdb-credentials -n &lt;namespace&gt; \
+  -o jsonpath='{.data.username}' | base64 -d
+
+# Decode password
+kubectl get secret documentdb-credentials -n &lt;namespace&gt; \
+  -o jsonpath='{.data.password}' | base64 -d
+</code></pre>
+<p>For production, consider using:</p>
+<ul>
+<li>Azure Key Vault for secrets (via Secrets Store CSI driver)</li>
+<li>HashiCorp Vault integration</li>
+<li>External Secrets Operator</li>
+</ul>
+<hr />
+<h2 id="additional-resources">Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://documentdb.io/documentdb-kubernetes-operator/preview/">Public Documentation</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md">TLS Setup Guide</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md">E2E Testing Guide</a></li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator">GitHub Repository</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      
+    
+  </body>
+</html>
