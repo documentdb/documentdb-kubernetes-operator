@@ -2,6 +2,7 @@ site_name: DocumentDB-Kubernetes-Operator
 repo_url: https://github.com/documentdb/documentdb-kubernetes-operator
 edit_uri: edit/main/docs/operator-public-documentation/
 docs_dir: docs/operator-public-documentation
+
 # Material theme is required for mike's version selector dropdown;
 # the readthedocs theme does not support it.
 theme:
@@ -25,6 +26,9 @@ extra:
     provider: mike
     default: latest
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+
 nav:
   - Preview:
       - Get Started: preview/index.md
@@ -37,6 +41,9 @@ nav:
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
+      - High Availability:
+          - Overview: preview/high-availability/overview.md
+          - Local HA: preview/high-availability/local-ha.md
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
