@@ -1,0 +1,1807 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../backup-and-restore/">
+      
+      
+        <link rel="next" href="../faq/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
+    
+    
+      
+        <title>API Reference - DocumentDB-Kubernetes-Operator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#api-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DocumentDB-Kubernetes-Operator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    DocumentDB-Kubernetes-Operator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Preview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Preview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Get Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced-configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Packages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentdbiopreview" class="md-nav__link">
+    <span class="md-ellipsis">
+      documentdb.io/preview
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="documentdb.io/preview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backupconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      BackupConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backupspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      BackupSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bootstrapconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      BootstrapConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certmanagertls" class="md-nav__link">
+    <span class="md-ellipsis">
+      CertManagerTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clusterreplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClusterReplication
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdbspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDBSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exposeviaservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      ExposeViaService
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gatewaytls" class="md-nav__link">
+    <span class="md-ellipsis">
+      GatewayTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#globalendpointstls" class="md-nav__link">
+    <span class="md-ellipsis">
+      GlobalEndpointsTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issuerref" class="md-nav__link">
+    <span class="md-ellipsis">
+      IssuerRef
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#membercluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      MemberCluster
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pvrecoveryconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      PVRecoveryConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#postgrestls" class="md-nav__link">
+    <span class="md-ellipsis">
+      PostgresTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#providedtls" class="md-nav__link">
+    <span class="md-ellipsis">
+      ProvidedTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recoveryconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      RecoveryConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduledbackup" class="md-nav__link">
+    <span class="md-ellipsis">
+      ScheduledBackup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduledbackupspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ScheduledBackupSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storageconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      StorageConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tlsconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLSConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timeouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Timeouts
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubectl-plugin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Kubectl Plugin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#packages" class="md-nav__link">
+    <span class="md-ellipsis">
+      Packages
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentdbiopreview" class="md-nav__link">
+    <span class="md-ellipsis">
+      documentdb.io/preview
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="documentdb.io/preview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resource-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource Types
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Types">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backupconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      BackupConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backupspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      BackupSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bootstrapconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      BootstrapConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#certmanagertls" class="md-nav__link">
+    <span class="md-ellipsis">
+      CertManagerTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clusterreplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      ClusterReplication
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdbspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDBSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exposeviaservice" class="md-nav__link">
+    <span class="md-ellipsis">
+      ExposeViaService
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gatewaytls" class="md-nav__link">
+    <span class="md-ellipsis">
+      GatewayTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#globalendpointstls" class="md-nav__link">
+    <span class="md-ellipsis">
+      GlobalEndpointsTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issuerref" class="md-nav__link">
+    <span class="md-ellipsis">
+      IssuerRef
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#membercluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      MemberCluster
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pvrecoveryconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      PVRecoveryConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#postgrestls" class="md-nav__link">
+    <span class="md-ellipsis">
+      PostgresTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#providedtls" class="md-nav__link">
+    <span class="md-ellipsis">
+      ProvidedTLS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recoveryconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      RecoveryConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resource
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduledbackup" class="md-nav__link">
+    <span class="md-ellipsis">
+      ScheduledBackup
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scheduledbackupspec" class="md-nav__link">
+    <span class="md-ellipsis">
+      ScheduledBackupSpec
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storageconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      StorageConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tlsconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLSConfiguration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timeouts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Timeouts
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
+<h2 id="packages">Packages<a class="headerlink" href="#packages" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#documentdbiopreview">documentdb.io/preview</a></li>
+</ul>
+<h2 id="documentdbiopreview">documentdb.io/preview<a class="headerlink" href="#documentdbiopreview" title="Permanent link">&para;</a></h2>
+<p>Package preview contains API Schema definitions for the db preview API group.</p>
+<h3 id="resource-types">Resource Types<a class="headerlink" href="#resource-types" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="#backup">Backup</a></li>
+<li><a href="#documentdb">DocumentDB</a></li>
+<li><a href="#scheduledbackup">ScheduledBackup</a></li>
+</ul>
+<h4 id="backup">Backup<a class="headerlink" href="#backup" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>documentdb.io/preview</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>Backup</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#backupspec">BackupSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="backupconfiguration">BackupConfiguration<a class="headerlink" href="#backupconfiguration" title="Permanent link">&para;</a></h4>
+<p>BackupConfiguration defines backup settings for DocumentDB.</p>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>retentionDays</code> <em>integer</em></td>
+<td>RetentionDays specifies how many days backups should be retained.<br />If not specified, the default retention period is 30 days.</td>
+<td>30</td>
+<td>Maximum: 365 <br />Minimum: 1 <br />Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="backupspec">BackupSpec<a class="headerlink" href="#backupspec" title="Permanent link">&para;</a></h4>
+<p>BackupSpec defines the desired state of Backup.</p>
+<p><em>Appears in:</em>
+- <a href="#backup">Backup</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cluster</code> <em><a href="https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#LocalObjectReference">LocalObjectReference</a></em></td>
+<td>Cluster specifies the DocumentDB cluster to backup.<br />The cluster must exist in the same namespace as the Backup resource.</td>
+<td></td>
+<td>Required: {} <br /></td>
+</tr>
+<tr>
+<td><code>retentionDays</code> <em>integer</em></td>
+<td>RetentionDays specifies how many days the backup should be retained.<br />If not specified, the default retention period from the cluster's backup retention policy will be used.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="bootstrapconfiguration">BootstrapConfiguration<a class="headerlink" href="#bootstrapconfiguration" title="Permanent link">&para;</a></h4>
+<p>BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.</p>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>recovery</code> <em><a href="#recoveryconfiguration">RecoveryConfiguration</a></em></td>
+<td>Recovery configures recovery from a backup.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="certmanagertls">CertManagerTLS<a class="headerlink" href="#certmanagertls" title="Permanent link">&para;</a></h4>
+<p>CertManagerTLS holds parameters for cert-manager driven certificates.</p>
+<p><em>Appears in:</em>
+- <a href="#gatewaytls">GatewayTLS</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>issuerRef</code> <em><a href="#issuerref">IssuerRef</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dnsNames</code> <em>string array</em></td>
+<td>DNSNames for the certificate SANs. If empty, operator will add Service DNS names.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>secretName</code> <em>string</em></td>
+<td>SecretName optional explicit name for the target secret. If empty a default is chosen.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="clusterreplication">ClusterReplication<a class="headerlink" href="#clusterreplication" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>crossCloudNetworkingStrategy</code> <em>string</em></td>
+<td>CrossCloudNetworking determines which type of networking mechanics for the replication</td>
+<td></td>
+<td>Enum: [AzureFleet Istio None] <br /></td>
+</tr>
+<tr>
+<td><code>primary</code> <em>string</em></td>
+<td>Primary is the name of the primary cluster for replication.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>clusterList</code> <em><a href="#membercluster">MemberCluster</a> array</em></td>
+<td>ClusterList is the list of clusters participating in replication.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>highAvailability</code> <em>boolean</em></td>
+<td>Whether or not to have replicas on the primary cluster.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="documentdb">DocumentDB<a class="headerlink" href="#documentdb" title="Permanent link">&para;</a></h4>
+<p>DocumentDB is the Schema for the dbs API.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>documentdb.io/preview</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>DocumentDB</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#documentdbspec">DocumentDBSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="documentdbspec">DocumentDBSpec<a class="headerlink" href="#documentdbspec" title="Permanent link">&para;</a></h4>
+<p>DocumentDBSpec defines the desired state of DocumentDB.</p>
+<p><em>Appears in:</em>
+- <a href="#documentdb">DocumentDB</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nodeCount</code> <em>integer</em></td>
+<td>NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.</td>
+<td></td>
+<td>Maximum: 1 <br />Minimum: 1 <br /></td>
+</tr>
+<tr>
+<td><code>instancesPerNode</code> <em>integer</em></td>
+<td>InstancesPerNode is the number of DocumentDB instances per node. Range: 1-3.</td>
+<td></td>
+<td>Maximum: 3 <br />Minimum: 1 <br /></td>
+</tr>
+<tr>
+<td><code>resource</code> <em><a href="#resource">Resource</a></em></td>
+<td>Resource specifies the storage resources for DocumentDB.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>documentDBVersion</code> <em>string</em></td>
+<td>DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).<br />When set, this overrides the default versions for documentDBImage and gatewayImage.<br />Individual image fields take precedence over this version.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>documentDBImage</code> <em>string</em></td>
+<td>DocumentDBImage is the container image to use for DocumentDB.<br />Changing this is not recommended for most users.<br />If not specified, defaults based on documentDBVersion or operator defaults.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>gatewayImage</code> <em>string</em></td>
+<td>GatewayImage is the container image to use for the DocumentDB Gateway sidecar.<br />Changing this is not recommended for most users.<br />If not specified, defaults to a version that matches the DocumentDB operator version.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>postgresImage</code> <em>string</em></td>
+<td>PostgresImage is the container image to use for the PostgreSQL server.<br />If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.<br />Must use trixie (Debian 13) base to match the extension's GLIBC requirements.</td>
+<td>ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie</td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>documentDbCredentialSecret</code> <em>string</em></td>
+<td>DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials<br />for the DocumentDB gateway (expects keys <code>username</code> and <code>password</code>). If omitted,<br />a default secret name <code>documentdb-credentials</code> is used.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>clusterReplication</code> <em><a href="#clusterreplication">ClusterReplication</a></em></td>
+<td>ClusterReplication configures cross-cluster replication for DocumentDB.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>sidecarInjectorPluginName</code> <em>string</em></td>
+<td>SidecarInjectorPluginName is the name of the sidecar injector plugin to use.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>walReplicaPluginName</code> <em>string</em></td>
+<td>WalReplicaPluginName is the name of the wal replica plugin to use.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>exposeViaService</code> <em><a href="#exposeviaservice">ExposeViaService</a></em></td>
+<td>ExposeViaService configures how to expose DocumentDB via a Kubernetes service.<br />This can be a LoadBalancer or ClusterIP service.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>environment</code> <em>string</em></td>
+<td>Environment specifies the cloud environment for deployment<br />This determines cloud-specific service annotations for LoadBalancer services</td>
+<td></td>
+<td>Enum: [eks aks gke] <br /></td>
+</tr>
+<tr>
+<td><code>timeouts</code> <em><a href="#timeouts">Timeouts</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>tls</code> <em><a href="#tlsconfiguration">TLSConfiguration</a></em></td>
+<td>TLS configures certificate management for DocumentDB components.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>logLevel</code> <em>string</em></td>
+<td>Overrides default log level for the DocumentDB cluster.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>bootstrap</code> <em><a href="#bootstrapconfiguration">BootstrapConfiguration</a></em></td>
+<td>Bootstrap configures the initialization of the DocumentDB cluster.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>backup</code> <em><a href="#backupconfiguration">BackupConfiguration</a></em></td>
+<td>Backup configures backup settings for DocumentDB.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>featureGates</code> <em>object (keys:string, values:boolean)</em></td>
+<td>FeatureGates enables or disables optional DocumentDB features.<br />Keys are PascalCase feature names following the Kubernetes feature gate convention.<br />Example: {"ChangeStreams": true}<br />IMPORTANT: When adding a new feature gate, update ALL of the following:<br />1. Add a new FeatureGate* constant in documentdb_types.go<br />2. Add the key name to the XValidation CEL rule's allowed list below<br />3. Add a default entry in the featureGateDefaults map in documentdb_types.go</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>affinity</code> <em><a href="https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#AffinityConfiguration">AffinityConfiguration</a></em></td>
+<td>Affinity/Anti-affinity rules for Pods (cnpg passthrough)</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="exposeviaservice">ExposeViaService<a class="headerlink" href="#exposeviaservice" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serviceType</code> <em>string</em></td>
+<td>ServiceType determines the type of service to expose for DocumentDB.</td>
+<td></td>
+<td>Enum: [LoadBalancer ClusterIP] <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="gatewaytls">GatewayTLS<a class="headerlink" href="#gatewaytls" title="Permanent link">&para;</a></h4>
+<p>GatewayTLS defines TLS configuration for the gateway sidecar (Phase 1: certificate provisioning only)</p>
+<p><em>Appears in:</em>
+- <a href="#tlsconfiguration">TLSConfiguration</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mode</code> <em>string</em></td>
+<td>Mode selects the TLS management strategy.</td>
+<td></td>
+<td>Enum: [Disabled SelfSigned CertManager Provided] <br /></td>
+</tr>
+<tr>
+<td><code>certManager</code> <em><a href="#certmanagertls">CertManagerTLS</a></em></td>
+<td>CertManager config when Mode=CertManager.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>provided</code> <em><a href="#providedtls">ProvidedTLS</a></em></td>
+<td>Provided secret reference when Mode=Provided.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="globalendpointstls">GlobalEndpointsTLS<a class="headerlink" href="#globalendpointstls" title="Permanent link">&para;</a></h4>
+<p>GlobalEndpointsTLS acts as a placeholder for future global endpoint TLS settings.</p>
+<p><em>Appears in:</em>
+- <a href="#tlsconfiguration">TLSConfiguration</a></p>
+<h4 id="issuerref">IssuerRef<a class="headerlink" href="#issuerref" title="Permanent link">&para;</a></h4>
+<p>IssuerRef references a cert-manager Issuer or ClusterIssuer.</p>
+<p><em>Appears in:</em>
+- <a href="#certmanagertls">CertManagerTLS</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td>Kind of issuer (Issuer or ClusterIssuer). Defaults to Issuer.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>group</code> <em>string</em></td>
+<td>Group defaults to cert-manager.io</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="membercluster">MemberCluster<a class="headerlink" href="#membercluster" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#clusterreplication">ClusterReplication</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td>Name is the name of the member cluster.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>environment</code> <em>string</em></td>
+<td>EnvironmentOverride is the cloud environment of the member cluster.<br />Will default to the global setting</td>
+<td></td>
+<td>Enum: [eks aks gke] <br /></td>
+</tr>
+<tr>
+<td><code>storageClass</code> <em>string</em></td>
+<td>StorageClassOverride specifies the storage class for DocumentDB persistent volumes in this member cluster.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="pvrecoveryconfiguration">PVRecoveryConfiguration<a class="headerlink" href="#pvrecoveryconfiguration" title="Permanent link">&para;</a></h4>
+<p>PVRecoveryConfiguration defines settings for recovering from a retained PersistentVolume.</p>
+<p><em>Appears in:</em>
+- <a href="#recoveryconfiguration">RecoveryConfiguration</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code> <em>string</em></td>
+<td>Name is the name of the PersistentVolume to recover from.<br />The PV must exist and be in Available or Released state.</td>
+<td></td>
+<td>MinLength: 1 <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="postgrestls">PostgresTLS<a class="headerlink" href="#postgrestls" title="Permanent link">&para;</a></h4>
+<p>PostgresTLS acts as a placeholder for future Postgres TLS settings.</p>
+<p><em>Appears in:</em>
+- <a href="#tlsconfiguration">TLSConfiguration</a></p>
+<h4 id="providedtls">ProvidedTLS<a class="headerlink" href="#providedtls" title="Permanent link">&para;</a></h4>
+<p>ProvidedTLS references an existing secret that contains tls.crt/tls.key (and optional ca.crt).</p>
+<p><em>Appears in:</em>
+- <a href="#gatewaytls">GatewayTLS</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>secretName</code> <em>string</em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="recoveryconfiguration">RecoveryConfiguration<a class="headerlink" href="#recoveryconfiguration" title="Permanent link">&para;</a></h4>
+<p>RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.</p>
+<p><em>Appears in:</em>
+- <a href="#bootstrapconfiguration">BootstrapConfiguration</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backup</code> <em><a href="https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#LocalObjectReference">LocalObjectReference</a></em></td>
+<td>Backup specifies the source backup to restore from.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>persistentVolume</code> <em><a href="#pvrecoveryconfiguration">PVRecoveryConfiguration</a></em></td>
+<td>PersistentVolume specifies the PV to restore from.<br />The operator will create a temporary PVC bound to this PV, use it for CNPG recovery,<br />and delete the temporary PVC after the cluster is healthy.<br />Cannot be used together with Backup.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="resource">Resource<a class="headerlink" href="#resource" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>storage</code> <em><a href="#storageconfiguration">StorageConfiguration</a></em></td>
+<td>Storage configuration for DocumentDB persistent volumes.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="scheduledbackup">ScheduledBackup<a class="headerlink" href="#scheduledbackup" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiVersion</code> <em>string</em></td>
+<td><code>documentdb.io/preview</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>kind</code> <em>string</em></td>
+<td><code>ScheduledBackup</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metadata</code> <em><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#objectmeta-v1-meta">ObjectMeta</a></em></td>
+<td>Refer to Kubernetes API documentation for fields of <code>metadata</code>.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>spec</code> <em><a href="#scheduledbackupspec">ScheduledBackupSpec</a></em></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="scheduledbackupspec">ScheduledBackupSpec<a class="headerlink" href="#scheduledbackupspec" title="Permanent link">&para;</a></h4>
+<p>ScheduledBackupSpec defines the desired state of ScheduledBackup</p>
+<p><em>Appears in:</em>
+- <a href="#scheduledbackup">ScheduledBackup</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cluster</code> <em><a href="https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#LocalObjectReference">LocalObjectReference</a></em></td>
+<td>Cluster specifies the DocumentDB cluster to backup.<br />The cluster must exist in the same namespace as the ScheduledBackup resource.</td>
+<td></td>
+<td>Required: {} <br /></td>
+</tr>
+<tr>
+<td><code>schedule</code> <em>string</em></td>
+<td>Schedule defines when backups should be created using cron expression format.<br />See https://pkg.go.dev/github.com/robfig/cron#hdr-CRON_Expression_Format</td>
+<td></td>
+<td>Required: {} <br /></td>
+</tr>
+<tr>
+<td><code>retentionDays</code> <em>integer</em></td>
+<td>RetentionDays specifies how many days the backups should be retained.<br />If not specified, the default retention period from the cluster's backup retention policy will be used.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="storageconfiguration">StorageConfiguration<a class="headerlink" href="#storageconfiguration" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#resource">Resource</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pvcSize</code> <em>string</em></td>
+<td>PvcSize is the size of the persistent volume claim for DocumentDB storage (e.g., "10Gi").</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>storageClass</code> <em>string</em></td>
+<td>StorageClass specifies the storage class for DocumentDB persistent volumes.<br />If not specified, the cluster's default storage class will be used.</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>persistentVolumeReclaimPolicy</code> <em>string</em></td>
+<td>PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when<br />the DocumentDB cluster is deleted.<br />When a DocumentDB cluster is deleted, the following chain of deletions occurs:<br />DocumentDB deletion → CNPG Cluster deletion → PVC deletion → PV deletion (based on this policy)<br />Options:<br />  - Retain (default): The PV is preserved after cluster deletion, allowing manual<br />    data recovery or forensic analysis. Use for production workloads where data<br />    safety is critical. Orphaned PVs must be manually deleted when no longer needed.<br />  - Delete: The PV is automatically deleted when the PVC is deleted. Use for development,<br />    testing, or ephemeral environments where data persistence is not required.<br />WARNING: Setting this to "Delete" means all data will be permanently lost when<br />the DocumentDB cluster is deleted. This cannot be undone.</td>
+<td>Retain</td>
+<td>Enum: [Retain Delete] <br />Optional: {} <br /></td>
+</tr>
+</tbody>
+</table>
+<h4 id="tlsconfiguration">TLSConfiguration<a class="headerlink" href="#tlsconfiguration" title="Permanent link">&para;</a></h4>
+<p>TLSConfiguration aggregates TLS settings across DocumentDB components.</p>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway</code> <em><a href="#gatewaytls">GatewayTLS</a></em></td>
+<td>Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only).</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>postgres</code> <em><a href="#postgrestls">PostgresTLS</a></em></td>
+<td>Postgres configures TLS for the Postgres server (placeholder for future phases).</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>globalEndpoints</code> <em><a href="#globalendpointstls">GlobalEndpointsTLS</a></em></td>
+<td>GlobalEndpoints configures TLS for global endpoints (placeholder for future phases).</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h4 id="timeouts">Timeouts<a class="headerlink" href="#timeouts" title="Permanent link">&para;</a></h4>
+<p><em>Appears in:</em>
+- <a href="#documentdbspec">DocumentDBSpec</a></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+<th>Default</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stopDelay</code> <em>integer</em></td>
+<td></td>
+<td></td>
+<td>Maximum: 1800 <br />Minimum: 0 <br /></td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      
+    
+  </body>
+</html>
