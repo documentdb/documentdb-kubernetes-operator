@@ -2,12 +2,15 @@ site_name: DocumentDB-Kubernetes-Operator
 repo_url: https://github.com/documentdb/documentdb-kubernetes-operator
 edit_uri: edit/main/docs/operator-public-documentation/
 docs_dir: docs/operator-public-documentation
+
 # Material theme is required for mike's version selector dropdown;
 # the readthedocs theme does not support it.
 theme:
   name: material
   features:
     - content.code.copy
+    - content.tabs.link
+    - content.code.annotate
 
 # mike (https://github.com/jimporter/mike) enables versioned docs on GitHub Pages.
 # Each release gets a frozen snapshot (e.g., /0.2.0/), and "latest" always points
@@ -18,12 +21,18 @@ extra:
     provider: mike
     default: latest
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+
 nav:
   - Preview:
       - Get Started: preview/index.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
+      - High Availability:
+          - Overview: preview/high-availability/overview.md
+          - Local HA: preview/high-availability/local-ha.md
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
@@ -33,5 +42,15 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
   - toc:
       permalink: true
