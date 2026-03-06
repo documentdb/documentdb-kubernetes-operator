@@ -135,6 +135,18 @@ func (impl Implementation) reconcileMetadata(
 			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
 			Value: "http://" + cluster.Name + "-collector." + cluster.Namespace + ".svc.cluster.local:4317",
 		},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  "OTEL_RESOURCE_ATTRIBUTES",
+			Value: "service.instance.id=$(POD_NAME)",
+		},
 	}
 
 	// Add USERNAME and PASSWORD environment variables from secret defined in configuration

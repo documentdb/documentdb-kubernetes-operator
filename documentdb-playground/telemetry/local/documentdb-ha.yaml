@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: demo_user
+  password: DemoPassword100
+---
+# ExternalName service bridges the DocumentDB namespace to the observability namespace.
+# The sidecar injector sets OTEL_EXPORTER_OTLP_ENDPOINT to:
+#   http://documentdb-preview-collector.documentdb-preview-ns.svc.cluster.local:4317
+# This service routes that to the actual OTel Collector in the observability namespace.
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-preview-collector
+  namespace: documentdb-preview-ns
+spec:
+  type: ExternalName
+  externalName: otel-collector.observability.svc.cluster.local
+  ports:
+    - name: otlp-grpc
+      port: 4317
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  documentDbCredentialSecret: documentdb-credentials
+  gatewayImage: "localhost:5001/documentdb-gateway:latest"
+  resource:
+    storage:
+      pvcSize: 5Gi
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
