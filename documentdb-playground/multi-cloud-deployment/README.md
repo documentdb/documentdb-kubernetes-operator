@@ -143,8 +143,6 @@ The template uses placeholders replaced at runtime:
 - `{{DOCUMENTDB_PASSWORD}}`: The database password
 - `{{PRIMARY_CLUSTER}}`: The selected primary cluster
 - `{{CLUSTER_LIST}}`: YAML list of all clusters with their environments
-- `{{GATEWAY_IMAGE}}`: Image to be used for the documentdb gateway
-- `{{DOCUMENTDB_IMAGE}}`: Image to be used for the documentdb postgres backend
 
 ### Azure DNS Configuration
 

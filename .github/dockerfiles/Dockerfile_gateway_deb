@@ -1,0 +1,60 @@
+# Lean gateway image — contains only the DocumentDB gateway binary
+# Designed for use with the DocumentDB Kubernetes Operator (CNPG-based)
+#
+# Usage:
+#   docker build \
+#     --build-arg GATEWAY_DEB_REL_PATH=packages/documentdb_gateway_0.1.0-1_arm64.deb \
+#     -t documentdb-gateway:latest \
+#     -f Dockerfile_gateway_deb <build-context>
+#
+# The build context must contain:
+#   - The gateway .deb at GATEWAY_DEB_REL_PATH
+#   - scripts/gateway_entrypoint.sh
+#   - scripts/utils.sh
+#   - pg_documentdb_gw/SetupConfiguration.json
+ARG BASE_IMAGE=debian:trixie-slim
+FROM ${BASE_IMAGE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+# Required: path (relative to build context) to the pre-built gateway .deb.
+ARG GATEWAY_DEB_REL_PATH
+
+# Fail fast when the caller forgets the deb path.
+RUN [ -n "${GATEWAY_DEB_REL_PATH}" ] || \
+    (echo "ERROR: GATEWAY_DEB_REL_PATH build-arg is required." >&2; exit 1)
+
+# ---------- minimal runtime deps + PG client (psql, pg_isready) ----------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        jq \
+        openssl \
+        postgresql-client && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# ---------- gateway binary (from deb) ----------
+COPY ${GATEWAY_DEB_REL_PATH} /tmp/gateway.deb
+RUN dpkg -i /tmp/gateway.deb && \
+    rm -f /tmp/gateway.deb
+
+# ---------- runtime config & scripts ----------
+RUN useradd -ms /bin/bash -u 1000 documentdb
+
+RUN mkdir -p /home/documentdb/gateway/scripts \
+    && mkdir -p /home/documentdb/gateway/pg_documentdb_gw/target
+
+COPY pg_documentdb_gw/SetupConfiguration.json \
+     /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json
+COPY scripts/utils.sh \
+     /home/documentdb/gateway/scripts/utils.sh
+COPY scripts/gateway_entrypoint.sh \
+     /home/documentdb/gateway/scripts/gateway_entrypoint.sh
+
+RUN chown -R documentdb:documentdb /home/documentdb/gateway \
+    && chmod +x /home/documentdb/gateway/scripts/*.sh
+
+USER documentdb
+WORKDIR /home/documentdb/gateway
+
+ENTRYPOINT ["/bin/bash", "/home/documentdb/gateway/scripts/gateway_entrypoint.sh"]

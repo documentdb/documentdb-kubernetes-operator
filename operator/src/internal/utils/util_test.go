@@ -384,48 +384,79 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 
 func TestGetDocumentDBImageForInstance(t *testing.T) {
 	tests := []struct {
-		name     string
-		spec     dbpreview.DocumentDBSpec
-		expected string
+		name       string
+		documentdb *dbpreview.DocumentDB
+		expected   string
 	}{
+		// Priority 1: spec.DocumentDBImage overrides everything
 		{
-			name:     "default image when no overrides",
-			spec:     dbpreview.DocumentDBSpec{},
-			expected: DEFAULT_DOCUMENTDB_IMAGE,
-		},
-		{
-			name: "explicit image takes precedence over everything",
-			spec: dbpreview.DocumentDBSpec{
+			name: "custom image overrides feature gate",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				DocumentDBImage: "custom-registry/custom-image:v1",
 				FeatureGates:    map[string]bool{dbpreview.FeatureGateChangeStreams: true},
-			},
+			}},
 			expected: "custom-registry/custom-image:v1",
 		},
+
+		// Priority 2: spec.DocumentDBVersion
 		{
-			name: "changestream image when feature gate is enabled",
-			spec: dbpreview.DocumentDBSpec{
+			name: "documentDBVersion resolves extension image",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			}},
+			expected: DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "custom image overrides documentDBVersion",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBImage:   "custom-registry/custom-image:v1",
+				DocumentDBVersion: "1.2.3",
+			}},
+			expected: "custom-registry/custom-image:v1",
+		},
+
+		// Priority 3: ChangeStreams feature gate
+		{
+			name: "ChangeStreams enabled returns changestream image",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
-			},
+			}},
 			expected: CHANGESTREAM_DOCUMENTDB_IMAGE,
 		},
 		{
-			name: "default image when feature gate is explicitly disabled",
-			spec: dbpreview.DocumentDBSpec{
+			name: "ChangeStreams explicitly disabled falls through to default",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
-			},
+			}},
 			expected: DEFAULT_DOCUMENTDB_IMAGE,
+		},
+
+		// Priority 3: default image (no overrides)
+		{
+			name:       "default image when no overrides",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
+			expected:   DEFAULT_DOCUMENTDB_IMAGE,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := &dbpreview.DocumentDB{Spec: tt.spec}
-			got := GetDocumentDBImageForInstance(db)
-			if got != tt.expected {
-				t.Errorf("GetDocumentDBImageForInstance() = %q, want %q", got, tt.expected)
+			result := GetDocumentDBImageForInstance(tt.documentdb)
+			if result != tt.expected {
+				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var resolves extension image", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		result := GetDocumentDBImageForInstance(db)
+		expected := DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0"
+		if result != expected {
+			t.Errorf("got %q, want %q", result, expected)
+		}
+	})
 }
 
 func TestGetPortFor(t *testing.T) {
@@ -491,6 +522,21 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			expected: "custom-registry/custom-gateway:v1",
 		},
 		{
+			name: "documentDBVersion resolves gateway image",
+			spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			},
+			expected: GATEWAY_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "explicit gatewayImage overrides documentDBVersion",
+			spec: dbpreview.DocumentDBSpec{
+				GatewayImage:      "custom-registry/custom-gateway:v1",
+				DocumentDBVersion: "1.2.3",
+			},
+			expected: "custom-registry/custom-gateway:v1",
+		},
+		{
 			name: "changestream image when feature gate is enabled",
 			spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
@@ -515,6 +561,16 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var resolves gateway image", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		got := GetGatewayImageForDocumentDB(db)
+		expected := GATEWAY_IMAGE_REPO + ":0.200.0"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
 }
 
 func TestGetEnvironmentSpecificAnnotations(t *testing.T) {
@@ -822,6 +878,249 @@ func TestGetDocumentDBServiceDefinition_ServiceNameLength(t *testing.T) {
 
 			if service.Name == "" {
 				t.Error("Service name should not be empty")
+			}
+		})
+	}
+}
+
+func TestParseExtensionVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expected  [3]int
+		expectErr bool
+		errSubstr string
+	}{
+		{
+			name:     "valid standard version",
+			input:    "0.110-0",
+			expected: [3]int{0, 110, 0},
+		},
+		{
+			name:     "valid version with non-zero patch",
+			input:    "0.110-1",
+			expected: [3]int{0, 110, 1},
+		},
+		{
+			name:     "valid version with major > 0",
+			input:    "1.0-0",
+			expected: [3]int{1, 0, 0},
+		},
+		{
+			name:     "valid version all non-zero",
+			input:    "2.15-3",
+			expected: [3]int{2, 15, 3},
+		},
+		{
+			name:     "valid version with large numbers",
+			input:    "100.999-50",
+			expected: [3]int{100, 999, 50},
+		},
+		{
+			name:      "missing dash separator",
+			input:     "0.110.0",
+			expectErr: true,
+			errSubstr: "missing '-'",
+		},
+		{
+			name:      "missing dot separator",
+			input:     "0110-0",
+			expectErr: true,
+			errSubstr: "missing '.'",
+		},
+		{
+			name:      "non-numeric major",
+			input:     "abc.110-0",
+			expectErr: true,
+			errSubstr: "invalid major version",
+		},
+		{
+			name:      "non-numeric minor",
+			input:     "0.abc-0",
+			expectErr: true,
+			errSubstr: "invalid minor version",
+		},
+		{
+			name:      "non-numeric patch",
+			input:     "0.110-abc",
+			expectErr: true,
+			errSubstr: "invalid patch version",
+		},
+		{
+			name:      "empty string",
+			input:     "",
+			expectErr: true,
+			errSubstr: "missing '-'",
+		},
+		{
+			name:      "only dash",
+			input:     "-",
+			expectErr: true,
+			errSubstr: "missing '.'",
+		},
+		{
+			name:      "only dot",
+			input:     ".",
+			expectErr: true,
+			errSubstr: "missing '-'",
+		},
+		{
+			name:      "extra dash parts are ignored by SplitN",
+			input:     "0.110-0-1",
+			expectErr: true,
+			errSubstr: "invalid patch version",
+		},
+		{
+			name:     "extra dot in major.minor parsed correctly",
+			input:    "0.1.2-3",
+			expected: [3]int{0, 0, 0},
+			// "1.2" is not a valid int, so this should error
+			expectErr: true,
+			errSubstr: "invalid minor version",
+		},
+		{
+			name:      "negative major version",
+			input:     "-1.110-0",
+			expectErr: true,
+			errSubstr: "missing '.'",
+		},
+		{
+			name:     "zero version",
+			input:    "0.0-0",
+			expected: [3]int{0, 0, 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseExtensionVersion(tt.input)
+			if tt.expectErr {
+				if err == nil {
+					t.Errorf("parseExtensionVersion(%q) expected error containing %q, but got nil", tt.input, tt.errSubstr)
+				} else if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("parseExtensionVersion(%q) error = %q, expected to contain %q", tt.input, err.Error(), tt.errSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("parseExtensionVersion(%q) unexpected error: %v", tt.input, err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("parseExtensionVersion(%q) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompareExtensionVersions(t *testing.T) {
+	tests := []struct {
+		name     string
+		v1       string
+		v2       string
+		expected int
+	}{
+		{
+			name:     "equal versions",
+			v1:       "0.110-0",
+			v2:       "0.110-0",
+			expected: 0,
+		},
+		{
+			name:     "v1 minor greater (upgrade)",
+			v1:       "0.110-0",
+			v2:       "0.109-0",
+			expected: 1,
+		},
+		{
+			name:     "v1 minor less (rollback)",
+			v1:       "0.109-0",
+			v2:       "0.110-0",
+			expected: -1,
+		},
+		{
+			name:     "v1 major greater",
+			v1:       "1.0-0",
+			v2:       "0.110-0",
+			expected: 1,
+		},
+		{
+			name:     "v1 patch greater",
+			v1:       "0.110-1",
+			v2:       "0.110-0",
+			expected: 1,
+		},
+		{
+			name:     "v1 patch less",
+			v1:       "0.110-0",
+			v2:       "0.110-1",
+			expected: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := CompareExtensionVersions(tt.v1, tt.v2)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("CompareExtensionVersions(%q, %q) = %d, want %d", tt.v1, tt.v2, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCompareExtensionVersionsErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		v1   string
+		v2   string
+	}{
+		{
+			name: "invalid v1 format",
+			v1:   "abc",
+			v2:   "0.110-0",
+		},
+		{
+			name: "invalid v2 format",
+			v1:   "0.110-0",
+			v2:   "xyz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CompareExtensionVersions(tt.v1, tt.v2)
+			if err == nil {
+				t.Errorf("CompareExtensionVersions(%q, %q) expected error, got nil", tt.v1, tt.v2)
+			}
+		})
+	}
+}
+
+func TestExtensionVersionToSemver(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "standard version", input: "0.110-0", expected: "0.110.0"},
+		{name: "non-zero patch", input: "0.110-1", expected: "0.110.1"},
+		{name: "major version", input: "1.0-0", expected: "1.0.0"},
+		{name: "all non-zero", input: "2.15-3", expected: "2.15.3"},
+		{name: "large numbers", input: "100.999-50", expected: "100.999.50"},
+		{name: "already semver (no hyphen)", input: "0.110.0", expected: "0.110.0"},
+		{name: "empty string", input: "", expected: ""},
+		{name: "no hyphen single number", input: "110", expected: "110"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtensionVersionToSemver(tt.input)
+			if result != tt.expected {
+				t.Errorf("ExtensionVersionToSemver(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}

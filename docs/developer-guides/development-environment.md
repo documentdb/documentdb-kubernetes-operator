@@ -94,7 +94,7 @@ the Linux instructions inside WSL2.
 | --------- | --------------- | ----- |
 | Go | 1.25.0 | Matches `go.mod`. Install via package manager or [go.dev](https://go.dev/dl) |
 | Docker Engine | 24.x | Needed for image builds and kind |
-| kind | 0.22+ | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
+| kind | 0.31+ | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
 | kubectl | 1.30+ | Align with the Kubernetes version you test against |
 | Helm | 3.15+ | Required by deployment scripts |
 | golangci-lint | 1.55+ | `curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \| sh -s -- -b /usr/local/bin` |
@@ -107,7 +107,7 @@ the Linux instructions inside WSL2.
 sudo apt-get update
 sudo apt-get install -y build-essential curl git jq make tar gzip
 sudo snap install go --channel=1.25/stable
-curl -Lo kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
+curl -Lo kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /usr/local/bin

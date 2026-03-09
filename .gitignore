@@ -410,3 +410,4 @@ Chart.lock
 
 # Test output
 *.out
+.DS_Store

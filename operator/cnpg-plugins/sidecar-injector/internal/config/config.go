@@ -10,12 +10,14 @@ import (
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/common"
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/validation"
 	"github.com/cloudnative-pg/cnpg-i/pkg/operator"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
 	labelsParameter                     = "labels"
 	annotationParameter                 = "annotations"
 	gatewayImageParameter               = "gatewayImage"
+	gatewayImagePullPolicyParameter     = "gatewayImagePullPolicy"
 	documentDbCredentialSecretParameter = "documentDbCredentialSecret"
 )
 
@@ -24,6 +26,7 @@ type Configuration struct {
 	Labels                     map[string]string
 	Annotations                map[string]string
 	GatewayImage               string
+	GatewayImagePullPolicy     corev1.PullPolicy
 	DocumentDbCredentialSecret string
 }
 
@@ -56,11 +59,13 @@ func FromParameters(
 	// Parse simple string parameters
 	gatewayImage := helper.Parameters[gatewayImageParameter]
 	credentialSecret := helper.Parameters[documentDbCredentialSecretParameter]
+	pullPolicy := parsePullPolicy(helper.Parameters[gatewayImagePullPolicyParameter])
 
 	configuration := &Configuration{
 		Labels:                     labels,
 		Annotations:                annotations,
 		GatewayImage:               gatewayImage,
+		GatewayImagePullPolicy:     pullPolicy,
 		DocumentDbCredentialSecret: credentialSecret,
 	}
 
@@ -101,10 +106,25 @@ func (config *Configuration) applyDefaults() {
 	}
 	// Set defaults
 	if config.GatewayImage == "" {
-		config.GatewayImage = "ghcr.io/microsoft/documentdb/documentdb-local:16"
+		// NOTE: Keep in sync with operator/src/internal/utils/constants.go:DEFAULT_GATEWAY_IMAGE
+		config.GatewayImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0"
+	}
+	if config.GatewayImagePullPolicy == "" {
+		config.GatewayImagePullPolicy = corev1.PullIfNotPresent
 	}
 	if config.DocumentDbCredentialSecret == "" {
 		config.DocumentDbCredentialSecret = "documentdb-credentials"
+	}
+}
+
+// parsePullPolicy converts a string to a corev1.PullPolicy.
+// Returns empty string for unrecognized values; callers rely on applyDefaults() for the fallback.
+func parsePullPolicy(value string) corev1.PullPolicy {
+	switch corev1.PullPolicy(value) {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		return corev1.PullPolicy(value)
+	default:
+		return ""
 	}
 }
 
@@ -122,6 +142,7 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	result[labelsParameter] = string(serializedLabels)
 	result[annotationParameter] = string(serializedAnnotations)
 	result[gatewayImageParameter] = config.GatewayImage
+	result[gatewayImagePullPolicyParameter] = string(config.GatewayImagePullPolicy)
 	result[documentDbCredentialSecretParameter] = config.DocumentDbCredentialSecret
 
 	return result, nil

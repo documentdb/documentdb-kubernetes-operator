@@ -21,6 +21,7 @@ spec:
       containers:
       - name: documentdb-operator
         image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Values.documentDbVersion | default .Chart.AppVersion }}"
+        imagePullPolicy: "{{ .Values.image.documentdbk8soperator.pullPolicy }}"
         env:
         - name: GATEWAY_PORT
           value: "10260"
@@ -48,4 +49,11 @@ spec:
         - name: APPINSIGHTS_INSTRUMENTATIONKEY
           value: {{ .Values.telemetry.instrumentationKey | quote }}
         {{- end }}
+        {{- if .Values.gatewayImagePullPolicy }}
+        - name: GATEWAY_IMAGE_PULL_POLICY
+          value: "{{ .Values.gatewayImagePullPolicy }}"
+        {{- end }}
+        {{- if .Values.documentDbImagePullPolicy }}
+        - name: DOCUMENTDB_IMAGE_PULL_POLICY
+          value: "{{ .Values.documentDbImagePullPolicy }}"
         {{- end }}

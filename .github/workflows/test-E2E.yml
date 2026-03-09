@@ -69,7 +69,7 @@ jobs:
     secrets: inherit
 
   e2e-test:
-    name: Run E2E Tests
+    name: E2E (${{ matrix.architecture }}, K8s ${{ matrix.kubernetes_version }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: build
@@ -78,16 +78,19 @@ jobs:
     strategy:
       matrix:
         include:
+          # ImageVolume mode (K8s >= 1.35) - uses separate PostgreSQL + extension images
           - architecture: amd64
             runner: ubuntu-22.04
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
           - architecture: arm64
             runner: ubuntu-22.04-arm
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
+            kubernetes_version: "v1.35.0"
     
     env:
       # Use built image tag on PR or when no external tag provided
@@ -124,6 +127,7 @@ jobs:
           echo "- **Source**: Local build pipeline" >> $GITHUB_STEP_SUMMARY
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: \`${{ matrix.kubernetes_version }}\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment
@@ -146,6 +150,7 @@ jobs:
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
+        kubernetes-version: ${{ matrix.kubernetes_version }}
 
     - name: Setup port forwarding for comprehensive tests
       uses: ./.github/actions/setup-port-forwarding
@@ -423,10 +428,11 @@ jobs:
     - name: Test completion summary
       if: always()
       run: |
-        echo "## E2E Test Summary for ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
+        echo "## E2E Test Summary for ${{ matrix.architecture }} (K8s ${{ matrix.kubernetes_version }})" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Architecture**: ${{ matrix.architecture }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Runner**: ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Kubernetes Version**: ${{ matrix.kubernetes_version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Test Scenario**: ${{ matrix.test_scenario_name }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Node Count**: ${{ matrix.node_count }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Image Tag**: ${{ env.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY

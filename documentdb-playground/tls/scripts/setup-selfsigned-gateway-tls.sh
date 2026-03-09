@@ -12,9 +12,6 @@ SelfSigned gateway TLS as documented in docs/gateway-tls-validation.md.
 Options:
   -n, --namespace <name>          Kubernetes namespace for the DocumentDB resource (default: documentdb-preview-ns)
       --name <name>               DocumentDB resource name (default: documentdb-preview)
-      --docdb-version <ver>       DocumentDB engine version (default: 16)
-      --docdb-image <ref>         DocumentDB image reference (default: ghcr.io/microsoft/documentdb/documentdb-local:<version>)
-      --gateway-image <ref>       Gateway image reference (default: same as --docdb-image)
       --pvc-size <size>           Persistent volume claim size (default: 10Gi)
       --storage-class <name>      StorageClass to use for PVCs (optional)
       --secret-name <name>        Credentials secret name (default: documentdb-credentials)
@@ -30,9 +27,6 @@ EOF
 
 NAMESPACE="documentdb-preview-ns"
 DOCDB_NAME="documentdb-preview"
-DOCDB_VERSION="16"
-DOCDB_IMAGE=""
-GATEWAY_IMAGE=""
 PVC_SIZE="10Gi"
 STORAGE_CLASS=""
 SECRET_NAME="documentdb-credentials"
@@ -53,18 +47,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --name)
       DOCDB_NAME="$2"
-      shift 2
-      ;;
-    --docdb-version)
-      DOCDB_VERSION="$2"
-      shift 2
-      ;;
-    --docdb-image)
-      DOCDB_IMAGE="$2"
-      shift 2
-      ;;
-    --gateway-image)
-      GATEWAY_IMAGE="$2"
       shift 2
       ;;
     --pvc-size)
@@ -115,13 +97,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$DOCDB_IMAGE" ]]; then
-  DOCDB_IMAGE="ghcr.io/microsoft/documentdb/documentdb-local:${DOCDB_VERSION}"
-fi
-if [[ -z "$GATEWAY_IMAGE" ]]; then
-  GATEWAY_IMAGE="$DOCDB_IMAGE"
-fi
-
 for bin in kubectl helm; do
   if ! command -v "$bin" >/dev/null 2>&1; then
     echo "Required command '$bin' not found on PATH" >&2
@@ -162,9 +137,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBVersion: "${DOCDB_VERSION}"
-  documentDBImage: "${DOCDB_IMAGE}"
-  gatewayImage: "${GATEWAY_IMAGE}"
   resource:
     storage:
       pvcSize: ${PVC_SIZE}

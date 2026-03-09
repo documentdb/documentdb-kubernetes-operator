@@ -11,11 +11,24 @@ const (
 	// DocumentDB versioning environment variable
 	DOCUMENTDB_VERSION_ENV = "DOCUMENTDB_VERSION"
 
-	// DocumentDB image repository
-	DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/microsoft/documentdb/documentdb-local"
+	// Gateway image pull policy environment variable
+	GATEWAY_IMAGE_PULL_POLICY_ENV = "GATEWAY_IMAGE_PULL_POLICY"
 
-	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
-	DEFAULT_GATEWAY_IMAGE                 = DOCUMENTDB_IMAGE_REPOSITORY + ":16"
+	// DocumentDB extension image pull policy environment variable
+	DOCUMENTDB_IMAGE_PULL_POLICY_ENV = "DOCUMENTDB_IMAGE_PULL_POLICY"
+
+	// Image repositories for deb-based images (must match build_images.yml naming)
+	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
+	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
+
+	// MinK8sMinorVersion is the minimum required Kubernetes minor version.
+	// The operator requires K8s 1.35+ for ImageVolume GA support.
+	MinK8sMinorVersion = 35
+
+	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
+	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
+	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
+	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
 	// TODO: remove these constants once change stream support is included in the official images.
@@ -53,6 +66,10 @@ const (
 	JSON_PATCH_PATH_EXTERNAL_CLUSTERS    = "/spec/externalClusters"
 	JSON_PATCH_PATH_MANAGED_SERVICES     = "/spec/managed/services/additional"
 	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
+
+	// JSON Patch path format strings for image upgrades (require fmt.Sprintf with index)
+	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT      = "/spec/postgresql/extensions/%d/image/reference"
+	JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT = "/spec/plugins/%d/parameters/gatewayImage"
 
 	// JSON Patch operations
 	JSON_PATCH_OP_REPLACE = "replace"

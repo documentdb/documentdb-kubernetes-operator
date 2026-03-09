@@ -1,4 +1,4 @@
-name: Deploy MkDocs and Helm Repo
+name: Deploy Versioned Docs
 on:
   workflow_dispatch:
   push:
@@ -7,12 +7,11 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
-      - 'operator/documentdb-helm-chart/**'
+  release:
+    types: [published]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # Allow only one concurrent deployment
 concurrency:
@@ -20,44 +19,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  deploy-docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: 3.x
+
       - name: Install dependencies
-        run: pip install mkdocs mkdocs-material
-      - name: Build documentation
-        run: mkdocs build --clean
-      
-      - name: Install Helm
+        run: pip install "mkdocs-material==9.5.19" "mike==2.1.3"
+
+      - name: Configure Git for mike
         run: |
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-      
-      - name: Update chart dependencies
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # On push to main: deploy as "dev" version
+      - name: Deploy dev docs
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: mike deploy dev --push --update-aliases
+
+      # On release: deploy versioned docs and update "latest" alias
+      - name: Deploy release docs
+        if: github.event_name == 'release'
         run: |
-          cd operator/documentdb-helm-chart
-          helm dependency update
-      
-      - name: Package Helm chart
-        run: |
-          helm package operator/documentdb-helm-chart -d site
-      
-      - name: Generate Helm index
-        run: |
-          helm repo index site --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-      
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'site'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          VERSION=${{ github.event.release.tag_name }}
+          mike deploy ${VERSION} latest --push --update-aliases
+          mike set-default latest --push

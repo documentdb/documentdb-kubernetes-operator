@@ -52,6 +52,7 @@ var _ = Describe("Physical Replication", func() {
 
 		documentdb := baseDocumentDB("docdb-not-present", namespace)
 		documentdb.UID = types.UID("docdb-not-present-uid")
+		documentdb.Finalizers = []string{documentDBFinalizer}
 		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.AzureFleet),
 			Primary:                      "member-2",

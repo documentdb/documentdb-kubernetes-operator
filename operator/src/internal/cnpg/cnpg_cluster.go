@@ -5,6 +5,7 @@ package cnpg
 
 import (
 	"cmp"
+	"os"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
@@ -17,7 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdb_image, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
 	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
@@ -38,6 +39,15 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		storageClassPointer = &storageClass
 	}
 
+	// Set ImageVolumeSource.PullPolicy for the extension image when configured.
+	// This addresses the fact that ImageVolume sources DO support pull policies
+	// (via corev1.ImageVolumeSource.PullPolicy), unlike regular container images
+	// which only support pull policies on container specs.
+	extensionImageSource := corev1.ImageVolumeSource{Reference: documentdbImage}
+	if pullPolicy := parsePullPolicy(os.Getenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV)); pullPolicy != "" {
+		extensionImageSource.PullPolicy = pullPolicy
+	}
+
 	return &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
@@ -56,7 +66,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
 				Instances: documentdb.Spec.InstancesPerNode,
-				ImageName: documentdb_image,
+				ImageName: documentdb.Spec.PostgresImage,
 				StorageConfiguration: cnpgv1.StorageConfiguration{
 					StorageClass: storageClassPointer, // Use configured storage class or default
 					Size:         documentdb.Spec.Resource.Storage.PvcSize,
@@ -66,6 +76,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					params := map[string]string{
 						"gatewayImage":               gatewayImage,
 						"documentDbCredentialSecret": credentialSecretName,
+					}
+					if pullPolicy := os.Getenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV); pullPolicy != "" {
+						params["gatewayImagePullPolicy"] = pullPolicy
 					}
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
@@ -77,9 +90,16 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						Parameters: params,
 					}}
 				}(),
-				PostgresUID: 105,
-				PostgresGID: 108,
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Extensions: []cnpgv1.ExtensionConfiguration{
+						{
+							Name:                 "documentdb",
+							ImageVolumeSource:    extensionImageSource,
+							DynamicLibraryPath:   []string{"lib"},
+							ExtensionControlPath: []string{"share"},
+							LdLibraryPath:        []string{"lib", "system"},
+						},
+					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
 					Parameters: func() map[string]string {
 						params := map[string]string{
@@ -110,6 +130,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				Affinity: documentdb.Spec.Affinity,
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
+
 			return spec
 		}(),
 	}
@@ -181,4 +202,15 @@ func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
 		return documentdb.Spec.Timeouts.StopDelay
 	}
 	return util.CNPG_DEFAULT_STOP_DELAY
+}
+
+// parsePullPolicy converts a string to a corev1.PullPolicy.
+// Returns empty string for unrecognized values.
+func parsePullPolicy(value string) corev1.PullPolicy {
+	switch corev1.PullPolicy(value) {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		return corev1.PullPolicy(value)
+	default:
+		return ""
+	}
 }

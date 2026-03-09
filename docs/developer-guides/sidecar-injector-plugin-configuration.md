@@ -41,7 +41,6 @@ spec:
   resource:
     storage:
       pvcSize: "10Gi"
-  documentDBImage: "mcr.microsoft.com/documentdb/documentdb:16-v1.3.0"
   # Explicitly specify gateway image
   gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
   exposeViaService:
@@ -128,7 +127,6 @@ spec:
   resource:
     storage:
       pvcSize: "20Gi"
-  documentDBImage: "mcr.microsoft.com/documentdb/documentdb:16-v1.3.0"
   gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
   sidecarInjectorPluginName: "cnpg-i-sidecar-injector.documentdb.io"
   exposeViaService:

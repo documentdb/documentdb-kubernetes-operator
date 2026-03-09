@@ -1,0 +1,100 @@
+# DocumentDB extension image for CNPG ImageVolume mode.
+# Contains only extension artifacts (.so, .control, .sql, bitcode) and
+# runtime shared-library dependencies.  PostgreSQL is provided by the
+# CNPG base image at runtime.
+#
+# Follows the pattern from:
+#   https://github.com/cloudnative-pg/postgres-extensions-containers
+#
+# Usage:
+#   docker build \
+#     --build-arg PG_MAJOR=18 \
+#     --build-arg DEB_PACKAGE_REL_PATH=packages/documentdb_0.110-0_arm64.deb \
+#     -t documentdb-extension:latest \
+#     -f Dockerfile_extension .
+
+ARG BASE=ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+FROM ${BASE} AS builder
+
+ARG PG_MAJOR=18
+ARG DEB_PACKAGE_REL_PATH
+
+USER 0
+
+RUN set -eux && \
+    # Snapshot base image system libraries for later diffing
+    ldconfig -p | awk '{print $NF}' | grep '^/' | sort | uniq > /tmp/base-image-libs.out && \
+    # Install pgdg extension packages
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        postgresql-${PG_MAJOR}-cron \
+        postgresql-${PG_MAJOR}-pgvector \
+        postgresql-${PG_MAJOR}-postgis-3
+
+# Install the DocumentDB extension from a pre-built .deb
+COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
+RUN dpkg -i /tmp/documentdb.deb && \
+    rm -f /tmp/documentdb.deb
+
+# Gather system library dependencies not present in the CNPG base image
+RUN set -eux && \
+    mkdir -p /system /licenses && \
+    find /usr/lib/postgresql/${PG_MAJOR}/lib/ -name '*.so' -print0 | \
+        xargs -0 ldd 2>/dev/null | \
+        awk '{print $3}' | grep '^/' | sort | uniq > /tmp/all-deps.out && \
+    comm -13 /tmp/base-image-libs.out /tmp/all-deps.out > /tmp/libraries.out && \
+    while read -r lib; do \
+        resolved=$(readlink -f "$lib"); \
+        dir=$(dirname "$lib"); \
+        base=$(basename "$lib"); \
+        cp -a "$resolved" /system/; \
+        for file in "$dir"/"${base%.so*}.so"*; do \
+            [ -e "$file" ] || continue; \
+            if [ -L "$file" ] && [ "$(readlink -f "$file")" = "$resolved" ]; then \
+                ln -sf "$(basename "$resolved")" "/system/$(basename "$file")"; \
+            fi; \
+        done; \
+    done < /tmp/libraries.out && \
+    for lib in $(find /system -maxdepth 1 -type f -name '*.so*'); do \
+        pkg=$(dpkg -S "$(basename "$lib")" 2>/dev/null | grep -v "diversion by" | awk -F: '/:/{print $1; exit}'); \
+        [ -z "$pkg" ] && continue; \
+        mkdir -p "/licenses/$pkg" && \
+        cp -a "/usr/share/doc/$pkg/copyright" "/licenses/$pkg/copyright" 2>/dev/null || true; \
+    done
+
+# Resolve Debian-alternatives symlinks — they break in ImageVolume mode
+# because /etc/alternatives/ is outside the volume mount.
+RUN set -eux && \
+    for link in \
+      /usr/share/postgresql/${PG_MAJOR}/extension/*.control \
+      /usr/share/postgresql/${PG_MAJOR}/extension/*.sql \
+      /usr/lib/postgresql/${PG_MAJOR}/lib/*.so; do \
+        [ -L "$link" ] || continue; \
+        target=$(readlink -f "$link" 2>/dev/null); \
+        if [ -n "$target" ] && [ -f "$target" ]; then \
+            cp --remove-destination "$target" "$link"; \
+        elif [ -L "$link" ] && [ ! -e "$link" ]; then \
+            rm -f "$link"; \
+        fi; \
+    done
+
+# ---------- minimal final image with only extension artifacts ----------
+FROM scratch
+ARG PG_MAJOR=18
+
+# Licenses
+COPY --from=builder /licenses/ /licenses/
+
+# Extension shared libraries (.so and bitcode)
+COPY --from=builder /usr/lib/postgresql/${PG_MAJOR}/lib/ /lib/
+
+# Extension SQL and control files
+COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/extension/ /share/extension/
+
+# PostGIS supporting data (spatial_ref_sys, topology, etc.)
+COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/contrib/ /share/contrib/
+
+# System library dependencies not present in the CNPG base image
+COPY --from=builder /system/ /system/
+
+USER 65532:65532

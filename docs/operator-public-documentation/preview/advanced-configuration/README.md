@@ -36,8 +36,8 @@ The operator supports three TLS modes for secure gateway connections, each suite
 
 For comprehensive TLS setup and testing documentation, see:
 
-- **[Complete TLS Setup Guide](../../../../documentdb-playground/tls/README.md)** — Quick start with automated scripts, detailed configuration for each TLS mode, troubleshooting, and best practices
-- **[E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md)** — Automated and manual testing, validation procedures, and CI/CD integration examples
+- **[Complete TLS Setup Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md)** — Quick start with automated scripts, detailed configuration for each TLS mode, troubleshooting, and best practices
+- **[E2E Testing Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md)** — Automated and manual testing, validation procedures, and CI/CD integration examples
 
 ### Quick TLS Setup
 
@@ -169,7 +169,7 @@ kubectl get secret -n <namespace> <tls-secret-name> -o jsonpath='{.data.tls\.crt
 
 ### Troubleshooting TLS
 
-For comprehensive troubleshooting, see the [E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md#troubleshooting).
+For comprehensive troubleshooting, see the [E2E Testing Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md#troubleshooting).
 
 Common issues:
 
@@ -457,6 +457,6 @@ For production, consider using:
 ## Additional Resources
 
 - [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/)
-- [TLS Setup Guide](../../../../documentdb-playground/tls/README.md)
-- [E2E Testing Guide](../../../../documentdb-playground/tls/E2E-TESTING.md)
+- [TLS Setup Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md)
+- [E2E Testing Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md)
 - [GitHub Repository](https://github.com/documentdb/documentdb-kubernetes-operator)

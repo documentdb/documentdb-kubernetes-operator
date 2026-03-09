@@ -169,7 +169,7 @@ func (impl Implementation) reconcileMetadata(
 	sidecar := &corev1.Container{
 		Name:            "documentdb-gateway",
 		Image:           configuration.GatewayImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: configuration.GatewayImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: 10260,
