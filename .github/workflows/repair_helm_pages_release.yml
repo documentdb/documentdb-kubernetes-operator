@@ -32,6 +32,11 @@ on:
         description: 'Safety check: repeat the version exactly before publishing'
         required: true
         default: '0.1.3'
+      normalize_chart_metadata:
+        description: 'Allow packaging the checked-out source ref at the requested release version even when Chart.yaml still carries pre-release metadata'
+        required: false
+        default: false
+        type: boolean
       allow_pages_source_mismatch:
         description: 'Allow publishing even when GitHub Pages is configured from a different branch'
         required: true
@@ -71,6 +76,11 @@ on:
         description: 'Safety check: repeat the version exactly before publishing'
         required: true
         type: string
+      normalize_chart_metadata:
+        description: 'Allow packaging the checked-out source ref at the requested release version even when Chart.yaml still carries pre-release metadata'
+        required: false
+        default: false
+        type: boolean
       allow_pages_source_mismatch:
         description: 'Allow publishing even when GitHub Pages is configured from a different branch'
         required: false
@@ -151,28 +161,48 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           EXPECTED_CNPG_VERSION: ${{ inputs.expected_cnpg_version }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+          NORMALIZE_CHART_METADATA: ${{ inputs.normalize_chart_metadata }}
           CHART_PATH: ${{ env.CHART_DIR }}/Chart.yaml
-          CHART_LOCK_PATH: ${{ env.CHART_DIR }}/Chart.lock
         run: |
           set -euo pipefail
           test -f "${CHART_PATH}"
-          test -f "${CHART_LOCK_PATH}"
           ruby <<'RUBY'
           require "yaml"
 
           chart = YAML.load_file(ENV.fetch("CHART_PATH"))
-          lock = YAML.load_file(ENV.fetch("CHART_LOCK_PATH"))
           version = ENV.fetch("VERSION")
           expected = ENV["EXPECTED_CNPG_VERSION"]
+          release_ref = ENV.fetch("RELEASE_REF")
+          normalize_chart_metadata = ENV.fetch("NORMALIZE_CHART_METADATA") == "true"
+          source_version = chart["version"]
 
-          abort("::error::Chart.yaml version #{chart["version"].inspect} does not match #{version.inspect}.") unless chart["version"] == version
+          if source_version != version
+            if normalize_chart_metadata
+              puts "::notice::Chart.yaml version #{source_version.inspect} from #{release_ref.inspect} will be normalized to #{version.inspect} during packaging."
+            else
+              abort("::error::Chart.yaml version #{source_version.inspect} does not match #{version.inspect}. Rerun with normalize_chart_metadata=true if this source ref intentionally needs release metadata normalization.")
+            end
+          end
 
           if expected && !expected.empty?
-            dependency = Array(lock["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
-            abort("::error::Chart.lock does not pin cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
+            dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
+            abort("::error::Chart.yaml does not pin cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
           end
           RUBY
-          helm dependency build "${CHART_DIR}"
+
+      - name: Normalize chart metadata for packaged release
+        working-directory: source
+        env:
+          VERSION: ${{ inputs.version }}
+          CHART_PATH: ${{ env.CHART_DIR }}/Chart.yaml
+          VALUES_PATH: ${{ env.CHART_DIR }}/values.yaml
+        run: |
+          set -euo pipefail
+          sed -i "s/^version: .*/version: ${VERSION}/" "${CHART_PATH}"
+          sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "${CHART_PATH}"
+          sed -i "s/tag: .*/tag: ${VERSION}/g" "${VALUES_PATH}"
+          helm dependency update "${CHART_DIR}"
 
       - name: Mirror current published chart artifacts
         env:
@@ -230,6 +260,7 @@ jobs:
           expected = ENV["EXPECTED_CNPG_VERSION"]
 
           abort("::error::Packaged chart version #{chart["version"].inspect} does not match #{version.inspect}.") unless chart["version"] == version
+          abort("::error::Packaged chart appVersion #{chart["appVersion"].inspect} does not match #{version.inspect}.") unless chart["appVersion"] == version
 
           if expected && !expected.empty?
             dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
@@ -263,6 +294,7 @@ jobs:
           PUBLISH_BRANCH: ${{ inputs.publish_branch }}
           REPO_URL: ${{ inputs.repo_url }}
           DRY_RUN: ${{ inputs.dry_run }}
+          NORMALIZE_CHART_METADATA: ${{ inputs.normalize_chart_metadata }}
           PAGES_SOURCE_BRANCH: ${{ steps.pages-config.outputs.branch }}
           PAGES_SOURCE_PATH: ${{ steps.pages-config.outputs.path }}
         run: |
@@ -276,6 +308,7 @@ jobs:
             echo "- GitHub Pages source: \`${PAGES_SOURCE_BRANCH}${PAGES_SOURCE_PATH}\`"
             echo "- Repo URL: \`${REPO_URL}\`"
             echo "- Dry run: \`${DRY_RUN}\`"
+            echo "- Normalize chart metadata: \`${NORMALIZE_CHART_METADATA}\`"
             echo ""
             echo "### Pending git changes"
             echo '```text'

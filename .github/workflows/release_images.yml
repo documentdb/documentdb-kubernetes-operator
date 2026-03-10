@@ -152,6 +152,7 @@ jobs:
       repo_url: https://documentdb.github.io/documentdb-kubernetes-operator
       dry_run: false
       confirm_version: ${{ inputs.version }}
+      normalize_chart_metadata: true
       # Follow the same gh-pages branch used by mike in deploy_docs.yml.
       allow_pages_source_mismatch: true
     secrets: inherit
