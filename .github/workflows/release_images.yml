@@ -97,9 +97,8 @@ jobs:
 
       - name: Update values.yaml with version tag
         run: |
-          echo "Updating values.yaml with version tag: ${{ github.event.inputs.version }}"
-          sed -i 's/tag: .*/tag: ${{ github.event.inputs.version }}/g' operator/documentdb-helm-chart/values.yaml
-          echo "Updated values.yaml content:"
+          echo "Chart uses Chart.appVersion for image tags (no tag: field in values.yaml)"
+          echo "values.yaml content:"
           cat operator/documentdb-helm-chart/values.yaml
 
       - name: Set chart version

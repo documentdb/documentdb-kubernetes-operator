@@ -108,6 +108,10 @@ jobs:
           CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
           set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::version must be a valid semver string (e.g. 0.1.3 or 0.2.0-rc.1)."
+            exit 1
+          fi
           if [[ "${VERSION}" != "${CONFIRM_VERSION}" ]]; then
             echo "::error::confirm_version must exactly match version."
             exit 1
@@ -196,12 +200,10 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           CHART_PATH: ${{ env.CHART_DIR }}/Chart.yaml
-          VALUES_PATH: ${{ env.CHART_DIR }}/values.yaml
         run: |
           set -euo pipefail
           sed -i "s/^version: .*/version: ${VERSION}/" "${CHART_PATH}"
           sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "${CHART_PATH}"
-          sed -i "s/tag: .*/tag: ${VERSION}/g" "${VALUES_PATH}"
           helm dependency update "${CHART_DIR}"
 
       - name: Mirror current published chart artifacts
@@ -221,10 +223,7 @@ jobs:
             puts urls
             RUBY
           else
-            cat > live/index.yaml <<'EOF'
-          apiVersion: v1
-          entries: {}
-          EOF
+            printf 'apiVersion: v1\nentries: {}\n' > live/index.yaml
             : > live/chart-urls.txt
           fi
           while IFS= read -r url; do
