@@ -25,6 +25,8 @@ The standard connection string format for DocumentDB:
 mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
 ```
 
+
+
 | Parameter | Description |
 |-----------|-------------|
 | `<username>` | Username from your `documentdb-credentials` Secret |
@@ -35,6 +37,9 @@ mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanis
 | `tls=true` | TLS is always enabled on the gateway |
 | `tlsAllowInvalidCertificates=true` | Skip certificate validation (for self-signed certificates) |
 | `replicaSet=rs0` | Replica set name |
+
+!!! note
+  You only need `tlsAllowInvalidCertificates=true` (or `--tlsAllowInvalidCertificates`) when using self-signed certificates. For trusted CA-issued certificates, omit it.
 
 !!! tip "Get the connection string from the DocumentDB cluster status"
     The operator generates a connection string in the DocumentDB resource status. This string contains embedded `kubectl` commands to extract credentials from the Secret:
@@ -80,6 +85,40 @@ The service name follows the pattern `documentdb-service-<documentdb-name>` (tru
 !!! note
     Set `spec.environment` to `aks`, `eks`, or `gke` to apply cloud-specific load balancer annotations automatically. See [Networking](../configuration/networking.md) for details.
 
+### Cross-cloud connectivity (multi-region deployments)
+
+For multi-region DocumentDB deployments with cross-cluster replication, the operator supports two networking strategies configured via `spec.clusterReplication.crossCloudNetworkingStrategy`:
+
+=== "Istio (recommended for multi-cloud)"
+
+    Istio service mesh handles cross-cluster service discovery and mTLS traffic through east-west gateways. Each Kubernetes cluster runs its own Istio control plane, and remote secrets enable mutual discovery. Applications connect to DocumentDB using the LoadBalancer IP of the Istio east-west gateway or the DocumentDB service in the local Kubernetes cluster.
+
+    See the [multi-cloud deployment playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) for a complete AKS + GKE + EKS setup with Istio.
+
+=== "Azure Fleet"
+
+    Azure Fleet networking uses `ServiceExport` and `MultiClusterService` resources to expose DocumentDB services across fleet member Kubernetes clusters. The operator automatically generates cross-cluster service endpoints using the naming pattern:
+
+    ```text
+    <namespace>-<service-name>.fleet-system.svc
+    ```
+
+    See the [AKS Fleet deployment playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment) for setup details.
+
+??? tip "Azure DNS for production connection strings"
+    The multi-cloud playground can optionally create an **Azure DNS zone** with:
+
+    - **A/CNAME records** for each Kubernetes cluster's DocumentDB LoadBalancer endpoint (for example, `azure-documentdb.<zone>`, `gcp-documentdb.<zone>`)
+    - An **SRV record** (`_mongodb._tcp.<zone>`) pointing to the primary DocumentDB cluster on port 10260
+
+    This enables `mongodb+srv://` connection strings that automatically resolve to the correct endpoint:
+
+    ```bash
+    mongosh "mongodb+srv://docdb:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+    ```
+
+    Set `ENABLE_AZURE_DNS=true` when running `deploy-documentdb.sh` in the multi-cloud playground. See the [multi-cloud deployment README](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) for configuration options.
+
 ### Kubernetes service DNS (in-cluster)
 
 Applications running inside the same Kubernetes cluster can connect using the service DNS name:
@@ -87,6 +126,7 @@ Applications running inside the same Kubernetes cluster can connect using the se
 ```text
 documentdb-service-my-documentdb.documentdb-ns.svc.cluster.local:10260
 ```
+
 
 ## Connect with mongosh
 
