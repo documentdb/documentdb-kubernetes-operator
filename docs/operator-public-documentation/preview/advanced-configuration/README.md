@@ -2,12 +2,6 @@
 
 This section covers advanced configuration options for the DocumentDB Kubernetes Operator.
 
-For core configuration topics, see the [Configuration](../configuration/tls.md) guides:
-
-- [API Reference](../api-reference.md) — CRD reference for DocumentDB, Backup, and ScheduledBackup
-- [TLS](../configuration/tls.md) — TLS modes, certificate rotation, and troubleshooting
-- [Storage](../configuration/storage.md) — Storage classes, PVC sizing, encryption
-- [Networking](../configuration/networking.md) — Service types, load balancers, Network Policies
 ## Table of Contents
 
 - [High Availability](#high-availability)
@@ -88,8 +82,4 @@ For production, consider using:
 
 ## Additional Resources
 
-- [Configuration Guides](../configuration/tls.md) — TLS, Storage, Networking, and Resource Management
-- [API Reference](../api-reference.md) — CRD reference for DocumentDB, Backup, and ScheduledBackup
-- [TLS Setup Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md)
-- [E2E Testing Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md)
 - [GitHub Repository](https://github.com/documentdb/documentdb-kubernetes-operator)

@@ -29,9 +29,9 @@ nav:
   - Preview:
       - Get Started: preview/index.md
       - Configuration:
+          - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
-          - Networking: preview/configuration/networking.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md

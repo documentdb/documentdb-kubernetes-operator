@@ -11,7 +11,9 @@ tags:
 
 ## Overview
 
-DocumentDB uses Kubernetes [PersistentVolumeClaims (PVCs)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims) to request storage, which are backed by [PersistentVolumes (PVs)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) provisioned by your cloud provider.
+Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.
+
+Each DocumentDB instance stores its data on a Kubernetes [PersistentVolume (PV)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) provisioned through a [PersistentVolumeClaim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims). You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the `spec.resource.storage` field:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -28,22 +30,24 @@ spec:
 
 For the full field reference, see [StorageConfiguration](../api-reference.md#storageconfiguration) in the API Reference.
 
-## PVC Sizing
+## Disk Size (`pvcSize`)
 
-PVC size is set at cluster creation time. Online PVC resizing is **coming soon** — see [#298](https://github.com/documentdb/documentdb-kubernetes-operator/issues/298) for tracking.
+The `pvcSize` field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is **coming soon** — see [#298](https://github.com/documentdb/documentdb-kubernetes-operator/issues/298) for tracking.
 
-## Reclaim Policy
+## Reclaim Policy (`persistentVolumeReclaimPolicy`)
+
+The `persistentVolumeReclaimPolicy` field controls what happens to your data when a DocumentDB cluster is deleted:
 
 | Policy | Behavior |
 |--------|----------|
-| `Retain` (default) | PV is preserved after PVC deletion. **Recommended for production.** |
-| `Delete` | PV and underlying storage are deleted with the PVC. Suitable for development. |
+| `Retain` (default) | Data is preserved after DocumentDB deletion. **Recommended for production.** |
+| `Delete` | Data is permanently deleted with the DocumentDB cluster. Suitable for development. |
 
-With `Retain`, you can recover data from a retained PV after cluster deletion. See [PersistentVolume Retention and Recovery](../backup-and-restore.md#persistentvolume-retention-and-recovery) for restore steps.
+With `Retain`, you can recover data even after the DocumentDB cluster is gone. See [PersistentVolume Retention and Recovery](../backup-and-restore.md#persistentvolume-retention-and-recovery) for restore steps.
 
-## Storage Classes
+## Storage Classes (`storageClass`)
 
-A [StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) defines the type of underlying disk (e.g., SSD vs HDD) and provisioner used for persistent volumes. If you don't specify one, Kubernetes uses the default StorageClass in your cluster.
+The `storageClass` field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See [Kubernetes StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.
 
 To see available StorageClasses and which one is the default:
 
@@ -54,6 +58,8 @@ kubectl get storageclass
 The default is marked with `(default)` in the output.
 
 ## Disk Encryption
+
+Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.
 
 | Provider | Default Encryption | Customer-Managed Keys |
 |----------|-------------------|----------------------|
@@ -81,10 +87,10 @@ The default is marked with `(default)` in the output.
 
 ## PersistentVolume Security
 
-The operator automatically applies security-hardening mount options to all PersistentVolumes associated with DocumentDB clusters:
+As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:
 
-| Mount Option | Description |
-|--------------|-------------|
-| `nodev` | Prevents device files from being interpreted on the filesystem |
-| `nosuid` | Prevents setuid/setgid bits from taking effect |
-| `noexec` | Prevents execution of binaries on the filesystem |
+| Mount Option | What it prevents |
+|--------------|------------------|
+| `nodev` | Blocks creation of device files that could access host hardware |
+| `nosuid` | Blocks privilege escalation via setuid/setgid binaries |
+| `noexec` | Blocks execution of malicious binaries written to the data volume |

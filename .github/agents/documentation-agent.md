@@ -49,6 +49,7 @@ You are a documentation specialist for the DocumentDB Kubernetes Operator projec
 - always check for and avoid outdated information in the documentation
 - always check for and avoid typos and grammatical errors in the documentation
 - ensure that all documentation is accurate and up-to-date with the latest code changes
+- **Never use "cluster" alone** — always qualify as "DocumentDB cluster" or "Kubernetes cluster" to avoid ambiguity
 
 ## MkDocs Site
 

@@ -184,7 +184,7 @@ documentdb-preview   Cluster in healthy state   mongodb://...
 
 ### Connect to the DocumentDB cluster
 
-Choose a connection method based on your service type.
+Choose a connection method based on your service type. For more details on service types, load balancers, and Network Policies, see [Networking](configuration/networking.md). For TLS certificate configuration, see [TLS](configuration/tls.md).
 
 #### Option 1: ClusterIP service (default — for local development)
 
@@ -374,32 +374,37 @@ For details, see [Sidecar Injector Plugin Configuration](https://github.com/docu
 
 ### Local high-availability (HA)
 
-Deploy multiple DocumentDB instances with automatic failover by setting `instancesPerNode` to a value greater than 1 (up to 3). This creates one primary instance and two replicas for read scalability and automatic failover.
+Deploy multiple DocumentDB instances with automatic failover by setting `instancesPerNode` to a value greater than 1.
 
-```yaml
+#### Enable local HA
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-ha
+  namespace: <your-namespace>
 spec:
-  instancesPerNode: 3    # 1 primary + 2 replicas
+  nodeCount: 1
+  instancesPerNode: 3
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 10Gi
+  exposeViaService:
+    serviceType: LoadBalancer
+EOF
 ```
 
-For the full field reference, see the [API Reference](api-reference.md#documentdbspec).
+This configuration creates:
+
+- **1 primary instance** — handles all write operations
+- **2 replica instances** — provide read scalability and automatic failover
 
 ### Multi-cloud deployment
 
 The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md).
-
-### TLS
-
-The operator supports four TLS modes: Disabled, SelfSigned, CertManager, and Provided. See [TLS Configuration](configuration/tls.md) for setup instructions, certificate rotation, and troubleshooting.
-
-For automated TLS testing scripts, see the [TLS Playground](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md).
-
-
-### Further reading
-
-- [API Reference](api-reference.md) — Auto-generated CRD type reference
-- [Backup and Restore](backup-and-restore.md) — On-demand and scheduled backups
-- [kubectl Plugin](kubectl-plugin.md) — CLI tooling for day-two operations
-
 
 ## Clean up
 

@@ -11,7 +11,9 @@ tags:
 
 ## Overview
 
-The DocumentDB operator supports TLS encryption for gateway connections. TLS protects data in transit between clients and the DocumentDB gateway.
+TLS encrypts connections between your applications and DocumentDB. Configure it to protect data in transit and meet your security requirements.
+
+The DocumentDB gateway always encrypts connections — TLS is active regardless of the mode you choose. The `spec.tls.gateway.mode` field controls how the operator manages TLS certificates:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -21,7 +23,7 @@ metadata:
 spec:
   tls:
     gateway:
-      mode: SelfSigned   # Disabled (default) | SelfSigned | CertManager | Provided
+      mode: SelfSigned   # Disabled | SelfSigned | CertManager | Provided
 ```
 
 For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconfiguration) in the API Reference.
@@ -30,7 +32,7 @@ For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconf
 
 Select your TLS mode below. Each tab shows prerequisites, the complete YAML configuration, and connection instructions.
 
-=== "Disabled (default)"
+=== "Disabled"
 
     **Best for:** Development and testing only
 
@@ -38,7 +40,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
 
     **Prerequisites:** None
 
-    Disabled mode runs the gateway without TLS encryption. All traffic between clients and the gateway is unencrypted.
+    Disabled mode means the operator does not manage TLS certificates. However, the gateway still encrypts all connections using an internally generated self-signed certificate. Clients must connect with `tls=true&tlsAllowInvalidCertificates=true`.
 
     ```yaml title="documentdb-tls-disabled.yaml"
     apiVersion: documentdb.io/preview
@@ -52,6 +54,8 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
       resource:
         storage:
           pvcSize: 10Gi
+      exposeViaService:
+        serviceType: ClusterIP
       tls:
         gateway:
           mode: Disabled
@@ -60,7 +64,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
     **Connect with mongosh:**
 
     ```bash
-    mongosh "mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256"
+    mongosh "mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
     ```
 
 === "SelfSigned"
@@ -68,7 +72,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
     **Best for:** Development, testing, and environments without external PKI (Public Key Infrastructure)
 
     !!! note "Prerequisites"
-        [cert-manager](https://cert-manager.io/) must be installed in the cluster. See [Install cert-manager](../index.md#install-cert-manager) for setup instructions.
+        [cert-manager](https://cert-manager.io/) must be installed in the Kubernetes cluster. See [Install cert-manager](../index.md#install-cert-manager) for setup instructions.
 
     SelfSigned mode uses cert-manager to automatically generate, manage, and rotate a self-signed server certificate (90-day validity, renewed 15 days before expiry). No additional configuration is needed beyond setting the mode.
 
@@ -84,6 +88,8 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
       resource:
         storage:
           pvcSize: 10Gi
+      exposeViaService:
+        serviceType: ClusterIP
       tls:
         gateway:
           mode: SelfSigned
@@ -161,6 +167,8 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
       resource:
         storage:
           pvcSize: 100Gi
+      exposeViaService:
+        serviceType: ClusterIP
       tls:
         gateway:
           mode: CertManager
@@ -176,7 +184,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
     1. Must match the `metadata.name` of your Issuer or ClusterIssuer (e.g., `my-ca-issuer` from the prerequisite example above).
     2. Use [`ClusterIssuer`](https://cert-manager.io/docs/concepts/issuer/#cluster-resource) for cluster-scoped issuers, or [`Issuer`](https://cert-manager.io/docs/concepts/issuer/#namespaces) for namespace-scoped.
     3. [Subject Alternative Names](https://en.wikipedia.org/wiki/Subject_Alternative_Name) — add all DNS names clients will use to connect.
-    4. The Kubernetes Secret where cert-manager will store the issued certificate.
+    4. Optional. The Kubernetes Secret where cert-manager stores the issued certificate — you do not need to create this Secret yourself, cert-manager generates it automatically. Defaults to `<documentdb-name>-gateway-cert-tls` if not specified.
 
     For a complete list of CertManager fields, see [CertManagerTLS](../api-reference.md#certmanagertls) in the API Reference.
 
@@ -224,6 +232,8 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
       resource:
         storage:
           pvcSize: 100Gi
+      exposeViaService:
+        serviceType: ClusterIP
       tls:
         gateway:
           mode: Provided
@@ -241,7 +251,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
 
 ## Certificate Rotation
 
-Certificate rotation is automatic and zero-downtime. When a certificate is renewed, the gateway picks up the new certificate within ~2 minutes without restarting pods.
+Certificate rotation is automatic and zero-downtime. When a certificate is renewed, the gateway picks up the new certificate without restarting pods.
 
 | Mode | Rotation | Action required |
 |------|----------|-----------------|

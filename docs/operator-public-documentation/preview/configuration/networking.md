@@ -11,7 +11,9 @@ tags:
 
 ## Overview
 
-DocumentDB exposes connectivity through a Kubernetes Service named `documentdb-service-<cluster-name>`. The gateway listens on port **10260** (MongoDB-compatible wire protocol).
+Networking controls how clients connect to your DocumentDB cluster. Configure it to choose between internal-only or external access, and to secure traffic with Network Policies.
+
+The operator creates a Kubernetes [Service](https://kubernetes.io/docs/concepts/services-networking/service/) named `documentdb-service-<cluster-name>` to provide a stable endpoint for your applications. Since pod IPs change whenever pods restart, the Service gives you a fixed address that automatically routes traffic to the active primary pod on port **10260**. You can control how this service is exposed by setting the `exposeViaService` field:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -30,7 +32,7 @@ For the full field reference, see [ExposeViaService](../api-reference.md#exposev
 
 === "ClusterIP (Internal)"
 
-    Exposes the service only within the Kubernetes cluster.
+    Use [ClusterIP](https://kubernetes.io/docs/concepts/services-networking/service/#type-clusterip) when your applications run **inside** the same Kubernetes cluster. This is the default and most secure option — the database is not exposed outside the Kubernetes cluster. For local development, use `kubectl port-forward`.
 
     ```yaml
     apiVersion: documentdb.io/preview
@@ -48,22 +50,17 @@ For the full field reference, see [ExposeViaService](../api-reference.md#exposev
         serviceType: ClusterIP
     ```
 
-    Connect from within the cluster:
-
-    ```bash
-    mongosh "mongodb://<username>:<password>@documentdb-service-my-documentdb.default.svc.cluster.local:10260/?directConnection=true"
-    ```
-
-    For local development, use port-forwarding:
-
-    ```bash
-    kubectl port-forward svc/documentdb-service-my-documentdb -n default 10260:10260
-    mongosh "mongodb://<username>:<password>@localhost:10260/?directConnection=true"
-    ```
-
 === "LoadBalancer (External)"
 
-    Provisions a cloud load balancer for external access. Set the `environment` field to get cloud-optimized annotations.
+    Use [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer) when your applications run **outside** the Kubernetes cluster, or you need a public or cloud-accessible endpoint. The cloud provider provisions an external IP (AKS, GKE) or hostname (EKS).
+
+    Setting `environment` is optional but recommended — it adds cloud-specific annotations to the LoadBalancer service:
+
+    - **`aks`**: Explicitly marks the load balancer as external (`azure-load-balancer-external: true`)
+    - **`eks`**: Uses AWS Network Load Balancer (NLB) with cross-zone balancing and IP-based targeting for lower latency
+    - **`gke`**: Sets the load balancer type to External
+
+    Without `environment`, a generic LoadBalancer is created that relies on the cloud provider's default behavior.
 
     === "AKS"
 
@@ -82,14 +79,6 @@ For the full field reference, see [ExposeViaService](../api-reference.md#exposev
           environment: aks
           exposeViaService:
             serviceType: LoadBalancer
-        ```
-
-        Get the external IP and connect:
-
-        ```bash
-        EXTERNAL_IP=$(kubectl get svc documentdb-service-my-documentdb -n default \
-          -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        mongosh "mongodb://<username>:<password>@$EXTERNAL_IP:10260/?directConnection=true"
         ```
 
     === "EKS"
@@ -111,15 +100,6 @@ For the full field reference, see [ExposeViaService](../api-reference.md#exposev
             serviceType: LoadBalancer
         ```
 
-        !!! note
-            On EKS, the external endpoint is a hostname rather than an IP. Use it directly in your connection string.
-
-        ```bash
-        HOSTNAME=$(kubectl get svc documentdb-service-my-documentdb -n default \
-          -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-        mongosh "mongodb://<username>:<password>@$HOSTNAME:10260/?directConnection=true"
-        ```
-
     === "GKE"
 
         ```yaml
@@ -139,17 +119,36 @@ For the full field reference, see [ExposeViaService](../api-reference.md#exposev
             serviceType: LoadBalancer
         ```
 
-        Get the external IP and connect:
+## Connect with mongosh
 
-        ```bash
-        EXTERNAL_IP=$(kubectl get svc documentdb-service-my-documentdb -n default \
-          -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        mongosh "mongodb://<username>:<password>@$EXTERNAL_IP:10260/?directConnection=true"
-        ```
+=== "Connection String"
+
+    Retrieve the connection string from the DocumentDB resource status and connect. This works with both ClusterIP and LoadBalancer service types — the operator automatically populates it with the correct service address.
+
+    The connection string contains embedded `kubectl` commands that resolve your credentials automatically:
+
+    ```bash
+    CONNECTION_STRING=$(eval echo "$(kubectl get documentdb my-documentdb -n default -o jsonpath='{.status.connectionString}')")
+    mongosh "$CONNECTION_STRING"
+    ```
+
+=== "Port Forwarding"
+
+    Port forwarding works with any service type and is useful for local development. It connects directly to the pod, bypassing the Kubernetes Service. Run `kubectl port-forward` in one terminal and `mongosh` in a separate terminal, since port forwarding must stay running.
+
+    ```bash
+    # Terminal 1 — keep this running
+    kubectl port-forward svc/documentdb-service-my-documentdb -n default 10260:10260
+    ```
+
+    ```bash
+    # Terminal 2
+    mongosh "mongodb://<username>:<password>@localhost:10260/?directConnection=true"
+    ```
 
 ## Network Policies
 
-If your cluster uses restrictive [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/), ensure the following traffic is allowed:
+If your Kubernetes cluster uses restrictive [NetworkPolicies](https://kubernetes.io/docs/concepts/services-networking/network-policies/), ensure the following traffic is allowed:
 
 | Traffic | From | To | Port |
 |---------|------|----|------|
@@ -162,7 +161,7 @@ If your cluster uses restrictive [NetworkPolicies](https://kubernetes.io/docs/co
 
 ### Example NetworkPolicy Configuration
 
-If your cluster enforces a default-deny ingress policy, apply the following to allow DocumentDB traffic.
+If your Kubernetes cluster enforces a default-deny ingress policy, apply the following to allow DocumentDB traffic.
 
 === "Gateway Access (port 10260)"
 
