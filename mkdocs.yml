@@ -28,6 +28,10 @@ extra:
 nav:
   - Preview:
       - Get Started: preview/index.md
+      - Getting Started:
+          - "Quickstart: Kind": preview/getting-started/quickstart-kind.md
+          - "Quickstart: K3s": preview/getting-started/quickstart-k3s.md
+          - Connecting to DocumentDB: preview/getting-started/connecting-to-documentdb.md
       - Configuration:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
