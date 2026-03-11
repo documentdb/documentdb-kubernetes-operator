@@ -101,6 +101,13 @@ jobs:
           echo "values.yaml content:"
           cat operator/documentdb-helm-chart/values.yaml
 
+      - name: Inject telemetry connection string
+        if: ${{ secrets.APPINSIGHTS_CONNECTION_STRING != '' }}
+        run: |
+          echo "Injecting Application Insights connection string for telemetry"
+          # Use yq to update the connectionString field in values.yaml
+          sed -i 's|connectionString: ""|connectionString: "${{ secrets.APPINSIGHTS_CONNECTION_STRING }}"|g' operator/documentdb-helm-chart/values.yaml
+
       - name: Set chart version
         run: |
             echo "CHART_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV

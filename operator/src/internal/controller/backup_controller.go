@@ -19,14 +19,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 // BackupReconciler reconciles a Backup object
 type BackupReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme       *runtime.Scheme
+	Recorder     record.EventRecorder
+	TelemetryMgr *telemetry.Manager
 }
 
 // Reconcile handles the reconciliation loop for Backup resources.
@@ -47,6 +49,8 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Delete the Backup resource if it has expired
 	if backup.Status.IsExpired() {
 		r.Recorder.Event(backup, "Normal", "BackupExpired", "Backup has expired and will be deleted")
+		// Track backup deletion telemetry before deleting
+		r.trackBackupDeleted(ctx, backup, "expired")
 		if err := r.Delete(ctx, backup); err != nil {
 			r.Recorder.Event(backup, "Warning", "BackupDeleteFailed", "Failed to delete expired Backup: "+err.Error())
 			return ctrl.Result{}, err
@@ -192,6 +196,16 @@ func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbprevi
 
 	r.Recorder.Event(backup, "Normal", "BackupInitialized", "Successfully initialized backup")
 
+	// Track backup creation telemetry
+	// Determine backup type from labels - scheduled backups have the "scheduledbackup" label
+	backupType := "on-demand"
+	if backup.Labels != nil {
+		if v, ok := backup.Labels["scheduledbackup"]; ok && v != "" {
+			backupType = "scheduled"
+		}
+	}
+	r.trackBackupCreated(ctx, backup, cluster, backupType)
+
 	// Requeue to check status
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
@@ -261,6 +275,70 @@ func (r *BackupReconciler) SetBackupPhaseSkipped(ctx context.Context, backup *db
 		requeueAfter = time.Minute
 	}
 	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// trackBackupCreated tracks backup creation telemetry.
+func (r *BackupReconciler) trackBackupCreated(ctx context.Context, backup *dbpreview.Backup, cluster *dbpreview.DocumentDB, backupType string) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	// Get or create backup ID
+	backupID, err := r.TelemetryMgr.GUIDs.GetOrCreateBackupID(ctx, backup)
+	if err != nil {
+		log.FromContext(ctx).V(1).Info("Failed to get backup telemetry ID", "error", err)
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(cluster)
+
+	// Determine if this is from primary cluster
+	replicationContext, _ := util.GetReplicationContext(ctx, r.Client, *cluster)
+	isPrimary := replicationContext == nil || replicationContext.IsPrimary()
+
+	retentionDays := 30 // default
+	if cluster.Spec.Backup != nil && cluster.Spec.Backup.RetentionDays > 0 {
+		retentionDays = cluster.Spec.Backup.RetentionDays
+	}
+	// Check if backup has its own retention override
+	if backup.Spec.RetentionDays != nil && *backup.Spec.RetentionDays > 0 {
+		retentionDays = *backup.Spec.RetentionDays
+	}
+
+	r.TelemetryMgr.Events.TrackBackupCreated(telemetry.BackupCreatedEvent{
+		BackupID:         backupID,
+		ClusterID:        clusterID,
+		NamespaceHash:    telemetry.HashNamespace(backup.Namespace),
+		BackupType:       backupType,
+		BackupMethod:     "VolumeSnapshot",
+		BackupPhase:      "starting",
+		RetentionDays:    retentionDays,
+		CloudProvider:    telemetry.MapCloudProviderToString(cluster.Spec.Environment),
+		IsPrimaryCluster: isPrimary,
+	})
+}
+
+// trackBackupDeleted tracks backup deletion telemetry.
+func (r *BackupReconciler) trackBackupDeleted(ctx context.Context, backup *dbpreview.Backup, reason string) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	backupID := r.TelemetryMgr.GUIDs.GetBackupID(backup)
+	if backupID == "" {
+		return
+	}
+
+	ageDays := 0
+	if backup.CreationTimestamp.Time.Year() > 1 {
+		ageDays = int(time.Since(backup.CreationTimestamp.Time).Hours() / 24)
+	}
+
+	r.TelemetryMgr.Events.TrackBackupDeleted(telemetry.BackupDeletedEvent{
+		BackupID:       backupID,
+		DeletionReason: reason,
+		BackupAgeDays:  ageDays,
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.

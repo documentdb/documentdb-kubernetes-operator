@@ -21,7 +21,7 @@ This document specifies all telemetry data points to be collected by Application
 - **Metric**: `operator.health.status`
 - **Value**: `1` (healthy) or `0` (unhealthy)
 - **Frequency**: Every 60 seconds
-- **Dimensions**: `pod_name`, `namespace`
+- **Dimensions**: `pod_name`, `namespace_hash`
 
 ---
 

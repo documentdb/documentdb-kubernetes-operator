@@ -37,6 +37,7 @@ import (
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -55,9 +56,10 @@ const (
 // DocumentDBReconciler reconciles a DocumentDB object
 type DocumentDBReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Config    *rest.Config
-	Clientset kubernetes.Interface
+	Scheme       *runtime.Scheme
+	Config       *rest.Config
+	Clientset    kubernetes.Interface
+	TelemetryMgr *telemetry.Manager
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
 	// SQLExecutor executes SQL commands against a CNPG cluster's primary pod.
@@ -74,31 +76,49 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
-func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+	reconcileStart := time.Now()
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
 
 	logger := log.FromContext(ctx)
 
+	// Track reconciliation duration at the end using named return value
+	defer func() {
+		r.trackReconcileDuration(ctx, "DocumentDB", "reconcile", time.Since(reconcileStart).Seconds(), retErr == nil)
+	}()
+
 	// Fetch the DocumentDB instance
 	documentdb := &dbpreview.DocumentDB{}
-	err := r.Get(ctx, req.NamespacedName, documentdb)
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, documentdb); err != nil {
 		if errors.IsNotFound(err) {
 			// DocumentDB resource not found, handle cleanup
 			logger.Info("DocumentDB resource not found. Cleaning up associated resources.")
-			if err := r.cleanupResources(ctx, req); err != nil {
-				return ctrl.Result{}, err
+			if cleanupErr := r.cleanupResources(ctx, req); cleanupErr != nil {
+				retErr = cleanupErr
+				return result, retErr
 			}
-			return ctrl.Result{}, nil
+			return result, nil
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
-		return ctrl.Result{}, err
+		r.trackReconcileError(ctx, "DocumentDB", req.Name, req.Namespace, "get-resource", err)
+		retErr = err
+		return result, retErr
+	}
+
+	// Ensure cluster has telemetry ID
+	if r.TelemetryMgr != nil && r.TelemetryMgr.IsEnabled() {
+		if _, err := r.TelemetryMgr.GUIDs.GetOrCreateClusterID(ctx, documentdb); err != nil {
+			logger.V(1).Info("Failed to create telemetry ID for cluster", "error", err)
+		}
 	}
 
 	// Handle finalizer lifecycle (add on create, remove on delete)
-	if done, result, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
-		return result, err
+	if done, res, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
+		if err != nil {
+			retErr = err
+		}
+		return res, retErr
 	}
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
@@ -175,11 +195,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
 		if errors.IsNotFound(err) {
+			clusterCreateStart := time.Now()
 			if err := r.Client.Create(ctx, desiredCnpgCluster); err != nil {
 				logger.Error(err, "Failed to create CNPG Cluster")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
 			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
+			// Track cluster creation telemetry
+			r.TrackClusterCreated(ctx, documentdb, time.Since(clusterCreateStart).Seconds())
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 		logger.Error(err, "Failed to get CNPG Cluster")
@@ -187,11 +210,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if anything has changed in the generated cnpg spec
+	updateStart := time.Now()
 	err, requeueTime := r.TryUpdateCluster(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
 	if err != nil {
 		logger.Error(err, "Failed to update CNPG Cluster")
 	}
 	if requeueTime > 0 {
+		// Track cluster update if something changed
+		r.trackClusterUpdated(ctx, documentdb, "configuration", time.Since(updateStart).Seconds())
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
@@ -696,6 +722,134 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 	}
 
 	return stdout.String(), nil
+}
+
+// trackReconcileError tracks reconciliation errors to telemetry.
+// Note: ResourceID is omitted to avoid PII - errors are tracked by namespace hash and error type only.
+func (r *DocumentDBReconciler) trackReconcileError(ctx context.Context, resourceType, resourceName, namespace, errorType string, err error) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	// Do not include resourceName as it may contain PII (user-provided names)
+	// Errors can be correlated by namespace_hash + error_type + timestamp
+	r.TelemetryMgr.Events.TrackReconciliationError(telemetry.ReconciliationErrorEvent{
+		ResourceType:     resourceType,
+		ResourceID:       "", // Omitted to avoid PII - use namespace_hash for correlation
+		NamespaceHash:    telemetry.HashNamespace(namespace),
+		ErrorType:        errorType,
+		ErrorMessage:     sanitizeError(err),
+		ResolutionStatus: "pending",
+	})
+}
+
+// trackReconcileDuration tracks reconciliation duration to telemetry.
+func (r *DocumentDBReconciler) trackReconcileDuration(ctx context.Context, resourceType, operation string, durationSeconds float64, success bool) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	status := "success"
+	if !success {
+		status = "error"
+	}
+
+	r.TelemetryMgr.Metrics.TrackReconciliationDuration(telemetry.ReconciliationDurationMetric{
+		ResourceType:    resourceType,
+		Operation:       operation,
+		Status:          status,
+		DurationSeconds: durationSeconds,
+	})
+}
+
+// trackClusterUpdated tracks when a cluster is updated.
+func (r *DocumentDBReconciler) trackClusterUpdated(ctx context.Context, documentdb *dbpreview.DocumentDB, updateType string, durationSeconds float64) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
+	if clusterID == "" {
+		return
+	}
+
+	r.TelemetryMgr.Events.TrackClusterUpdated(telemetry.ClusterUpdatedEvent{
+		ClusterID:             clusterID,
+		NamespaceHash:         telemetry.HashNamespace(documentdb.Namespace),
+		UpdateType:            updateType,
+		UpdateDurationSeconds: durationSeconds,
+	})
+}
+
+// TrackClusterCreated tracks when a new cluster is created.
+func (r *DocumentDBReconciler) TrackClusterCreated(ctx context.Context, documentdb *dbpreview.DocumentDB, durationSeconds float64) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
+	bootstrapType := "new"
+	if documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil {
+		bootstrapType = "recovery"
+	}
+
+	r.TelemetryMgr.Events.TrackClusterCreated(telemetry.ClusterCreatedEvent{
+		ClusterID:               clusterID,
+		NamespaceHash:           telemetry.HashNamespace(documentdb.Namespace),
+		CreationDurationSeconds: durationSeconds,
+		NodeCount:               documentdb.Spec.NodeCount,
+		InstancesPerNode:        documentdb.Spec.InstancesPerNode,
+		StorageSize:             documentdb.Spec.Resource.Storage.PvcSize,
+		CloudProvider:           telemetry.MapCloudProviderToString(documentdb.Spec.Environment),
+		TLSEnabled:              documentdb.Spec.TLS != nil,
+		BootstrapType:           bootstrapType,
+		SidecarInjectorPlugin:   documentdb.Spec.SidecarInjectorPluginName != "",
+		ServiceType:             documentdb.Spec.ExposeViaService.ServiceType,
+	})
+
+	// Also track cluster configuration metric
+	r.TelemetryMgr.Metrics.TrackClusterConfiguration(telemetry.ClusterConfigurationMetric{
+		ClusterID:         clusterID,
+		NamespaceHash:     telemetry.HashNamespace(documentdb.Namespace),
+		NodeCount:         documentdb.Spec.NodeCount,
+		InstancesPerNode:  documentdb.Spec.InstancesPerNode,
+		TotalInstances:    documentdb.Spec.NodeCount * documentdb.Spec.InstancesPerNode,
+		PVCSizeCategory:   telemetry.CategorizePVCSize(documentdb.Spec.Resource.Storage.PvcSize),
+		DocumentDBVersion: documentdb.Spec.DocumentDBVersion,
+	})
+}
+
+// sanitizeError returns a coarse, non-PII classification of the error.
+// Per telemetry spec, we do not include raw error text to avoid leaking PII or sensitive data.
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Map well-known Kubernetes/API error types to generic, non-PII messages.
+	switch {
+	case errors.IsNotFound(err):
+		return "resource not found"
+	case errors.IsAlreadyExists(err):
+		return "resource already exists"
+	case errors.IsForbidden(err):
+		return "forbidden"
+	case errors.IsUnauthorized(err):
+		return "unauthorized"
+	case errors.IsConflict(err):
+		return "conflict"
+	case errors.IsTimeout(err):
+		return "timeout"
+	case errors.IsInvalid(err):
+		return "invalid resource"
+	case errors.IsServerTimeout(err):
+		return "server timeout"
+	case errors.IsServiceUnavailable(err):
+		return "service unavailable"
+	default:
+		// Do not include the raw error text to avoid leaking PII or sensitive data.
+		return "unknown error"
+	}
 }
 
 // reconcilePVRecovery handles recovery from a retained PersistentVolume.
