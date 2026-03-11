@@ -78,9 +78,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
@@ -137,6 +135,8 @@
         </button>
       </nav>
       
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
     </form>
     <div class="md-search__output">
       <div class="md-search__scrollwrap" data-md-scrollfix>
@@ -173,6 +173,53 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  Preview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../kubectl-plugin/" class="md-tabs__link">
+          
+  
+  Tools
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -186,8 +233,10 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
@@ -223,15 +272,23 @@
     
     
     
+      
+        
+        
+      
+      
+        
+      
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
         
           
-          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
             
   
   <span class="md-ellipsis">
@@ -265,6 +322,120 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -680,6 +851,11 @@
     
     
     
+      
+      
+        
+      
+    
     
     <li class="md-nav__item md-nav__item--nested">
       
@@ -1049,116 +1225,120 @@
 
 
 <h1 id="backup-and-restore">Backup and Restore<a class="headerlink" href="#backup-and-restore" title="Permanent link">&para;</a></h1>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For the complete Backup and ScheduledBackup CRD field definitions, see the <a href="../api-reference/#backup">API Reference</a>.</p>
+</div>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <h3 id="for-kind-or-minikube">For Kind or Minikube<a class="headerlink" href="#for-kind-or-minikube" title="Permanent link">&para;</a></h3>
 <ol>
 <li>Run the CSI driver deployment script <strong>before</strong> installing the documentdb-operator:</li>
 </ol>
-<pre><code class="language-bash">./operator/src/scripts/test-scripts/deploy-csi-driver.sh
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>./operator/src/scripts/test-scripts/deploy-csi-driver.sh
+</code></pre></div>
 <ol>
 <li>Validate storage and snapshot components:</li>
 </ol>
-<pre><code class="language-bash">kubectl get storageclass
-kubectl get volumesnapshotclasses
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>volumesnapshotclasses
+</code></pre></div>
 <p>You should see something like:</p>
-<p>StorageClasses:</p>
-<pre><code>NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
-csi-hostpath-sc      hostpath.csi.k8s.io     Delete          Immediate              true                   5d20h
-standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  5d20h
-</code></pre>
-<p>VolumeSnapshotClasses:</p>
-<pre><code>NAME                     DRIVER                DELETIONPOLICY   AGE
-csi-hostpath-snapclass   hostpath.csi.k8s.io   Delete           5d19h
-</code></pre>
+<p>StorageClasses:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>NAME                 PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>csi-hostpath-sc      hostpath.csi.k8s.io     Delete          Immediate              true                   5d20h
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>standard (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false                  5d20h
+</code></pre></div></p>
+<p>VolumeSnapshotClasses:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>NAME                     DRIVER                DELETIONPOLICY   AGE
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>csi-hostpath-snapclass   hostpath.csi.k8s.io   Delete           5d19h
+</code></pre></div></p>
 <p>If <code>csi-hostpath-snapclass</code> isn't present, the deploy script didn’t finish correctly. Re-run it.</p>
 <ol>
 <li>When creating a cluster, ensure you set the appropriate storage class:</li>
 </ol>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  resource:
-    storage:
-      storageClass: csi-hostpath-sc  # Specify your CSI storage class
-  # ... other configuration
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">csi-hostpath-sc</span><span class="w">  </span><span class="c1"># Specify your CSI storage class</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span><span class="c1"># ... other configuration</span>
+</code></pre></div>
 <h3 id="aks">AKS<a class="headerlink" href="#aks" title="Permanent link">&para;</a></h3>
 <p>AKS already provides a CSI driver. </p>
 <p>To allow the documentdb-operator to auto-create a default <code>VolumeSnapshotClass</code>, set <code>spec.environment: aks</code> in your <code>DocumentDB</code> spec:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  environment: aks
-  # ... other configuration
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aks</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="c1"># ... other configuration</span>
+</code></pre></div>
 <h3 id="other-providers-eks-gke-custom">Other Providers (EKS / GKE / Custom)<a class="headerlink" href="#other-providers-eks-gke-custom" title="Permanent link">&para;</a></h3>
 <p>Support is emerging; you must manually ensure:
 - A CSI driver that supports snapshots
 - VolumeSnapshot CRDs installed
 - A default <code>VolumeSnapshotClass</code></p>
 <p>Example manual snapshot class (adjust DRIVER accordingly):</p>
-<pre><code class="language-yaml">apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshotClass
-metadata:
-  name: generic-snapclass
-  annotations:
-    snapshot.storage.kubernetes.io/is-default-class: &quot;true&quot;
-driver: ebs.csi.aws.com        # or pd.csi.storage.gke.io / other
-deletionPolicy: Delete
-</code></pre>
-<p>Apply:</p>
-<pre><code class="language-bash">kubectl apply -f volumesnapshotclass.yaml
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">snapshot.storage.k8s.io/v1</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">VolumeSnapshotClass</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generic-snapclass</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">annotations</span><span class="p">:</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">    </span><span class="nt">snapshot.storage.kubernetes.io/is-default-class</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="nt">driver</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span><span class="w">        </span><span class="c1"># or pd.csi.storage.gke.io / other</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="nt">deletionPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
+</code></pre></div>
+<p>Apply:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>volumesnapshotclass.yaml
+</code></pre></div></p>
 <h2 id="on-demand-backup">On-Demand Backup<a class="headerlink" href="#on-demand-backup" title="Permanent link">&para;</a></h2>
 <p>An on-demand backup creates a single backup of a DocumentDB cluster.</p>
 <h3 id="creating-an-on-demand-backup">Creating an On-Demand Backup<a class="headerlink" href="#creating-an-on-demand-backup" title="Permanent link">&para;</a></h3>
 <p>Create a <code>Backup</code> resource:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: Backup
-metadata:
-  name: my-backup
-  namespace: default # Same namespace as DocumentDB cluster
-spec:
-  cluster:
-    name: my-documentdb-cluster  # Must match the DocumentDB cluster name
-  retentionDays: 30  # Optional: backup retention period in days
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Backup</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-backup</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w"> </span><span class="c1"># Same namespace as DocumentDB cluster</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">cluster</span><span class="p">:</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb-cluster</span><span class="w">  </span><span class="c1"># Must match the DocumentDB cluster name</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">retentionDays</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">  </span><span class="c1"># Optional: backup retention period in days</span>
+</code></pre></div>
 <p>Apply the resource:</p>
-<pre><code class="language-bash">kubectl apply -f backup.yaml
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>backup.yaml
+</code></pre></div>
 <h3 id="monitoring-backup-status">Monitoring Backup Status<a class="headerlink" href="#monitoring-backup-status" title="Permanent link">&para;</a></h3>
 <p>Check the backup status:</p>
-<pre><code class="language-bash">kubectl get backups -n default
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>backups<span class="w"> </span>-n<span class="w"> </span>default
+</code></pre></div>
 <p>View detailed backup information:</p>
-<pre><code class="language-bash">kubectl describe backup my-backup -n default
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>backup<span class="w"> </span>my-backup<span class="w"> </span>-n<span class="w"> </span>default
+</code></pre></div>
 <h2 id="scheduled-backups">Scheduled Backups<a class="headerlink" href="#scheduled-backups" title="Permanent link">&para;</a></h2>
 <p>Scheduled backups automatically create backups at regular intervals using a cron schedule.</p>
 <h3 id="creating-a-scheduled-backup">Creating a Scheduled Backup<a class="headerlink" href="#creating-a-scheduled-backup" title="Permanent link">&para;</a></h3>
 <p>Save the following <code>ScheduledBackup</code> resource to <code>scheduledbackup.yaml</code>:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: ScheduledBackup
-metadata:
-  name: my-scheduled-backup
-  namespace: default # Same namespace as DocumentDB
-spec:
-  cluster:
-    name: my-documentdb-cluster  # Must match the DocumentDB cluster name
-  schedule: &quot;0 2 * * *&quot;  # Cron expression: daily at 2:00 AM
-  retentionDays: 30  # Optional: backup retention period in days
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ScheduledBackup</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-scheduled-backup</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w"> </span><span class="c1"># Same namespace as DocumentDB</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span><span class="nt">cluster</span><span class="p">:</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb-cluster</span><span class="w">  </span><span class="c1"># Must match the DocumentDB cluster name</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">  </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0</span><span class="nv"> </span><span class="s">2</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*&quot;</span><span class="w">  </span><span class="c1"># Cron expression: daily at 2:00 AM</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span><span class="nt">retentionDays</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">  </span><span class="c1"># Optional: backup retention period in days</span>
+</code></pre></div>
 <p>Apply the resource:</p>
-<pre><code class="language-bash">kubectl apply -f scheduledbackup.yaml
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>scheduledbackup.yaml
+</code></pre></div>
 <h3 id="cron-schedule-format">Cron Schedule Format<a class="headerlink" href="#cron-schedule-format" title="Permanent link">&para;</a></h3>
 <p>The schedule uses standard cron expression format. Common examples:</p>
 <table>
@@ -1194,11 +1374,11 @@ spec:
 <p>For more details, see <a href="https://pkg.go.dev/github.com/robfig/cron#hdr-CRON_Expression_Format">cron expression format</a>.</p>
 <h3 id="monitoring-scheduled-backups">Monitoring Scheduled Backups<a class="headerlink" href="#monitoring-scheduled-backups" title="Permanent link">&para;</a></h3>
 <p>List all ScheduledBackups:</p>
-<pre><code class="language-bash">kubectl get scheduledbackups -n default
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>scheduledbackups<span class="w"> </span>-n<span class="w"> </span>default
+</code></pre></div>
 <p>Check the generated backups:</p>
-<pre><code class="language-bash">kubectl get backups -n default
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>backups<span class="w"> </span>-n<span class="w"> </span>default
+</code></pre></div>
 <h3 id="important-notes">Important Notes<a class="headerlink" href="#important-notes" title="Permanent link">&para;</a></h3>
 <ul>
 <li>If a backup is currently running, the next backup will be queued and start after the current one completes</li>
@@ -1211,25 +1391,25 @@ spec:
 <p>You can restore a backup to a <strong>different DocumentDB cluster</strong>.</p>
 <h3 id="list-available-backups">List Available Backups<a class="headerlink" href="#list-available-backups" title="Permanent link">&para;</a></h3>
 <p>First, identify the backup you want to restore:</p>
-<pre><code class="language-bash">kubectl get backups -n default
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>backups<span class="w"> </span>-n<span class="w"> </span>default
+</code></pre></div>
 <h3 id="create-a-new-cluster-with-backup-recovery">Create a New Cluster with Backup Recovery<a class="headerlink" href="#create-a-new-cluster-with-backup-recovery" title="Permanent link">&para;</a></h3>
 <p>Create a new <code>DocumentDB</code> resource with recovery configuration:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-restored-cluster
-  namespace: default
-spec:
-  bootstrap:
-    recovery:
-      backup:
-        name: my-backup  # Reference the backup to restore from
-  #...... other configurations
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-restored-cluster</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="w">  </span><span class="nt">bootstrap</span><span class="p">:</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">    </span><span class="nt">recovery</span><span class="p">:</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="w">      </span><span class="nt">backup</span><span class="p">:</span>
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-backup</span><span class="w">  </span><span class="c1"># Reference the backup to restore from</span>
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="w">  </span><span class="c1">#...... other configurations</span>
+</code></pre></div>
 <p>Apply the resource:</p>
-<pre><code class="language-bash">kubectl apply -f restore.yaml
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>restore.yaml
+</code></pre></div>
 <h2 id="backup-retention-policy">Backup Retention Policy<a class="headerlink" href="#backup-retention-policy" title="Permanent link">&para;</a></h2>
 <p>Backups don't live forever. Each one gets an expiration time. After that time passes, the operator deletes it automatically.</p>
 <h3 id="where-the-retention-value-comes-from-priority-order">Where the Retention Value Comes From (priority order)<a class="headerlink" href="#where-the-retention-value-comes-from-priority-order" title="Permanent link">&para;</a></h3>
@@ -1246,36 +1426,36 @@ spec:
 <li>Expiration = start + retentionDays * 24h</li>
 </ul>
 <h3 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h3>
-<p>Per-backup override:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: Backup
-metadata:
-  name: monthly-audit
-spec:
-  cluster:
-    name: prod-cluster
-  retentionDays: 90
-</code></pre>
-<p>Scheduled backups (14‑day retention):</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: ScheduledBackup
-metadata:
-  name: nightly
-spec:
-  cluster:
-    name: prod-cluster
-  schedule: &quot;0 2 * * *&quot;
-  retentionDays: 14
-</code></pre>
-<p>Cluster default (used when Backup doesn't set retention):</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: prod-cluster
-spec:
-  backup:
-    retentionDays: 30
-</code></pre>
+<p>Per-backup override:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Backup</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">monthly-audit</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="w">  </span><span class="nt">cluster</span><span class="p">:</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod-cluster</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="w">  </span><span class="nt">retentionDays</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">90</span>
+</code></pre></div></p>
+<p>Scheduled backups (14‑day retention):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ScheduledBackup</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nightly</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="w">  </span><span class="nt">cluster</span><span class="p">:</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod-cluster</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="w">  </span><span class="nt">schedule</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0</span><span class="nv"> </span><span class="s">2</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*&quot;</span>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a><span class="w">  </span><span class="nt">retentionDays</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14</span>
+</code></pre></div></p>
+<p>Cluster default (used when Backup doesn't set retention):
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prod-cluster</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="w">  </span><span class="nt">backup</span><span class="p">:</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="w">    </span><span class="nt">retentionDays</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+</code></pre></div></p>
 <h3 id="important-notes_1">Important Notes<a class="headerlink" href="#important-notes_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Changing retention on a <code>ScheduledBackup</code> only affects new backups, not old ones.</li>
@@ -1288,19 +1468,19 @@ spec:
 <p>The DocumentDB operator supports retaining PersistentVolumes (PVs) after cluster deletion, allowing you to recover data by creating a new cluster from the retained PV.</p>
 <h3 id="configuring-pv-retention">Configuring PV Retention<a class="headerlink" href="#configuring-pv-retention" title="Permanent link">&para;</a></h3>
 <p>By default, PVs are retained when the DocumentDB cluster is deleted (policy is <code>Retain</code>). To delete the PV automatically, set the <code>persistentVolumeReclaimPolicy</code> to <code>Delete</code>:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  resource:
-    storage:
-      pvcSize: 10Gi
-      persistentVolumeReclaimPolicy: Retain  # Default - keeps PV after cluster deletion
-      # persistentVolumeReclaimPolicy: Delete  # Deletes PV when cluster is deleted
-  # ... other configuration
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">  </span><span class="c1"># Default - keeps PV after cluster deletion</span>
+<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="w">      </span><span class="c1"># persistentVolumeReclaimPolicy: Delete  # Deletes PV when cluster is deleted</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="w">  </span><span class="c1"># ... other configuration</span>
+</code></pre></div>
 <h3 id="how-pv-retention-works">How PV Retention Works<a class="headerlink" href="#how-pv-retention-works" title="Permanent link">&para;</a></h3>
 <ol>
 <li>When <code>persistentVolumeReclaimPolicy</code> is <code>Retain</code> (the default), the operator updates the underlying PersistentVolume's reclaim policy</li>
@@ -1312,30 +1492,30 @@ spec:
 <h3 id="recovering-from-a-retained-pv">Recovering from a Retained PV<a class="headerlink" href="#recovering-from-a-retained-pv" title="Permanent link">&para;</a></h3>
 <p>To restore a DocumentDB cluster from a retained PV:</p>
 <p><strong>Step 1: Identify the retained PV</strong></p>
-<pre><code class="language-bash"># Find PVs by DocumentDB cluster labels 
-kubectl get pv -l documentdb.io/cluster=&lt;cluster-name&gt;,documentdb.io/namespace=&lt;namespace&gt;
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1"># Find PVs by DocumentDB cluster labels </span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pv<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;,documentdb.io/namespace<span class="o">=</span>&lt;namespace&gt;
+</code></pre></div>
 <p><strong>Step 2: Create a new DocumentDB cluster with PV recovery</strong></p>
 <p>The operator automatically handles all the complexity of PV recovery:</p>
-<pre><code class="language-yaml">apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-recovered-cluster
-  namespace: default
-spec:
-  nodeCount: 1
-  instancesPerNode: 1
-  resource:
-    storage:
-      pvcSize: 10Gi
-      storageClass: managed-csi
-  exposeViaService:
-    serviceType: ClusterIP
-  bootstrap:
-    recovery:
-      persistentVolume:
-        name: &lt;pv-name&gt;  # Name of the retained PV to recover from
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-recovered-cluster</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi</span>
+<a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a><span class="w">  </span><span class="nt">exposeViaService</span><span class="p">:</span>
+<a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a><span class="w">    </span><span class="nt">serviceType</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ClusterIP</span>
+<a id="__codelineno-24-15" name="__codelineno-24-15" href="#__codelineno-24-15"></a><span class="w">  </span><span class="nt">bootstrap</span><span class="p">:</span>
+<a id="__codelineno-24-16" name="__codelineno-24-16" href="#__codelineno-24-16"></a><span class="w">    </span><span class="nt">recovery</span><span class="p">:</span>
+<a id="__codelineno-24-17" name="__codelineno-24-17" href="#__codelineno-24-17"></a><span class="w">      </span><span class="nt">persistentVolume</span><span class="p">:</span>
+<a id="__codelineno-24-18" name="__codelineno-24-18" href="#__codelineno-24-18"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;pv-name&gt;</span><span class="w">  </span><span class="c1"># Name of the retained PV to recover from</span>
+</code></pre></div>
 <p><strong>What the operator does automatically:</strong></p>
 <ol>
 <li>Validates that the PV exists and is in <code>Available</code> or <code>Released</code> state</li>
@@ -1347,12 +1527,12 @@ spec:
 </ol>
 <h3 id="cleaning-up-retained-pvs">Cleaning Up Retained PVs<a class="headerlink" href="#cleaning-up-retained-pvs" title="Permanent link">&para;</a></h3>
 <p>After successful recovery (or when you no longer need the data), delete the retained PV:</p>
-<pre><code class="language-bash"># Find retained PVs for a cluster
-kubectl get pv -l documentdb.io/cluster=&lt;cluster-name&gt;,documentdb.io/namespace=&lt;namespace&gt;
-
-# Delete the retained PV when no longer needed
-kubectl delete pv &lt;pv-name&gt;
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="c1"># Find retained PVs for a cluster</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pv<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;,documentdb.io/namespace<span class="o">=</span>&lt;namespace&gt;
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="c1"># Delete the retained PV when no longer needed</span>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>pv<span class="w"> </span>&lt;pv-name&gt;
+</code></pre></div>
 <h3 id="important-notes-for-pv-recovery">Important Notes for PV Recovery<a class="headerlink" href="#important-notes-for-pv-recovery" title="Permanent link">&para;</a></h3>
 <ul>
 <li>The PV must exist and be in <code>Available</code> or <code>Released</code> state</li>
@@ -1379,8 +1559,16 @@ kubectl delete pv &lt;pv-name&gt;
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
         
       </main>
       
@@ -1408,7 +1596,7 @@ kubectl delete pv &lt;pv-name&gt;
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
       <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>

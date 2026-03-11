@@ -6,25 +6,27 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Configure persistent storage for DocumentDB including storage classes, PVC sizing, volume expansion, reclaim policies, and disk encryption across AKS, EKS, and GKE.">
       
       
       
-        <link rel="prev" href="../configuration/storage/">
+      
+        <link rel="prev" href="../tls/">
       
       
-        <link rel="next" href="../backup-and-restore/">
+        <link rel="next" href="../../advanced-configuration/">
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
     
     
       
-        <title>Advanced Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Storage Configuration - DocumentDB-Kubernetes-Operator</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
       
       
 
@@ -43,7 +45,7 @@
       
     
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -62,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#advanced-configuration" class="md-skip">
+        <a href="#storage-configuration" class="md-skip">
           Skip to content
         </a>
       
@@ -80,7 +82,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Advanced Configuration
+              Storage Configuration
             
           </span>
         </div>
@@ -187,7 +189,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../" class="md-tabs__link">
           
   
   Preview
@@ -205,7 +207,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../kubectl-plugin/" class="md-tabs__link">
+        <a href="../../kubectl-plugin/" class="md-tabs__link">
           
   
   Tools
@@ -238,7 +240,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -313,7 +315,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -331,6 +333,8 @@
                 
   
   
+    
+  
   
   
     
@@ -345,11 +349,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" checked>
         
           
           <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
@@ -363,7 +367,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_2">
             <span class="md-nav__icon md-icon"></span>
             Configuration
@@ -377,7 +381,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/networking/" class="md-nav__link">
+      <a href="../networking/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -398,7 +402,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/tls/" class="md-nav__link">
+      <a href="../tls/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -407,35 +411,6 @@
   
 
       </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../configuration/storage/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Storage
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
     </li>
   
 
@@ -461,7 +436,7 @@
           
   
   <span class="md-ellipsis">
-    Advanced Configuration
+    Storage
   </span>
   
 
@@ -472,7 +447,7 @@
         
   
   <span class="md-ellipsis">
-    Advanced Configuration
+    Storage
   </span>
   
 
@@ -494,93 +469,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#table-of-contents" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Table of Contents
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#high-availability" class="md-nav__link">
+  <a href="#disk-size-pvcsize" class="md-nav__link">
     <span class="md-ellipsis">
-      High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="High Availability">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#multi-instance-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Instance Setup
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#recommended-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      Recommended Settings
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scheduling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Scheduling
+      Disk Size (pvcSize)
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#security" class="md-nav__link">
+  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
     <span class="md-ellipsis">
-      Security
+      Reclaim Policy (persistentVolumeReclaimPolicy)
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Security">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rbac" class="md-nav__link">
-    <span class="md-ellipsis">
-      RBAC
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#secrets-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      Secrets Management
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#additional-resources" class="md-nav__link">
+  <a href="#storage-classes-storageclass" class="md-nav__link">
     <span class="md-ellipsis">
-      Additional Resources
+      Storage Classes (storageClass)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disk-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disk Encryption
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistentvolume-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Security
     </span>
   </a>
   
@@ -595,6 +531,14 @@
 
               
             
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
               
                 
   
@@ -602,7 +546,28 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-restore/" class="md-nav__link">
+      <a href="../../advanced-configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -623,7 +588,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -644,7 +609,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../faq/" class="md-nav__link">
+      <a href="../../faq/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -712,7 +677,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../kubectl-plugin/" class="md-nav__link">
+      <a href="../../kubectl-plugin/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -760,93 +725,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#table-of-contents" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Table of Contents
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#high-availability" class="md-nav__link">
+  <a href="#disk-size-pvcsize" class="md-nav__link">
     <span class="md-ellipsis">
-      High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="High Availability">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#multi-instance-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Instance Setup
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#recommended-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      Recommended Settings
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scheduling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Scheduling
+      Disk Size (pvcSize)
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#security" class="md-nav__link">
+  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
     <span class="md-ellipsis">
-      Security
+      Reclaim Policy (persistentVolumeReclaimPolicy)
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Security">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rbac" class="md-nav__link">
-    <span class="md-ellipsis">
-      RBAC
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#secrets-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      Secrets Management
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#additional-resources" class="md-nav__link">
+  <a href="#storage-classes-storageclass" class="md-nav__link">
     <span class="md-ellipsis">
-      Additional Resources
+      Storage Classes (storageClass)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disk-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disk Encryption
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#persistentvolume-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      PersistentVolume Security
     </span>
   </a>
   
@@ -870,79 +796,129 @@
   
 
 
-<h1 id="advanced-configuration">Advanced Configuration<a class="headerlink" href="#advanced-configuration" title="Permanent link">&para;</a></h1>
-<p>This section covers advanced configuration options for the DocumentDB Kubernetes Operator.</p>
-<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="#high-availability">High Availability</a></li>
-<li><a href="#scheduling">Scheduling</a></li>
-<li><a href="#security">Security</a></li>
-</ul>
-<h2 id="high-availability">High Availability<a class="headerlink" href="#high-availability" title="Permanent link">&para;</a></h2>
-<p>Deploy multiple instances for automatic failover and read scalability.</p>
-<h3 id="multi-instance-setup">Multi-Instance Setup<a class="headerlink" href="#multi-instance-setup" title="Permanent link">&para;</a></h3>
-<p>Set <code>instancesPerNode</code> to 3 to create a primary with two replicas:</p>
+<h1 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.</p>
+<p>Each DocumentDB instance stores its data on a Kubernetes <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PersistentVolume (PV)</a> provisioned through a <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">PersistentVolumeClaim (PVC)</a>. You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the <code>spec.resource.storage</code> field:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-ha</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">premium-ssd</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span><span class="w">                           </span><span class="c1"># Required: storage size</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi-premium</span><span class="w">         </span><span class="c1"># Optional: defaults to Kubernetes default StorageClass</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">     </span><span class="c1"># Optional: Retain (default) or Delete</span>
 </code></pre></div>
-<h3 id="recommended-settings">Recommended Settings<a class="headerlink" href="#recommended-settings" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Minimum instances</strong>: 3 for production workloads</li>
-<li><strong>Storage class</strong>: Use premium SSDs for production</li>
-<li><strong>Resource requests</strong>: Set appropriate CPU and memory limits</li>
-</ul>
-<hr />
-<h2 id="scheduling">Scheduling<a class="headerlink" href="#scheduling" title="Permanent link">&para;</a></h2>
-<p>Configure pod affinity for a documentdb cluster's database pods. This replicates
-the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io/docs/1.28/scheduling/">https://cloudnative-pg.io/docs/1.28/scheduling/</a></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">affinity</span><span class="p">:</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<p>For the full field reference, see <a href="../../api-reference/#storageconfiguration">StorageConfiguration</a> in the API Reference.</p>
+<h2 id="disk-size-pvcsize">Disk Size (<code>pvcSize</code>)<a class="headerlink" href="#disk-size-pvcsize" title="Permanent link">&para;</a></h2>
+<p>The <code>pvcSize</code> field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is <strong>coming soon</strong> — see <a href="https://github.com/documentdb/documentdb-kubernetes-operator/issues/298">#298</a> for tracking.</p>
+<h2 id="reclaim-policy-persistentvolumereclaimpolicy">Reclaim Policy (<code>persistentVolumeReclaimPolicy</code>)<a class="headerlink" href="#reclaim-policy-persistentvolumereclaimpolicy" title="Permanent link">&para;</a></h2>
+<p>The <code>persistentVolumeReclaimPolicy</code> field controls what happens to your data when a DocumentDB cluster is deleted:</p>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Retain</code> (default)</td>
+<td>Data is preserved after DocumentDB deletion. <strong>Recommended for production.</strong></td>
+</tr>
+<tr>
+<td><code>Delete</code></td>
+<td>Data is permanently deleted with the DocumentDB cluster. Suitable for development.</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>Retain</code>, you can recover data even after the DocumentDB cluster is gone. See <a href="../../backup-and-restore/#persistentvolume-retention-and-recovery">PersistentVolume Retention and Recovery</a> for restore steps.</p>
+<h2 id="storage-classes-storageclass">Storage Classes (<code>storageClass</code>)<a class="headerlink" href="#storage-classes-storageclass" title="Permanent link">&para;</a></h2>
+<p>The <code>storageClass</code> field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See <a href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes StorageClass</a> for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.</p>
+<p>To see available StorageClasses and which one is the default:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
 </code></pre></div>
-<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
-<p>Security best practices for DocumentDB deployments.</p>
-<h3 id="rbac">RBAC<a class="headerlink" href="#rbac" title="Permanent link">&para;</a></h3>
-<p>The operator requires specific permissions to manage DocumentDB resources. The Helm chart automatically creates the necessary RBAC rules.</p>
-<h3 id="secrets-management">Secrets Management<a class="headerlink" href="#secrets-management" title="Permanent link">&para;</a></h3>
-<p>Retrieve credentials from the Kubernetes Secret you created:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Decode username</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.username}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># Decode password</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.password}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d
+<p>The default is marked with <code>(default)</code> in the output.</p>
+<h2 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h2>
+<p>Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Default Encryption</th>
+<th>Customer-Managed Keys</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AKS</strong></td>
+<td>✅ Enabled (platform-managed keys)</td>
+<td><a href="https://learn.microsoft.com/azure/aks/azure-disk-customer-managed-keys">Azure Disk Encryption with CMK</a></td>
+</tr>
+<tr>
+<td><strong>GKE</strong></td>
+<td>✅ Enabled (Google-managed keys)</td>
+<td><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">CMEK for GKE persistent disks</a></td>
+</tr>
+<tr>
+<td><strong>EKS</strong></td>
+<td>❌ <strong>Not enabled by default</strong></td>
+<td><a href="https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html">EBS CSI driver encryption</a> — set <code>encrypted: "true"</code> in StorageClass</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>For production on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage.k8s.io/v1</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageClass</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs-sc-encrypted</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gp3</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">encrypted</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="c1"># kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;  # Optional: customer-managed key</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">reclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">volumeBindingMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WaitForFirstConsumer</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">allowVolumeExpansion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
-<p>For production, consider using:</p>
-<ul>
-<li>Azure Key Vault for secrets (via Secrets Store CSI driver)</li>
-<li>HashiCorp Vault integration</li>
-<li>External Secrets Operator</li>
-</ul>
-<hr />
-<h2 id="additional-resources">Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../configuration/networking/">Networking</a> — Service types, connection methods, and Network Policies</li>
-<li><a href="../configuration/tls/">TLS</a> — Certificate modes, rotation, and troubleshooting</li>
-<li><a href="../configuration/storage/">Storage</a> — PVC sizing, storage classes, and disk encryption</li>
-<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator">GitHub Repository</a></li>
-</ul>
+</div>
+<h2 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h2>
+<p>As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:</p>
+<table>
+<thead>
+<tr>
+<th>Mount Option</th>
+<th>What it prevents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nodev</code></td>
+<td>Blocks creation of device files that could access host hardware</td>
+</tr>
+<tr>
+<td><code>nosuid</code></td>
+<td>Blocks privilege escalation via setuid/setgid binaries</td>
+</tr>
+<tr>
+<td><code>noexec</code></td>
+<td>Blocks execution of malicious binaries written to the data volume</td>
+</tr>
+</tbody>
+</table>
 
 
 
 
 
 
+
+  
+  
 
 
 
@@ -991,10 +967,10 @@ the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
       
     
   </body>

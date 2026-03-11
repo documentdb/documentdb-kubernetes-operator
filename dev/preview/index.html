@@ -10,7 +10,7 @@
       
       
       
-        <link rel="next" href="advanced-configuration/">
+        <link rel="next" href="configuration/networking/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -76,9 +76,7 @@
     
       
 
-  
-
-<header class="md-header md-header--shadow" data-md-component="header">
+<header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
@@ -135,6 +133,8 @@
         </button>
       </nav>
       
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
     </form>
     <div class="md-search__output">
       <div class="md-search__scrollwrap" data-md-scrollfix>
@@ -171,6 +171,53 @@
       
         
           
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  Preview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="kubectl-plugin/" class="md-tabs__link">
+          
+  
+  Tools
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
         
       
       <main class="md-main" data-md-component="main">
@@ -184,8 +231,10 @@
                     
 
 
+  
 
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
     <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
@@ -221,15 +270,23 @@
     
     
     
+      
+        
+        
+      
+      
+        
+      
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
         <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
         
           
-          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
             
   
   <span class="md-ellipsis">
@@ -471,15 +528,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#tls-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      TLS setup
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -530,6 +578,120 @@
     </ul>
   
 </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -635,6 +797,11 @@
   
     
     
+    
+      
+      
+        
+      
     
     
     <li class="md-nav__item md-nav__item--nested">
@@ -888,15 +1055,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#tls-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      TLS setup
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -981,254 +1139,254 @@
 </ul>
 <h3 id="start-a-local-kubernetes-cluster">Start a local Kubernetes cluster<a class="headerlink" href="#start-a-local-kubernetes-cluster" title="Permanent link">&para;</a></h3>
 <p>If you're using <code>minikube</code>:</p>
-<pre><code class="language-sh">minikube start --kubernetes-version=v1.35.0
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>minikube<span class="w"> </span>start<span class="w"> </span>--kubernetes-version<span class="o">=</span>v1.35.0
+</code></pre></div>
 <p>If you are using <code>kind</code> (v0.31+), use the following command:</p>
-<pre><code class="language-sh">kind create cluster --image kindest/node:v1.35.0
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kind<span class="w"> </span>create<span class="w"> </span>cluster<span class="w"> </span>--image<span class="w"> </span>kindest/node:v1.35.0
+</code></pre></div>
 <h3 id="install-cert-manager">Install cert-manager<a class="headerlink" href="#install-cert-manager" title="Permanent link">&para;</a></h3>
 <p>The operator uses <a href="https://cert-manager.io/docs/">cert-manager</a> to manage TLS certificates for the DocumentDB cluster.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>If you already have cert-manager installed, skip this step.</p>
 </div>
-<pre><code class="language-bash">helm repo add jetstack https://charts.jetstack.io
-helm repo update
-helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>helm<span class="w"> </span>repo<span class="w"> </span>add<span class="w"> </span>jetstack<span class="w"> </span>https://charts.jetstack.io
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>helm<span class="w"> </span>repo<span class="w"> </span>update
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>helm<span class="w"> </span>install<span class="w"> </span>cert-manager<span class="w"> </span>jetstack/cert-manager<span class="w"> </span>--namespace<span class="w"> </span>cert-manager<span class="w"> </span>--create-namespace<span class="w"> </span>--set<span class="w"> </span><span class="nv">installCRDs</span><span class="o">=</span><span class="nb">true</span>
+</code></pre></div>
 <p>Verify that cert-manager is running:</p>
-<pre><code class="language-bash">kubectl get pods -n cert-manager
-</code></pre>
-<pre><code class="language-text">NAMESPACE           NAME                                            READY   STATUS    RESTARTS
-cert-manager        cert-manager-6794b8d569-d7lwd                   1/1     Running   0
-cert-manager        cert-manager-cainjector-7f69cd69f7-pd9bc        1/1     Running   0
-cert-manager        cert-manager-webhook-6cc5dccc4b-7jmrh           1/1     Running   0
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>cert-manager
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>NAMESPACE           NAME                                            READY   STATUS    RESTARTS
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>cert-manager        cert-manager-6794b8d569-d7lwd                   1/1     Running   0
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>cert-manager        cert-manager-cainjector-7f69cd69f7-pd9bc        1/1     Running   0
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>cert-manager        cert-manager-webhook-6cc5dccc4b-7jmrh           1/1     Running   0
+</code></pre></div>
 <h3 id="install-the-documentdb-operator">Install the DocumentDB operator<a class="headerlink" href="#install-the-documentdb-operator" title="Permanent link">&para;</a></h3>
 <p>The operator Helm chart automatically installs the <a href="https://cloudnative-pg.io/docs/">CloudNativePG operator</a> as a dependency in the <code>cnpg-system</code> namespace.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If CloudNativePG is already installed in your cluster, you may experience conflicts. See the Helm chart documentation for options to skip the CNPG dependency.</p>
 </div>
-<pre><code class="language-bash"># Add the Helm repository
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-
-# Install the operator
-helm install documentdb-operator documentdb/documentdb-operator \
-  --namespace documentdb-operator \
-  --create-namespace \
-  --wait
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Add the Helm repository</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>helm<span class="w"> </span>repo<span class="w"> </span>add<span class="w"> </span>documentdb<span class="w"> </span>https://documentdb.github.io/documentdb-kubernetes-operator
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>helm<span class="w"> </span>repo<span class="w"> </span>update
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># Install the operator</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span>--wait
+</code></pre></div>
 <p>Verify the operator is running:</p>
-<pre><code class="language-bash">kubectl get deployment -n documentdb-operator
-</code></pre>
-<pre><code class="language-text">NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
-documentdb-operator   1/1     1            1           113s
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>NAME                  READY   UP-TO-DATE   AVAILABLE   AGE
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>documentdb-operator   1/1     1            1           113s
+</code></pre></div>
 <p>Confirm the DocumentDB CRDs are installed:</p>
-<pre><code class="language-bash">kubectl get crd | grep documentdb
-</code></pre>
-<pre><code class="language-text">dbs.documentdb.io
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>crd<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>documentdb
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>dbs.documentdb.io
+</code></pre></div>
 <h3 id="store-documentdb-credentials-in-a-kubernetes-secret">Store DocumentDB credentials in a Kubernetes Secret<a class="headerlink" href="#store-documentdb-credentials-in-a-kubernetes-secret" title="Permanent link">&para;</a></h3>
 <p>Before deploying a cluster, create a Secret with the credentials that the DocumentDB gateway will use. The operator's sidecar injector automatically projects these values as environment variables into the gateway container.</p>
-<pre><code class="language-bash">cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: documentdb-preview-ns
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: documentdb-credentials
-  namespace: documentdb-preview-ns
-type: Opaque
-stringData:
-  username: k8s_secret_user
-  password: K8sSecret100
-EOF
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>cat<span class="w"> </span><span class="s">&lt;&lt;EOF | kubectl apply -f -</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="s">apiVersion: v1</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="s">kind: Namespace</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="s">metadata:</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="s">  name: documentdb-preview-ns</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="s">---</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="s">apiVersion: v1</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="s">kind: Secret</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="s">metadata:</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="s">  name: documentdb-credentials</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="s">  namespace: documentdb-preview-ns</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="s">type: Opaque</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="s">stringData:</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="s">  username: k8s_secret_user</span>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="s">  password: K8sSecret100</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="s">EOF</span>
+</code></pre></div>
 <p>Verify the Secret:</p>
-<pre><code class="language-bash">kubectl get secret documentdb-credentials -n documentdb-preview-ns
-</code></pre>
-<pre><code class="language-text">NAME                     TYPE     DATA   AGE
-documentdb-credentials   Opaque   2      10s
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>NAME                     TYPE     DATA   AGE
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>documentdb-credentials   Opaque   2      10s
+</code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>By default, the operator expects a Secret named <code>documentdb-credentials</code> with <code>username</code> and <code>password</code> keys. To use a different Secret name, set <code>spec.documentDbCredentialSecret</code> in your DocumentDB resource.</p>
 </div>
 <h3 id="deploy-a-documentdb-cluster">Deploy a DocumentDB cluster<a class="headerlink" href="#deploy-a-documentdb-cluster" title="Permanent link">&para;</a></h3>
 <p>Create a single-node DocumentDB cluster:</p>
-<pre><code class="language-bash">cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-preview
-  namespace: documentdb-preview-ns
-spec:
-  nodeCount: 1
-  instancesPerNode: 1
-  documentDbCredentialSecret: documentdb-credentials
-  resource:
-    storage:
-      pvcSize: 10Gi
-  exposeViaService:
-    serviceType: ClusterIP
-EOF
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cat<span class="w"> </span><span class="s">&lt;&lt;EOF | kubectl apply -f -</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="s">apiVersion: documentdb.io/preview</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="s">kind: DocumentDB</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="s">metadata:</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="s">  name: documentdb-preview</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="s">  namespace: documentdb-preview-ns</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="s">spec:</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="s">  nodeCount: 1</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="s">  instancesPerNode: 1</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="s">  documentDbCredentialSecret: documentdb-credentials</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="s">  resource:</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="s">    storage:</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="s">      pvcSize: 10Gi</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="s">  exposeViaService:</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="s">    serviceType: ClusterIP</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="s">EOF</span>
+</code></pre></div>
 <p>Wait for the cluster to initialize, then verify it's running:</p>
-<pre><code class="language-bash">kubectl get pods -n documentdb-preview-ns
-</code></pre>
-<pre><code class="language-text">NAME                   READY   STATUS    RESTARTS   AGE
-documentdb-preview-1   2/2     Running   0          26m
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>NAME                   READY   STATUS    RESTARTS   AGE
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>documentdb-preview-1   2/2     Running   0          26m
+</code></pre></div>
 <p>Check the DocumentDB resource status:</p>
-<pre><code class="language-bash">kubectl get DocumentDB -n documentdb-preview-ns
-</code></pre>
-<pre><code class="language-text">NAME                 STATUS                     CONNECTION STRING
-documentdb-preview   Cluster in healthy state   mongodb://...
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>DocumentDB<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>NAME                 STATUS                     CONNECTION STRING
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>documentdb-preview   Cluster in healthy state   mongodb://...
+</code></pre></div>
 <h3 id="connect-to-the-documentdb-cluster">Connect to the DocumentDB cluster<a class="headerlink" href="#connect-to-the-documentdb-cluster" title="Permanent link">&para;</a></h3>
-<p>Choose a connection method based on your service type.</p>
+<p>Choose a connection method based on your service type. For more details on service types, load balancers, and Network Policies, see <a href="configuration/networking/">Networking</a>. For TLS certificate configuration, see <a href="configuration/tls/">TLS</a>.</p>
 <h4 id="option-1-clusterip-service-default-for-local-development">Option 1: ClusterIP service (default — for local development)<a class="headerlink" href="#option-1-clusterip-service-default-for-local-development" title="Permanent link">&para;</a></h4>
 <p><strong>Step 1:</strong> Set up port forwarding (keep this terminal open):</p>
-<pre><code class="language-bash">kubectl port-forward pod/documentdb-preview-1 10260:10260 -n documentdb-preview-ns
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>pod/documentdb-preview-1<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
 <p><strong>Step 2:</strong> In a new terminal, connect with <a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a>:</p>
-<pre><code class="language-bash">mongosh 127.0.0.1:10260 \
-  -u k8s_secret_user \
-  -p K8sSecret100 \
-  --authenticationMechanism SCRAM-SHA-256 \
-  --tls --tlsAllowInvalidCertificates
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>mongosh<span class="w"> </span><span class="m">127</span>.0.0.1:10260<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span>-u<span class="w"> </span>k8s_secret_user<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span>-p<span class="w"> </span>K8sSecret100<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">  </span>--authenticationMechanism<span class="w"> </span>SCRAM-SHA-256<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">  </span>--tls<span class="w"> </span>--tlsAllowInvalidCertificates
+</code></pre></div>
 <p>Or use a connection string:</p>
-<pre><code class="language-bash">mongosh &quot;mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+</code></pre></div>
 <h4 id="option-2-loadbalancer-service-for-cloud-deployments">Option 2: LoadBalancer service (for cloud deployments)<a class="headerlink" href="#option-2-loadbalancer-service-for-cloud-deployments" title="Permanent link">&para;</a></h4>
 <p>For direct external access in cloud environments (AKS, EKS, GKE), deploy with a <code>LoadBalancer</code> service type:</p>
 <p><strong>Step 1:</strong> Deploy DocumentDB with LoadBalancer:</p>
-<pre><code class="language-bash">cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-preview
-  namespace: documentdb-preview-ns
-spec:
-  nodeCount: 1
-  instancesPerNode: 1
-  documentDbCredentialSecret: documentdb-credentials
-  resource:
-    storage:
-      pvcSize: 10Gi
-  exposeViaService:
-    serviceType: LoadBalancer
-EOF
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>cat<span class="w"> </span><span class="s">&lt;&lt;EOF | kubectl apply -f -</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="s">apiVersion: documentdb.io/preview</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="s">kind: DocumentDB</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="s">metadata:</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="s">  name: documentdb-preview</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="s">  namespace: documentdb-preview-ns</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="s">spec:</span>
+<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="s">  nodeCount: 1</span>
+<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="s">  instancesPerNode: 1</span>
+<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="s">  documentDbCredentialSecret: documentdb-credentials</span>
+<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a><span class="s">  resource:</span>
+<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="s">    storage:</span>
+<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a><span class="s">      pvcSize: 10Gi</span>
+<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a><span class="s">  exposeViaService:</span>
+<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a><span class="s">    serviceType: LoadBalancer</span>
+<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a><span class="s">EOF</span>
+</code></pre></div>
 <p><strong>Step 2:</strong> Wait for the external IP:</p>
-<pre><code class="language-bash">kubectl get services -n documentdb-preview-ns -w
-</code></pre>
-<pre><code class="language-text">NAME                                    TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)           AGE
-documentdb-service-documentdb-preview   LoadBalancer   10.0.228.243   52.149.56.216   10260:30312/TCP   2m
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>services<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-w
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>NAME                                    TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)           AGE
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>documentdb-service-documentdb-preview   LoadBalancer   10.0.228.243   52.149.56.216   10260:30312/TCP   2m
+</code></pre></div>
 <p><strong>Step 3:</strong> Connect using the external IP:</p>
-<pre><code class="language-bash"># Get the connection string
-kubectl get documentdb documentdb-preview -n documentdb-preview-ns -o jsonpath='{.status.connectionString}'
-
-# Connect with mongosh
-mongosh &quot;&lt;connection-string&gt;&quot;
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># Get the connection string</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="c1"># Connect with mongosh</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>mongosh<span class="w"> </span><span class="s2">&quot;&lt;connection-string&gt;&quot;</span>
+</code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>LoadBalancer services are supported in cloud environments (AKS, EKS, GKE) and in local development with <a href="https://minikube.sigs.k8s.io/docs/handbook/accessing/">minikube</a> and <a href="https://kind.sigs.k8s.io/docs/user/loadbalancer">kind</a>.</p>
 </div>
 <h3 id="work-with-data">Work with data<a class="headerlink" href="#work-with-data" title="Permanent link">&para;</a></h3>
 <p>Once connected, create a database, a collection, and insert some documents:</p>
-<pre><code class="language-bash">use testdb
-
-db.createCollection(&quot;test_collection&quot;)
-
-db.test_collection.insertMany([
-  { name: &quot;Alice&quot;, age: 30 },
-  { name: &quot;Bob&quot;, age: 25 },
-  { name: &quot;Charlie&quot;, age: 35 }
-])
-
-db.test_collection.find()
-</code></pre>
-<pre><code class="language-text">[direct: mongos] test&gt; use testdb
-switched to db testdb
-[direct: mongos] testdb&gt; db.createCollection(&quot;test_collection&quot;)
-{ ok: 1 }
-[direct: mongos] testdb&gt; db.test_collection.insertMany([
-...   { name: &quot;Alice&quot;, age: 30 },
-...   { name: &quot;Bob&quot;, age: 25 },
-...   { name: &quot;Charlie&quot;, age: 35 }
-... ])
-{
-  acknowledged: true,
-  insertedIds: {
-    '0': ObjectId('682c3b06491dc99ae02b3fed'),
-    '1': ObjectId('682c3b06491dc99ae02b3fee'),
-    '2': ObjectId('682c3b06491dc99ae02b3fef')
-  }
-}
-[direct: mongos] testdb&gt; db.test_collection.find()
-[
-  { _id: ObjectId('682c3b06491dc99ae02b3fed'), name: 'Alice', age: 30 },
-  { _id: ObjectId('682c3b06491dc99ae02b3fee'), name: 'Bob', age: 25 },
-  {
-    _id: ObjectId('682c3b06491dc99ae02b3fef'),
-    name: 'Charlie',
-    age: 35
-  }
-]
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>use<span class="w"> </span>testdb
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>db.createCollection<span class="o">(</span><span class="s2">&quot;test_collection&quot;</span><span class="o">)</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>db.test_collection.insertMany<span class="o">([</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Alice&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="o">}</span>,
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Bob&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">25</span><span class="w"> </span><span class="o">}</span>,
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Charlie&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">35</span><span class="w"> </span><span class="o">}</span>
+<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="o">])</span>
+<a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a>
+<a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a>db.test_collection.find<span class="o">()</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>[direct: mongos] test&gt; use testdb
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>switched to db testdb
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>[direct: mongos] testdb&gt; db.createCollection(&quot;test_collection&quot;)
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>{ ok: 1 }
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>[direct: mongos] testdb&gt; db.test_collection.insertMany([
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>...   { name: &quot;Alice&quot;, age: 30 },
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>...   { name: &quot;Bob&quot;, age: 25 },
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>...   { name: &quot;Charlie&quot;, age: 35 }
+<a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>... ])
+<a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>{
+<a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>  acknowledged: true,
+<a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>  insertedIds: {
+<a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>    &#39;0&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fed&#39;),
+<a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>    &#39;1&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fee&#39;),
+<a id="__codelineno-26-15" name="__codelineno-26-15" href="#__codelineno-26-15"></a>    &#39;2&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fef&#39;)
+<a id="__codelineno-26-16" name="__codelineno-26-16" href="#__codelineno-26-16"></a>  }
+<a id="__codelineno-26-17" name="__codelineno-26-17" href="#__codelineno-26-17"></a>}
+<a id="__codelineno-26-18" name="__codelineno-26-18" href="#__codelineno-26-18"></a>[direct: mongos] testdb&gt; db.test_collection.find()
+<a id="__codelineno-26-19" name="__codelineno-26-19" href="#__codelineno-26-19"></a>[
+<a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a>  { _id: ObjectId(&#39;682c3b06491dc99ae02b3fed&#39;), name: &#39;Alice&#39;, age: 30 },
+<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>  { _id: ObjectId(&#39;682c3b06491dc99ae02b3fee&#39;), name: &#39;Bob&#39;, age: 25 },
+<a id="__codelineno-26-22" name="__codelineno-26-22" href="#__codelineno-26-22"></a>  {
+<a id="__codelineno-26-23" name="__codelineno-26-23" href="#__codelineno-26-23"></a>    _id: ObjectId(&#39;682c3b06491dc99ae02b3fef&#39;),
+<a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a>    name: &#39;Charlie&#39;,
+<a id="__codelineno-26-25" name="__codelineno-26-25" href="#__codelineno-26-25"></a>    age: 35
+<a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>  }
+<a id="__codelineno-26-27" name="__codelineno-26-27" href="#__codelineno-26-27"></a>]
+</code></pre></div>
 <h3 id="try-the-sample-python-app">Try the sample Python app<a class="headerlink" href="#try-the-sample-python-app" title="Permanent link">&para;</a></h3>
 <p>You can also connect using the sample Python program (PyMongo) in the repository. It inserts a document into a <code>movies</code> collection in the <code>sample_mflix</code> database.</p>
-<pre><code class="language-bash">git clone https://github.com/documentdb/documentdb-kubernetes-operator
-cd documentdb-kubernetes-operator/operator/src/scripts/test-scripts
-
-pip3 install pymongo
-
-python3 mongo-python-data-pusher.py
-</code></pre>
-<pre><code class="language-text">Inserted document ID: 682c54f9505b85fba77ed154
-{'_id': ObjectId('682c54f9505b85fba77ed154'),
- 'cast': ['Olivia Colman', 'Emma Stone', 'Rachel Weisz'],
- 'directors': ['Yorgos Lanthimos'],
- 'genres': ['Drama', 'History'],
- 'rated': 'R',
- 'runtime': 121,
- 'title': 'The Favourite MongoDB Movie',
- 'type': 'movie',
- 'year': 2018}
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/documentdb/documentdb-kubernetes-operator
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="nb">cd</span><span class="w"> </span>documentdb-kubernetes-operator/operator/src/scripts/test-scripts
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>pip3<span class="w"> </span>install<span class="w"> </span>pymongo
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>
+<a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>python3<span class="w"> </span>mongo-python-data-pusher.py
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>Inserted document ID: 682c54f9505b85fba77ed154
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>{&#39;_id&#39;: ObjectId(&#39;682c54f9505b85fba77ed154&#39;),
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a> &#39;cast&#39;: [&#39;Olivia Colman&#39;, &#39;Emma Stone&#39;, &#39;Rachel Weisz&#39;],
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a> &#39;directors&#39;: [&#39;Yorgos Lanthimos&#39;],
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a> &#39;genres&#39;: [&#39;Drama&#39;, &#39;History&#39;],
+<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a> &#39;rated&#39;: &#39;R&#39;,
+<a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a> &#39;runtime&#39;: 121,
+<a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a> &#39;title&#39;: &#39;The Favourite MongoDB Movie&#39;,
+<a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a> &#39;type&#39;: &#39;movie&#39;,
+<a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a> &#39;year&#39;: 2018}
+</code></pre></div>
 <p>Verify using <code>mongosh</code>:</p>
-<pre><code class="language-bash">use sample_mflix
-db.movies.find()
-</code></pre>
-<pre><code class="language-text">[direct: mongos] testdb&gt; use sample_mflix
-switched to db sample_mflix
-[direct: mongos] sample_mflix&gt;
-
-[direct: mongos] sample_mflix&gt; db.movies.find()
-[
-  {
-    _id: ObjectId('682c54f9505b85fba77ed154'),
-    title: 'The Favourite MongoDB Movie',
-    genres: [ 'Drama', 'History' ],
-    runtime: 121,
-    rated: 'R',
-    year: 2018,
-    directors: [ 'Yorgos Lanthimos' ],
-    cast: [ 'Olivia Colman', 'Emma Stone', 'Rachel Weisz' ],
-    type: 'movie'
-  }
-]
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>use<span class="w"> </span>sample_mflix
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>db.movies.find<span class="o">()</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>[direct: mongos] testdb&gt; use sample_mflix
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>switched to db sample_mflix
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>[direct: mongos] sample_mflix&gt;
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>
+<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>[direct: mongos] sample_mflix&gt; db.movies.find()
+<a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>[
+<a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>  {
+<a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>    _id: ObjectId(&#39;682c54f9505b85fba77ed154&#39;),
+<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>    title: &#39;The Favourite MongoDB Movie&#39;,
+<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>    genres: [ &#39;Drama&#39;, &#39;History&#39; ],
+<a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>    runtime: 121,
+<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>    rated: &#39;R&#39;,
+<a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a>    year: 2018,
+<a id="__codelineno-30-14" name="__codelineno-30-14" href="#__codelineno-30-14"></a>    directors: [ &#39;Yorgos Lanthimos&#39; ],
+<a id="__codelineno-30-15" name="__codelineno-30-15" href="#__codelineno-30-15"></a>    cast: [ &#39;Olivia Colman&#39;, &#39;Emma Stone&#39;, &#39;Rachel Weisz&#39; ],
+<a id="__codelineno-30-16" name="__codelineno-30-16" href="#__codelineno-30-16"></a>    type: &#39;movie&#39;
+<a id="__codelineno-30-17" name="__codelineno-30-17" href="#__codelineno-30-17"></a>  }
+<a id="__codelineno-30-18" name="__codelineno-30-18" href="#__codelineno-30-18"></a>]
+</code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>Update the script's <code>host</code> variable to match your service type (<code>127.0.0.1</code> for ClusterIP with port-forward, or the external IP for LoadBalancer). Use environment variables for credentials instead of hardcoding them.</p>
@@ -1240,23 +1398,23 @@ switched to db sample_mflix
 <h3 id="local-high-availability-ha">Local high-availability (HA)<a class="headerlink" href="#local-high-availability-ha" title="Permanent link">&para;</a></h3>
 <p>Deploy multiple DocumentDB instances with automatic failover by setting <code>instancesPerNode</code> to a value greater than 1.</p>
 <h4 id="enable-local-ha">Enable local HA<a class="headerlink" href="#enable-local-ha" title="Permanent link">&para;</a></h4>
-<pre><code class="language-bash">cat &lt;&lt;EOF | kubectl apply -f -
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-ha
-  namespace: &lt;your-namespace&gt;
-spec:
-  nodeCount: 1
-  instancesPerNode: 3
-  documentDbCredentialSecret: documentdb-credentials
-  resource:
-    storage:
-      pvcSize: 10Gi
-  exposeViaService:
-    serviceType: LoadBalancer
-EOF
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>cat<span class="w"> </span><span class="s">&lt;&lt;EOF | kubectl apply -f -</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="s">apiVersion: documentdb.io/preview</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="s">kind: DocumentDB</span>
+<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="s">metadata:</span>
+<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="s">  name: documentdb-ha</span>
+<a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="s">  namespace: &lt;your-namespace&gt;</span>
+<a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="s">spec:</span>
+<a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="s">  nodeCount: 1</span>
+<a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="s">  instancesPerNode: 3</span>
+<a id="__codelineno-31-10" name="__codelineno-31-10" href="#__codelineno-31-10"></a><span class="s">  documentDbCredentialSecret: documentdb-credentials</span>
+<a id="__codelineno-31-11" name="__codelineno-31-11" href="#__codelineno-31-11"></a><span class="s">  resource:</span>
+<a id="__codelineno-31-12" name="__codelineno-31-12" href="#__codelineno-31-12"></a><span class="s">    storage:</span>
+<a id="__codelineno-31-13" name="__codelineno-31-13" href="#__codelineno-31-13"></a><span class="s">      pvcSize: 10Gi</span>
+<a id="__codelineno-31-14" name="__codelineno-31-14" href="#__codelineno-31-14"></a><span class="s">  exposeViaService:</span>
+<a id="__codelineno-31-15" name="__codelineno-31-15" href="#__codelineno-31-15"></a><span class="s">    serviceType: LoadBalancer</span>
+<a id="__codelineno-31-16" name="__codelineno-31-16" href="#__codelineno-31-16"></a><span class="s">EOF</span>
+</code></pre></div>
 <p>This configuration creates:</p>
 <ul>
 <li><strong>1 primary instance</strong> — handles all write operations</li>
@@ -1264,49 +1422,43 @@ EOF
 </ul>
 <h3 id="multi-cloud-deployment">Multi-cloud deployment<a class="headerlink" href="#multi-cloud-deployment" title="Permanent link">&para;</a></h3>
 <p>The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md">Multi-Cloud Deployment Guide</a>.</p>
-<h3 id="tls-setup">TLS setup<a class="headerlink" href="#tls-setup" title="Permanent link">&para;</a></h3>
-<p>For advanced TLS configuration and testing:</p>
-<ul>
-<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md">TLS Setup Guide</a> — Complete TLS configuration guide</li>
-<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md">E2E Testing</a> — Comprehensive testing procedures</li>
-</ul>
 <h2 id="clean-up">Clean up<a class="headerlink" href="#clean-up" title="Permanent link">&para;</a></h2>
 <h3 id="delete-the-documentdb-cluster">Delete the DocumentDB cluster<a class="headerlink" href="#delete-the-documentdb-cluster" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">kubectl delete DocumentDB documentdb-preview -n documentdb-preview-ns
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>DocumentDB<span class="w"> </span>documentdb-preview<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
 <p>Verify the pod is terminated:</p>
-<pre><code class="language-bash">kubectl get pods -n documentdb-preview-ns
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+</code></pre></div>
 <h3 id="uninstall-the-operator">Uninstall the operator<a class="headerlink" href="#uninstall-the-operator" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">helm uninstall documentdb-operator --namespace documentdb-operator
-</code></pre>
-<pre><code class="language-text">These resources were kept due to the resource policy:
-[CustomResourceDefinition] poolers.postgresql.cnpg.io
-[CustomResourceDefinition] publications.postgresql.cnpg.io
-[CustomResourceDefinition] scheduledbackups.postgresql.cnpg.io
-[CustomResourceDefinition] subscriptions.postgresql.cnpg.io
-[CustomResourceDefinition] backups.postgresql.cnpg.io
-[CustomResourceDefinition] clusterimagecatalogs.postgresql.cnpg.io
-[CustomResourceDefinition] clusters.postgresql.cnpg.io
-[CustomResourceDefinition] databases.postgresql.cnpg.io
-[CustomResourceDefinition] imagecatalogs.postgresql.cnpg.io
-
-release &quot;documentdb-operator&quot; uninstalled
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a>helm<span class="w"> </span>uninstall<span class="w"> </span>documentdb-operator<span class="w"> </span>--namespace<span class="w"> </span>documentdb-operator
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>These resources were kept due to the resource policy:
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>[CustomResourceDefinition] poolers.postgresql.cnpg.io
+<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>[CustomResourceDefinition] publications.postgresql.cnpg.io
+<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>[CustomResourceDefinition] scheduledbackups.postgresql.cnpg.io
+<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>[CustomResourceDefinition] subscriptions.postgresql.cnpg.io
+<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>[CustomResourceDefinition] backups.postgresql.cnpg.io
+<a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a>[CustomResourceDefinition] clusterimagecatalogs.postgresql.cnpg.io
+<a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>[CustomResourceDefinition] clusters.postgresql.cnpg.io
+<a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a>[CustomResourceDefinition] databases.postgresql.cnpg.io
+<a id="__codelineno-35-10" name="__codelineno-35-10" href="#__codelineno-35-10"></a>[CustomResourceDefinition] imagecatalogs.postgresql.cnpg.io
+<a id="__codelineno-35-11" name="__codelineno-35-11" href="#__codelineno-35-11"></a>
+<a id="__codelineno-35-12" name="__codelineno-35-12" href="#__codelineno-35-12"></a>release &quot;documentdb-operator&quot; uninstalled
+</code></pre></div>
 <h3 id="delete-the-namespace-and-crds">Delete the namespace and CRDs<a class="headerlink" href="#delete-the-namespace-and-crds" title="Permanent link">&para;</a></h3>
-<pre><code class="language-bash">kubectl delete namespace documentdb-operator
-
-kubectl delete crd backups.postgresql.cnpg.io \
-  clusterimagecatalogs.postgresql.cnpg.io \
-  clusters.postgresql.cnpg.io \
-  databases.postgresql.cnpg.io \
-  imagecatalogs.postgresql.cnpg.io \
-  poolers.postgresql.cnpg.io \
-  publications.postgresql.cnpg.io \
-  scheduledbackups.postgresql.cnpg.io \
-  subscriptions.postgresql.cnpg.io \
-  dbs.documentdb.io
-</code></pre>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>namespace<span class="w"> </span>documentdb-operator
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>crd<span class="w"> </span>backups.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="w">  </span>clusterimagecatalogs.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a><span class="w">  </span>clusters.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a><span class="w">  </span>databases.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="w">  </span>imagecatalogs.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a><span class="w">  </span>poolers.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a><span class="w">  </span>publications.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-10" name="__codelineno-36-10" href="#__codelineno-36-10"></a><span class="w">  </span>scheduledbackups.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-11" name="__codelineno-36-11" href="#__codelineno-36-11"></a><span class="w">  </span>subscriptions.postgresql.cnpg.io<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-12" name="__codelineno-36-12" href="#__codelineno-36-12"></a><span class="w">  </span>dbs.documentdb.io
+</code></pre></div>
 
 
 
@@ -1324,8 +1476,16 @@ kubectl delete crd backups.postgresql.cnpg.io \
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
         
       </main>
       
@@ -1353,7 +1513,7 @@ kubectl delete crd backups.postgresql.cnpg.io \
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
       <script src="../assets/javascripts/bundle.dd8806f2.min.js"></script>
