@@ -266,58 +266,66 @@ go get go.mongodb.org/mongo-driver/mongo
 package main
 
 import (
-"context"
-"fmt"
-"log"
-"time"
+	"context"
+	"crypto/tls"
+	"fmt"
+	"log"
+	"time"
 
-"go.mongodb.org/mongo-driver/bson"
-"go.mongodb.org/mongo-driver/mongo"
-"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
-ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-uri := "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
-"?directConnection=true&authMechanism=SCRAM-SHA-256" +
-"&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+	uri := "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
+		"?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true"
 
-clientOpts := options.Client().
-ApplyURI(uri).
-SetMaxPoolSize(50).    // Maximum connections in the pool
-SetMinPoolSize(5).     // Minimum idle connections
-SetMaxConnIdleTime(30 * time.Second)
+	// For self-signed certificates, skip verification.
+	// For trusted CAs, load the CA cert into a tls.Config instead.
+	tlsConfig := &tls.Config{InsecureSkipVerify: true}
 
-client, err := mongo.Connect(ctx, clientOpts)
-if err != nil {
-log.Fatal(err)
-}
-defer client.Disconnect(ctx)
+	clientOpts := options.Client().
+		ApplyURI(uri).
+		SetTLSConfig(tlsConfig).
+		SetMaxPoolSize(50).    // Maximum connections in the pool
+		SetMinPoolSize(5).     // Minimum idle connections
+		SetMaxConnIdleTime(30 * time.Second)
 
-coll := client.Database("testdb").Collection("users")
-result, err := coll.InsertOne(ctx, bson.M{"name": "Alice", "role": "admin"})
-if err != nil {
-log.Fatal(err)
-}
-fmt.Printf("Inserted: %v\n", result.InsertedID)
+	client, err := mongo.Connect(ctx, clientOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Disconnect(ctx)
 
-cursor, err := coll.Find(ctx, bson.M{})
-if err != nil {
-log.Fatal(err)
-}
-defer cursor.Close(ctx)
+	coll := client.Database("testdb").Collection("users")
+	result, err := coll.InsertOne(ctx, bson.M{"name": "Alice", "role": "admin"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Inserted: %v\n", result.InsertedID)
 
-var docs []bson.M
-if err := cursor.All(ctx, &docs); err != nil {
-log.Fatal(err)
-}
-for _, doc := range docs {
-fmt.Println(doc)
-}
+	cursor, err := coll.Find(ctx, bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []bson.M
+	if err := cursor.All(ctx, &docs); err != nil {
+		log.Fatal(err)
+	}
+	for _, doc := range docs {
+		fmt.Println(doc)
+	}
 }
 ```
+
+!!! note "Go driver and `replicaSet`"
+    Do not include `replicaSet=rs0` in the URI when using `directConnection=true` with the Go driver. The combination creates a conflicting topology configuration that prevents the driver from connecting. The `directConnection=true` parameter alone is sufficient.
 
 ### Java (MongoDB Java Driver)
 
@@ -340,16 +348,34 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.security.cert.X509Certificate;
 import java.util.concurrent.TimeUnit;
 
 public class ConnectDocumentDB {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         String uri = "mongodb://dev_user:DevPassword123@127.0.0.1:10260/"
-            + "?directConnection=true&authMechanism=SCRAM-SHA-256"
-            + "&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0";
+            + "?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true";
+
+        // For self-signed certificates, create a trust-all SSLContext.
+        // For trusted CAs, configure a proper TrustStore instead.
+        TrustManager[] trustAll = new TrustManager[]{
+            new X509TrustManager() {
+                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                public void checkClientTrusted(X509Certificate[] c, String t) {}
+                public void checkServerTrusted(X509Certificate[] c, String t) {}
+            }
+        };
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustAll, new java.security.SecureRandom());
 
         MongoClientSettings settings = MongoClientSettings.builder()
             .applyConnectionString(new ConnectionString(uri))
+            .applyToSslSettings(builder -> builder
+                .enabled(true)
+                .context(sslContext))
             .applyToConnectionPoolSettings(builder -> builder
                 .maxSize(50)           // Maximum connections in the pool
                 .minSize(5)            // Minimum idle connections
@@ -370,6 +396,9 @@ public class ConnectDocumentDB {
     }
 }
 ```
+
+!!! note "Java driver TLS with self-signed certificates"
+    The `tlsAllowInvalidCertificates=true` URI parameter does not work with the Java driver. You must provide an explicit `SSLContext` that trusts the server certificate. For production, load your CA certificate into a JKS/PKCS12 TrustStore instead of using the trust-all approach shown above.
 
 ## Connection pooling best practices
 
