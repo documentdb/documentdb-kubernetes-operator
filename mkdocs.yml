@@ -31,26 +31,30 @@ extra:
 
 nav:
   - Preview:
-      - Get Started: preview/index.md
-      - Architecture:
-          - Overview: preview/architecture/overview.md
+      - Home: preview/index.md
       - Getting Started:
           - Before You Start: preview/getting-started/before-you-start.md
-          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
+          - "Quickstart: Kind": preview/getting-started/quickstart-kind.md
+          - "Quickstart: K3s": preview/getting-started/quickstart-k3s.md
           - Deploy on AKS: preview/getting-started/deploy-on-aks.md
+          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
+          - Connecting to DocumentDB: preview/getting-started/connecting-to-documentdb.md
+      - Architecture:
+          - Overview: preview/architecture/overview.md
       - Configuration:
+          - Storage: preview/configuration/storage.md
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
-          - Storage: preview/configuration/storage.md
-      - Advanced Configuration: preview/advanced-configuration/README.md
-      - Backup and Restore: preview/backup-and-restore.md
-      - API Reference: preview/api-reference.md
+      - Operations:
+          - Backup and Restore: preview/backup-and-restore.md
       - High Availability:
           - Overview: preview/high-availability/overview.md
           - Local HA: preview/high-availability/local-ha.md
+      - Advanced Configuration: preview/advanced-configuration/README.md
       - FAQ: preview/faq.md
-  - Tools:
-      - Kubectl Plugin: preview/kubectl-plugin.md
+      - Tools:
+          - Kubectl Plugin: preview/kubectl-plugin.md
+      - API Reference: preview/api-reference.md
 
 plugins:
   - search
