@@ -176,9 +176,13 @@ my-documentdb   Cluster in healthy state   mongodb://...
 kubectl port-forward pod/my-documentdb-1 10260:10260 -n documentdb-ns
 ```
 
-In another terminal:
+In another terminal, get the connection string and connect:
 
 ```bash
+# View the connection string from the DocumentDB cluster status
+kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.connectionString}'
+
+# Connect with mongosh (substitute your credentials)
 mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
@@ -216,7 +220,18 @@ NAME                                  TYPE           CLUSTER-IP    EXTERNAL-IP  
 documentdb-service-my-documentdb      LoadBalancer   10.43.x.x    192.168.1.100   10260:3xxxx/TCP   60s
 ```
 
-Connect using the external IP:
+Connect using the connection string from the DocumentDB cluster status:
+
+```bash
+kubectl get documentdb my-documentdb -n documentdb-ns
+```
+
+```text
+NAME            STATUS                     CONNECTION STRING
+my-documentdb   Cluster in healthy state   mongodb://...@192.168.1.100:10260/...
+```
+
+Connect with `mongosh` using the external IP:
 
 ```bash
 mongosh "mongodb://dev_user:DevPassword123@192.168.1.100:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"

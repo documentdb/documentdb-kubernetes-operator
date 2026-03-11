@@ -167,11 +167,21 @@ Set up port forwarding to access the DocumentDB Gateway (port 10260):
 kubectl port-forward pod/my-documentdb-1 10260:10260 -n documentdb-ns
 ```
 
-In a new terminal, connect with mongosh:
+In a new terminal, retrieve the connection string from the DocumentDB cluster status and connect:
+
+```bash
+# Get the connection string (contains embedded kubectl commands to resolve credentials)
+kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.connectionString}'
+```
+
+Use `mongosh` with the resolved credentials:
 
 ```bash
 mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
+
+!!! tip
+    The `CONNECTION STRING` column in `kubectl get documentdb` output contains embedded `kubectl` commands that extract the username and password from the credentials Secret at runtime. You can copy and `eval` the full string, or substitute your known credentials directly as shown above.
 
 Try inserting and querying data:
 
