@@ -144,6 +144,23 @@ mongosh 127.0.0.1:10260 \
   --tls --tlsAllowInvalidCertificates
 ```
 
+## Connect with DocumentDB for VS Code
+
+The [DocumentDB for VS Code](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-documentdb) extension provides a graphical interface for connecting to DocumentDB, browsing databases and collections, and running queries directly from Visual Studio Code.
+
+1. Install the **DocumentDB for VS Code** extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-documentdb).
+2. Open the DocumentDB view in the Activity Bar.
+3. Select **Add Connection** and enter your connection string:
+
+    ```text
+    mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
+    ```
+
+4. Browse databases, collections, and documents. You can also use the built-in playground to run queries interactively.
+
+!!! tip
+    If you are already using VS Code with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension for operator development, the DocumentDB extension works inside the devcontainer as well — just forward port 10260.
+
 ## Driver examples
 
 All examples below assume:
