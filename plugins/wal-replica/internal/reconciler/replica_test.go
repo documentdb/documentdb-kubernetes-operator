@@ -174,3 +174,28 @@ if ref.BlockOwnerDeletion == nil || !*ref.BlockOwnerDeletion {
 t.Error("expected BlockOwnerDeletion=true")
 }
 }
+
+func TestBuildNonControllerOwnerReference(t *testing.T) {
+cluster := &cnpgv1.Cluster{
+ObjectMeta: metav1.ObjectMeta{
+Name: "test",
+UID:  "uid-abc",
+},
+TypeMeta: metav1.TypeMeta{
+APIVersion: "postgresql.cnpg.io/v1",
+Kind:       "Cluster",
+},
+}
+
+ref := buildNonControllerOwnerReference(cluster)
+
+if ref.Name != "test" {
+t.Errorf("expected name test, got %q", ref.Name)
+}
+if ref.Controller == nil || *ref.Controller {
+t.Error("expected Controller=false")
+}
+if ref.BlockOwnerDeletion == nil || !*ref.BlockOwnerDeletion {
+t.Error("expected BlockOwnerDeletion=true")
+}
+}

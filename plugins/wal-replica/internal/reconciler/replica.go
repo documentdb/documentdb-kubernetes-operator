@@ -45,8 +45,12 @@ return fmt.Errorf("invalid plugin configuration: %s", valErrs[0].Message)
 configuration.ApplyDefaults(cluster)
 
 ownerRef := buildOwnerReference(cluster)
+// Use a non-controller OwnerReference for the PVC so CNPG does not
+// discover it as a managed PVC (which would require a cnpg.io/pvcRole label).
+// Garbage collection still works; only the "controller" flag is cleared.
+pvcOwnerRef := buildNonControllerOwnerReference(cluster)
 
-if err := ensurePVC(ctx, k8sClient, deploymentName, namespace, cluster.Name, configuration, ownerRef); err != nil {
+if err := ensurePVC(ctx, k8sClient, deploymentName, namespace, cluster.Name, configuration, pvcOwnerRef); err != nil {
 return err
 }
 
@@ -87,6 +91,17 @@ Kind:               cluster.Kind,
 Name:               cluster.Name,
 UID:                cluster.UID,
 Controller:         boolPtr(true),
+BlockOwnerDeletion: boolPtr(true),
+}
+}
+
+func buildNonControllerOwnerReference(cluster *cnpgv1.Cluster) metav1.OwnerReference {
+return metav1.OwnerReference{
+APIVersion:         cluster.APIVersion,
+Kind:               cluster.Kind,
+Name:               cluster.Name,
+UID:                cluster.UID,
+Controller:         boolPtr(false),
 BlockOwnerDeletion: boolPtr(true),
 }
 }
@@ -162,7 +177,7 @@ VolumeMounts: []corev1.VolumeMount{
 LivenessProbe: &corev1.Probe{
 ProbeHandler: corev1.ProbeHandler{
 Exec: &corev1.ExecAction{
-Command: []string{"pgrep", "-f", "pg_receivewal"},
+Command: []string{"sh", "-c", "cat /proc/*/cmdline 2>/dev/null | tr '\\0' ' ' | grep -q pg_receivewal"},
 },
 },
 InitialDelaySeconds: 10,
@@ -172,7 +187,7 @@ FailureThreshold:    3,
 ReadinessProbe: &corev1.Probe{
 ProbeHandler: corev1.ProbeHandler{
 Exec: &corev1.ExecAction{
-Command: []string{"pgrep", "-f", "pg_receivewal"},
+Command: []string{"sh", "-c", "cat /proc/*/cmdline 2>/dev/null | tr '\\0' ' ' | grep -q pg_receivewal"},
 },
 },
 InitialDelaySeconds: 5,
