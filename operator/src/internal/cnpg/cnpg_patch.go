@@ -36,11 +36,13 @@ const (
 	PatchPathPluginParamFmt = "/spec/plugins/%d/parameters/%s"
 
 	// JSON Patch paths — mutable spec fields
-	PatchPathImageName    = "/spec/imageName"
-	PatchPathStorageSize  = "/spec/storage/size"
-	PatchPathLogLevel     = "/spec/logLevel"
-	PatchPathAffinity     = "/spec/affinity"
-	PatchPathMaxStopDelay = "/spec/stopDelay"
+	PatchPathImageName          = "/spec/imageName"
+	PatchPathStorageSize        = "/spec/storage/size"
+	PatchPathLogLevel           = "/spec/logLevel"
+	PatchPathAffinity           = "/spec/affinity"
+	PatchPathMaxStopDelay       = "/spec/stopDelay"
+	PatchPathPostgresParameters = "/spec/postgresql/parameters"
+	PatchPathResources          = "/spec/resources"
 
 	// JSON Patch path for restart annotation.
 	// The '/' in the annotation key is escaped as '~1' per RFC 6901 (JSON Pointer).
