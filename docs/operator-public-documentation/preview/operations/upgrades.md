@@ -72,7 +72,10 @@ helm rollback documentdb-operator -n documentdb-operator
 - CRDs in the Helm chart's `crds/` directory are applied on **initial install only**. If a new operator version introduces CRD schema changes, apply them manually before upgrading:
 
     ```bash
-    kubectl apply -f https://raw.githubusercontent.com/microsoft/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml
+    kubectl apply \
+      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
+      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml \
+      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_scheduledbackups.yaml
     ```
 
 ## Component Upgrades
@@ -159,7 +162,7 @@ In most cases, use `spec.documentDBVersion` to upgrade both components together.
 
     ```yaml
     spec:
-      documentDBImage: "ghcr.io/microsoft/documentdb/documentdb:<version>"
+      documentDBImage: "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:<version>"
     ```
 
     This overrides only the database extension image while keeping the gateway at the version set by `documentDBVersion`.
@@ -168,7 +171,7 @@ In most cases, use `spec.documentDBVersion` to upgrade both components together.
 
     ```yaml
     spec:
-      gatewayImage: "ghcr.io/microsoft/documentdb/gateway:<version>"
+      gatewayImage: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:<version>"
     ```
 
     This overrides only the gateway sidecar image while keeping the extension at the version set by `documentDBVersion`.
