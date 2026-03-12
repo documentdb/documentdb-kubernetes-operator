@@ -1,6 +1,6 @@
 ---
 title: Failover
-description: Understand automatic and manual failover for DocumentDB clusters, including local replica promotion and cross-cluster failover for multi-region deployments.
+description: How DocumentDB handles automatic failover through local replica promotion, cross-cluster failover for multi-region deployments, and application connection considerations.
 tags:
   - operations
   - failover

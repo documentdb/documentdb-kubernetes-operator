@@ -1,6 +1,6 @@
 ---
 title: Backup and Restore
-description: Back up DocumentDB clusters with VolumeSnapshots and restore from backups, including on-demand backups, scheduled backups, retention policies, and troubleshooting.
+description: Create on-demand and scheduled VolumeSnapshot backups of DocumentDB clusters, restore data from a backup, and configure retention policies.
 tags:
   - operations
   - backup

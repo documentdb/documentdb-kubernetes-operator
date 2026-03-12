@@ -1,6 +1,6 @@
 ---
 title: Maintenance
-description: Day-to-day operational tasks for DocumentDB clusters including monitoring, log management, resource tuning, node maintenance, and troubleshooting.
+description: Monitor DocumentDB cluster health, review PostgreSQL and gateway logs, track resource usage, and configure Kubernetes events and alerts.
 tags:
   - operations
   - maintenance

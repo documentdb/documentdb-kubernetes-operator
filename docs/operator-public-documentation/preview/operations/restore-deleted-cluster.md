@@ -1,6 +1,6 @@
 ---
 title: Restore a Deleted DocumentDB Cluster
-description: Recover a DocumentDB cluster after accidental deletion using backup recovery or retained PersistentVolume recovery.
+description: Recover a DocumentDB cluster after accidental deletion by restoring from a VolumeSnapshot backup or by reattaching retained PersistentVolumes.
 tags:
   - operations
   - restore

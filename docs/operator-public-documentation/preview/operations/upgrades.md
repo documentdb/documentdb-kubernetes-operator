@@ -1,6 +1,6 @@
 ---
 title: Upgrades
-description: Upgrade the DocumentDB operator, extension, and gateway image with rolling updates and rollback protection.
+description: Upgrade the DocumentDB operator Helm chart and CRDs, update DocumentDB extension and gateway images per cluster, and roll back to a previous version.
 tags:
   - operations
   - upgrades
