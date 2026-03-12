@@ -36,7 +36,26 @@ helm repo update documentdb
 helm search repo documentdb/documentdb-operator --versions
 ```
 
-### Step 3: Upgrade the DocumentDB Operator
+### Step 3: Apply Updated CRDs
+
+Helm only installs CRDs on initial `helm install` — it does **not** update them on `helm upgrade`. If the new operator version introduces CRD schema changes, you must apply them manually first:
+
+```bash
+# Set this to the release tag you are upgrading to (e.g., v0.2.0)
+TARGET_VERSION=v0.2.0
+
+kubectl apply --server-side --force-conflicts \
+  -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
+  -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml \
+  -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_scheduledbackups.yaml
+```
+
+Server-side apply (`--server-side --force-conflicts`) is required because the DocumentDB CRD is too large for the `last-applied-configuration` annotation used by client-side `kubectl apply`.
+
+!!! warning
+    Always use CRDs from the **same version** as the Helm chart you are installing. Using CRDs from `main` or a different release may introduce schema mismatches.
+
+### Step 4: Upgrade the DocumentDB Operator
 
 ```bash
 helm upgrade documentdb-operator documentdb/documentdb-operator \
@@ -44,7 +63,7 @@ helm upgrade documentdb-operator documentdb/documentdb-operator \
   --wait
 ```
 
-### Step 4: Verify the Upgrade
+### Step 5: Verify the Upgrade
 
 ```bash
 # Check operator deployment
@@ -66,17 +85,12 @@ helm history documentdb-operator -n documentdb-operator
 helm rollback documentdb-operator -n documentdb-operator
 ```
 
+!!! note
+    `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the release notes explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
+
 ### DocumentDB Operator Upgrade Notes
 
 - The DocumentDB operator upgrade does **not** restart your DocumentDB cluster pods.
-- CRDs in the Helm chart's `crds/` directory are applied on **initial install only**. If a new operator version introduces CRD schema changes, apply them manually before upgrading:
-
-    ```bash
-    kubectl apply \
-      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
-      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml \
-      -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_scheduledbackups.yaml
-    ```
 
 ## Component Upgrades
 
