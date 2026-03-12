@@ -33,7 +33,6 @@ nav:
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
       - Operations:
-        - Scaling: preview/operations/scaling.md
         - Failover: preview/operations/failover.md
         - Upgrades: preview/operations/upgrades.md
         - Backup and Restore: preview/operations/backup-and-restore.md
