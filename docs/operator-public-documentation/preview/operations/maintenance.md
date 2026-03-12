@@ -82,7 +82,7 @@ kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
 
 ### Configuring Log Level
 
-Adjust the DocumentDB log level in the DocumentDB cluster spec:
+The `spec.logLevel` field controls the PostgreSQL instance log verbosity. It does not affect the DocumentDB operator or gateway logs.
 
 ```yaml
 spec:
@@ -95,9 +95,7 @@ Apply the change:
 kubectl apply -f documentdb.yaml
 ```
 
-## Resource Management
-
-### Viewing Current Resource Usage
+## Resource Monitoring
 
 ```bash
 # Pod resource consumption
@@ -106,14 +104,6 @@ kubectl top pods -n <namespace>
 # Node resource consumption
 kubectl top nodes
 ```
-
-### Recommended Resource Allocations
-
-| Workload | CPU | Memory | Storage |
-|----------|-----|--------|---------|
-| Development | 1 core | 2 GiB | 10 GiB |
-| Production | 2–4 cores | 4–8 GiB | 100 GiB+ |
-| High-load | 4–8 cores | 8–16 GiB | 500 GiB+ |
 
 ### Storage Monitoring
 
@@ -127,8 +117,8 @@ kubectl get pvc -n <namespace>
 kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgresql/data
 ```
 
-!!! warning
-    If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize`. See [Storage Configuration](../configuration/storage.md) for details.
+!!! note
+    PVC resize is not currently supported but is planned for a future release. If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize` and restore from a backup. See [Storage Configuration](../configuration/storage.md) for details.
 
 ## Node Maintenance
 
@@ -143,7 +133,7 @@ kubectl get pods -n <namespace> -o wide
 
 ### Step 2: Cordon the Node
 
-Prevent new pods from being scheduled on the node:
+Mark the node as unschedulable so no new pods are placed on it (existing pods continue running):
 
 ```bash
 kubectl cordon <node-name>
