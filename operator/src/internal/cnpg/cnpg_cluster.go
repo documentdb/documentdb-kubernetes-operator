@@ -10,6 +10,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
@@ -101,18 +102,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						},
 					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-					Parameters: func() map[string]string {
-						params := map[string]string{
-							"cron.database_name":    "postgres",
-							"max_replication_slots": "10",
-							"max_wal_senders":       "10",
-						}
-						// TODO: once DocumentDB supports change streams natively, additional GUC parameters may be needed here.
-						if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
-							params["wal_level"] = "logical"
-						}
-						return params
-					}(),
+					Parameters:          MergeParameters(documentdb, parseMemoryToBytes(documentdb.Spec.Resource.Memory)),
 					PgHBA: []string{
 						"host all all 0.0.0.0/0 trust",
 						"host all all ::0/0 trust",
@@ -127,7 +117,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					},
 					Target: cnpgv1.BackupTarget("primary"),
 				},
-				Affinity: documentdb.Spec.Affinity,
+				Affinity:  documentdb.Spec.Affinity,
+				Resources: buildResourceRequirements(documentdb),
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
 
@@ -202,6 +193,45 @@ func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
 		return documentdb.Spec.Timeouts.StopDelay
 	}
 	return util.CNPG_DEFAULT_STOP_DELAY
+}
+
+// parseMemoryToBytes converts a Kubernetes quantity string (e.g., "2Gi", "4096Mi")
+// to bytes. Returns 0 if the string is empty or "0" (meaning unlimited/unset).
+func parseMemoryToBytes(memoryStr string) int64 {
+	if memoryStr == "" || memoryStr == "0" {
+		return 0
+	}
+	qty, err := resource.ParseQuantity(memoryStr)
+	if err != nil {
+		return 0
+	}
+	return qty.Value()
+}
+
+// buildResourceRequirements constructs corev1.ResourceRequirements from the
+// DocumentDB Resource spec. Uses Guaranteed QoS (requests == limits) as
+// recommended by CNPG. Returns empty requirements if neither Memory nor CPU is set.
+func buildResourceRequirements(documentdb *dbpreview.DocumentDB) corev1.ResourceRequirements {
+	reqs := corev1.ResourceRequirements{}
+	mem := documentdb.Spec.Resource.Memory
+	cpu := documentdb.Spec.Resource.CPU
+
+	if (mem == "" || mem == "0") && (cpu == "" || cpu == "0") {
+		return reqs
+	}
+
+	limits := corev1.ResourceList{}
+	if mem != "" && mem != "0" {
+		limits[corev1.ResourceMemory] = resource.MustParse(mem)
+	}
+	if cpu != "" && cpu != "0" {
+		limits[corev1.ResourceCPU] = resource.MustParse(cpu)
+	}
+
+	// Guaranteed QoS: requests == limits
+	reqs.Limits = limits
+	reqs.Requests = limits.DeepCopy()
+	return reqs
 }
 
 // parsePullPolicy converts a string to a corev1.PullPolicy.
