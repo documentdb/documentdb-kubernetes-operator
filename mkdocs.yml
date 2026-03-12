@@ -32,6 +32,7 @@ nav:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
+          - PostgreSQL Tuning: postgresql-tuning.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md

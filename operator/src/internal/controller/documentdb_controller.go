@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -897,6 +898,23 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
+	// Step 3: Check for PostgreSQL parameter and resource changes
+	paramOps := buildParameterAndResourcePatchOps(currentCluster, desiredCluster)
+	if len(paramOps) > 0 {
+		paramPatchBytes, err := json.Marshal(paramOps)
+		if err != nil {
+			return fmt.Errorf("failed to marshal parameter patch: %w", err)
+		}
+
+		if err := r.Client.Patch(ctx, currentCluster, client.RawPatch(types.JSONPatchType, paramPatchBytes)); err != nil {
+			return fmt.Errorf("failed to patch CNPG cluster with parameter changes: %w", err)
+		}
+
+		logger.Info("Updated PostgreSQL parameters and/or resources in CNPG cluster",
+			"clusterName", currentCluster.Name,
+			"parameterOpsCount", len(paramOps))
+	}
+
 	// Step 2b: Images already match — update status fields if stale
 	if err := r.updateImageStatus(ctx, documentdb, currentCluster); err != nil {
 		logger.Error(err, "Failed to update image status")
@@ -1077,6 +1095,32 @@ func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.
 	}
 
 	return patchOps, extensionUpdated, gatewayUpdated, nil
+}
+
+// buildParameterAndResourcePatchOps returns JSON patch operations for PostgreSQL
+// parameter and resource requirement changes between current and desired clusters.
+func buildParameterAndResourcePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) []util.JSONPatch {
+	var ops []util.JSONPatch
+
+	// Check if PostgreSQL parameters changed
+	if !reflect.DeepEqual(currentCluster.Spec.PostgresConfiguration.Parameters, desiredCluster.Spec.PostgresConfiguration.Parameters) {
+		ops = append(ops, util.JSONPatch{
+			Op:    "replace",
+			Path:  "/spec/postgresql/parameters",
+			Value: desiredCluster.Spec.PostgresConfiguration.Parameters,
+		})
+	}
+
+	// Check if resource requirements changed
+	if !reflect.DeepEqual(currentCluster.Spec.Resources, desiredCluster.Spec.Resources) {
+		ops = append(ops, util.JSONPatch{
+			Op:    "replace",
+			Path:  "/spec/resources",
+			Value: desiredCluster.Spec.Resources,
+		})
+	}
+
+	return ops
 }
 
 // updateImageStatus reads the current extension and gateway images from the CNPG cluster

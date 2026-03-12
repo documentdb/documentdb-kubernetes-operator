@@ -103,6 +103,17 @@ type DocumentDBSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
 	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 
+	// PostgresParameters allows users to override PostgreSQL configuration parameters
+	// (postgresql.conf settings) passed through to the underlying CNPG Cluster.
+	// The operator applies memory-aware defaults (shared_buffers, effective_cache_size,
+	// work_mem, maintenance_work_mem) computed from the pod memory limit, plus static
+	// best-practice defaults for autovacuum, IO, WAL, and connection settings.
+	// Values specified here override computed and static defaults.
+	// Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,
+	// max_prepared_transactions) cannot be overridden.
+	// +optional
+	PostgresParameters map[string]string `json:"postgresParameters,omitempty"`
+
 	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
 	// +optional
 	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`
@@ -116,7 +127,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.persistentVolume) && self.persistentVolume.name != ”)",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
@@ -152,6 +163,25 @@ type BackupConfiguration struct {
 type Resource struct {
 	// Storage configuration for DocumentDB persistent volumes.
 	Storage StorageConfiguration `json:"storage"`
+
+	// Memory specifies the memory limit for each DocumentDB instance pod.
+	// This value is passed to the CNPG Cluster's spec.resources.limits.memory
+	// and spec.resources.requests.memory (Guaranteed QoS).
+	// Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)
+	// are auto-computed from this value.
+	// If not specified or set to "0", no memory limit is applied and static
+	// defaults are used for memory-aware parameters.
+	// Examples: "2Gi", "4Gi", "8Gi"
+	// +optional
+	Memory string `json:"memory,omitempty"`
+
+	// CPU specifies the CPU limit for each DocumentDB instance pod.
+	// This value is passed to the CNPG Cluster's spec.resources.limits.cpu
+	// and spec.resources.requests.cpu (Guaranteed QoS).
+	// If not specified or set to "0", no CPU limit is applied.
+	// Examples: "2", "4", "500m"
+	// +optional
+	CPU string `json:"cpu,omitempty"`
 }
 
 type StorageConfiguration struct {
