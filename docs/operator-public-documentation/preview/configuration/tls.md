@@ -1,6 +1,6 @@
 ---
 title: TLS Configuration
-description: Configure TLS encryption for DocumentDB gateway connections with SelfSigned, Provided, and CertManager modes, certificate rotation, and troubleshooting.
+description: Configure TLS certificate management for DocumentDB gateway connections — Disabled, SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
 tags:
   - configuration
   - tls

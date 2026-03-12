@@ -1,8 +1,17 @@
+---
+title: Scaling
+description: Scale DocumentDB clusters by adjusting instance count for high availability and expanding persistent storage.
+tags:
+  - operations
+  - scaling
+  - storage
+---
+
 # Scaling
 
-This guide explains how to scale a DocumentDB cluster by adjusting the number of instances and expanding storage.
-
 ## Overview
+
+Scaling adjusts the capacity of your DocumentDB cluster to match workload demands. Scale instances up for high availability and read throughput, or expand storage to accommodate growing data — without downtime or data loss.
 
 The DocumentDB operator supports two forms of scaling:
 
@@ -35,7 +44,7 @@ kubectl patch documentdb my-cluster -n default --type='json' \
 
 Or update the manifest:
 
-```yaml
+```yaml title="documentdb.yaml"
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
@@ -56,7 +65,7 @@ kubectl apply -f documentdb.yaml
 2. CNPG provisions new replica pods with streaming replication from the primary.
 3. Replicas perform a `pg_basebackup` from the primary to initialize.
 4. Once caught up, replicas begin receiving WAL (Write-Ahead Log) updates in real time.
-5. The cluster status updates when all instances are healthy.
+5. The DocumentDB cluster status updates when all instances are healthy.
 
 ### Scaling Down
 
@@ -89,59 +98,9 @@ kubectl get documentdb my-cluster -n default
 kubectl get clusters.postgresql.cnpg.io -n default
 ```
 
-## Storage Expansion
+## Storage
 
-You can increase the storage size for a DocumentDB cluster by updating the PVC size. The underlying storage class must support volume expansion.
-
-### Prerequisites
-
-Verify your storage class allows volume expansion:
-
-```bash
-kubectl get storageclass <storage-class> -o jsonpath='{.allowVolumeExpansion}'
-```
-
-This should return `true`. If not, you need a storage class that supports expansion.
-
-### Expanding Storage
-
-Update the PVC size:
-
-```bash
-kubectl patch documentdb my-cluster -n default --type='json' \
-  -p='[{"op": "replace", "path": "/spec/resource/storage/pvcSize", "value": "200Gi"}]'
-```
-
-Or update the manifest:
-
-```yaml
-spec:
-  resource:
-    storage:
-      pvcSize: 200Gi  # Increased from 100Gi
-```
-
-**What happens**:
-
-1. The operator updates the CNPG Cluster storage configuration.
-2. CNPG triggers a PVC resize for each instance.
-3. The CSI driver expands the underlying volume.
-4. Some storage providers may require a pod restart for the filesystem to be resized.
-
-!!! warning
-    Storage expansion is a one-way operation. You cannot shrink a PVC after expanding it.
-
-### Monitoring Storage Expansion
-
-```bash
-# Check PVC status
-kubectl get pvc -n default
-
-# Watch for resize events
-kubectl describe pvc <pvc-name> -n default
-```
-
-Look for the `FileSystemResizeSuccessful` condition on the PVC.
+Storage size is set when creating a DocumentDB cluster via `spec.resource.storage.pvcSize`. PVC resize after creation is not currently supported by the operator. For storage configuration details including storage classes, reclaim policies, and disk encryption, see [Storage Configuration](../configuration/storage.md).
 
 ## Recommended Scaling Practices
 

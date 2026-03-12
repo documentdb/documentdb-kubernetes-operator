@@ -1,10 +1,21 @@
+---
+title: Maintenance
+description: Day-to-day operational tasks for DocumentDB clusters including monitoring, log management, resource tuning, node maintenance, and troubleshooting.
+tags:
+  - operations
+  - maintenance
+  - monitoring
+---
+
 # Maintenance
 
-This guide covers day-to-day operational tasks for managing DocumentDB clusters, including monitoring, log management, resource tuning, and node maintenance.
+## Overview
 
-## Monitoring Cluster Health
+Maintenance covers the day-to-day tasks that keep your DocumentDB cluster healthy and performant. Regular monitoring, log review, and proactive resource management prevent outages and help you catch issues before they affect applications.
 
-### Cluster Status
+## Monitoring DocumentDB Cluster Health
+
+### DocumentDB Cluster Status
 
 Check the overall health of your DocumentDB clusters:
 
@@ -16,7 +27,7 @@ kubectl get documentdb -n <namespace>
 kubectl describe documentdb <cluster-name> -n <namespace>
 ```
 
-A healthy cluster shows `Cluster in healthy state` in the STATUS column.
+A healthy DocumentDB cluster shows `Cluster in healthy state` in the STATUS column.
 
 ### Pod Health
 
@@ -75,7 +86,7 @@ kubectl logs <pod-name> -n <namespace> -c gateway
 
 ### Configuring Log Level
 
-Adjust the DocumentDB log level in the cluster spec:
+Adjust the DocumentDB log level in the DocumentDB cluster spec:
 
 ```yaml
 spec:
@@ -121,7 +132,7 @@ kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgre
 ```
 
 !!! warning
-    If storage usage approaches capacity, expand storage before the volume fills up. See the [Scaling guide](scaling.md#storage-expansion) for instructions.
+    If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize`. See [Storage Configuration](../configuration/storage.md) for details.
 
 ## Node Maintenance
 
@@ -157,10 +168,10 @@ kubectl drain <node-name> \
 
 - If the primary pod is on this node, CNPG triggers an automatic failover to a replica before evicting.
 - Replica pods are rescheduled to other available nodes.
-- With 3 instances, the cluster remains available throughout.
+- With 3 instances, the DocumentDB cluster remains available throughout.
 
 !!! warning
-    With a single-instance cluster (`instancesPerNode: 1`), draining the node causes downtime. Scale to at least 2 instances before performing node maintenance.
+    With a single-instance DocumentDB cluster (`instancesPerNode: 1`), draining the node causes downtime. Scale to at least 2 instances before performing node maintenance.
 
 ### Step 4: Perform Maintenance
 
@@ -174,7 +185,7 @@ Allow pods to be scheduled on the node again:
 kubectl uncordon <node-name>
 ```
 
-### Step 6: Verify Cluster Health
+### Step 6: Verify DocumentDB Cluster Health
 
 ```bash
 kubectl get documentdb <cluster-name> -n <namespace>
@@ -186,7 +197,7 @@ kubectl get pods -n <namespace>
 To restart all DocumentDB pods without downtime (for example, to pick up ConfigMap changes):
 
 ```bash
-# CNPG handles rolling restarts when the cluster spec changes
+# CNPG handles rolling restarts when the CNPG cluster spec changes
 # You can trigger a restart by updating an annotation
 kubectl annotate clusters.postgresql.cnpg.io <cluster-name> -n <namespace> \
   kubectl.kubernetes.io/restartedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" --overwrite
@@ -198,7 +209,7 @@ CNPG restarts replicas first, then the primary, ensuring continuous availability
 
 ### Daily
 
-- [ ] Verify cluster health: `kubectl get documentdb -n <namespace>`
+- [ ] Verify DocumentDB cluster health: `kubectl get documentdb -n <namespace>`
 - [ ] Check backup status: `kubectl get backups -n <namespace>`
 - [ ] Monitor pod status: `kubectl get pods -n <namespace>`
 
@@ -213,8 +224,8 @@ CNPG restarts replicas first, then the primary, ensuring continuous availability
 
 - [ ] Create an on-demand [backup](backup-and-restore.md)
 - [ ] Verify the backup succeeds
-- [ ] Confirm the cluster has multiple instances for failover
-- [ ] Document the current cluster state (version, instance count, storage)
+- [ ] Confirm the DocumentDB cluster has multiple instances for failover
+- [ ] Document the current DocumentDB cluster state (version, instance count, storage)
 
 ## Events and Alerts
 
@@ -235,11 +246,11 @@ Key events to watch for:
 | `BackupSucceeded` | A backup completed successfully |
 | `BackupFailed` | A backup failed (investigate immediately) |
 | `FailoverCompleted` | A failover occurred (check for underlying issues) |
-| `PVRetained` | PVs were retained after cluster deletion |
+| `PVRetained` | PVs were retained after DocumentDB cluster deletion |
 
 ## Troubleshooting Common Issues
 
-### Cluster Stuck in Unhealthy State
+### DocumentDB Cluster Stuck in Unhealthy State
 
 ```bash
 # Check DocumentDB status
@@ -281,6 +292,6 @@ kubectl get secret documentdb-credentials -n <namespace>
 ## Next Steps
 
 - [Backup and Restore](backup-and-restore.md) — set up backup policies
-- [Scaling](scaling.md) — adjust cluster capacity
-- [Upgrades](upgrades.md) — keep your cluster up to date
+- [Scaling](scaling.md) — adjust DocumentDB cluster capacity
+- [Upgrades](upgrades.md) — keep your DocumentDB cluster up to date
 - [Failover](failover.md) — understand failover behavior
