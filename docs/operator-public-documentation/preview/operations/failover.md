@@ -11,7 +11,7 @@ tags:
 
 ## Overview
 
-Failover promotes a replica to primary when the current primary becomes unavailable. It protects your application from downtime caused by pod crashes, node failures, or planned maintenance — ensuring writes resume within seconds.
+Failover promotes a replica to primary when the current primary becomes unavailable. Because all client traffic — both reads and writes — routes through the primary, failover causes a brief period of downtime until the new primary is ready. This typically completes within seconds.
 
 The DocumentDB operator supports two levels of failover:
 
@@ -20,11 +20,11 @@ The DocumentDB operator supports two levels of failover:
 
 ## Local Automatic Failover
 
-When running with multiple instances (`spec.instancesPerNode >= 2`), the operator automatically handles failover if the primary instance becomes unavailable.
+Local automatic failover requires at least two instances (`spec.instancesPerNode >= 2`). With a single instance, there is only the primary and no replica available to promote — so failover is not possible. When multiple instances are running, the operator automatically promotes a replica to primary if the current primary becomes unavailable.
 
 ## Cross-Cluster Failover (Multi-Region)
 
-For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary.
+For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. For end-to-end setup examples, see the [AKS Fleet multi-region deployment](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment) and [multi-cloud deployment](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) playgrounds.
 
 ### Architecture
 
@@ -59,13 +59,11 @@ kubectl patch documentdb my-cluster -n default --type='json' \
 ### Connection Handling
 
 - **Use the Kubernetes Service** — always connect through the [Kubernetes Service](../configuration/networking.md#service-types) (not directly to pod IPs). The Service automatically routes to the current primary.
-- **Implement retry logic** — during failover, connections are briefly interrupted. Applications should retry with exponential backoff.
+- **Implement retry logic** — during failover, all connections are briefly interrupted. Applications should retry with exponential backoff.
 
-### Write Behavior During Failover
+### Behavior During Failover
 
-- Writes to the old primary may fail during the failover window.
-- Writes are available on the new primary within seconds of promotion.
-
-### Read Behavior During Failover
-
-- Reads are routed through the primary via the gateway. During failover, there is a brief interruption until the new primary is available.
+During failover:
+- Existing connections to the old primary are dropped.
+- There is a brief period of downtime until the new primary is promoted and ready to accept connections.
+- Once the new primary is available, the Kubernetes Service routes traffic to it automatically.

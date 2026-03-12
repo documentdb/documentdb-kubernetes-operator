@@ -27,7 +27,11 @@ kubectl get documentdb -n <namespace>
 kubectl describe documentdb <cluster-name> -n <namespace>
 ```
 
-A healthy DocumentDB cluster shows `Cluster in healthy state` in the STATUS column.
+| What to check | Normal | Investigate if |
+|---------------|--------|----------------|
+| `STATUS` column | `Cluster in healthy state` | Any other status (e.g., `Setting up primary`, `Creating replica`) persists longer than a few minutes |
+| `INSTANCES` column | Matches `spec.instances` (e.g., `3` for a 3-instance DocumentDB cluster) | Instance count is lower than expected |
+| `AGE` column | Consistent with deployment time | Unexpectedly recent — may indicate an unplanned restart |
 
 ### Pod Health
 
@@ -39,7 +43,12 @@ kubectl get pods -n <namespace> -l documentdb.io/cluster=<cluster-name>
 kubectl top pods -n <namespace>
 ```
 
-Each pod should show `2/2` in the READY column (PostgreSQL container + gateway sidecar).
+| What to check | Normal | Investigate if |
+|---------------|--------|----------------|
+| `READY` column | `2/2` (PostgreSQL container + gateway sidecar) | Less than `2/2` — one or both containers are not ready |
+| `STATUS` column | `Running` | `CrashLoopBackOff`, `Error`, `Pending`, or `Init` persisting beyond startup |
+| `RESTARTS` column | `0` (or very low over the cluster lifetime) | High or rapidly increasing — indicates repeated container crashes |
+| Resource usage (`kubectl top`) | CPU and memory well within `spec.resources` limits | CPU consistently near limit (throttling) or memory approaching limit (OOMKill risk) |
 
 ### Advanced Diagnostics
 
@@ -50,6 +59,12 @@ kubectl get clusters.postgresql.cnpg.io -n <namespace>
 
 kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
 ```
+
+| What to check | Normal | Investigate if |
+|---------------|--------|----------------|
+| Cluster phase | `Cluster in healthy state` | Any other phase persists (e.g., `Setting up primary`, `Upgrading cluster`) |
+| Replication status (in `describe` output) | All replicas show `streaming` state | Any replica shows `not streaming` or has high replication lag |
+| Conditions (in `describe` output) | All conditions show `True` | Any condition is `False` — read the condition message for details |
 
 ## Log Management
 
@@ -63,6 +78,10 @@ kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
     kubectl logs -n documentdb-operator deployment/documentdb-operator -f
     ```
 
+    **What's normal:** Periodic reconciliation messages, successful backup notifications.
+
+    **Investigate if:** Repeated `ERROR` or `WARNING` lines, reconciliation failures, or stack traces appear.
+
 === "PostgreSQL Logs"
 
     Access PostgreSQL logs inside a specific pod:
@@ -72,6 +91,10 @@ kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
       cat /controller/log/postgresql.log
     ```
 
+    **What's normal:** Startup messages, checkpoint completions, autovacuum activity.
+
+    **Investigate if:** `FATAL`, `PANIC`, or repeated `ERROR` entries appear. Watch for `out of memory`, `no space left on device`, or `too many connections` messages.
+
 === "Gateway Logs"
 
     Access gateway (sidecar) logs:
@@ -79,6 +102,10 @@ kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
     ```bash
     kubectl logs <pod-name> -n <namespace> -c gateway
     ```
+
+    **What's normal:** Successful connection handling, startup messages.
+
+    **Investigate if:** Repeated connection refused errors, authentication failures, or TLS handshake errors appear.
 
 ### Configuring Log Level
 
@@ -105,6 +132,12 @@ kubectl top pods -n <namespace>
 kubectl top nodes
 ```
 
+| What to check | Normal | Investigate if |
+|---------------|--------|----------------|
+| Pod CPU usage | Varies with workload; stays below `spec.resources.limits.cpu` | Consistently near the CPU limit — queries may be throttled. Consider [scaling up](scaling.md). |
+| Pod memory usage | Stable under `spec.resources.limits.memory` | Approaching or hitting the memory limit — pods may be OOMKilled. Check for memory-heavy queries or increase limits. |
+| Node resource usage | Enough headroom for pod scheduling and bursts | Nodes above 80% utilization — new pods may fail to schedule or existing pods may be evicted. |
+
 ### Storage Monitoring
 
 Monitor persistent volume usage:
@@ -117,79 +150,15 @@ kubectl get pvc -n <namespace>
 kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgresql/data
 ```
 
+| What to check | Normal | Investigate if |
+|---------------|--------|----------------|
+| PVC `STATUS` | `Bound` | `Pending` — the storage class may not be able to provision a volume |
+| Disk usage (`df -h`) | Below 70% of capacity | Above 80% — risk of the database halting when storage is full. Plan a migration to a larger volume. |
+| Growth rate | Gradual and predictable | Sudden spikes — may indicate a bulk data load, excessive logging, or WAL accumulation |
+
 !!! note
     PVC resize is not currently supported but is planned for a future release. If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize` and restore from a backup. See [Storage Configuration](../configuration/storage.md) for details.
 
-## Node Maintenance
-
-When performing maintenance on Kubernetes nodes (OS updates, hardware changes), follow these steps to minimize impact on your DocumentDB cluster.
-
-### Step 1: Identify Affected Pods
-
-```bash
-# Find which node each pod runs on
-kubectl get pods -n <namespace> -o wide
-```
-
-### Step 2: Cordon the Node
-
-Mark the node as unschedulable so no new pods are placed on it (existing pods continue running):
-
-```bash
-kubectl cordon <node-name>
-```
-
-### Step 3: Drain the Node
-
-Evict pods from the node (with appropriate timeouts):
-
-```bash
-kubectl drain <node-name> \
-  --ignore-daemonsets \
-  --delete-emptydir-data \
-  --grace-period=300
-```
-
-**What happens**:
-
-- If the primary pod is on this node, the operator triggers an automatic failover to a replica before evicting.
-- Replica pods are rescheduled to other available nodes.
-- With 3 instances, the DocumentDB cluster remains available throughout.
-
-!!! warning
-    With a single-instance DocumentDB cluster (`instancesPerNode: 1`), draining the node causes downtime. Scale to at least 2 instances before performing node maintenance.
-
-### Step 4: Perform Maintenance
-
-Complete your node maintenance (OS updates, patches, etc.).
-
-### Step 5: Uncordon the Node
-
-Allow pods to be scheduled on the node again:
-
-```bash
-kubectl uncordon <node-name>
-```
-
-### Step 6: Verify DocumentDB Cluster Health
-
-```bash
-kubectl get documentdb <cluster-name> -n <namespace>
-kubectl get pods -n <namespace>
-```
-
-## Rolling Restarts
-
-To restart all DocumentDB pods without downtime (for example, to pick up ConfigMap changes):
-
-```bash
-# The operator handles rolling restarts when the cluster spec changes
-# You can trigger a restart by updating an annotation
-kubectl annotate clusters.postgresql.cnpg.io <cluster-name> -n <namespace> \
-  kubectl.kubernetes.io/restartedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" --overwrite
-```
-
-The operator restarts replicas first, then the primary, ensuring continuous availability (with 2+ instances).
 
 ## Routine Checks
 
@@ -227,12 +196,12 @@ kubectl get events -n <namespace> --sort-by=.lastTimestamp
 
 Key events to watch for:
 
-| Event | Meaning |
-|-------|---------|
-| `BackupSucceeded` | A backup completed successfully |
-| `BackupFailed` | A backup failed (investigate immediately) |
-| `FailoverCompleted` | A failover occurred (check for underlying issues) |
-| `PVRetained` | PVs were retained after DocumentDB cluster deletion |
+| Event | Meaning | Action |
+|-------|---------|--------|
+| `BackupSucceeded` | A backup completed successfully | No action needed — verify periodically that backups are running on schedule |
+| `BackupFailed` | A backup failed | **Investigate immediately.** Check operator logs and storage configuration. Ensure your backup target is reachable. |
+| `FailoverCompleted` | A failover occurred | Check why the previous primary became unavailable (node failure, resource exhaustion, or network issue). See [Failover](failover.md). |
+| `PVRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
 
 ## Troubleshooting Common Issues
 
@@ -249,6 +218,10 @@ Key events to watch for:
     kubectl logs <pod-name> -n <namespace> -c postgres --tail=100
     ```
 
+    **What to look for:** The `Status.Conditions` section in the `describe` output tells you which condition is failing. Pod logs often reveal the root cause (storage full, connection limits, extension errors).
+
+    **Next steps:** If the DocumentDB cluster does not recover within a few minutes, check for node-level issues (`kubectl describe node`) and review recent changes to the DocumentDB manifest.
+
 === "CrashLoopBackOff"
 
     ```bash
@@ -259,11 +232,15 @@ Key events to watch for:
     kubectl logs <pod-name> -n <namespace> -c postgres --previous
     ```
 
-    Common causes:
+    **What to look for:** The `Events` section shows why the container exited. The `--previous` logs show what happened in the last run before the crash.
 
-    - Insufficient memory (OOMKilled)
-    - Storage full
-    - Extension version mismatch
+    Common causes and fixes:
+
+    | Cause | Symptom | Fix |
+    |-------|---------|-----|
+    | Insufficient memory | `OOMKilled` in pod events | Increase `spec.resources.limits.memory` |
+    | Storage full | `No space left on device` in logs | Provision a new DocumentDB cluster with larger `pvcSize` and [restore from backup](backup-and-restore.md) |
+    | Extension version mismatch | Extension load errors in logs | Verify `spec.documentDBVersion` is correct. See [Upgrades](upgrades.md). |
 
 === "Gateway Sidecar Not Ready"
 
@@ -274,6 +251,10 @@ Key events to watch for:
     # Check if credentials secret exists
     kubectl get secret documentdb-credentials -n <namespace>
     ```
+
+    **What to look for:** Connection refused or TLS errors in gateway logs. Missing secrets cause the gateway to fail authentication.
+
+    **Next steps:** Verify the `documentdb-credentials` secret exists and contains valid credentials. If using TLS, confirm certificates are valid and not expired (see [TLS Configuration](../configuration/tls.md)).
 
 ## Next Steps
 
