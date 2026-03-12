@@ -1,82 +1,91 @@
-# Backup and Restore
+---
+title: Backup and Restore
+description: Back up DocumentDB clusters with VolumeSnapshots and restore from backups, including on-demand backups, scheduled backups, retention policies, and troubleshooting.
+tags:
+  - operations
+  - backup
+  - restore
+---
 
-This guide covers the concepts, procedures, and troubleshooting for backing up and restoring DocumentDB clusters using the Kubernetes operator.
+# Backup and Restore
 
 ## Overview
 
-The DocumentDB operator provides a snapshot-based backup system built on Kubernetes [VolumeSnapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/). Each backup captures a point-in-time copy of the primary instance's persistent volume, which can later be used to bootstrap a new cluster.
+Backups protect your DocumentDB cluster against data loss from accidental deletion, corruption, or failed upgrades. A reliable backup strategy is the foundation of any production deployment — without it, recovery may be impossible.
+
+The DocumentDB operator provides a snapshot-based backup system built on Kubernetes [VolumeSnapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/). Each backup captures a point-in-time copy of the primary instance's persistent volume, which can later be used to bootstrap a new DocumentDB cluster.
 
 Key characteristics:
 
-- **VolumeSnapshot-based** — backups use the CSI driver's snapshot capability, so they are fast and storage-efficient.
+- **VolumeSnapshot-based** — backups use the [CSI (Container Storage Interface)](https://kubernetes.io/docs/concepts/storage/volumes/#csi) driver's snapshot capability, so they are fast and storage-efficient.
 - **Primary-only** — the operator always targets the primary instance for backups.
 - **Namespace-scoped** — `Backup` and `ScheduledBackup` resources must reside in the same namespace as the `DocumentDB` cluster.
 - **Retention-managed** — expired backups are automatically deleted by the operator.
 
 ## Prerequisites
 
-Before creating backups, ensure your cluster has the required snapshot infrastructure.
+Before creating backups, ensure your Kubernetes cluster has the required snapshot infrastructure.
 
-### Kind or Minikube
+=== "Kind / Minikube"
 
-Run the CSI driver deployment script **before** installing the operator:
+    Run the [CSI driver deployment script](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/operator/src/scripts/test-scripts/deploy-csi-driver.sh) **before** installing the operator:
 
-```bash
-./operator/src/scripts/test-scripts/deploy-csi-driver.sh
-```
+    ```bash
+    ./operator/src/scripts/test-scripts/deploy-csi-driver.sh
+    ```
 
-Validate storage and snapshot components:
+    Validate storage and snapshot components:
 
-```bash
-kubectl get storageclass
-kubectl get volumesnapshotclasses
-```
+    ```bash
+    kubectl get storageclass
+    kubectl get volumesnapshotclasses
+    ```
 
-You should see a `VolumeSnapshotClass` such as `csi-hostpath-snapclass`. If it's missing, re-run the deploy script.
+    You should see a `VolumeSnapshotClass` such as `csi-hostpath-snapclass`. If it's missing, re-run the deploy script.
 
-When creating a cluster, specify the CSI storage class:
+    When creating a DocumentDB cluster, specify the CSI storage class:
 
-```yaml
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  resource:
-    storage:
-      storageClass: csi-hostpath-sc
-```
+    ```yaml
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      resource:
+        storage:
+          storageClass: csi-hostpath-sc
+    ```
 
-### AKS
+=== "AKS"
 
-AKS provides a CSI driver out of the box. Set `spec.environment: aks` so the operator can auto-create a default `VolumeSnapshotClass`:
+    AKS provides a CSI driver out of the box. Set `spec.environment: aks` so the operator can auto-create a default `VolumeSnapshotClass`:
 
-```yaml
-spec:
-  environment: aks
-```
+    ```yaml
+    spec:
+      environment: aks
+    ```
 
-### EKS / GKE / Other Providers
+=== "EKS / GKE / Other"
 
-Ensure the following are in place:
+    Ensure the following are in place:
 
-- A CSI driver that supports snapshots
-- VolumeSnapshot CRDs installed
-- A default `VolumeSnapshotClass`
+    - A CSI driver that supports snapshots
+    - VolumeSnapshot CRDs installed
+    - A default `VolumeSnapshotClass`
 
-Example for EKS:
+    Example for EKS:
 
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshotClass
-metadata:
-  name: ebs-snapclass
-  annotations:
-    snapshot.storage.kubernetes.io/is-default-class: "true"
-driver: ebs.csi.aws.com
-deletionPolicy: Delete
-```
+    ```yaml
+    apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshotClass
+    metadata:
+      name: ebs-snapclass
+      annotations:
+        snapshot.storage.kubernetes.io/is-default-class: "true"
+    driver: ebs.csi.aws.com
+    deletionPolicy: Delete
+    ```
 
 ## On-Demand Backup
 
@@ -84,11 +93,10 @@ An on-demand backup creates a single backup of a DocumentDB cluster.
 
 ### Creating a Backup
 
-```yaml
+```yaml title="backup.yaml"
 apiVersion: documentdb.io/preview
 kind: Backup
 metadata:
-  name: my-backup
   namespace: default
 spec:
   cluster:
@@ -121,7 +129,7 @@ A backup transitions through the following phases:
 | `Running` | VolumeSnapshot in progress |
 | `Succeeded` | Backup completed successfully |
 | `Failed` | Backup failed (check events for details) |
-| `Skipped` | Backup skipped (for example, on a standby cluster) |
+| `Skipped` | Backup skipped (for example, on a standby DocumentDB cluster) |
 
 ### Verifying a Successful Backup
 
@@ -143,11 +151,10 @@ Scheduled backups automatically create `Backup` resources at regular intervals u
 
 ### Creating a Scheduled Backup
 
-```yaml
+```yaml title="scheduledbackup.yaml"
 apiVersion: documentdb.io/preview
 kind: ScheduledBackup
 metadata:
-  name: nightly-backup
   namespace: default
 spec:
   cluster:
@@ -186,7 +193,7 @@ kubectl get backups -n default --sort-by=.metadata.creationTimestamp
 
 - If a backup is still running when the next schedule triggers, the new backup is queued until the current one completes.
 - Failed backups do not block future scheduled backups.
-- `ScheduledBackup` resources are garbage-collected when the source cluster is deleted.
+- `ScheduledBackup` resources are garbage-collected when the source DocumentDB cluster is deleted.
 - Deleting a `ScheduledBackup` does **not** delete its previously created `Backup` objects.
 
 ## Restore from Backup
@@ -194,7 +201,7 @@ kubectl get backups -n default --sort-by=.metadata.creationTimestamp
 You can restore a backup by creating a **new** DocumentDB cluster that references the backup.
 
 !!! warning
-    In-place restore is not supported. You must create a new cluster to restore from a backup.
+    In-place restore is not supported. You must create a new DocumentDB cluster to restore from a backup.
 
 ### Step 1: Identify the Backup
 
@@ -204,9 +211,9 @@ kubectl get backups -n default
 
 Choose a backup in `Succeeded` status.
 
-### Step 2: Create a New Cluster
+### Step 2: Create a New DocumentDB Cluster
 
-```yaml
+```yaml title="restore.yaml"
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
@@ -218,6 +225,8 @@ spec:
   resource:
     storage:
       pvcSize: 10Gi
+  exposeViaService:
+    serviceType: ClusterIP
   bootstrap:
     recovery:
       backup:
@@ -231,15 +240,20 @@ kubectl apply -f restore.yaml
 ### Step 3: Verify the Restore
 
 ```bash
-# Wait for the cluster to become healthy
+# Wait for the DocumentDB cluster to become healthy
 kubectl get documentdb my-restored-cluster -n default -w
-
-# Connect and verify data
-kubectl port-forward pod/my-restored-cluster-1 10260:10260 -n default
-mongosh 127.0.0.1:10260 -u <username> -p <password> \
-  --authenticationMechanism SCRAM-SHA-256 \
-  --tls --tlsAllowInvalidCertificates
 ```
+
+Once the status shows `Cluster in healthy state`, connect and verify your data. See [Connect with mongosh](../configuration/networking.md#connect-with-mongosh) for connection instructions.
+
+### Restore Constraints
+
+- You **cannot** restore to the original DocumentDB cluster name while the old resources exist. Delete any leftover resources first, or use a new name.
+- The backup must be in `Succeeded` status.
+- The VolumeSnapshot referenced by the backup must still exist — if it was manually deleted, the backup cannot be used for recovery.
+- You cannot specify both `backup` and `persistentVolume` in the same recovery spec.
+
+For additional recovery options (including PV-based recovery), see [Restore a Deleted DocumentDB Cluster](restore-deleted-cluster.md).
 
 ## Backup Retention Policy
 
@@ -249,7 +263,7 @@ Each backup receives an expiration time. After expiration, the operator deletes 
 
 1. `Backup.spec.retentionDays` — per-backup override
 2. `ScheduledBackup.spec.retentionDays` — applied to all backups it creates
-3. `DocumentDB.spec.backup.retentionDays` — cluster-wide default
+3. `DocumentDB.spec.backup.retentionDays` — DocumentDB cluster-wide default
 4. **Default**: 30 days (if nothing is set)
 
 ### How Expiration Is Calculated
@@ -263,7 +277,7 @@ Each backup receives an expiration time. After expiration, the operator deletes 
 - Changing `retentionDays` on a `ScheduledBackup` only affects **new** backups.
 - Changing `DocumentDB.spec.backup.retentionDays` does not retroactively update existing backups.
 - Failed backups still expire (timer starts at creation).
-- Deleting the cluster does **not** immediately delete its `Backup` objects — they wait for expiration.
+- Deleting the DocumentDB cluster does **not** immediately delete its `Backup` objects — they wait for expiration.
 - There is no "keep forever" option. Export backups externally for permanent archival.
 
 ## Troubleshooting
@@ -298,9 +312,9 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=100
 kubectl get backups.postgresql.cnpg.io -n <namespace>
 ```
 
-### Restore Cluster Not Starting
+### Restored DocumentDB Cluster Not Starting
 
-**Symptoms**: Restored cluster pods stay in `Pending` or `CrashLoopBackOff`.
+**Symptoms**: Restored DocumentDB cluster pods stay in `Pending` or `CrashLoopBackOff`.
 
 **Actions**:
 
@@ -312,12 +326,42 @@ kubectl get backups.postgresql.cnpg.io -n <namespace>
   kubectl describe pod <restored-cluster-pod> -n <namespace>
   ```
 
-### Backups Skipped on Standby Clusters
+### Backups Skipped on Standby DocumentDB Clusters
 
-This is expected behavior. In multi-region setups, the operator skips backups on standby (replica) clusters to avoid duplicate backups. Only the primary cluster creates backups.
+This is expected behavior. In multi-region setups, the operator skips backups on standby (replica) DocumentDB clusters to avoid duplicate backups. Only the primary DocumentDB cluster creates backups.
+
+## Multi-Region Backup Considerations
+
+When using `clusterReplication` for multi-region deployments, backup behavior differs from single-region setups.
+
+### Primary-Only Backups
+
+The operator only creates backups on the **primary** DocumentDB cluster. If a `Backup` or `ScheduledBackup` resource is created in a standby DocumentDB cluster's namespace, the operator sets the backup phase to `Skipped` with the message: *"Backups can only be created from the primary cluster"*.
+
+```bash
+# Check if a backup was skipped
+kubectl get backup <backup-name> -n <namespace> -o jsonpath='{.status.phase}'
+# Output: "skipped" on standby DocumentDB clusters
+```
+
+### Endpoint Readiness
+
+During a cross-cluster failover (see [Failover](failover.md#cross-cluster-failover-multi-region)), backups on the newly promoted primary are deferred until the primary endpoint is fully ready. The operator requeues the backup and retries every minute until promotion completes.
+
+### Recommended Multi-Region Backup Strategy
+
+1. **Configure `ScheduledBackup` on all DocumentDB clusters** — the operator automatically skips backups on standby DocumentDB clusters, so there is no harm in deploying the same schedule everywhere. After a failover, the new primary begins creating backups without manual intervention.
+
+2. **Verify backups after failover** — when a standby DocumentDB cluster is promoted to primary, confirm that scheduled backups start succeeding:
+
+    ```bash
+    kubectl get backups -n <namespace> --sort-by=.metadata.creationTimestamp
+    ```
+
+3. **Retention applies to skipped backups too** — skipped backups still receive an expiration time and are cleaned up automatically.
 
 ## Next Steps
 
-- [Restore a Deleted Cluster](restore-deleted-cluster.md) — recover from accidental deletion
+- [Restore a Deleted DocumentDB Cluster](restore-deleted-cluster.md) — recover from accidental deletion
 - [Scaling](scaling.md) — adjust instance count and storage
 - [Failover](failover.md) — understand automatic and manual failover

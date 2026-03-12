@@ -1,20 +1,29 @@
+---
+title: Upgrades
+description: Upgrade the DocumentDB operator, extension, and gateway image with rolling updates, rollback protection, and zero-downtime strategies.
+tags:
+  - operations
+  - upgrades
+  - rolling-update
+---
+
 # Upgrades
 
-This guide covers upgrading the DocumentDB operator, the DocumentDB extension, and the gateway image. It explains how the operator handles rolling updates and rollback protection.
-
 ## Overview
+
+Upgrades keep your DocumentDB deployment current with the latest features, security patches, and bug fixes. The operator uses rolling updates managed by CloudNativePG to minimize downtime — replicas restart first, then the primary fails over, so writes are interrupted for only seconds.
 
 There are three types of upgrades in a DocumentDB deployment:
 
 | Upgrade Type | What Changes | How to Trigger |
 |-------------|-------------|----------------|
-| **Operator upgrade** | The Kubernetes operator itself | Helm chart upgrade |
+| **DocumentDB operator upgrade** | The Kubernetes operator itself | Helm chart upgrade |
 | **Extension upgrade** | The DocumentDB PostgreSQL extension | Update `spec.documentDBVersion` or `spec.documentDBImage` |
 | **Gateway upgrade** | The DocumentDB gateway sidecar | Update `spec.gatewayImage` |
 
-## Operator Upgrade
+## DocumentDB Operator Upgrade
 
-The operator is deployed via Helm. Upgrade it by updating the Helm release.
+The DocumentDB operator is deployed via Helm. Upgrade it by updating the Helm release.
 
 ### Step 1: Update the Helm Repository
 
@@ -28,30 +37,7 @@ helm repo update documentdb
 helm search repo documentdb/documentdb-operator --versions
 ```
 
-### Step 3: Back Up Your Cluster
-
-Before upgrading the operator, create a backup:
-
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: documentdb.io/preview
-kind: Backup
-metadata:
-  name: pre-upgrade-backup
-  namespace: <namespace>
-spec:
-  cluster:
-    name: <cluster-name>
-EOF
-```
-
-Wait for the backup to succeed:
-
-```bash
-kubectl get backup pre-upgrade-backup -n <namespace> -w
-```
-
-### Step 4: Upgrade the Operator
+### Step 3: Upgrade the DocumentDB Operator
 
 ```bash
 helm upgrade documentdb-operator documentdb/documentdb-operator \
@@ -59,7 +45,7 @@ helm upgrade documentdb-operator documentdb/documentdb-operator \
   --wait
 ```
 
-### Step 5: Verify the Upgrade
+### Step 4: Verify the Upgrade
 
 ```bash
 # Check operator deployment
@@ -72,11 +58,11 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=50
 kubectl get documentdb -n <namespace>
 ```
 
-### Operator Upgrade Notes
+### DocumentDB Operator Upgrade Notes
 
-- The operator upgrade does **not** restart your DocumentDB cluster pods.
+- The DocumentDB operator upgrade does **not** restart your DocumentDB cluster pods.
 - CRD changes are applied automatically by the Helm chart.
-- If the new operator version includes updated default images, clusters will be reconciled with the new images on the next reconciliation cycle.
+- If the new DocumentDB operator version includes updated default images, DocumentDB clusters will be reconciled with the new images on the next reconciliation cycle.
 
 ## Extension Upgrade
 
@@ -86,7 +72,7 @@ The DocumentDB extension (the PostgreSQL extension that provides MongoDB compati
 
 1. You update the `spec.documentDBVersion` or `spec.documentDBImage` field.
 2. The operator detects the version change and patches the CNPG Cluster spec with the new extension image.
-3. CNPG triggers a **rolling restart** of all pods in the cluster.
+3. CNPG triggers a **rolling restart** of all pods in the DocumentDB cluster.
 4. After all pods are healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
 5. The operator tracks the schema version in `status.schemaVersion`.
 
@@ -101,14 +87,14 @@ metadata:
   name: my-cluster
   namespace: default
 spec:
-  documentDBVersion: "1.2.0"  # New version
+  documentDBVersion: "<new-version>"  # New version
 ```
 
 Or specify a custom image directly:
 
 ```yaml
 spec:
-  documentDBImage: "ghcr.io/microsoft/documentdb/documentdb:1.2.0"
+  documentDBImage: "ghcr.io/microsoft/documentdb/documentdb:<new-version>"
 ```
 
 Apply the change:
@@ -153,7 +139,7 @@ The DocumentDB gateway (the MongoDB-compatible proxy) runs as a sidecar containe
 
 ```yaml
 spec:
-  gatewayImage: "ghcr.io/microsoft/documentdb/gateway:1.2.0"
+  gatewayImage: "ghcr.io/microsoft/documentdb/gateway:<new-version>"
 ```
 
 Apply the change:
@@ -191,15 +177,15 @@ All upgrades use a rolling update strategy managed by CNPG:
 | Failover complete | ✅ Full | ✅ Full |
 
 !!! note
-    With a single-instance cluster (`instancesPerNode: 1`), upgrades cause a brief period of complete unavailability while the pod restarts. For zero-downtime upgrades, use `instancesPerNode: 3`.
+    With a single-instance DocumentDB cluster (`instancesPerNode: 1`), upgrades cause a brief period of complete unavailability while the pod restarts. For zero-downtime upgrades, use `instancesPerNode: 3`.
 
 ## Pre-Upgrade Checklist
 
-- [ ] **Back up the cluster** — create an on-demand [backup](backup-and-restore.md) before any upgrade.
+- [ ] **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before any upgrade.
 - [ ] **Check the CHANGELOG** — review release notes for breaking changes.
-- [ ] **Verify cluster health** — ensure all instances are running and the cluster is in a healthy state.
+- [ ] **Verify DocumentDB cluster health** — ensure all instances are running and the DocumentDB cluster is in a healthy state.
 - [ ] **Plan for brief downtime** — even with rolling updates, the primary failover causes a few seconds of write unavailability.
-- [ ] **Test in a non-production environment** — validate the upgrade process in a staging cluster first.
+- [ ] **Test in a non-production environment** — validate the upgrade process in a staging DocumentDB cluster first.
 
 ## Troubleshooting
 
@@ -218,7 +204,7 @@ All upgrades use a rolling update strategy managed by CNPG:
 
 ### Extension Upgrade Fails
 
-**Symptoms**: Cluster health degrades after upgrade or `ALTER EXTENSION` fails.
+**Symptoms**: DocumentDB cluster health degrades after upgrade or `ALTER EXTENSION` fails.
 
 **Actions**:
 
@@ -233,8 +219,8 @@ All upgrades use a rolling update strategy managed by CNPG:
 
 If a downgrade is blocked by rollback protection, the only path forward is:
 
-1. Restore from a pre-upgrade [backup](backup-and-restore.md) to a new cluster.
-2. Apply the desired (older) version to the new cluster.
+1. Restore from a pre-upgrade [backup](backup-and-restore.md) to a new DocumentDB cluster.
+2. Apply the desired (older) version to the new DocumentDB cluster.
 
 ## Next Steps
 

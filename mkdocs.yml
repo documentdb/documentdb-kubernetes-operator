@@ -32,17 +32,17 @@ nav:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
+      - Operations:
+        - Scaling: preview/operations/scaling.md
+        - Upgrades: preview/operations/upgrades.md
+        - Failover: preview/operations/failover.md
+        - Backup and Restore: preview/operations/backup-and-restore.md
+        - Restore a Deleted Cluster: preview/operations/restore-deleted-cluster.md
+        - Maintenance: preview/operations/maintenance.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
       - FAQ: preview/faq.md
-  - Operations:
-      - Backup and Restore: preview/operations/backup-and-restore.md
-      - Scaling: preview/operations/scaling.md
-      - Upgrades: preview/operations/upgrades.md
-      - Failover: preview/operations/failover.md
-      - Restore a Deleted Cluster: preview/operations/restore-deleted-cluster.md
-      - Maintenance: preview/operations/maintenance.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
 

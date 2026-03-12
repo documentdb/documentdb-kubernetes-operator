@@ -1,13 +1,22 @@
-# Failover
+---
+title: Failover
+description: Understand automatic and manual failover for DocumentDB clusters, including local replica promotion and cross-cluster failover for multi-region deployments.
+tags:
+  - operations
+  - failover
+  - high-availability
+---
 
-This guide explains how automatic and manual failover works in DocumentDB clusters, how to test it, and what to consider for your applications.
+# Failover
 
 ## Overview
 
+Failover promotes a replica to primary when the current primary becomes unavailable. It protects your application from downtime caused by pod crashes, node failures, or planned maintenance — ensuring writes resume within seconds.
+
 The DocumentDB operator supports two levels of failover:
 
-- **Local failover** — automatic promotion of a replica to primary within a single cluster (managed by CNPG).
-- **Cross-cluster failover** — manual promotion of a standby cluster to primary in a multi-region deployment.
+- **Local failover** — automatic promotion of a replica to primary within a single DocumentDB cluster (managed by CNPG).
+- **Cross-cluster failover** — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.
 
 Automatic failover requires at least 2 instances (`spec.instancesPerNode >= 2`), with 3 recommended for production.
 
@@ -35,7 +44,7 @@ When running with multiple instances, the operator (via CNPG) automatically hand
 | Old primary rejoins as replica | Minutes (after recovery) |
 
 !!! note
-    Actual failover times depend on cluster load, network conditions, and the volume of uncommitted WAL data.
+    Actual failover times depend on DocumentDB cluster load, network conditions, and the volume of uncommitted WAL data.
 
 ### High Availability Configuration
 
@@ -52,18 +61,18 @@ spec:
   # ... other configuration
 ```
 
-With 3 instances, the cluster can tolerate the loss of any single instance (including the primary) without data loss or service interruption.
+With 3 instances, the DocumentDB cluster can tolerate the loss of any single instance (including the primary) without data loss or service interruption.
 
 ## Cross-Cluster Failover (Multi-Region)
 
-For multi-region deployments using cluster replication, you can promote a standby (replica) cluster to become the new primary.
+For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary.
 
 ### Architecture
 
 In a multi-region setup:
 
-- One cluster is designated as the **primary** and handles all writes.
-- Other clusters are **standbys** that replicate from the primary via streaming replication.
+- One DocumentDB cluster is designated as the **primary** and handles all writes.
+- Other DocumentDB clusters are **standbys** that replicate from the primary via streaming replication.
 - Cross-cluster networking is managed through Azure Fleet, Istio, or direct configuration.
 
 ```yaml
@@ -77,9 +86,9 @@ spec:
       - name: standby-cluster-2
 ```
 
-### Promoting a Standby Cluster
+### Promoting a Standby DocumentDB Cluster
 
-To promote a standby cluster to primary, update the `primary` field in all cluster configurations:
+To promote a standby DocumentDB cluster to primary, update the `primary` field in all DocumentDB cluster configurations:
 
 ```bash
 # On the new primary cluster
@@ -93,10 +102,10 @@ kubectl patch documentdb my-cluster -n default --type='json' \
 2. The promotion token is applied to the CNPG ReplicaCluster configuration on the new primary.
 3. CNPG promotes the standby to an independent primary.
 4. The old primary detects the role change and reconfigures as a replica.
-5. Quorum writes and replication slots are updated across all clusters.
+5. Quorum writes and replication slots are updated across all DocumentDB clusters.
 
 !!! warning
-    Cross-cluster failover is a significant operation. Ensure all standby clusters are fully caught up with replication before promoting.
+    Cross-cluster failover is a significant operation. Ensure all standby DocumentDB clusters are fully caught up with replication before promoting.
 
 ### High Availability Settings for Multi-Region
 
@@ -111,8 +120,8 @@ spec:
 
 This configures:
 
-- **Primary cluster**: 3 instances (primary + 1 local standby + WAL replica slot), with quorum (synchronous) writes.
-- **Standby clusters**: 1 instance (receives streaming replication from the primary).
+- **Primary DocumentDB cluster**: 3 instances (primary + 1 local standby + WAL replica slot), with quorum (synchronous) writes.
+- **Standby DocumentDB clusters**: 1 instance (receives streaming replication from the primary).
 
 ## Testing Failover
 
@@ -132,7 +141,7 @@ kubectl delete pod <primary-pod-name> -n default
 
 1. A replica is promoted to primary within seconds.
 2. The deleted pod is recreated and rejoins as a replica.
-3. The cluster returns to a healthy state.
+3. The DocumentDB cluster returns to a healthy state.
 
 ### Test 2: Monitoring During Failover
 
