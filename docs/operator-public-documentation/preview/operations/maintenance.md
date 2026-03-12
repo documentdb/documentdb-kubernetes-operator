@@ -142,6 +142,7 @@ kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgre
 
 !!! note
     PVC resize is not currently supported but is planned for a future release. If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize` and restore from a backup. See [Storage Configuration](../configuration/storage.md) for details.
+
 ## Events and Alerts
 
 The operator emits Kubernetes events for significant state changes:
@@ -162,26 +163,3 @@ Key events to watch for:
 | `BackupFailed` | A backup failed | **Investigate immediately.** Check operator logs and storage configuration. Ensure your backup target is reachable. |
 | `FailoverCompleted` | A failover occurred | Check why the previous primary became unavailable (node failure, resource exhaustion, or network issue). See [Failover](failover.md). |
 | `PVRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
-
-## Routine Checks
-
-=== "Daily"
-
-    - [ ] Verify [DocumentDB cluster health](#documentdb-cluster-status): `kubectl get documentdb -n <namespace>`
-    - [ ] Monitor [pod health](#pod-health): `kubectl get pods -n <namespace>`
-    - [ ] Check backup status: `kubectl get backups -n <namespace>` — see [Backup](backup-and-restore.md#backup)
-
-=== "Weekly"
-
-    - [ ] Review [operator and database logs](#log-management) for warnings or errors
-    - [ ] Check [storage utilization](#storage-monitoring) across all PVCs
-    - [ ] Verify scheduled backups are running on schedule — see [Backup](backup-and-restore.md#backup)
-    - [ ] Review [pod resource usage](#resource-monitoring) trends
-
-=== "Before Maintenance"
-
-    - [ ] Create an on-demand [backup](backup-and-restore.md#backup)
-    - [ ] Verify the backup reaches `completed` status
-    - [ ] Confirm the DocumentDB cluster has multiple instances for [failover](failover.md)
-    - [ ] Document the current DocumentDB cluster state (version, instance count, storage)
-
