@@ -97,6 +97,7 @@ Before creating backups, ensure your Kubernetes cluster has the required snapsho
     apiVersion: documentdb.io/preview
     kind: Backup
     metadata:
+      name: my-backup
       namespace: default
     spec:
       cluster:
@@ -158,7 +159,7 @@ You can restore a backup by creating a **new** DocumentDB cluster that reference
 
 ### Step 1: Identify the Backup
 
-List backups for your DocumentDB cluster and choose one in `Succeeded` status:
+List backups for your DocumentDB cluster and choose one in `completed` status:
 
 ```bash
 kubectl get backups -n default
@@ -202,7 +203,7 @@ Once the status shows `Cluster in healthy state`, connect and verify your data. 
 ### Restore Constraints
 
 - You **cannot** restore to the original DocumentDB cluster name while the old resources exist. Delete any leftover resources first, or use a new name.
-- The backup must be in `Succeeded` status.
+- The backup must be in `completed` status.
 - The VolumeSnapshot referenced by the backup must still exist — if it was manually deleted, the backup cannot be used for recovery.
 - You cannot specify both `backup` and `persistentVolume` in the same recovery spec.
 

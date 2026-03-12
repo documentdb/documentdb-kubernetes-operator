@@ -17,7 +17,7 @@ When a DocumentDB cluster is deleted, there are two paths to recovery:
 
 | Method | Requires | Data Freshness |
 |--------|----------|----------------|
-| **Backup recovery** | A `Backup` resource in `Succeeded` state | Point-in-time (when backup was taken) |
+| **Backup recovery** | A `Backup` resource in `completed` state | Point-in-time (when backup was taken) |
 | **PersistentVolume recovery** | PV with `persistentVolumeReclaimPolicy: Retain` | Latest (up to the moment of deletion) |
 
 !!! tip
@@ -25,7 +25,7 @@ When a DocumentDB cluster is deleted, there are two paths to recovery:
 
 ## Method 1: Restore from Backup
 
-If you have a `Backup` resource in `Succeeded` status, follow the restore procedure in [Backup and Restore — Restore from Backup](backup-and-restore.md#restore-from-backup).
+If you have a `Backup` resource in `completed` status, follow the restore procedure in [Backup and Restore — Restore from Backup](backup-and-restore.md#restore-from-backup).
 
 ## Method 2: Restore from Retained PersistentVolume
 
