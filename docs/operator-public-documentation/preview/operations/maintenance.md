@@ -30,14 +30,13 @@ kubectl describe documentdb <cluster-name> -n <namespace>
 | What to check | Normal | Investigate if |
 |---------------|--------|----------------|
 | `STATUS` column | `Cluster in healthy state` | Any other status (e.g., `Setting up primary`, `Creating replica`) persists longer than a few minutes |
-| `INSTANCES` column | Matches `spec.instances` (e.g., `3` for a 3-instance DocumentDB cluster) | Instance count is lower than expected |
 | `AGE` column | Consistent with deployment time | Unexpectedly recent — may indicate an unplanned restart |
 
 ### Pod Health
 
 ```bash
 # Check pod status (each pod runs PostgreSQL + gateway sidecar)
-kubectl get pods -n <namespace> -l documentdb.io/cluster=<cluster-name>
+kubectl get pods -n <namespace> -l app=<cluster-name>
 
 # View pod resource usage
 kubectl top pods -n <namespace>
@@ -72,7 +71,7 @@ kubectl top pods -n <namespace>
 
     ```bash
     kubectl exec -it <pod-name> -n <namespace> -c postgres -- \
-      cat /controller/log/postgresql.log
+      cat /controller/log/postgres
     ```
 
     **What's normal:** Startup messages, checkpoint completions, autovacuum activity.
@@ -84,7 +83,7 @@ kubectl top pods -n <namespace>
     Access gateway (sidecar) logs:
 
     ```bash
-    kubectl logs <pod-name> -n <namespace> -c gateway
+    kubectl logs <pod-name> -n <namespace> -c documentdb-gateway
     ```
 
     **What's normal:** Successful connection handling, startup messages.
@@ -159,7 +158,7 @@ Key events to watch for:
 
 | Event | Meaning | Action |
 |-------|---------|--------|
-| `BackupSucceeded` | A backup completed successfully | No action needed — verify periodically that backups are running on schedule |
+| `BackupSchedule` | A scheduled backup created a Backup resource | No action needed — verify periodically that backups are running on schedule |
 | `BackupFailed` | A backup failed | **Investigate immediately.** Check operator logs and storage configuration. Ensure your backup target is reachable. |
-| `FailoverCompleted` | A failover occurred | Check why the previous primary became unavailable (node failure, resource exhaustion, or network issue). See [Failover](failover.md). |
-| `PVRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
+| `InvalidSchedule` | A ScheduledBackup has an invalid cron expression | Fix the `spec.schedule` field in your ScheduledBackup resource. |
+| `PVsRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
