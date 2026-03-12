@@ -48,7 +48,7 @@ kubectl top pods -n <namespace>
 | `READY` column | `2/2` (PostgreSQL container + gateway sidecar) | Less than `2/2` — one or both containers are not ready |
 | `STATUS` column | `Running` | `CrashLoopBackOff`, `Error`, `Pending`, or `Init` persisting beyond startup |
 | `RESTARTS` column | `0` (or very low over the cluster lifetime) | High or rapidly increasing — indicates repeated container crashes |
-| Resource usage (`kubectl top`) | CPU and memory well within `spec.resources` limits | CPU consistently near limit (throttling) or memory approaching limit (OOMKill risk) |
+| Resource usage (`kubectl top`) | CPU and memory stable under normal workload | CPU consistently maxed out (throttling) or memory climbing steadily (OOMKill risk) |
 
 ## Log Management
 
@@ -118,8 +118,8 @@ kubectl top nodes
 
 | What to check | Normal | Investigate if |
 |---------------|--------|----------------|
-| Pod CPU usage | Varies with workload; stays below `spec.resources.limits.cpu` | Consistently near the CPU limit — queries may be throttled. Consider [scaling up](scaling.md). |
-| Pod memory usage | Stable under `spec.resources.limits.memory` | Approaching or hitting the memory limit — pods may be OOMKilled. Check for memory-heavy queries or increase limits. |
+| Pod CPU usage | Varies with workload; no sustained spikes | Consistently maxed out — queries may be throttled |
+| Pod memory usage | Stable and predictable | Climbing steadily or hitting node limits — pods may be OOMKilled. Check for memory-heavy queries. |
 | Node resource usage | Enough headroom for pod scheduling and bursts | Nodes above 80% utilization — new pods may fail to schedule or existing pods may be evicted. |
 
 ### Storage Monitoring
@@ -167,21 +167,21 @@ Key events to watch for:
 
 === "Daily"
 
-    - [ ] Verify DocumentDB cluster health: `kubectl get documentdb -n <namespace>`
-    - [ ] Check backup status: `kubectl get backups -n <namespace>`
-    - [ ] Monitor pod status: `kubectl get pods -n <namespace>`
+    - [ ] Verify [DocumentDB cluster health](#documentdb-cluster-status): `kubectl get documentdb -n <namespace>`
+    - [ ] Monitor [pod health](#pod-health): `kubectl get pods -n <namespace>`
+    - [ ] Check backup status: `kubectl get backups -n <namespace>` — see [Backup](backup-and-restore.md#backup)
 
 === "Weekly"
 
-    - [ ] Review operator logs for warnings or errors
-    - [ ] Check storage utilization across all PVCs
-    - [ ] Verify scheduled backups are running on schedule
-    - [ ] Review pod resource usage trends
+    - [ ] Review [operator and database logs](#log-management) for warnings or errors
+    - [ ] Check [storage utilization](#storage-monitoring) across all PVCs
+    - [ ] Verify scheduled backups are running on schedule — see [Backup](backup-and-restore.md#backup)
+    - [ ] Review [pod resource usage](#resource-monitoring) trends
 
 === "Before Maintenance"
 
-    - [ ] Create an on-demand [backup](backup-and-restore.md)
-    - [ ] Verify the backup succeeds
-    - [ ] Confirm the DocumentDB cluster has multiple instances for failover
+    - [ ] Create an on-demand [backup](backup-and-restore.md#backup)
+    - [ ] Verify the backup reaches `completed` status
+    - [ ] Confirm the DocumentDB cluster has multiple instances for [failover](failover.md)
     - [ ] Document the current DocumentDB cluster state (version, instance count, storage)
 
