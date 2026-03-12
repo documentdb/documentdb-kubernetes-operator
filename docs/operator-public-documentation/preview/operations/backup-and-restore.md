@@ -308,7 +308,7 @@ kubectl describe backup <backup-name> -n <namespace>
 # Check operator logs
 kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=100
 
-# Check CNPG backup status
+# Check backup status
 kubectl get backups.postgresql.cnpg.io -n <namespace>
 ```
 

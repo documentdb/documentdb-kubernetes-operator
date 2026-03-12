@@ -41,48 +41,44 @@ kubectl top pods -n <namespace>
 
 Each pod should show `2/2` in the READY column (PostgreSQL container + gateway sidecar).
 
-### CNPG Cluster Status
+### Advanced Diagnostics
 
-For deeper diagnostics, inspect the underlying CNPG cluster:
+For deeper diagnostics, inspect the underlying database cluster resource:
 
 ```bash
-# CNPG cluster status
 kubectl get clusters.postgresql.cnpg.io -n <namespace>
 
-# Detailed CNPG status
 kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
 ```
 
 ## Log Management
 
-### Operator Logs
+=== "DocumentDB Operator Logs"
 
-View the DocumentDB operator logs:
+    ```bash
+    # Recent operator logs
+    kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=100
 
-```bash
-# Recent operator logs
-kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=100
+    # Follow operator logs in real time
+    kubectl logs -n documentdb-operator deployment/documentdb-operator -f
+    ```
 
-# Follow operator logs in real time
-kubectl logs -n documentdb-operator deployment/documentdb-operator -f
-```
+=== "PostgreSQL Logs"
 
-### PostgreSQL Logs
+    Access PostgreSQL logs inside a specific pod:
 
-Access PostgreSQL logs inside a specific pod:
+    ```bash
+    kubectl exec -it <pod-name> -n <namespace> -c postgres -- \
+      cat /controller/log/postgresql.log
+    ```
 
-```bash
-kubectl exec -it <pod-name> -n <namespace> -c postgres -- \
-  cat /controller/log/postgresql.log
-```
+=== "Gateway Logs"
 
-### Gateway Logs
+    Access gateway (sidecar) logs:
 
-Access gateway (sidecar) logs:
-
-```bash
-kubectl logs <pod-name> -n <namespace> -c gateway
-```
+    ```bash
+    kubectl logs <pod-name> -n <namespace> -c gateway
+    ```
 
 ### Configuring Log Level
 
@@ -166,7 +162,7 @@ kubectl drain <node-name> \
 
 **What happens**:
 
-- If the primary pod is on this node, CNPG triggers an automatic failover to a replica before evicting.
+- If the primary pod is on this node, the operator triggers an automatic failover to a replica before evicting.
 - Replica pods are rescheduled to other available nodes.
 - With 3 instances, the DocumentDB cluster remains available throughout.
 
@@ -197,35 +193,35 @@ kubectl get pods -n <namespace>
 To restart all DocumentDB pods without downtime (for example, to pick up ConfigMap changes):
 
 ```bash
-# CNPG handles rolling restarts when the CNPG cluster spec changes
+# The operator handles rolling restarts when the cluster spec changes
 # You can trigger a restart by updating an annotation
 kubectl annotate clusters.postgresql.cnpg.io <cluster-name> -n <namespace> \
   kubectl.kubernetes.io/restartedAt="$(date -u +%Y-%m-%dT%H:%M:%SZ)" --overwrite
 ```
 
-CNPG restarts replicas first, then the primary, ensuring continuous availability (with 2+ instances).
+The operator restarts replicas first, then the primary, ensuring continuous availability (with 2+ instances).
 
 ## Routine Checks
 
-### Daily
+=== "Daily"
 
-- [ ] Verify DocumentDB cluster health: `kubectl get documentdb -n <namespace>`
-- [ ] Check backup status: `kubectl get backups -n <namespace>`
-- [ ] Monitor pod status: `kubectl get pods -n <namespace>`
+    - [ ] Verify DocumentDB cluster health: `kubectl get documentdb -n <namespace>`
+    - [ ] Check backup status: `kubectl get backups -n <namespace>`
+    - [ ] Monitor pod status: `kubectl get pods -n <namespace>`
 
-### Weekly
+=== "Weekly"
 
-- [ ] Review operator logs for warnings or errors
-- [ ] Check storage utilization across all PVCs
-- [ ] Verify scheduled backups are running on schedule
-- [ ] Review pod resource usage trends
+    - [ ] Review operator logs for warnings or errors
+    - [ ] Check storage utilization across all PVCs
+    - [ ] Verify scheduled backups are running on schedule
+    - [ ] Review pod resource usage trends
 
-### Before Maintenance Windows
+=== "Before Maintenance"
 
-- [ ] Create an on-demand [backup](backup-and-restore.md)
-- [ ] Verify the backup succeeds
-- [ ] Confirm the DocumentDB cluster has multiple instances for failover
-- [ ] Document the current DocumentDB cluster state (version, instance count, storage)
+    - [ ] Create an on-demand [backup](backup-and-restore.md)
+    - [ ] Verify the backup succeeds
+    - [ ] Confirm the DocumentDB cluster has multiple instances for failover
+    - [ ] Document the current DocumentDB cluster state (version, instance count, storage)
 
 ## Events and Alerts
 
@@ -250,44 +246,44 @@ Key events to watch for:
 
 ## Troubleshooting Common Issues
 
-### DocumentDB Cluster Stuck in Unhealthy State
+=== "Unhealthy State"
 
-```bash
-# Check DocumentDB status
-kubectl describe documentdb <cluster-name> -n <namespace>
+    ```bash
+    # Check DocumentDB status
+    kubectl describe documentdb <cluster-name> -n <namespace>
 
-# Check CNPG cluster status
-kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
+    # Check underlying database cluster status
+    kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
 
-# Check pod logs
-kubectl logs <pod-name> -n <namespace> -c postgres --tail=100
-```
+    # Check pod logs
+    kubectl logs <pod-name> -n <namespace> -c postgres --tail=100
+    ```
 
-### Pod in CrashLoopBackOff
+=== "CrashLoopBackOff"
 
-```bash
-# Check pod events
-kubectl describe pod <pod-name> -n <namespace>
+    ```bash
+    # Check pod events
+    kubectl describe pod <pod-name> -n <namespace>
 
-# Check previous container logs
-kubectl logs <pod-name> -n <namespace> -c postgres --previous
-```
+    # Check previous container logs
+    kubectl logs <pod-name> -n <namespace> -c postgres --previous
+    ```
 
-Common causes:
+    Common causes:
 
-- Insufficient memory (OOMKilled)
-- Storage full
-- Extension version mismatch
+    - Insufficient memory (OOMKilled)
+    - Storage full
+    - Extension version mismatch
 
-### Gateway Sidecar Not Ready
+=== "Gateway Sidecar Not Ready"
 
-```bash
-# Check gateway container logs
-kubectl logs <pod-name> -n <namespace> -c gateway
+    ```bash
+    # Check gateway container logs
+    kubectl logs <pod-name> -n <namespace> -c gateway
 
-# Check if credentials secret exists
-kubectl get secret documentdb-credentials -n <namespace>
-```
+    # Check if credentials secret exists
+    kubectl get secret documentdb-credentials -n <namespace>
+    ```
 
 ## Next Steps
 

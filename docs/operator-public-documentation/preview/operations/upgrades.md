@@ -11,7 +11,7 @@ tags:
 
 ## Overview
 
-Upgrades keep your DocumentDB deployment current with the latest features, security patches, and bug fixes. The operator uses rolling updates managed by CloudNativePG to minimize downtime — replicas restart first, then the primary fails over, so writes are interrupted for only seconds.
+Upgrades keep your DocumentDB deployment current with the latest features, security patches, and bug fixes. The operator uses rolling updates to minimize downtime — replicas restart first, then the primary fails over, so writes are interrupted for only seconds.
 
 There are three types of upgrades in a DocumentDB deployment:
 
@@ -64,109 +64,101 @@ kubectl get documentdb -n <namespace>
 - CRD changes are applied automatically by the Helm chart.
 - If the new DocumentDB operator version includes updated default images, DocumentDB clusters will be reconciled with the new images on the next reconciliation cycle.
 
-## Extension Upgrade
+## Component Upgrades
 
-The DocumentDB extension (the PostgreSQL extension that provides MongoDB compatibility) can be upgraded independently.
+=== "Extension Upgrade"
 
-### How Extension Upgrades Work
+    The DocumentDB extension (the PostgreSQL extension that provides MongoDB compatibility) can be upgraded independently.
 
-1. You update the `spec.documentDBVersion` or `spec.documentDBImage` field.
-2. The operator detects the version change and patches the CNPG Cluster spec with the new extension image.
-3. CNPG triggers a **rolling restart** of all pods in the DocumentDB cluster.
-4. After all pods are healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
-5. The operator tracks the schema version in `status.schemaVersion`.
+    **How it works:**
 
-### Triggering an Extension Upgrade
+    1. You update the `spec.documentDBVersion` or `spec.documentDBImage` field.
+    2. The operator detects the version change and updates the database image.
+    3. The operator triggers a **rolling restart** of all pods in the DocumentDB cluster.
+    4. After all pods are healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
+    5. The operator tracks the schema version in `status.schemaVersion`.
 
-Update the version:
+    **Trigger the upgrade:**
 
-```yaml
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  documentDBVersion: "<new-version>"  # New version
-```
+    Update the version:
 
-Or specify a custom image directly:
+    ```yaml
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      documentDBVersion: "<new-version>"  # New version
+    ```
 
-```yaml
-spec:
-  documentDBImage: "ghcr.io/microsoft/documentdb/documentdb:<new-version>"
-```
+    Or specify a custom image directly:
 
-Apply the change:
+    ```yaml
+    spec:
+      documentDBImage: "ghcr.io/microsoft/documentdb/documentdb:<new-version>"
+    ```
 
-```bash
-kubectl apply -f documentdb.yaml
-```
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
 
-### Monitoring the Upgrade
+    **Monitor the upgrade:**
 
-```bash
-# Watch the rolling restart
-kubectl get pods -n default -w
+    ```bash
+    # Watch the rolling restart
+    kubectl get pods -n default -w
 
-# Check cluster status
-kubectl get documentdb my-cluster -n default
+    # Check DocumentDB cluster status
+    kubectl get documentdb my-cluster -n default
 
-# Check the schema version after upgrade
-kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
-```
+    # Check the schema version after upgrade
+    kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
+    ```
 
-During the rolling restart:
+    During the rolling restart:
 
-1. Replicas are upgraded first, one at a time.
-2. Once all replicas are healthy with the new version, the primary is upgraded.
-3. A brief failover occurs when the primary pod restarts.
+    1. Replicas are upgraded first, one at a time.
+    2. Once all replicas are healthy with the new version, the primary is upgraded.
+    3. A brief failover occurs when the primary pod restarts.
 
-### Rollback Protection
+    !!! danger
+        **Downgrades are not supported.** If you attempt to set a `documentDBVersion` lower than the currently installed schema version, the operator will reject the change. This is because the extension may have applied schema migrations that have no corresponding downgrade path.
 
-The operator includes built-in rollback protection for extension upgrades:
+    If a version mismatch is detected where the binary version is lower than the schema version, the operator logs a warning and skips the upgrade.
 
-!!! danger
-    **Downgrades are not supported.** If you attempt to set a `documentDBVersion` lower than the currently installed schema version, the operator will reject the change. This is because the extension may have applied schema migrations that have no corresponding downgrade path.
+=== "Gateway Upgrade"
 
-If a version mismatch is detected where the binary version is lower than the schema version, the operator logs a warning and skips the upgrade.
+    The DocumentDB gateway (the MongoDB-compatible proxy) runs as a sidecar container alongside each PostgreSQL instance.
 
-## Gateway Upgrade
+    **Trigger the upgrade:**
 
-The DocumentDB gateway (the MongoDB-compatible proxy) runs as a sidecar container alongside each PostgreSQL instance.
+    ```yaml
+    spec:
+      gatewayImage: "ghcr.io/microsoft/documentdb/gateway:<new-version>"
+    ```
 
-### Triggering a Gateway Upgrade
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
 
-```yaml
-spec:
-  gatewayImage: "ghcr.io/microsoft/documentdb/gateway:<new-version>"
-```
+    **How it works:**
 
-Apply the change:
+    1. The operator updates the plugin parameters with the new gateway image.
+    2. The operator adds a restart annotation (`kubectl.kubernetes.io/restartedAt`) to trigger pod restarts.
+    3. The operator performs a rolling restart of all pods.
+    4. Each pod comes up with the new gateway sidecar image.
 
-```bash
-kubectl apply -f documentdb.yaml
-```
-
-### How Gateway Upgrades Work
-
-1. The operator updates the plugin parameters with the new gateway image.
-2. The operator adds a restart annotation (`kubectl.kubernetes.io/restartedAt`) to trigger pod restarts.
-3. CNPG performs a rolling restart of all pods.
-4. Each pod comes up with the new gateway sidecar image.
-
-### Gateway-Only Updates
-
-If only the gateway image changes (no extension change), the operator forces a rolling restart via annotation. This ensures the new gateway image is picked up without requiring an extension upgrade.
+    If only the gateway image changes (no extension change), the operator forces a rolling restart via annotation. This ensures the new gateway image is picked up without requiring an extension upgrade.
 
 ## Rolling Update Behavior
 
-All upgrades use a rolling update strategy managed by CNPG:
+All upgrades use a rolling update strategy:
 
 1. **Replicas first** — replica instances are restarted one at a time.
 2. **Primary last** — the primary is restarted after all replicas are healthy.
-3. **Automatic failover** — when the primary restarts, CNPG promotes a replica as the new primary. The old primary rejoins as a replica after restart.
-4. **Zero data loss** — CNPG ensures WAL continuity throughout the process.
+3. **Automatic failover** — when the primary restarts, a replica is promoted as the new primary. The old primary rejoins as a replica after restart.
+4. **Zero data loss** — WAL continuity is maintained throughout the process.
 
 ### Expected Behavior During Upgrades
 

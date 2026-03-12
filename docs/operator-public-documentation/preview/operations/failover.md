@@ -15,20 +15,20 @@ Failover promotes a replica to primary when the current primary becomes unavaila
 
 The DocumentDB operator supports two levels of failover:
 
-- **Local failover** — automatic promotion of a replica to primary within a single DocumentDB cluster (managed by CNPG).
+- **Local failover** — automatic promotion of a replica to primary within a single DocumentDB cluster.
 - **Cross-cluster failover** — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.
 
 Automatic failover requires at least 2 instances (`spec.instancesPerNode >= 2`), with 3 recommended for production.
 
 ## Local Automatic Failover
 
-When running with multiple instances, the operator (via CNPG) automatically handles failover if the primary instance becomes unavailable.
+When running with multiple instances, the operator automatically handles failover if the primary instance becomes unavailable.
 
 ### How It Works
 
-1. CNPG continuously monitors the health of all instances.
-2. If the primary instance fails (pod crash, node failure, or unresponsive), CNPG detects the failure.
-3. CNPG promotes the most up-to-date replica as the new primary.
+1. The operator continuously monitors the health of all instances.
+2. If the primary instance fails (pod crash, node failure, or unresponsive), the operator detects the failure.
+3. The most up-to-date replica is promoted as the new primary.
 4. Remaining replicas reconfigure to replicate from the new primary.
 5. The Kubernetes Service automatically routes traffic to the new primary.
 6. When the failed instance recovers, it rejoins as a replica.
@@ -99,8 +99,8 @@ kubectl patch documentdb my-cluster -n default --type='json' \
 **What happens**:
 
 1. The operator reads the promotion token from the current primary.
-2. The promotion token is applied to the CNPG ReplicaCluster configuration on the new primary.
-3. CNPG promotes the standby to an independent primary.
+2. The promotion token is applied to the new primary.
+3. The standby is promoted to an independent primary.
 4. The old primary detects the role change and reconfigures as a replica.
 5. Quorum writes and replication slots are updated across all DocumentDB clusters.
 
@@ -125,59 +125,59 @@ This configures:
 
 ## Testing Failover
 
-### Test 1: Pod Deletion (Simulated Failure)
+=== "Pod Deletion (Simulated Failure)"
 
-Delete the primary pod to simulate a crash:
+    Delete the primary pod to simulate a crash:
 
-```bash
-# Identify the primary pod
-kubectl get pods -n default -l role=primary
+    ```bash
+    # Identify the primary pod
+    kubectl get pods -n default -l role=primary
 
-# Delete the primary pod
-kubectl delete pod <primary-pod-name> -n default
-```
+    # Delete the primary pod
+    kubectl delete pod <primary-pod-name> -n default
+    ```
 
-**Expected behavior**:
+    **Expected behavior**:
 
-1. A replica is promoted to primary within seconds.
-2. The deleted pod is recreated and rejoins as a replica.
-3. The DocumentDB cluster returns to a healthy state.
+    1. A replica is promoted to primary within seconds.
+    2. The deleted pod is recreated and rejoins as a replica.
+    3. The DocumentDB cluster returns to a healthy state.
 
-### Test 2: Monitoring During Failover
+=== "Monitor During Failover"
 
-Watch the failover in real time:
+    Watch the failover in real time:
 
-```bash
-# In terminal 1: watch pod status
-kubectl get pods -n default -w
+    ```bash
+    # In terminal 1: watch pod status
+    kubectl get pods -n default -w
 
-# In terminal 2: watch cluster status
-kubectl get documentdb my-cluster -n default -w
+    # In terminal 2: watch cluster status
+    kubectl get documentdb my-cluster -n default -w
 
-# In terminal 3: continuously test connectivity
-while true; do
-  mongosh 127.0.0.1:10260 -u <user> -p <pass> \
-    --authenticationMechanism SCRAM-SHA-256 \
-    --tls --tlsAllowInvalidCertificates \
-    --eval "db.runCommand({ping: 1})" 2>&1 | head -1
-  sleep 1
-done
-```
+    # In terminal 3: continuously test connectivity
+    while true; do
+      mongosh 127.0.0.1:10260 -u <user> -p <pass> \
+        --authenticationMechanism SCRAM-SHA-256 \
+        --tls --tlsAllowInvalidCertificates \
+        --eval "db.runCommand({ping: 1})" 2>&1 | head -1
+      sleep 1
+    done
+    ```
 
-### Test 3: Verify Data Integrity
+=== "Verify Data Integrity"
 
-After failover completes:
+    After failover completes:
 
-```bash
-# Connect to the new primary
-mongosh 127.0.0.1:10260 -u <user> -p <pass> \
-  --authenticationMechanism SCRAM-SHA-256 \
-  --tls --tlsAllowInvalidCertificates
+    ```bash
+    # Connect to the new primary
+    mongosh 127.0.0.1:10260 -u <user> -p <pass> \
+      --authenticationMechanism SCRAM-SHA-256 \
+      --tls --tlsAllowInvalidCertificates
 
-# Verify data is intact
-use testdb
-db.test_collection.countDocuments()
-```
+    # Verify data is intact
+    use testdb
+    db.test_collection.countDocuments()
+    ```
 
 ## Application Considerations
 
@@ -221,9 +221,9 @@ In your application, configure:
 **Possible causes**:
 
 - Only 1 instance configured (`instancesPerNode: 1`). Failover requires at least 2 instances.
-- CNPG operator is not running. Check:
+- The DocumentDB operator is not running. Check:
   ```bash
-  kubectl get pods -n cnpg-system
+  kubectl get pods -n documentdb-operator
   ```
 
 ### Failover Takes Too Long
