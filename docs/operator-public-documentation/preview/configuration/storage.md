@@ -1,6 +1,6 @@
 ---
 title: Storage Configuration
-description: Configure persistent storage for DocumentDB including storage classes, PVC sizing, volume expansion, reclaim policies, and disk encryption across AKS, EKS, and GKE.
+description: Configure persistent storage for DocumentDB including storage classes, PVC sizing, reclaim policies, and disk encryption across AKS, EKS, and GKE.
 tags:
   - configuration
   - storage
