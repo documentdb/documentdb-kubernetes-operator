@@ -50,22 +50,6 @@ kubectl top pods -n <namespace>
 | `RESTARTS` column | `0` (or very low over the cluster lifetime) | High or rapidly increasing — indicates repeated container crashes |
 | Resource usage (`kubectl top`) | CPU and memory well within `spec.resources` limits | CPU consistently near limit (throttling) or memory approaching limit (OOMKill risk) |
 
-### Advanced Diagnostics
-
-For deeper diagnostics, inspect the underlying database cluster resource:
-
-```bash
-kubectl get clusters.postgresql.cnpg.io -n <namespace>
-
-kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
-```
-
-| What to check | Normal | Investigate if |
-|---------------|--------|----------------|
-| Cluster phase | `Cluster in healthy state` | Any other phase persists (e.g., `Setting up primary`, `Upgrading cluster`) |
-| Replication status (in `describe` output) | All replicas show `streaming` state | Any replica shows `not streaming` or has high replication lag |
-| Conditions (in `describe` output) | All conditions show `True` | Any condition is `False` — read the condition message for details |
-
 ## Log Management
 
 === "DocumentDB Operator Logs"
@@ -158,7 +142,26 @@ kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgre
 
 !!! note
     PVC resize is not currently supported but is planned for a future release. If storage usage approaches capacity, provision a new DocumentDB cluster with larger `pvcSize` and restore from a backup. See [Storage Configuration](../configuration/storage.md) for details.
+## Events and Alerts
 
+The operator emits Kubernetes events for significant state changes:
+
+```bash
+# View events for a DocumentDB cluster
+kubectl get events -n <namespace> --field-selector involvedObject.name=<cluster-name>
+
+# View all DocumentDB-related events
+kubectl get events -n <namespace> --sort-by=.lastTimestamp
+```
+
+Key events to watch for:
+
+| Event | Meaning | Action |
+|-------|---------|--------|
+| `BackupSucceeded` | A backup completed successfully | No action needed — verify periodically that backups are running on schedule |
+| `BackupFailed` | A backup failed | **Investigate immediately.** Check operator logs and storage configuration. Ensure your backup target is reachable. |
+| `FailoverCompleted` | A failover occurred | Check why the previous primary became unavailable (node failure, resource exhaustion, or network issue). See [Failover](failover.md). |
+| `PVRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
 
 ## Routine Checks
 
@@ -182,83 +185,3 @@ kubectl exec -it <pod-name> -n <namespace> -c postgres -- df -h /var/lib/postgre
     - [ ] Confirm the DocumentDB cluster has multiple instances for failover
     - [ ] Document the current DocumentDB cluster state (version, instance count, storage)
 
-## Events and Alerts
-
-The operator emits Kubernetes events for significant state changes:
-
-```bash
-# View events for a DocumentDB cluster
-kubectl get events -n <namespace> --field-selector involvedObject.name=<cluster-name>
-
-# View all DocumentDB-related events
-kubectl get events -n <namespace> --sort-by=.lastTimestamp
-```
-
-Key events to watch for:
-
-| Event | Meaning | Action |
-|-------|---------|--------|
-| `BackupSucceeded` | A backup completed successfully | No action needed — verify periodically that backups are running on schedule |
-| `BackupFailed` | A backup failed | **Investigate immediately.** Check operator logs and storage configuration. Ensure your backup target is reachable. |
-| `FailoverCompleted` | A failover occurred | Check why the previous primary became unavailable (node failure, resource exhaustion, or network issue). See [Failover](failover.md). |
-| `PVRetained` | PVs were retained after DocumentDB cluster deletion | Expected if `reclaimPolicy: Retain`. Clean up PVs manually if no longer needed. |
-
-## Troubleshooting Common Issues
-
-=== "Unhealthy State"
-
-    ```bash
-    # Check DocumentDB status
-    kubectl describe documentdb <cluster-name> -n <namespace>
-
-    # Check underlying database cluster status
-    kubectl describe clusters.postgresql.cnpg.io <cluster-name> -n <namespace>
-
-    # Check pod logs
-    kubectl logs <pod-name> -n <namespace> -c postgres --tail=100
-    ```
-
-    **What to look for:** The `Status.Conditions` section in the `describe` output tells you which condition is failing. Pod logs often reveal the root cause (storage full, connection limits, extension errors).
-
-    **Next steps:** If the DocumentDB cluster does not recover within a few minutes, check for node-level issues (`kubectl describe node`) and review recent changes to the DocumentDB manifest.
-
-=== "CrashLoopBackOff"
-
-    ```bash
-    # Check pod events
-    kubectl describe pod <pod-name> -n <namespace>
-
-    # Check previous container logs
-    kubectl logs <pod-name> -n <namespace> -c postgres --previous
-    ```
-
-    **What to look for:** The `Events` section shows why the container exited. The `--previous` logs show what happened in the last run before the crash.
-
-    Common causes and fixes:
-
-    | Cause | Symptom | Fix |
-    |-------|---------|-----|
-    | Insufficient memory | `OOMKilled` in pod events | Increase `spec.resources.limits.memory` |
-    | Storage full | `No space left on device` in logs | Provision a new DocumentDB cluster with larger `pvcSize` and [restore from backup](backup-and-restore.md) |
-    | Extension version mismatch | Extension load errors in logs | Verify `spec.documentDBVersion` is correct. See [Upgrades](upgrades.md). |
-
-=== "Gateway Sidecar Not Ready"
-
-    ```bash
-    # Check gateway container logs
-    kubectl logs <pod-name> -n <namespace> -c gateway
-
-    # Check if credentials secret exists
-    kubectl get secret documentdb-credentials -n <namespace>
-    ```
-
-    **What to look for:** Connection refused or TLS errors in gateway logs. Missing secrets cause the gateway to fail authentication.
-
-    **Next steps:** Verify the `documentdb-credentials` secret exists and contains valid credentials. If using TLS, confirm certificates are valid and not expired (see [TLS Configuration](../configuration/tls.md)).
-
-## Next Steps
-
-- [Backup and Restore](backup-and-restore.md) — set up backup policies
-- [Scaling](scaling.md) — adjust DocumentDB cluster capacity
-- [Upgrades](upgrades.md) — keep your DocumentDB cluster up to date
-- [Failover](failover.md) — understand failover behavior

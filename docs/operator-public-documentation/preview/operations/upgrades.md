@@ -1,6 +1,6 @@
 ---
 title: Upgrades
-description: Upgrade the DocumentDB operator, extension, and gateway image with rolling updates, rollback protection, and zero-downtime strategies.
+description: Upgrade the DocumentDB operator, extension, and gateway image with rolling updates and rollback protection.
 tags:
   - operations
   - upgrades
@@ -69,7 +69,11 @@ helm rollback documentdb-operator -n documentdb-operator
 ### DocumentDB Operator Upgrade Notes
 
 - The DocumentDB operator upgrade does **not** restart your DocumentDB cluster pods.
-- CRD changes are applied automatically by the Helm chart.
+- CRDs in the Helm chart's `crds/` directory are applied on **initial install only**. If a new operator version introduces CRD schema changes, apply them manually before upgrading:
+
+    ```bash
+    kubectl apply -f https://raw.githubusercontent.com/microsoft/documentdb-kubernetes-operator/main/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml
+    ```
 
 ## Component Upgrades
 
@@ -84,7 +88,7 @@ Updating `spec.documentDBVersion` upgrades **both** the DocumentDB extension and
 ### Step 1: Update the DocumentDB Version
 
 !!! danger
-    **Downgrades are not supported.** If you attempt to set a `documentDBVersion` lower than the currently installed schema version, the operator will reject the change. This is because the extension may have applied schema migrations that have no corresponding downgrade path.
+    **Downgrades are not supported.** If you set `documentDBVersion` to a version lower than the currently installed schema version, the operator will still update the container images but will **skip the schema migration** (`ALTER EXTENSION UPDATE`) and emit a warning event. This leaves the DocumentDB cluster running an older binary against a newer schema, which may cause unexpected behavior. Always move forward to a newer version or restore from backup.
 
 ```yaml title="documentdb.yaml"
 apiVersion: documentdb.io/preview
@@ -134,10 +138,7 @@ Whether you can roll back depends on whether the schema has been updated:
 
 === "Schema already updated"
 
-    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied and **cannot be reversed**. To recover:
-
-    1. **Restore from backup.** Use the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist) to restore the DocumentDB cluster to its pre-upgrade state. See [Backup and Restore](backup-and-restore.md) for instructions.
-    2. **Contact support** if the cluster is unhealthy but still running — there may be a forward fix available in a newer version.
+    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied and **cannot be reversed**. To recover: Use the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist) to restore the DocumentDB cluster to its pre-upgrade state. See [Backup and Restore](backup-and-restore.md) for instructions.
 
 !!! tip
     This is why backing up before a component upgrade is critical. Once the schema is updated, there is no rollback — only restore.
@@ -146,8 +147,8 @@ Whether you can roll back depends on whether the schema has been updated:
 
 1. You update the `spec.documentDBVersion` field.
 2. The operator detects the version change and updates both the database image and the gateway sidecar image.
-3. The operator performs a **rolling update**: replicas are upgraded first one at a time, then a **switchover** promotes the most up-to-date replica to primary, and the former primary is shut down and restarted with the new version.
-4. After all pods are healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
+3. The underlying cluster manager performs a **rolling restart**: replicas are restarted first one at a time, then the **primary is restarted in place**. Expect a brief period of downtime while the primary pod restarts.
+4. After the primary pod is healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
 5. The operator tracks the schema version in `status.schemaVersion`.
 
 ### Advanced: Independent Image Overrides
