@@ -6,9 +6,9 @@
 set -e  # Exit on any error
 
 # Configuration (should match create-cluster.sh)
-CLUSTER_NAME="ray-ddb-cluster"
-RESOURCE_GROUP="ray-documentdb-rg"
-LOCATION="West US 2"
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-cluster}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
+LOCATION="${LOCATION:-westus2}"
 
 # Deletion scope flags
 DELETE_INSTANCE="${DELETE_INSTANCE:-false}"

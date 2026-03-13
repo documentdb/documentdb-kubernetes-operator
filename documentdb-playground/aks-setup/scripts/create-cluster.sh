@@ -6,17 +6,17 @@
 set -e  # Exit on any error
 
 # Configuration
-CLUSTER_NAME="ray-ddb-cluster"
-RESOURCE_GROUP="ray-documentdb-rg"
-LOCATION="West US 2"
-NODE_COUNT=2
-NODE_SIZE="Standard_D4s_v5"
-KUBERNETES_VERSION="1.31.11"
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-cluster}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
+LOCATION="${LOCATION:-westus2}"
+NODE_COUNT="${NODE_COUNT:-3}"
+NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34.3}"
 
 # DocumentDB Operator Configuration
 # For testing: update with your account/org if using a fork
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.1"
+OPERATOR_CHART_VERSION="0.1.3"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
