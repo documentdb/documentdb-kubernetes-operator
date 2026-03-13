@@ -109,7 +109,7 @@ Comprehensively removes all Azure resources and stops billing.
 ```bash
 CLUSTER_NAME="documentdb-cluster"
 RESOURCE_GROUP="documentdb-rg"
-LOCATION="West US 2"
+LOCATION="westus2"
 NODE_COUNT=3
 NODE_SIZE="Standard_D4s_v5"
 KUBERNETES_VERSION="1.34.3"
@@ -232,12 +232,9 @@ kubectl get dbs -A -o wide
 # Get external IP only
 kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns
 
-# Get credentials from secret (PowerShell)
-$username = kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath="{.data.username}"
-[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($username))
-
-$password = kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath="{.data.password}"
-[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($password))
+# Get credentials from secret
+kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.username}' | base64 -d
+kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.password}' | base64 -d
 
 # Connection string format
 mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0

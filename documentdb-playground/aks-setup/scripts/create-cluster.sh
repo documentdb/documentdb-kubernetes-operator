@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-storage-class    Use AKS default storage (StandardSSD_LRS) - default"
             echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
             echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
-            echo "  --location LOCATION     Azure location (default: East US)"
+            echo "  --location LOCATION     Azure location (default: westus2)"
             echo "  --github-username       GitHub username for operator installation"
             echo "  --github-token          GitHub token for operator installation"
             echo "  -h, --help             Show this help message"
