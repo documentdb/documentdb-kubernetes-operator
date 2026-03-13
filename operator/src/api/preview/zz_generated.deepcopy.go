@@ -286,6 +286,13 @@ func (in *DocumentDBSpec) DeepCopyInto(out *DocumentDBSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.PostgresParameters != nil {
+		in, out := &in.PostgresParameters, &out.PostgresParameters
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	in.Affinity.DeepCopyInto(&out.Affinity)
 }
 

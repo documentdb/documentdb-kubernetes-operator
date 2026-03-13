@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -642,3 +643,149 @@ func TestGetMaxStopDelayOrDefault(t *testing.T) {
 		})
 	}
 }
+
+var _ = Describe("parseMemoryToBytes", func() {
+	It("returns 0 for empty string", func() {
+		Expect(parseMemoryToBytes("")).To(Equal(int64(0)))
+	})
+
+	It("returns 0 for '0'", func() {
+		Expect(parseMemoryToBytes("0")).To(Equal(int64(0)))
+	})
+
+	It("returns 0 for invalid quantity", func() {
+		Expect(parseMemoryToBytes("notavalue")).To(Equal(int64(0)))
+	})
+
+	It("parses Gi values correctly", func() {
+		Expect(parseMemoryToBytes("2Gi")).To(Equal(int64(2 * 1024 * 1024 * 1024)))
+	})
+
+	It("parses Mi values correctly", func() {
+		Expect(parseMemoryToBytes("512Mi")).To(Equal(int64(512 * 1024 * 1024)))
+	})
+})
+
+var _ = Describe("buildResourceRequirements", func() {
+	It("returns empty requirements when both memory and cpu are empty", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+
+	It("returns empty requirements when both memory and cpu are '0'", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "0",
+					CPU:     "0",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+
+	It("sets memory limits and requests with Guaranteed QoS", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "4Gi",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		expectedMem := resource.MustParse("4Gi")
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(expectedMem))
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(expectedMem))
+	})
+
+	It("sets cpu limits and requests with Guaranteed QoS", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					CPU:     "2",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		expectedCPU := resource.MustParse("2")
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(expectedCPU))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(expectedCPU))
+	})
+
+	It("sets both memory and cpu", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "8Gi",
+					CPU:     "4",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
+	})
+
+	It("ignores invalid memory values gracefully", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "notvalid",
+					CPU:     "2",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		_, hasMem := result.Limits[corev1.ResourceMemory]
+		Expect(hasMem).To(BeFalse())
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+	})
+
+	It("ignores invalid cpu values gracefully", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "4Gi",
+					CPU:     "notvalid",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		_, hasCPU := result.Limits[corev1.ResourceCPU]
+		Expect(hasCPU).To(BeFalse())
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
+	})
+
+	It("returns empty requirements when all values are invalid", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "notvalid",
+					CPU:     "alsonotvalid",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+})
