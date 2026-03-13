@@ -35,8 +35,6 @@ ENABLE_AZURE_DNS="${ENABLE_AZURE_DNS:-true}"
 
 # Set password from argument or environment variable
 DOCUMENTDB_PASSWORD="${1:-${DOCUMENTDB_PASSWORD:-}}"
-DOCUMENTDB_IMAGE="${DOCUMENTDB_IMAGE:-ghcr.io/microsoft/documentdb/documentdb-local:16}"
-GATEWAY_IMAGE="${GATEWAY_IMAGE:-${DOCUMENTDB_IMAGE}}"
 
 # If no password provided, generate a secure one
 if [ -z "$DOCUMENTDB_PASSWORD" ]; then
@@ -179,8 +177,6 @@ TEMP_YAML=$(mktemp)
 # Use sed for safer substitution
 sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
     -e "s/{{PRIMARY_CLUSTER}}/$PRIMARY_CLUSTER/g" \
-    -e "s#{{DOCUMENTDB_IMAGE}}#$DOCUMENTDB_IMAGE#g" \
-    -e "s#{{GATEWAY_IMAGE}}#$GATEWAY_IMAGE#g" \
     "$SCRIPT_DIR/documentdb-cluster.yaml" | \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then

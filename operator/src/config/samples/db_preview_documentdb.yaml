@@ -10,7 +10,6 @@ spec:
   instancesPerNode: 1
   resource:
     pvcSize: 1Gi
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   exposeViaService:
     serviceType: ClusterIP
   # Uncomment one TLS mode below

@@ -280,7 +280,7 @@ CNPG creates internal PostgreSQL Services:
 `<cluster>-rw` (primary only, 5432), `<cluster>-ro` (standby replicas only, 5432), `<cluster>-r` (any instance: primary or standby, 5432).
 
 DocumentDB exposes Mongo protocol via separate gateway Services on port 10260, not by altering CNPG ones:
-`documentdb-gateway-rw` (primary), `documentdb-gateway-ro` (standbys).
+`documentdb-service-<documentdb name>`.
 
 Use cases:
 - 5432 Services: admin, backups, metrics, internal automation.

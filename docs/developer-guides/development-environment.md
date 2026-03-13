@@ -186,7 +186,39 @@ operator through Helm.
 
 ---
 
-## 4. Contributing guidelines
+## 4. Testing public documentation locally
+
+To build the documentation and run a development server for live previewing:
+
+1. Create a Python virtual environment:
+
+   ```bash
+   python3 -m venv documentdb-k8s-docs-venv
+   ```
+
+2. Activate the virtual environment:
+
+   ```bash
+   source documentdb-k8s-docs-venv/bin/activate
+   ```
+
+3. Install MkDocs:
+
+   ```bash
+   pip install mkdocs mkdocs-material
+   ```
+
+4. Run the local MkDocs server for testing:
+
+   ```bash
+   mkdocs serve
+   ```
+
+   This starts a local server (typically at `http://127.0.0.1:8000`) where you can preview documentation changes in real time.
+
+---
+
+## 5. Contributing guidelines
 
 Before opening a pull request, review the repository-wide
 [CONTRIBUTING.md](../../CONTRIBUTING.md) for the CLA process, style guidance,

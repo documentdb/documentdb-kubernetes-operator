@@ -6,6 +6,16 @@ replicaCount: 1
 # Defaults to Chart.appVersion if not specified  
 documentDbVersion: ""
 
+# Gateway image pull policy for the gateway sidecar container.
+# Valid values: Always, IfNotPresent, Never. Defaults to IfNotPresent if not set.
+gatewayImagePullPolicy: ""
+
+# DocumentDB extension image pull policy for the ImageVolume.
+# Valid values: Always, IfNotPresent, Never. If not set, Kubernetes default behavior is used.
+# This sets ImageVolumeSource.PullPolicy on the CNPG extension configuration
+# (see operator/src/internal/cnpg/cnpg_cluster.go).
+documentDbImagePullPolicy: ""
+
 serviceAccount:
   create: true
   automount: true

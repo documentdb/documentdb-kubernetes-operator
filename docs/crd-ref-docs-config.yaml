@@ -1,0 +1,24 @@
+processor:
+  # Exclude list types and status types from the generated documentation.
+  # Status types (TLSStatus, DocumentDBStatus) are read-only runtime state set by the operator.
+  # Since the status field is excluded via ignoreFields, excluding the status types
+  # prevents broken cross-references (e.g., TLSStatus "Appears in: DocumentDBStatus").
+  ignoreTypes:
+    - "List$"
+    - "Status$"
+  # Exclude status and TypeMeta fields
+  ignoreFields:
+    - "status$"
+    - "TypeMeta$"
+
+render:
+  # Kubernetes version for linking to K8s API docs
+  kubernetesVersion: 1.35
+  # Link external types to their upstream documentation
+  knownTypes:
+    - name: LocalObjectReference
+      package: github.com/cloudnative-pg/cloudnative-pg/api/v1
+      link: https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#LocalObjectReference
+    - name: AffinityConfiguration
+      package: github.com/cloudnative-pg/cloudnative-pg/api/v1
+      link: https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#AffinityConfiguration

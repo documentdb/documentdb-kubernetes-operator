@@ -14,6 +14,7 @@ security), see our [public documentation](https://documentdb.io/documentdb-kuber
   installed and configured
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed
 - [Helm](https://helm.sh/docs/intro/install/) v3.0+ installed
+- [mongosh](https://www.mongodb.com/try/download/shell) (MongoDB Shell) for testing connections
 - Azure subscription with appropriate permissions
 
 ### Basic Usage
@@ -36,7 +37,7 @@ cd scripts
 
 - Complete AKS cluster with managed node pools
 - Azure CNI networking with network policies
-- Cluster autoscaler (1-5 nodes)
+- Cluster autoscaler (2-5 nodes)
 - Monitoring addon enabled
 - Managed identity integration
 
@@ -100,13 +101,31 @@ Comprehensively removes all Azure resources and stops billing.
 
 ## Example Configuration Defaults
 
+### **Azure Resources Created:**
+- **AKS Cluster**: Managed Kubernetes with Azure CNI
+- **Node Pool**: Standard_D4s_v5 VMs (3 nodes) with autoscaling (2-5)
+- **Load Balancer**: Standard SKU for public access
+- **Managed Identity**: For secure Azure resource access
+- **Storage**: Standard SSD by default (Premium SSD optional)
+- **Networking**: Virtual network with security policies
+
+### **Kubernetes Components:**
+- **DocumentDB Operator**: Version 0.1.3 with Azure features
+- **CNPG**: CloudNative PostgreSQL for data persistence
+- **cert-manager**: Certificate lifecycle management
+- **Azure CSI Drivers**: Disk and File storage integration
+
+## 🔧 Configuration
+
+### **Default Settings:**
 ```bash
 CLUSTER_NAME="documentdb-cluster"
 RESOURCE_GROUP="documentdb-rg"
-LOCATION="East US"
-NODE_COUNT=2
-NODE_SIZE="Standard_D2s_v3"
-KUBERNETES_VERSION="1.35.0"
+LOCATION="westus2"
+NODE_COUNT=3
+NODE_SIZE="Standard_D4s_v5"
+KUBERNETES_VERSION="1.34.3"
+OPERATOR_CHART_VERSION="0.1.3"
 ```
 
 ### Storage Configuration
@@ -216,19 +235,19 @@ kubectl get svc -A -w
 ### **Access DocumentDB:**
 
 ```bash
-# Get external IP
+# Get connection string (easiest method)
+kubectl get dbs -A -o wide
+# Output includes full connection string with status
+
+# Get external IP only
 kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns
 
-# Get credentials
-kubectl get secret documentdb-credentials \
-  -n documentdb-instance-ns \
-  -o jsonpath='{.data.username}' | base64 -d
-kubectl get secret documentdb-credentials \
-  -n documentdb-instance-ns \
-  -o jsonpath='{.data.password}' | base64 -d
+# Get credentials from secret
+kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.username}' | base64 -d
+kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.password}' | base64 -d
 
 # Connection string format
-mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true
+mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
 ```
 
 ### Common Issues
@@ -259,14 +278,23 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator
 
 ### Estimated Monthly Costs (East US):
 
+### **Estimated Monthly Costs (West US 2):**
 - **AKS Cluster**: ~$73/month (managed control plane)
-- **2x Standard_D2s_v3 VMs**: ~$140/month
-- **Premium SSD Storage (10GB)**: ~$2/month
+- **3x Standard_D4s_v5 VMs**: ~$420/month
+- **Standard SSD Storage (10GB)**: ~$1/month
 - **Standard Load Balancer**: ~$18/month
-- **Total**: ~$233/month
+- **Total**: ~$512/month
 
 ### Cleanup
 
+# Reduce node count
+NODE_COUNT=1
+
+# Use Standard SSD (default) instead of Premium
+# storageClass omitted in DocumentDB spec uses AKS default (StandardSSD_LRS)
+```
+
+### **Cleanup:**
 ```bash
 # Always clean up when done to avoid charges
 ./delete-cluster.sh --force
@@ -277,6 +305,7 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator
 - [Deploy on AKS Guide](../../docs/operator-public-documentation/getting-started/deploy-on-aks.md)
 - [AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
 - [DocumentDB Operator GitHub](https://github.com/documentdb/documentdb-operator)
+- [MongoDB Shell (mongosh)](https://www.mongodb.com/try/download/shell)
 
 ## Support
 

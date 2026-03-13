@@ -11,6 +11,9 @@ on:
         description: 'Version to release (used for images and Helm chart)'
         required: true
         default: '0.1.1'
+      source_ref:
+        description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
+        required: true
       run_tests:
         description: 'Run tests before releasing'
         required: false
@@ -86,15 +89,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
       - name: Update values.yaml with version tag
         run: |
-          echo "Updating values.yaml with version tag: ${{ github.event.inputs.version }}"
-          sed -i 's/tag: .*/tag: ${{ github.event.inputs.version }}/g' operator/documentdb-helm-chart/values.yaml
-          echo "Updated values.yaml content:"
+          echo "Chart uses Chart.appVersion for image tags (no tag: field in values.yaml)"
+          echo "values.yaml content:"
           cat operator/documentdb-helm-chart/values.yaml
 
       - name: Set chart version
@@ -126,9 +130,29 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Chart Name**: \`$CHART_NAME\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`$CHART_VERSION\` (unified for chart and images)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart Source Ref**: \`${{ github.event.inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Source Tag**: \`${{ github.event.inputs.candidate_version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Target Tag**: \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: \`$GHCR_REPO\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Note**: Images promoted from \`${{ github.event.inputs.candidate_version }}\` to \`${{ github.event.inputs.version }}\` and Helm chart published" >> $GITHUB_STEP_SUMMARY
+
+  publish-helm-pages:
+    name: Publish Helm Repository
+    needs: publish-helm-chart
+    if: ${{ always() && needs.publish-helm-chart.result == 'success' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/repair_helm_pages_release.yml
+    with:
+      version: ${{ inputs.version }}
+      release_ref: ${{ inputs.source_ref }}
+      publish_branch: gh-pages
+      repo_url: https://documentdb.github.io/documentdb-kubernetes-operator
+      dry_run: false
+      confirm_version: ${{ inputs.version }}
+      normalize_chart_metadata: true
+      # Follow the same gh-pages branch used by mike in deploy_docs.yml.
+      allow_pages_source_mismatch: true
+    secrets: inherit
   

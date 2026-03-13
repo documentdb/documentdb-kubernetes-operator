@@ -483,8 +483,6 @@ spec:
   environment: eks
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   documentDbCredentialSecret: documentdb-credentials
   resource:
     storage:

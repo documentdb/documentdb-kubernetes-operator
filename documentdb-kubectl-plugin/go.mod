@@ -1,6 +1,6 @@
 module github.com/documentdb/documentdb-operator/documentdb-kubectl-plugin
 
-go 1.25.7
+go 1.25.8
 
 require (
 	github.com/spf13/cobra v1.9.1

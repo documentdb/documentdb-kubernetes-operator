@@ -46,7 +46,8 @@ type DocumentDBSpec struct {
 
 	// PostgresImage is the container image to use for the PostgreSQL server.
 	// If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.
-	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm"
+	// Must use trixie (Debian 13) base to match the extension's GLIBC requirements.
+	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
 	// +optional
 	PostgresImage string `json:"postgresImage,omitempty"`
 

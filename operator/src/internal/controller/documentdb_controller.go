@@ -60,10 +60,6 @@ type DocumentDBReconciler struct {
 	Clientset kubernetes.Interface
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
-	// ImageVolumeSupported indicates whether the Kubernetes cluster supports ImageVolume (K8s >= 1.35).
-	// When true, the operator uses separate PostgreSQL + extension images via CNPG Extensions.
-	// When false, it falls back to a combined image containing both (legacy mode for K8s < 1.35).
-	ImageVolumeSupported bool
 	// SQLExecutor executes SQL commands against a CNPG cluster's primary pod.
 	// Defaults to executeSQLCommand (real pod exec via SPDY). Override in tests
 	// to inject canned responses without requiring a live Kubernetes cluster.
@@ -156,10 +152,10 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// create the CNPG Cluster
-	documentdbImage := util.GetDocumentDBImageForInstance(documentdb, r.ImageVolumeSupported)
+	documentdbImage := util.GetDocumentDBImageForInstance(documentdb)
 
 	currentCnpgCluster := &cnpgv1.Cluster{}
-	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), r.ImageVolumeSupported, logger)
+	desiredCnpgCluster := cnpg.GetCnpgClusterSpec(req, documentdb, documentdbImage, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
 
 	if replicationContext.IsReplicating() {
 		err = r.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, desiredCnpgCluster)
@@ -328,12 +324,9 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if documentdb images need to be upgraded (extension + gateway image update, ALTER EXTENSION)
-	// This only applies when using separate images via ImageVolume (K8s >= 1.35)
-	if r.ImageVolumeSupported {
-		if err := r.upgradeDocumentDBIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
-			logger.Error(err, "Failed to upgrade DocumentDB images")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
+	if err := r.upgradeDocumentDBIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
+		logger.Error(err, "Failed to upgrade DocumentDB images")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
 	// Don't requeue again unless there is a change
@@ -541,17 +534,18 @@ func documentDBServicePredicate() predicate.Predicate {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Clientset == nil {
+		return fmt.Errorf("Clientset must be configured: required for Kubernetes version detection and SQL execution")
+	}
+
 	if r.SQLExecutor == nil {
 		r.SQLExecutor = r.executeSQLCommand
 	}
-	r.ImageVolumeSupported = r.detectImageVolumeSupport()
-	setupLog := ctrl.Log.WithName("setup")
-	if r.ImageVolumeSupported {
-		setupLog.Info("ImageVolume support detected (K8s >= 1.35), using separate PostgreSQL and extension images")
-	} else {
-		setupLog.Info("DEPRECATION WARNING: "+
-			"Support for Kubernetes < 1.35 will be removed in a future release. "+
-			"Please upgrade your cluster to Kubernetes 1.35 or later.")
+
+	// Verify the cluster meets the minimum Kubernetes version requirement.
+	// ImageVolume (GA in K8s 1.35) is required for mounting the DocumentDB extension image.
+	if err := r.validateK8sVersion(); err != nil {
+		return err
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -564,27 +558,41 @@ func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// detectImageVolumeSupport checks if the Kubernetes cluster supports ImageVolume (K8s >= 1.35).
-// Returns true if the server minor version is >= MinK8sMinorVersionForImageVolume.
-func (r *DocumentDBReconciler) detectImageVolumeSupport() bool {
-	if r.Clientset == nil {
-		return false
-	}
-
+// validateK8sVersion checks that the Kubernetes cluster version is at least 1.35.
+// The operator requires ImageVolume (GA in K8s 1.35) to mount the DocumentDB extension image.
+// Callers must ensure Clientset is non-nil before calling this method.
+func (r *DocumentDBReconciler) validateK8sVersion() error {
 	serverVersion, err := r.Clientset.Discovery().ServerVersion()
 	if err != nil {
-		ctrl.Log.WithName("setup").Error(err, "Failed to detect Kubernetes version, defaulting to combined image mode")
-		return false
+		return fmt.Errorf("failed to detect Kubernetes version: %w", err)
 	}
 
-	minor, err := strconv.Atoi(strings.TrimSuffix(serverVersion.Minor, "+"))
+	majorStr := strings.TrimRight(serverVersion.Major, "+")
+	major, err := strconv.Atoi(majorStr)
 	if err != nil {
-		ctrl.Log.WithName("setup").Error(err, "Failed to parse Kubernetes minor version", "minor", serverVersion.Minor)
-		return false
+		return fmt.Errorf("failed to parse Kubernetes major version %q: %w", serverVersion.Major, err)
 	}
 
-	ctrl.Log.WithName("setup").Info("Detected Kubernetes version", "major", serverVersion.Major, "minor", serverVersion.Minor)
-	return minor >= util.MinK8sMinorVersionForImageVolume
+	// Future major versions (>1) are assumed to support ImageVolume.
+	if major > 1 {
+		return nil
+	}
+
+	minorStr := strings.TrimRight(serverVersion.Minor, "+")
+	minor, err := strconv.Atoi(minorStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse Kubernetes minor version %q: %w", serverVersion.Minor, err)
+	}
+
+	if minor < util.MinK8sMinorVersion {
+		return fmt.Errorf(
+			"kubernetes version %s.%s is not supported: the DocumentDB operator requires Kubernetes 1.%d+ "+
+				"for ImageVolume support (GA in K8s 1.%d). Please upgrade your cluster",
+			serverVersion.Major, serverVersion.Minor, util.MinK8sMinorVersion, util.MinK8sMinorVersion,
+		)
+	}
+
+	return nil
 }
 
 // COPIED FROM https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.25/internal/cmd/plugin/promote/promote.go
@@ -994,10 +1002,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 }
 
 // buildImagePatchOps compares the current and desired CNPG cluster specs and returns
-// JSON Patch operations for any image differences (extension image and/or gateway image).
+// JSON Patch operations for any image differences (extension image settings and/or gateway image).
 // This is a pure function with no API calls. Returns:
-//   - patchOps: 0–2 JSON Patch replace operations
-//   - extensionUpdated: true if extension image differs
+//   - patchOps: JSON Patch operations to align image-related fields
+//   - extensionUpdated: true if extension image settings differ
 //   - gatewayUpdated: true if gateway image differs
 //   - err: non-nil if the documentdb extension is not found in the current cluster
 func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.JSONPatch, bool, bool, error) {

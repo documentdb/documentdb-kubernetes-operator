@@ -5,6 +5,7 @@ package cnpg
 
 import (
 	"cmp"
+	"os"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
@@ -17,7 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion, useImageVolume bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
 	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
@@ -36,6 +37,15 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 	var storageClassPointer *string
 	if storageClass != "" {
 		storageClassPointer = &storageClass
+	}
+
+	// Set ImageVolumeSource.PullPolicy for the extension image when configured.
+	// This addresses the fact that ImageVolume sources DO support pull policies
+	// (via corev1.ImageVolumeSource.PullPolicy), unlike regular container images
+	// which only support pull policies on container specs.
+	extensionImageSource := corev1.ImageVolumeSource{Reference: documentdbImage}
+	if pullPolicy := parsePullPolicy(os.Getenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV)); pullPolicy != "" {
+		extensionImageSource.PullPolicy = pullPolicy
 	}
 
 	return &cnpgv1.Cluster{
@@ -67,6 +77,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						"gatewayImage":               gatewayImage,
 						"documentDbCredentialSecret": credentialSecretName,
 					}
+					if pullPolicy := os.Getenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV); pullPolicy != "" {
+						params["gatewayImagePullPolicy"] = pullPolicy
+					}
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
@@ -80,11 +93,11 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{
 					Extensions: []cnpgv1.ExtensionConfiguration{
 						{
-							Name: "documentdb",
-							ImageVolumeSource: corev1.ImageVolumeSource{
-								Reference: documentdbImage,
-							},
-							LdLibraryPath: []string{"lib"},
+							Name:                 "documentdb",
+							ImageVolumeSource:    extensionImageSource,
+							DynamicLibraryPath:   []string{"lib"},
+							ExtensionControlPath: []string{"share"},
+							LdLibraryPath:        []string{"lib", "system"},
 						},
 					},
 					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
@@ -117,15 +130,6 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				Affinity: documentdb.Spec.Affinity,
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
-
-			// Combined mode (K8s < 1.35): use the all-in-one image directly and clear ImageVolume fields.
-			if !useImageVolume {
-				spec.ImageName = documentdbImage
-				spec.PostgresUID = util.COMBINED_IMAGE_POSTGRES_UID
-				spec.PostgresGID = util.COMBINED_IMAGE_POSTGRES_GID
-				spec.PostgresConfiguration.Extensions = nil
-				log.Info("Using combined image mode (K8s < 1.35)", "imageName", documentdbImage)
-			}
 
 			return spec
 		}(),
@@ -198,4 +202,15 @@ func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
 		return documentdb.Spec.Timeouts.StopDelay
 	}
 	return util.CNPG_DEFAULT_STOP_DELAY
+}
+
+// parsePullPolicy converts a string to a corev1.PullPolicy.
+// Returns empty string for unrecognized values.
+func parsePullPolicy(value string) corev1.PullPolicy {
+	switch corev1.PullPolicy(value) {
+	case corev1.PullAlways, corev1.PullNever, corev1.PullIfNotPresent:
+		return corev1.PullPolicy(value)
+	default:
+		return ""
+	}
 }

@@ -8,6 +8,11 @@ on:
         required: false
         default: '0.1.0'
         type: string
+      documentdb_ref:
+        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
+        required: false
+        default: 'main'
+        type: string
     outputs:
       image_tag:
         description: 'Built image tag'
@@ -118,9 +123,60 @@ jobs:
         path: sidecar-${{ matrix.arch }}-image.tar
         retention-days: 1
 
+  build-packages:
+    name: Build DocumentDB Packages (${{ matrix.arch }})
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      DOCUMENTDB_REPO: documentdb/documentdb
+      DOCUMENTDB_REPO_REF: ${{ inputs.documentdb_ref || 'main' }}
+    steps:
+    - name: Checkout documentdb source
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.DOCUMENTDB_REPO }}
+        ref: ${{ env.DOCUMENTDB_REPO_REF }}
+
+    - name: Build extension deb (PG18)
+      run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
+
+    - name: Build gateway deb
+      # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
+      # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
+      run: ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+
+    - name: Upload packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-packages-${{ matrix.arch }}
+        path: packages/*.deb
+        retention-days: 1
+        if-no-files-found: error
+        compression-level: 0
+
+    - name: Upload gateway runtime files
+      if: matrix.arch == 'amd64'
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-gateway-runtime-files
+        path: |
+          scripts/utils.sh
+          pg_documentdb_gw/SetupConfiguration.json
+        retention-days: 1
+        if-no-files-found: error
+
   build-documentdb:
     name: Build DocumentDB Images
     timeout-minutes: 30
+    needs: [build-packages]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -136,18 +192,33 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Download packages
+      uses: actions/download-artifact@v4
+      with:
+        name: build-packages-${{ matrix.arch }}
+        path: packages/
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
     - name: Build documentdb Docker image for ${{ matrix.arch }}
       run: |
+        set -euo pipefail
         echo "Building documentdb Docker image for ${{ matrix.arch }} architecture..."
+        DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+        if [[ -z "$DEB_FILE" ]]; then
+          echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
+          ls -la packages/ >&2
+          exit 1
+        fi
+        echo "Using deb: $DEB_FILE"
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
-          --build-arg ARCH=${{ matrix.base_arch }} \
+          --build-arg PG_MAJOR=18 \
+          --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
           --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
           --load \
-          -f .github/dockerfiles/Dockerfile_docdb .
+          -f .github/dockerfiles/Dockerfile_extension .
         
         echo "✓ DocumentDB Docker image built successfully for ${{ matrix.arch }}"
 
@@ -167,6 +238,7 @@ jobs:
   build-gateway:
     name: Build Gateway Images
     timeout-minutes: 30
+    needs: [build-packages]
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -182,18 +254,48 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Download packages
+      uses: actions/download-artifact@v4
+      with:
+        name: build-packages-${{ matrix.arch }}
+        path: packages/
+
+    - name: Download gateway runtime files
+      uses: actions/download-artifact@v4
+      with:
+        name: build-gateway-runtime-files
+        path: gateway-runtime/
+
+    - name: Prepare gateway build context
+      run: |
+        set -e
+        mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
+        cp packages/*gateway*.deb gateway-context/packages/
+        cp gateway-runtime/scripts/utils.sh gateway-context/scripts/
+        cp gateway-runtime/pg_documentdb_gw/SetupConfiguration.json gateway-context/pg_documentdb_gw/
+        cp .github/dockerfiles/gateway_entrypoint.sh gateway-context/scripts/
+        ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
     - name: Build gateway Docker image for ${{ matrix.arch }}
       run: |
+        set -euo pipefail
         echo "Building gateway Docker image for ${{ matrix.arch }} architecture..."
+        GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
+        if [[ -z "$GW_DEB" ]]; then
+          echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
+          ls -la gateway-context/packages/ >&2
+          exit 1
+        fi
+        echo "Using deb: $GW_DEB"
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
-          --build-arg ARCH=${{ matrix.base_arch }} \
+          --build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB \
           --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
           --load \
-          -f .github/dockerfiles/Dockerfile_gateway .
+          -f .github/dockerfiles/Dockerfile_gateway_deb gateway-context
         
         echo "✓ Gateway Docker image built successfully for ${{ matrix.arch }}"
 
@@ -214,7 +316,7 @@ jobs:
     name: Consolidate Platform Images
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [build-operator, build-sidecar, build-documentdb, build-gateway]
+    needs: [build-operator, build-sidecar, build-packages, build-documentdb, build-gateway]
     outputs:
       image_tag: ${{ env.IMAGE_TAG }}
     steps:

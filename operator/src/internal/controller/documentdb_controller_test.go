@@ -6,11 +6,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +23,7 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -3409,14 +3412,9 @@ var _ = Describe("DocumentDB Controller", func() {
 	})
 
 	Describe("SetupWithManager", func() {
-		It("should initialize SQLExecutor and detect ImageVolume before manager registration", func() {
-			clientset := kubefake.NewSimpleClientset()
-			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
-			Expect(ok).To(BeTrue())
-			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
-
+		It("should initialize SQLExecutor before manager registration", func() {
 			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
+				Clientset: kubefake.NewSimpleClientset(),
 			}
 
 			// Passing nil manager: initialization runs first, then builder fails
@@ -3425,7 +3423,13 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			// Verify defaults were initialized
 			Expect(reconciler.SQLExecutor).ToNot(BeNil())
-			Expect(reconciler.ImageVolumeSupported).To(BeTrue())
+		})
+
+		It("should return error when Clientset is nil and no custom SQLExecutor is set", func() {
+			reconciler := &DocumentDBReconciler{}
+			err := reconciler.SetupWithManager(nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Clientset must be configured"))
 		})
 
 		It("should not override pre-set SQLExecutor", func() {
@@ -3435,6 +3439,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			reconciler := &DocumentDBReconciler{
 				SQLExecutor: customExecutor,
+				Clientset:   kubefake.NewSimpleClientset(),
 			}
 
 			// Passing nil manager: initialization runs, then builder fails
@@ -3445,24 +3450,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			output, _ := reconciler.SQLExecutor(context.Background(), nil, "")
 			Expect(output).To(Equal("custom"))
 		})
-	})
 
-	Describe("detectImageVolumeSupport", func() {
-		It("should return true for K8s >= 1.35", func() {
-			clientset := kubefake.NewSimpleClientset()
-			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
-			Expect(ok).To(BeTrue())
-			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
-
-			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
-			}
-
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeTrue())
-		})
-
-		It("should return false for K8s < 1.35", func() {
+		It("should return error when K8s version validation fails", func() {
 			clientset := kubefake.NewSimpleClientset()
 			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
 			Expect(ok).To(BeTrue())
@@ -3472,31 +3461,151 @@ var _ = Describe("DocumentDB Controller", func() {
 				Clientset: clientset,
 			}
 
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeFalse())
+			err := reconciler.SetupWithManager(nil)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not supported"))
+		})
+	})
+
+	Describe("Reconcile", func() {
+		It("should reconcile a DocumentDB with existing CNPG cluster through the full path", func() {
+			// Register rbacv1 for Role/RoleBinding creation in EnsureServiceAccountRoleAndRoleBinding
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			// Create DocumentDB with finalizer already present (skip finalizer-add requeue)
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "1Gi",
+						},
+					},
+				},
+			}
+
+			// Create existing CNPG cluster with matching images (no upgrade needed)
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: documentDBName + "-1",
+					TargetPrimary:  documentDBName + "-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+
+			// Mock SQLExecutor: permissions already granted, extension versions match
+			sqlExecutor := func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+				if strings.Contains(cmd, "pg_roles") {
+					return "(1 row)", nil
+				}
+				if strings.Contains(cmd, "pg_available_extensions") {
+					return " default_version | installed_version\n" +
+						"-----------------+-------------------\n" +
+						" 0.110-0         | 0.110-0\n(1 row)", nil
+				}
+				return "", nil
+			}
+
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: sqlExecutor,
+			}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			})
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+		})
+	})
+
+	Describe("validateK8sVersion", func() {
+		It("should return nil for K8s >= 1.35", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
+
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
-		It("should return true for K8s 1.36+", func() {
+		It("should return error for K8s < 1.35", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "34"}
+
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			err := reconciler.validateK8sVersion()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("not supported"))
+			Expect(err.Error()).To(ContainSubstring("1.35"))
+		})
+
+		It("should return nil for K8s 1.36+", func() {
 			clientset := kubefake.NewSimpleClientset()
 			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "36"}
 
-			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
-			}
-
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeTrue())
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
-		It("should return false when Clientset is nil", func() {
-			reconciler := &DocumentDBReconciler{
-				Clientset: nil,
-			}
+		It("should return nil for future major versions (e.g. K8s 2.0)", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "2", Minor: "0"}
 
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeFalse())
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
 		It("should handle minor version with + suffix", func() {
@@ -3505,15 +3614,11 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35+"}
 
-			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
-			}
-
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeTrue())
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
-		It("should return false when ServerVersion returns error", func() {
+		It("should return error when ServerVersion fails", func() {
 			clientset := kubefake.NewSimpleClientset()
 			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
 			Expect(ok).To(BeTrue())
@@ -3521,26 +3626,34 @@ var _ = Describe("DocumentDB Controller", func() {
 				return true, nil, fmt.Errorf("connection refused")
 			})
 
-			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
-			}
-
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeFalse())
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			err := reconciler.validateK8sVersion()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to detect"))
 		})
 
-		It("should return false when minor version is not a number", func() {
+		It("should return error when minor version is not a number", func() {
 			clientset := kubefake.NewSimpleClientset()
 			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "abc"}
 
-			reconciler := &DocumentDBReconciler{
-				Clientset: clientset,
-			}
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			err := reconciler.validateK8sVersion()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to parse"))
+		})
 
-			result := reconciler.detectImageVolumeSupport()
-			Expect(result).To(BeFalse())
+		It("should return error when major version is not a number", func() {
+			clientset := kubefake.NewSimpleClientset()
+			fakeDisc, ok := clientset.Discovery().(*fakediscovery.FakeDiscovery)
+			Expect(ok).To(BeTrue())
+			fakeDisc.FakedServerVersion = &version.Info{Major: "abc", Minor: "35"}
+
+			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			err := reconciler.validateK8sVersion()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to parse Kubernetes major version"))
 		})
 	})
 })

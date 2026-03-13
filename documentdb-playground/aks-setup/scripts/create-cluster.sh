@@ -6,17 +6,17 @@
 set -e  # Exit on any error
 
 # Configuration
-CLUSTER_NAME="documentdb-cluster"
-RESOURCE_GROUP="documentdb-rg"
-LOCATION="West US 2"
-NODE_COUNT=2
-NODE_SIZE="Standard_D4s_v5"
-KUBERNETES_VERSION="1.35.0"
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-cluster}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
+LOCATION="${LOCATION:-westus2}"
+NODE_COUNT="${NODE_COUNT:-3}"
+NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34.3}"
 
 # DocumentDB Operator Configuration
 # For testing: update with your account/org if using a fork
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.1"
+OPERATOR_CHART_VERSION="0.1.3"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-storage-class    Use AKS default storage (StandardSSD_LRS) - default"
             echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
             echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
-            echo "  --location LOCATION     Azure location (default: East US)"
+            echo "  --location LOCATION     Azure location (default: westus2)"
             echo "  --github-username       GitHub username for operator installation"
             echo "  --github-token          GitHub token for operator installation"
             echo "  -h, --help             Show this help message"
@@ -468,8 +468,6 @@ spec:
   environment: aks
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   documentDbCredentialSecret: documentdb-credentials
   resource:
     storage:
@@ -491,8 +489,6 @@ spec:
   environment: aks
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
-  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
   documentDbCredentialSecret: documentdb-credentials
   resource:
     storage:

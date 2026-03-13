@@ -384,71 +384,79 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 
 func TestGetDocumentDBImageForInstance(t *testing.T) {
 	tests := []struct {
-		name           string
-		documentdb     *dbpreview.DocumentDB
-		useImageVolume bool
-		expected       string
+		name       string
+		documentdb *dbpreview.DocumentDB
+		expected   string
 	}{
 		// Priority 1: spec.DocumentDBImage overrides everything
 		{
-			name: "custom image overrides feature gate in ImageVolume mode",
+			name: "custom image overrides feature gate",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				DocumentDBImage: "custom-registry/custom-image:v1",
 				FeatureGates:    map[string]bool{dbpreview.FeatureGateChangeStreams: true},
 			}},
-			useImageVolume: true,
-			expected:       "custom-registry/custom-image:v1",
-		},
-		{
-			name: "custom image overrides default in combined mode",
-			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-				DocumentDBImage: "custom-registry/documentdb:v2.0.0",
-			}},
-			useImageVolume: false,
-			expected:       "custom-registry/documentdb:v2.0.0",
+			expected: "custom-registry/custom-image:v1",
 		},
 
-		// Priority 2: ChangeStreams feature gate
+		// Priority 2: spec.DocumentDBVersion
+		{
+			name: "documentDBVersion resolves extension image",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			}},
+			expected: DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "custom image overrides documentDBVersion",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+				DocumentDBImage:   "custom-registry/custom-image:v1",
+				DocumentDBVersion: "1.2.3",
+			}},
+			expected: "custom-registry/custom-image:v1",
+		},
+
+		// Priority 3: ChangeStreams feature gate
 		{
 			name: "ChangeStreams enabled returns changestream image",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
 			}},
-			useImageVolume: true,
-			expected:       CHANGESTREAM_DOCUMENTDB_IMAGE,
+			expected: CHANGESTREAM_DOCUMENTDB_IMAGE,
 		},
 		{
 			name: "ChangeStreams explicitly disabled falls through to default",
 			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false},
 			}},
-			useImageVolume: true,
-			expected:       DEFAULT_DOCUMENTDB_IMAGE,
+			expected: DEFAULT_DOCUMENTDB_IMAGE,
 		},
 
-		// Priority 3: mode-appropriate default (no overrides)
+		// Priority 3: default image (no overrides)
 		{
-			name:           "default ImageVolume mode image when no overrides",
-			documentdb:     &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
-			useImageVolume: true,
-			expected:       DEFAULT_DOCUMENTDB_IMAGE,
-		},
-		{
-			name:           "default combined mode image when no overrides",
-			documentdb:     &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
-			useImageVolume: false,
-			expected:       DEFAULT_COMBINED_DOCUMENTDB_IMAGE,
+			name:       "default image when no overrides",
+			documentdb: &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}},
+			expected:   DEFAULT_DOCUMENTDB_IMAGE,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GetDocumentDBImageForInstance(tt.documentdb, tt.useImageVolume)
+			result := GetDocumentDBImageForInstance(tt.documentdb)
 			if result != tt.expected {
 				t.Errorf("GetDocumentDBImageForInstance() = %q, expected %q", result, tt.expected)
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var resolves extension image", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		result := GetDocumentDBImageForInstance(db)
+		expected := DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.200.0"
+		if result != expected {
+			t.Errorf("got %q, want %q", result, expected)
+		}
+	})
 }
 
 func TestGetPortFor(t *testing.T) {
@@ -514,6 +522,21 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			expected: "custom-registry/custom-gateway:v1",
 		},
 		{
+			name: "documentDBVersion resolves gateway image",
+			spec: dbpreview.DocumentDBSpec{
+				DocumentDBVersion: "1.2.3",
+			},
+			expected: GATEWAY_IMAGE_REPO + ":1.2.3",
+		},
+		{
+			name: "explicit gatewayImage overrides documentDBVersion",
+			spec: dbpreview.DocumentDBSpec{
+				GatewayImage:      "custom-registry/custom-gateway:v1",
+				DocumentDBVersion: "1.2.3",
+			},
+			expected: "custom-registry/custom-gateway:v1",
+		},
+		{
 			name: "changestream image when feature gate is enabled",
 			spec: dbpreview.DocumentDBSpec{
 				FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
@@ -538,6 +561,16 @@ func TestGetGatewayImageForDocumentDB(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("DOCUMENTDB_VERSION env var resolves gateway image", func(t *testing.T) {
+		t.Setenv(DOCUMENTDB_VERSION_ENV, "0.200.0")
+		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+		got := GetGatewayImageForDocumentDB(db)
+		expected := GATEWAY_IMAGE_REPO + ":0.200.0"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
 }
 
 func TestGetEnvironmentSpecificAnnotations(t *testing.T) {

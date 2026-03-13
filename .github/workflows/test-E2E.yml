@@ -85,29 +85,12 @@ jobs:
             node_count: 1
             instances_per_node: 1
             kubernetes_version: "v1.35.0"
-            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
           - architecture: arm64
             runner: ubuntu-22.04-arm
             test_scenario_name: "single-node"
             node_count: 1
             instances_per_node: 1
             kubernetes_version: "v1.35.0"
-            documentdb_image: "ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0"
-          # Combined mode (K8s < 1.35) - uses single all-in-one image
-          - architecture: amd64
-            runner: ubuntu-22.04
-            test_scenario_name: "single-node"
-            node_count: 1
-            instances_per_node: 1
-            kubernetes_version: "v1.34.0"
-            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
-          - architecture: arm64
-            runner: ubuntu-22.04-arm
-            test_scenario_name: "single-node"
-            node_count: 1
-            instances_per_node: 1
-            kubernetes_version: "v1.34.0"
-            documentdb_image: "ghcr.io/microsoft/documentdb/documentdb-local:16"
     
     env:
       # Use built image tag on PR or when no external tag provided
@@ -164,7 +147,6 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
-        documentdb-image: ${{ matrix.documentdb_image }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}

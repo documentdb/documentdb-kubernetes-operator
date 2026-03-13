@@ -43,7 +43,8 @@ env:
   DB_USERNAME: k8s_secret_user
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
-  DOCUMENTDB_IMAGE: ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0
+  DOCUMENTDB_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
+  GATEWAY_IMAGE: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
 
 jobs:
   # Conditional build workflow - only run if image_tag is not provided or on pull_request
@@ -106,6 +107,21 @@ jobs:
         fi
         echo "- **Architecture**: \`${{ matrix.architecture }}\`" >> $GITHUB_STEP_SUMMARY
 
+    - name: Determine DocumentDB and Gateway image references
+      run: |
+        # For local builds, use the locally built images; for external, use defaults.
+        if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
+          DOCDB_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
+          GW_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
+        else
+          DOCDB_IMAGE="${{ env.DOCUMENTDB_IMAGE }}"
+          GW_IMAGE="${{ env.GATEWAY_IMAGE }}"
+        fi
+        echo "DOCUMENTDB_IMAGE_REF=$DOCDB_IMAGE" >> $GITHUB_ENV
+        echo "GATEWAY_IMAGE_REF=$GW_IMAGE" >> $GITHUB_ENV
+        echo "DocumentDB image: $DOCDB_IMAGE"
+        echo "Gateway image: $GW_IMAGE"
+
     - name: Setup test environment
       uses: ./.github/actions/setup-test-environment
       with:
@@ -123,6 +139,8 @@ jobs:
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
+        documentdb-image: ${{ env.DOCUMENTDB_IMAGE_REF }}
+        gateway-image: ${{ env.GATEWAY_IMAGE_REF }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
@@ -270,8 +288,8 @@ jobs:
         spec:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
-          documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
-          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          documentDBImage: ${{ env.DOCUMENTDB_IMAGE_REF }}
+          gatewayImage: ${{ env.GATEWAY_IMAGE_REF }}
           resource:
             storage:
               pvcSize: 5Gi
@@ -452,8 +470,8 @@ jobs:
         spec:
           nodeCount: ${{ matrix.node_count }}
           instancesPerNode: ${{ matrix.instances_per_node }}
-          documentDBImage: ${{ env.DOCUMENTDB_IMAGE }}
-          gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+          documentDBImage: ${{ env.DOCUMENTDB_IMAGE_REF }}
+          gatewayImage: ${{ env.GATEWAY_IMAGE_REF }}
           resource:
             storage:
               pvcSize: 5Gi

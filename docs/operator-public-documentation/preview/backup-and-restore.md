@@ -1,5 +1,8 @@
 # Backup and Restore
 
+!!! tip
+    For the complete Backup and ScheduledBackup CRD field definitions, see the [API Reference](api-reference.md#backup).
+
 ## Prerequisites
 
 ### For Kind or Minikube

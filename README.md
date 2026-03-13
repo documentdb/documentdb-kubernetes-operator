@@ -32,7 +32,7 @@ For information on setting up your development environment to contribute to this
 Deploy DocumentDB clusters across different cloud platforms and configurations:
 
 - **Azure (AKS)**: [Comprehensive deployment automation scripts for Azure Kubernetes Service](documentdb-playground/aks-setup/README.md)
-- **AWS (EKS)**: [Simple automation scripts for deploying on Amazon Elastic Kubernetes Service](documentdb-playground/aws-setup/README.md)  
+- **AWS (EKS)**: [Simple automation scripts for deploying on Amazon Elastic Kubernetes Service](documentdb-playground/aws-setup/README.md)
 - **Multi-Cloud**: [High availability setup across multiple cloud providers using KubeFleet and Istio](documentdb-playground/multi-cloud-deployment/README.md)
 - **Azure Multi-Region (AKS + AzureFleet)**: [Deployment scripts for deploying multi-regionally in Azure](documentdb-playground/aks-fleet-deployment/README.md)
 - **TLS Configuration**: [Gateway TLS setup with multiple certificate modes (self-signed, provided, cert-manager)](documentdb-playground/tls/README.md)
@@ -50,4 +50,4 @@ For security concerns, please review our [Security Policy](SECURITY.md).
 
 - Create an [issue](https://github.com/documentdb/documentdb-kubernetes-operator/issues) for bug reports and feature requests
 - Check our [documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/) for common questions
-- Contact us on [Discord](https://discordapp.com/channels/1374170121219866635/1435045191156236458)
+- [Join our Discord](https://discord.gg/vH7bYu524D) and then contact us on [#kubernetes](https://discordapp.com/channels/1374170121219866635/1435045191156236458)

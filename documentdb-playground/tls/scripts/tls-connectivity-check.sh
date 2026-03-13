@@ -39,7 +39,6 @@ EOF
 
 NAMESPACE="documentdb-preview-ns"
 DOCDB_NAME="documentdb-preview"
-DOCDB_VERSION="16"
 SECRET_NAME="documentdb-credentials"
 SECRET_USER="docdbuser"
 SECRET_PASS="P@ssw0rd123"
@@ -62,8 +61,6 @@ while [[ $# -gt 0 ]]; do
       NAMESPACE="$2"; shift 2 ;;
     --docdb-name)
       DOCDB_NAME="$2"; shift 2 ;;
-    --docdb-version)
-      DOCDB_VERSION="$2"; shift 2 ;;
     --secret-name)
       SECRET_NAME="$2"; shift 2 ;;
     --username)
@@ -172,9 +169,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBVersion: "${DOCDB_VERSION}"
-  documentDBImage: "ghcr.io/microsoft/documentdb/documentdb-local:${DOCDB_VERSION}"
-  gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:${DOCDB_VERSION}"
   resource:
     storage:
       pvcSize: ${PVC_SIZE}
@@ -204,9 +198,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBVersion: "${DOCDB_VERSION}"
-  documentDBImage: "ghcr.io/microsoft/documentdb/documentdb-local:${DOCDB_VERSION}"
-  gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:${DOCDB_VERSION}"
   resource:
     storage:
       pvcSize: ${PVC_SIZE}

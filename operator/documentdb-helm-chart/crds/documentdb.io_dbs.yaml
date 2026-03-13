@@ -1215,10 +1215,11 @@ spec:
                 minimum: 1
                 type: integer
               postgresImage:
-                default: ghcr.io/cloudnative-pg/postgresql:18-minimal-bookworm
+                default: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
                 description: |-
                   PostgresImage is the container image to use for the PostgreSQL server.
                   If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.
+                  Must use trixie (Debian 13) base to match the extension's GLIBC requirements.
                 type: string
               resource:
                 description: Resource specifies the storage resources for DocumentDB.

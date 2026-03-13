@@ -434,16 +434,15 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 		return documentdb.Spec.GatewayImage
 	}
 
-	// TODO: Uncomment when we publish custom gateway images
-	// // Use spec-level documentDBVersion if set
-	// if documentdb.Spec.DocumentDBVersion != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, documentdb.Spec.DocumentDBVersion)
-	// }
+	// Use spec-level documentDBVersion if set
+	if documentdb.Spec.DocumentDBVersion != "" {
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+	}
 
-	// // Use global documentDbVersion if set
-	// if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
-	// }
+	// Use global documentDbVersion if set
+	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
+		return fmt.Sprintf("%s:%s", GATEWAY_IMAGE_REPO, version)
+	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.
@@ -457,24 +456,20 @@ func GetGatewayImageForDocumentDB(documentdb *dbpreview.DocumentDB) string {
 
 // GetDocumentDBImageForInstance returns the documentdb engine image.
 // Priority: spec.documentDBImage > spec.documentDBVersion > env.DOCUMENTDB_VERSION > default
-// The default depends on the deployment mode:
-//   - ImageVolume mode (useImageVolume=true): returns DEFAULT_DOCUMENTDB_IMAGE (extension image)
-//   - Combined mode (useImageVolume=false): returns DEFAULT_COMBINED_DOCUMENTDB_IMAGE (all-in-one image)
-func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB, useImageVolume bool) string {
+func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB) string {
 	if documentdb.Spec.DocumentDBImage != "" {
 		return documentdb.Spec.DocumentDBImage
 	}
 
-	// TODO: Uncomment when we publish custom documentdb images
-	// // Use spec-level documentDBVersion if set
-	// if documentdb.Spec.DocumentDBVersion != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, documentdb.Spec.DocumentDBVersion)
-	// }
+	// Use spec-level documentDBVersion if set
+	if documentdb.Spec.DocumentDBVersion != "" {
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, documentdb.Spec.DocumentDBVersion)
+	}
 
-	// // Use global documentDbVersion if set
-	// if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
-	// 	return fmt.Sprintf("%s:%s", DOCUMENTDB_IMAGE_REPOSITORY, version)
-	// }
+	// Use global documentDbVersion if set (from DOCUMENTDB_VERSION env var)
+	if version := os.Getenv(DOCUMENTDB_VERSION_ENV); version != "" {
+		return fmt.Sprintf("%s:%s", DOCUMENTDB_EXTENSION_IMAGE_REPO, version)
+	}
 
 	// Use changestream-enabled image when the ChangeStreams feature gate is on.
 	// TODO: remove this override once change stream support is included in the official images.
@@ -482,11 +477,7 @@ func GetDocumentDBImageForInstance(documentdb *dbpreview.DocumentDB, useImageVol
 		return CHANGESTREAM_DOCUMENTDB_IMAGE
 	}
 
-	// Fall back to mode-appropriate default
-	if useImageVolume {
-		return DEFAULT_DOCUMENTDB_IMAGE
-	}
-	return DEFAULT_COMBINED_DOCUMENTDB_IMAGE
+	return DEFAULT_DOCUMENTDB_IMAGE
 }
 
 func GenerateServiceName(source, target, resourceGroup string) string {

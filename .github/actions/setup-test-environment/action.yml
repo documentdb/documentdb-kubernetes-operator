@@ -55,13 +55,13 @@ inputs:
     required: false
     default: 'false'
   documentdb-image:
-    description: 'DocumentDB image to use for the cluster'
+    description: 'Optional DocumentDB image override for the cluster'
     required: false
-    default: 'ghcr.io/guanzhousongmicrosoft/documentdb-pg18:0.110.0'
+    default: ''
   gateway-image:
-    description: 'Gateway image to use for the cluster (defaults to ghcr.io/microsoft/documentdb/documentdb-local:16)'
+    description: 'Optional gateway image override for the cluster'
     required: false
-    default: 'ghcr.io/microsoft/documentdb/documentdb-local:16'
+    default: ''
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -216,6 +216,32 @@ runs:
         node_image: kindest/node:${{ inputs.kubernetes-version }}
         cluster_name: documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}
 
+    - name: Resolve DocumentDB and Gateway image references
+      shell: bash
+      run: |
+        # Resolve early so kind-load and deploy steps both use the same refs.
+        # Priority: explicit input override > external manifest tag > local build tag.
+        if [[ -n "${{ inputs.documentdb-image }}" ]]; then
+          DOCDB_IMAGE="${{ inputs.documentdb-image }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}"
+        else
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        fi
+
+        if [[ -n "${{ inputs.gateway-image }}" ]]; then
+          GW_IMAGE="${{ inputs.gateway-image }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}"
+        else
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        fi
+
+        echo "DOCUMENTDB_IMAGE_RESOLVED=$DOCDB_IMAGE" >> $GITHUB_ENV
+        echo "GATEWAY_IMAGE_RESOLVED=$GW_IMAGE" >> $GITHUB_ENV
+        echo "Resolved DocumentDB image: $DOCDB_IMAGE"
+        echo "Resolved Gateway image: $GW_IMAGE"
+
     - name: Load Docker images into kind cluster (local build)
       if: inputs.use-external-images == 'false'
       shell: bash
@@ -225,6 +251,8 @@ runs:
         CLUSTER_NAME="documentdb-${{ inputs.test-type }}-${{ inputs.architecture }}-${{ inputs.test-scenario-name }}"
         OPERATOR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/operator:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         SIDECAR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/sidecar:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        LOCAL_DOCUMENTDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+        LOCAL_GATEWAY_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         
         # Load the operator image into kind cluster
         kind load docker-image "$OPERATOR_IMAGE" --name "$CLUSTER_NAME"
@@ -232,7 +260,24 @@ runs:
         # Load the sidecar image into kind cluster  
         kind load docker-image "$SIDECAR_IMAGE" --name "$CLUSTER_NAME"
         
-        echo "✓ All local Docker images loaded into kind cluster successfully"
+        # Load locally built documentdb and gateway images
+        kind load docker-image "$LOCAL_DOCUMENTDB_IMAGE" --name "$CLUSTER_NAME"
+        kind load docker-image "$LOCAL_GATEWAY_IMAGE" --name "$CLUSTER_NAME"
+        
+        # If override images were provided and differ from the local build tags,
+        # pull and load them so the CR can reference them inside kind.
+        if [[ "$DOCUMENTDB_IMAGE_RESOLVED" != "$LOCAL_DOCUMENTDB_IMAGE" ]]; then
+          echo "Pulling override documentdb image: $DOCUMENTDB_IMAGE_RESOLVED"
+          docker pull "$DOCUMENTDB_IMAGE_RESOLVED"
+          kind load docker-image "$DOCUMENTDB_IMAGE_RESOLVED" --name "$CLUSTER_NAME"
+        fi
+        if [[ "$GATEWAY_IMAGE_RESOLVED" != "$LOCAL_GATEWAY_IMAGE" ]]; then
+          echo "Pulling override gateway image: $GATEWAY_IMAGE_RESOLVED"
+          docker pull "$GATEWAY_IMAGE_RESOLVED"
+          kind load docker-image "$GATEWAY_IMAGE_RESOLVED" --name "$CLUSTER_NAME"
+        fi
+        
+        echo "✓ All Docker images loaded into kind cluster successfully"
 
     - name: Pre-pull external images for kind cluster (external images)
       if: inputs.use-external-images == 'true'
@@ -420,6 +465,9 @@ runs:
               --set documentDbVersion="$LOCAL_IMAGE_TAG" \
               --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
               --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
+              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
+              --set image.sidecarinjector.pullPolicy=IfNotPresent \
+              --set image.walreplica.pullPolicy=IfNotPresent \
               --wait --timeout=15m
           else
             helm install documentdb-operator ./documentdb-chart \
@@ -428,6 +476,9 @@ runs:
               --set documentDbVersion="$LOCAL_IMAGE_TAG" \
               --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
               --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
+              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
+              --set image.sidecarinjector.pullPolicy=IfNotPresent \
+              --set image.walreplica.pullPolicy=IfNotPresent \
               --values /tmp/values-override.yaml \
               --wait --timeout=15m
           fi
@@ -452,6 +503,20 @@ runs:
         echo "Sidecar injector image (if present):"
         kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
         echo ""
+        echo "Operator imagePullPolicy:"
+        OPERATOR_PULL_POLICY=$(kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}')
+        echo "$OPERATOR_PULL_POLICY"
+        if [[ "$OPERATOR_PULL_POLICY" != "IfNotPresent" ]]; then
+          echo "❌ Expected operator imagePullPolicy=IfNotPresent for local images, got: $OPERATOR_PULL_POLICY"
+          exit 1
+        fi
+        echo "Sidecar injector imagePullPolicy:"
+        SIDECAR_PULL_POLICY=$(kubectl get deployment sidecar-injector -n cnpg-system -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}')
+        echo "$SIDECAR_PULL_POLICY"
+        if [[ "$SIDECAR_PULL_POLICY" != "IfNotPresent" ]]; then
+          echo "❌ Expected sidecar injector imagePullPolicy=IfNotPresent for local images, got: $SIDECAR_PULL_POLICY"
+          exit 1
+        fi
 
         # Additional verification - check that operator is actually running
         echo "Checking operator pod status..."
@@ -592,8 +657,8 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ${{ inputs.documentdb-image }}
-          gatewayImage: ${{ inputs.gateway-image }}
+          documentDBImage: ${DOCUMENTDB_IMAGE_RESOLVED}
+          gatewayImage: ${GATEWAY_IMAGE_RESOLVED}
           resource:
             storage:
               pvcSize: 5Gi

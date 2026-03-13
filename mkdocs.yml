@@ -2,16 +2,41 @@ site_name: DocumentDB-Kubernetes-Operator
 repo_url: https://github.com/documentdb/documentdb-kubernetes-operator
 edit_uri: edit/main/docs/operator-public-documentation/
 docs_dir: docs/operator-public-documentation
+# Material theme is required for mike's version selector dropdown;
+# the readthedocs theme does not support it.
 theme:
-  name: readthedocs
+  name: material
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+# mike (https://github.com/jimporter/mike) enables versioned docs on GitHub Pages.
+# Each release gets a frozen snapshot (e.g., /0.2.0/), and "latest" always points
+# to the most recent release. Unreleased changes on main deploy to /dev/ only.
+# See .github/workflows/deploy_docs.yml for the deployment logic.
+extra:
+  version:
+    provider: mike
+    default: latest
 
 nav:
   - Preview:
       - Get Started: preview/index.md
       - Getting Started:
         - Deploy on AKS: getting-started/deploy-on-aks.md
+      - Configuration:
+          - Networking: preview/configuration/networking.md
+          - TLS: preview/configuration/tls.md
+          - Storage: preview/configuration/storage.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
+      - API Reference: preview/api-reference.md
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
@@ -22,5 +47,13 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
   - toc:
       permalink: true

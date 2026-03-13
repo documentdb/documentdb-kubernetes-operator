@@ -28,8 +28,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: {{DOCUMENTDB_IMAGE}}
-  gatewayImage: {{GATEWAY_IMAGE}}
   resource:
     storage:
       pvcSize: 10Gi

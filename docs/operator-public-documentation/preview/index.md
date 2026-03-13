@@ -17,10 +17,8 @@ Follow these steps to install the operator, deploy a DocumentDB cluster, and con
 
 - [Helm](https://helm.sh/docs/intro/install/) installed.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) installed.
-- A local Kubernetes cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/), or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (v0.31+) installed. You are free to use any other Kubernetes cluster, but that's not a requirement for this quickstart.
-- Install [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) to connect to the DocumentDB cluster.
-
-> **Kubernetes version:** **Kubernetes 1.35+** is recommended. The operator uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in K8s 1.35) to mount the DocumentDB extension. On older clusters the operator falls back to a combined image automatically, but support for Kubernetes < 1.35 will be removed in a future release.
+- A **Kubernetes 1.35+** cluster. The operator uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in K8s 1.35) to mount the DocumentDB extension. A local cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/) or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (v0.31+) works for this quickstart.
+- [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) installed to connect to the DocumentDB cluster.
 
 ### Start a local Kubernetes cluster
 
@@ -186,7 +184,7 @@ documentdb-preview   Cluster in healthy state   mongodb://...
 
 ### Connect to the DocumentDB cluster
 
-Choose a connection method based on your service type.
+Choose a connection method based on your service type. For more details on service types, load balancers, and Network Policies, see [Networking](configuration/networking.md). For TLS certificate configuration, see [TLS](configuration/tls.md).
 
 #### Option 1: ClusterIP service (default — for local development)
 
@@ -372,7 +370,7 @@ switched to db sample_mflix
 
 The operator uses a sidecar injector plugin to automatically inject the DocumentDB Gateway container into PostgreSQL pods. You can customize the gateway image, pod labels, and annotations.
 
-For details, see [Sidecar Injector Plugin Configuration](../../developer-guides/sidecar-injector-plugin-configuration.md).
+For details, see [Sidecar Injector Plugin Configuration](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/developer-guides/sidecar-injector-plugin-configuration.md).
 
 ### Local high-availability (HA)
 
@@ -406,15 +404,7 @@ This configuration creates:
 
 ### Multi-cloud deployment
 
-The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-cloud-deployment/README.md).
-
-### TLS setup
-
-For advanced TLS configuration and testing:
-
-- [TLS Setup Guide](../../../documentdb-playground/tls/README.md) — Complete TLS configuration guide
-- [E2E Testing](../../../documentdb-playground/tls/E2E-TESTING.md) — Comprehensive testing procedures
-
+The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md).
 
 ## Clean up
 

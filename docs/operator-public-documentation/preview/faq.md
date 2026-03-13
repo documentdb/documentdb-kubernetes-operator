@@ -23,6 +23,10 @@ The operator works on any conformant Kubernetes distribution (version 1.30 or la
 
 The operator is under active development and currently in **preview**. We don't yet recommend it for production workloads. We welcome feedback and contributions as we work toward general availability.
 
+### Where can I find the full CRD field reference?
+
+See the [API Reference](api-reference.md) for auto-generated documentation of all DocumentDB, Backup, and ScheduledBackup CRD fields with types, defaults, and validation rules.
+
 ## Installation
 
 ### Do I need to install CloudNativePG separately?
@@ -45,4 +49,4 @@ Set `spec.instancesPerNode` to 3 to deploy one primary and two replicas. The ope
 
 ### Can I deploy across multiple clouds?
 
-Yes. The operator supports multi-cloud deployment with cross-cluster replication. See the [Multi-Cloud Deployment Guide](../../../documentdb-playground/multi-cloud-deployment/README.md) for setup instructions.
+Yes. The operator supports multi-cloud deployment with cross-cluster replication. See the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md) for setup instructions.
