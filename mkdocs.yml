@@ -28,6 +28,8 @@ extra:
 nav:
   - Preview:
       - Get Started: preview/index.md
+      - Getting Started:
+        - Deploy on AKS: getting-started/deploy-on-aks.md
       - Configuration:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
@@ -38,6 +40,7 @@ nav:
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
+  
 
 plugins:
   - search
