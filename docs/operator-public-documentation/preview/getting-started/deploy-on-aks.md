@@ -1,3 +1,12 @@
+---
+title: Deploy on Azure Kubernetes Service
+description: Complete guide for deploying the DocumentDB Kubernetes Operator on Azure Kubernetes Service (AKS)
+tags:
+  - aks
+  - azure
+  - deployment
+---
+
 # Deploy on Azure Kubernetes Service (AKS)
 
 This guide covers the general AKS deployment model for the DocumentDB Kubernetes
@@ -103,5 +112,6 @@ az aks enable-addons \
 ## Additional Resources
 
 - [AKS documentation](https://learn.microsoft.com/azure/aks/)
+- [AKS Security best practices](https://learn.microsoft.com/azure/aks/operator-best-practices-cluster-security)
 - [Azure CNI networking](https://learn.microsoft.com/azure/aks/configure-azure-cni)
 - [Azure Load Balancer](https://learn.microsoft.com/azure/load-balancer/)

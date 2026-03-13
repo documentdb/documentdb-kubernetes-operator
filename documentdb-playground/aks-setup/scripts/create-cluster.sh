@@ -6,8 +6,8 @@
 set -e  # Exit on any error
 
 # Configuration
-CLUSTER_NAME="ray-ddb-cluster"
-RESOURCE_GROUP="ray-documentdb-rg"
+CLUSTER_NAME="documentdb-cluster"
+RESOURCE_GROUP="documentdb-rg"
 LOCATION="West US 2"
 NODE_COUNT=2
 NODE_SIZE="Standard_D4s_v5"

@@ -8,11 +8,11 @@ theme:
 nav:
   - Preview:
       - Get Started: preview/index.md
+      - Getting Started:
+        - Deploy on AKS: getting-started/deploy-on-aks.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - FAQ: preview/faq.md
-  - Getting Started:
-      - Deploy on AKS: getting-started/deploy-on-aks.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
   
