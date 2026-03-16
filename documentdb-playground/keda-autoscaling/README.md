@@ -66,7 +66,7 @@ kubectl apply -f manifests/drain-jobs.yaml
 The setup script builds a connection string for DocumentDB and stores it in a Kubernetes Secret:
 
 ```text
-mongodb://<user>:<pass>@documentdb-service-keda-demo.documentdb-ns.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true
+mongodb://<user>:<pass>@documentdb-service-keda-demo.documentdb-ns.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true
 ```
 
 | Parameter | Value | Why it's needed |
@@ -75,7 +75,7 @@ mongodb://<user>:<pass>@documentdb-service-keda-demo.documentdb-ns.svc.cluster.l
 | `directConnection=true` | Required | DocumentDB doesn't run a real replica set topology |
 | `authMechanism=SCRAM-SHA-256` | Required | DocumentDB's authentication mechanism |
 | `tls=true` | Required | DocumentDB Gateway serves TLS by default |
-| `tlsAllowInvalidCertificates=true` | For self-signed | Skip certificate validation with the default self-signed certificates |
+| `tlsInsecure=true` | For self-signed | Skip certificate validation with the default self-signed certificates |
 
 ## Script reference
 
@@ -116,9 +116,12 @@ Interactive walkthrough that seeds jobs, watches scaling, drains jobs, and watch
 
 ## Known limitations and gotchas
 
-> **Important:** KEDA's MongoDB scaler uses the Go MongoDB driver internally. The
-> `tlsAllowInvalidCertificates=true` connection string parameter is respected by the driver, but
-> if you encounter TLS errors, consider switching DocumentDB to `CertManager` TLS mode. See the
+> **Important:** KEDA's MongoDB scaler uses the Go MongoDB driver internally. You must use
+> `tlsInsecure=true` (not `tlsAllowInvalidCertificates=true`) in the connection string. The
+> Go driver only respects `tlsInsecure` for skipping both certificate and hostname verification.
+> Using `tlsAllowInvalidCertificates=true` alone causes `x509: certificate is not valid for any
+> names` errors because hostname verification still applies. For production, switch DocumentDB to
+> `CertManager` TLS mode — see the
 > [TLS configuration documentation](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/configuration/tls.md).
 
 > **Note:** The `directConnection=true` parameter is essential. Without it, the Go MongoDB driver

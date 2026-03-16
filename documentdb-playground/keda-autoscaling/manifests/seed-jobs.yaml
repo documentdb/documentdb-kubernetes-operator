@@ -15,20 +15,21 @@ spec:
       restartPolicy: Never
       containers:
         - name: seed
-          image: mongodb/mongodb-community-server:8.0-ubuntu2404
+          image: mongo:8.0
           command:
-            - mongosh
-            - "--eval"
+            - /bin/sh
+            - -c
             - |
-              const db = connect(process.env.MONGODB_URI);
-              db.getSiblingDB("appdb").jobs.insertMany(
-                Array.from({length: 10}, (_, i) => ({
-                  status: "pending",
-                  created: new Date(),
-                  data: "job-" + (i + 1)
-                }))
-              );
-              print("Inserted " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}) + " pending jobs");
+              mongosh "$MONGODB_URI" --eval '
+                db.getSiblingDB("appdb").jobs.insertMany(
+                  Array.from({length: 10}, (_, i) => ({
+                    status: "pending",
+                    created: new Date(),
+                    data: "job-" + (i + 1)
+                  }))
+                );
+                print("Pending jobs: " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}));
+              '
           env:
             - name: MONGODB_URI
               valueFrom:

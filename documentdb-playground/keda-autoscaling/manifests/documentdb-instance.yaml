@@ -12,4 +12,6 @@ spec:
   resource:
     storage:
       pvcSize: 2Gi
+  exposeViaService:
+    serviceType: ClusterIP
   sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io

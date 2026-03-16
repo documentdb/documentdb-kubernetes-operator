@@ -15,18 +15,19 @@ spec:
       restartPolicy: Never
       containers:
         - name: drain
-          image: mongodb/mongodb-community-server:8.0-ubuntu2404
+          image: mongo:8.0
           command:
-            - mongosh
-            - "--eval"
+            - /bin/sh
+            - -c
             - |
-              const db = connect(process.env.MONGODB_URI);
-              const result = db.getSiblingDB("appdb").jobs.updateMany(
-                {status: "pending"},
-                {$set: {status: "completed", completedAt: new Date()}}
-              );
-              print("Marked " + result.modifiedCount + " jobs as completed");
-              print("Remaining pending: " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}));
+              mongosh "$MONGODB_URI" --eval '
+                const result = db.getSiblingDB("appdb").jobs.updateMany(
+                  {status: "pending"},
+                  {$set: {status: "completed", completedAt: new Date()}}
+                );
+                print("Marked " + result.modifiedCount + " jobs as completed");
+                print("Remaining pending: " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}));
+              '
           env:
             - name: MONGODB_URI
               valueFrom:

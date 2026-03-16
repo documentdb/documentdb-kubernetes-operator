@@ -133,7 +133,7 @@ create_keda_connection_secret() {
     pass=$(kubectl get secret "$DOCUMENTDB_SECRET" -n "$DOCUMENTDB_NAMESPACE" -o jsonpath='{.data.password}' | base64 -d)
     svc_name="documentdb-service-${DOCUMENTDB_NAME}.${DOCUMENTDB_NAMESPACE}.svc.cluster.local"
 
-    conn_string="mongodb://${user}:${pass}@${svc_name}:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+    conn_string="mongodb://${user}:${pass}@${svc_name}:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true"
 
     # Create in keda namespace (for ClusterTriggerAuthentication)
     kubectl create secret generic documentdb-keda-connection \
