@@ -11,7 +11,8 @@ These instructions guide GitHub Copilot's automated pull request reviews for the
 
 For the full code review checklist — including Kubernetes operator patterns, security, performance, and testing standards — see [`.github/agents/code-review-agent.md`](agents/code-review-agent.md).
 
-### Go Code reviews
+### Go code reviews
+
 When a PR changes Go source files, pay special attention to:
 
 - Error handling: no ignored errors, errors wrapped with context (`fmt.Errorf("context: %w", err)`).
@@ -31,7 +32,7 @@ When a PR changes files under `operator/documentdb-helm-chart/`:
 
 ## Documentation reviews
 
-When a PR changes files matching any of these paths, apply the documentation rules from `.github/agents/documentation-agent.md`:
+When a PR changes files matching any of these paths, apply the full documentation review rules from [`.github/agents/documentation-agent.md`](agents/documentation-agent.md):
 
 - `docs/**`
 - `mkdocs.yml`
@@ -39,36 +40,4 @@ When a PR changes files matching any of these paths, apply the documentation rul
 - `*.md` (top-level Markdown files)
 - `operator/src/api/preview/*_types.go` (Go doc comments become API reference text)
 
-### Microsoft Writing Style Guide
-
-Check for these commonly violated rules:
-
-- **Sentence case for headings** — capitalize only the first word and proper nouns.
-- **Capitalize product names** — "Kubernetes" (not "kubernetes"), "Azure Load Balancer" (the Azure product) vs. "load balancer" (generic concept).
-- **"That" vs "which"** — "that" for restrictive clauses, "which" (with comma) for nonrestrictive.
-- **Second person** — address the reader as "you", not "the user".
-- **Use `learn.microsoft.com`** — not `docs.microsoft.com`.
-- **No "e.g." or "i.e."** — write "for example" or "such as". Be consistent within a page.
-- **Never use "cluster" alone** — always qualify as "DocumentDB cluster" or "Kubernetes cluster".
-
-### MkDocs and link rules
-
-- Nav paths in `mkdocs.yml` must be relative to `docs_dir` (`docs/operator-public-documentation/`). Files under `preview/` need the `preview/` prefix.
-- Links from inside `docs_dir` to files outside it (such as `documentdb-playground/`) must use absolute GitHub URLs, not relative paths.
-- Published MkDocs URLs don't include `.md` — flag links that include the extension in user-facing URLs.
-- Every new page under `docs/operator-public-documentation/` should have YAML front matter with `title`, `description`, and `tags`.
-
-### Cloud-specific documentation
-
-When a PR documents cloud-specific settings (annotations, storage classes, identity, networking):
-
-- Verify that the doc explains what the operator does automatically.
-- Verify that each cloud-specific feature links to the upstream cloud provider documentation (AKS, EKS, or GKE).
-- Verify that the doc cross-references the operator's API Reference for the relevant CRD field.
-- Flag security or cost bullet lists that have no links to supporting documentation.
-
-### Single source of truth
-
-- Playground READMEs should focus on script usage; public docs should cover concepts and troubleshooting.
-- Flag duplicated explanatory content between playground READMEs and public documentation pages.
-
+The documentation agent covers Microsoft Writing Style Guide compliance, MkDocs link and nav rules, cloud-specific documentation patterns, and single source of truth guidelines. Refer to it for the complete checklist rather than duplicating rules here.

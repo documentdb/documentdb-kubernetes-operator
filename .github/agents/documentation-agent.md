@@ -93,7 +93,7 @@ Before submitting documentation changes, verify:
 
 - [ ] MkDocs nav paths resolve correctly (`mkdocs build --strict` passes)
 - [ ] External URLs use `learn.microsoft.com` (not `docs.microsoft.com`)
-- [ ] Links from files outside `docs_dir` use absolute GitHub URLs (not relative paths into `docs/`)
+- [ ] Links from published MkDocs pages to files outside `docs_dir` use absolute GitHub URLs (not relative paths that escape `docs_dir`)
 - [ ] Published MkDocs URLs don't include the `.md` extension (MkDocs strips it)
 - [ ] Internal cross-references between pages use relative `.md` links
 
@@ -137,7 +137,7 @@ When documenting any cloud-specific setting (annotation, storage class, identity
 1. Explain what the operator does automatically when the `spec.environment` field is set.
 2. Show the resulting YAML or configuration that the operator produces.
 3. Link to the upstream cloud provider documentation for the underlying feature (for example, [AKS load balancer annotations](https://learn.microsoft.com/azure/aks/load-balancer-standard), [EKS NLB](https://docs.aws.amazon.com/eks/latest/userguide/network-load-balancing.html)).
-4. Cross-reference the operator's own [API Reference](preview/api-reference.md) for the relevant CRD field.
+4. Cross-reference the operator's own [API Reference](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/api-reference.md) for the relevant CRD field.
 
 #### Single source of truth
 
