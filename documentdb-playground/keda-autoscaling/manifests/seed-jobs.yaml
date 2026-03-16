@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-pending-jobs
+  namespace: app
+  labels:
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: keda-documentdb-demo
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: mongodb/mongodb-community-server:8.0-ubuntu2404
+          command:
+            - mongosh
+            - "--eval"
+            - |
+              const db = connect(process.env.MONGODB_URI);
+              db.getSiblingDB("appdb").jobs.insertMany(
+                Array.from({length: 10}, (_, i) => ({
+                  status: "pending",
+                  created: new Date(),
+                  data: "job-" + (i + 1)
+                }))
+              );
+              print("Inserted " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}) + " pending jobs");
+          env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-keda-connection
+                  key: connectionString

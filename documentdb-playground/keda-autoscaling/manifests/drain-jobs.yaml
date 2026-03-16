@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drain-pending-jobs
+  namespace: app
+  labels:
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: keda-documentdb-demo
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: drain
+          image: mongodb/mongodb-community-server:8.0-ubuntu2404
+          command:
+            - mongosh
+            - "--eval"
+            - |
+              const db = connect(process.env.MONGODB_URI);
+              const result = db.getSiblingDB("appdb").jobs.updateMany(
+                {status: "pending"},
+                {$set: {status: "completed", completedAt: new Date()}}
+              );
+              print("Marked " + result.modifiedCount + " jobs as completed");
+              print("Remaining pending: " + db.getSiblingDB("appdb").jobs.countDocuments({status: "pending"}));
+          env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-keda-connection
+                  key: connectionString

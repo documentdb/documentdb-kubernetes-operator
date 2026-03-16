@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-worker
+  namespace: app
+  labels:
+    app: job-worker
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: job-worker
+  template:
+    metadata:
+      labels:
+        app: job-worker
+        app.kubernetes.io/part-of: keda-documentdb-demo
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'Processing job...' && sleep 30"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

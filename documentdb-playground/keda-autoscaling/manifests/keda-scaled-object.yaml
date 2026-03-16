@@ -1,0 +1,25 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: documentdb-worker-scaler
+  namespace: app
+  labels:
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  scaleTargetRef:
+    name: job-worker
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  pollingInterval: 5
+  cooldownPeriod: 30
+  triggers:
+    - type: mongodb
+      metadata:
+        dbName: "appdb"
+        collection: "jobs"
+        query: '{"status":"pending"}'
+        queryValue: "5"
+        activationQueryValue: "1"
+      authenticationRef:
+        name: documentdb-trigger-auth
+        kind: ClusterTriggerAuthentication
