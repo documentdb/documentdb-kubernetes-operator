@@ -32,6 +32,10 @@ nav:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
+      - Multi-Region Deployment:
+          - Overview: preview/multi-region-deployment/overview.md
+          - Setup Guide: preview/multi-region-deployment/setup.md
+          - Failover Procedures: preview/multi-region-deployment/failover-procedures.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md

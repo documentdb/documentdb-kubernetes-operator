@@ -158,7 +158,7 @@ Load aliases:
 source ~/.bashrc
 ```
 
-## Fleet Management
+## KubeFleet
 
 ```bash
 # List member clusters
