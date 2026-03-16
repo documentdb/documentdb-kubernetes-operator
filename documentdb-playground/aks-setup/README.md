@@ -4,13 +4,13 @@ This directory contains comprehensive automation scripts for deploying DocumentD
 on Azure Kubernetes Service (AKS) with production-ready configurations.
 
 For general AKS guidance (architecture, configuration, troubleshooting, cost, and
-security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/getting-started/deploy-on-aks.md)
+security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/getting-started/deploy-on-aks/)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
   installed and configured
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed
 - [Helm](https://helm.sh/docs/intro/install/) v3.0+ installed
@@ -276,7 +276,7 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator
 
 ## Cost Management
 
-### Estimated Monthly Costs (East US):
+### Estimated Monthly Costs (East US)
 
 ### **Estimated Monthly Costs (West US 2):**
 - **AKS Cluster**: ~$73/month (managed control plane)
@@ -302,8 +302,8 @@ NODE_COUNT=1
 
 ## Additional Resources
 
-- [Deploy on AKS Guide](../../docs/operator-public-documentation/getting-started/deploy-on-aks.md)
-- [AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
+- [Deploy on AKS Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/getting-started/deploy-on-aks.md)
+- [AKS Documentation](https://learn.microsoft.com/azure/aks/)
 - [DocumentDB Operator GitHub](https://github.com/documentdb/documentdb-operator)
 - [MongoDB Shell (mongosh)](https://www.mongodb.com/try/download/shell)
 
