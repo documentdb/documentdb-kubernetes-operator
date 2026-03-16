@@ -8,10 +8,6 @@ tags:
   - replication
 ---
 
-# Multi-Region Setup Guide
-
-This guide walks through deploying DocumentDB across multiple Kubernetes clusters with regional replication.
-
 ## Prerequisites
 
 ### Infrastructure Requirements
@@ -50,7 +46,9 @@ See [Get Started](../index.md#install-cert-manager) for detailed cert-manager se
 
 #### 2. DocumentDB Operator
 
-Install the operator on each Kubernetes cluster. If using KubeFleet (recommended), install once on the hub cluster and let it propagate to all member clusters. See [Fleet Setup](#with-fleet-management-recommended) below.
+Install the operator on each Kubernetes cluster. If using KubeFleet (recommended),
+install once on the hub cluster and let it propagate to all member clusters. See
+[KubeFleet Setup](#with-kubefleet-recommended) below.
 
 ```bash
 helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
@@ -66,9 +64,10 @@ Verify on each cluster:
 kubectl get pods -n documentdb-operator
 ```
 
-#### Self Label
+#### Create the cluster identity ConfigMap
 
-Each Kubernetes cluster participating in multi-region deployment must identify itself with a unique cluster name. Create a ConfigMap on each cluster:
+Each Kubernetes cluster participating in multi-region deployment must identify
+itself with a unique cluster name. Create a ConfigMap on each cluster:
 
 ```bash
 # Run on each cluster - replace with actual cluster name
@@ -79,7 +78,8 @@ kubectl create configmap cluster-identity \
   --from-literal=cluster-name="${CLUSTER_NAME}"
 ```
 
-Important: The cluster name in this ConfigMap must exactly match one of the member cluster names in the DocumentDB resource's spec.clusterReplication.clusterList[].name. See Cluster Identification for details.
+Important: The cluster name in this ConfigMap must exactly match one of the member
+cluster names in the DocumentDB resource's spec.clusterReplication.clusterList[].name. 
 
 This is needed since the DocumentDB CRD will be the same across primaries and replicas for ease of use, but the clusters need
 to be able to identify where in the topology they lie.
@@ -599,7 +599,7 @@ If PVCs aren't provisioning:
 
 ## Next Steps
 
-- [Failover Procedures](failover-procedures.md) - Learn how to perform planned and unplanned fail overs
+- [Failover Procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
 - [Backup and Restore](../backup-and-restore.md) - Configure multi-region backup strategies
 - [TLS Configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
 - [AKS Fleet Deployment Example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup

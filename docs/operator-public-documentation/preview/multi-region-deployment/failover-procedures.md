@@ -8,13 +8,11 @@ tags:
   - operations
 ---
 
-# Multi-Region Failover Procedures
-
-This guide provides runbooks for switching the primary DocumentDB cluster between regions during planned maintenance or unplanned outages.
-
 ## Overview
 
-A **failover** promotes a replica cluster to become the new primary, making it accept write operations. The previous primary (if still available) becomes a replica replicating from the new primary.
+A **failover** promotes a replica cluster to become the new primary, making it
+accept write operations. The previous primary (if still available) becomes a replica
+replicating from the new primary.
 
 **When to perform failover:**
 
@@ -27,31 +25,34 @@ A **failover** promotes a replica cluster to become the new primary, making it a
 
 ### Planned Failover
 
-This is a failover where the primary is safely demoted, writes are all flushed, and then the new primary is
-promoted. This kind of failover has no data loss, a set window where writes aren't accepted, and the same number
-of replicas before and after. 
+This is a failover where the primary is safely demoted, writes are all flushed,
+and then the new primary is promoted. This kind of failover has no data loss, a
+set window where writes aren't accepted, and the same number of replicas before
+and after.
 
 ### Unplanned Failover (Disaster Recovery)
 
-This is a failover where the primary becomes unavailable and has to be forced out of the DocumentDB cluster
-entirely. Downtime is relative to how long it takes to detect the degradation of the primary, as well as the
-time it takes to spin up HA on the new primary (if HA is enabled). There is a potential for lost writes to 
-the primary, but with High-Availability the client should know when writes weren't committed to remotes.
-By the end of this type of failover, there will be one fewer region in the DocumentDB cluster and likely steps
-will be needed to add the new region. See the [add region playground guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/fleet-add-region/README.md)
+This is a failover where the primary becomes unavailable and has to be forced out
+of the DocumentDB cluster entirely. Downtime depends on how quickly primary degradation
+is detected and, if HA is enabled, how long it takes to scale up the new primary.
+Some writes to the failed primary might be lost, but with high availability enabled,
+clients can determine when writes were not committed to replicas. After an unplanned
+failover, the DocumentDB cluster has one fewer region, and you will need to add
+the region back when the Kubernetes cluster is back online, or add a replacement
+region. See the [add region playground guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/fleet-add-region/README.md)
 for an example.
 
 ## Prerequisites
 
 Before performing any failover:
 
-- [ ] **Replica health:** Target replica cluster is running and replication is current
-- [ ] **Network access:** You have kubectl access to all clusters involved
-- [ ] **Backup available:** Recent backup exists for rollback if needed
-- [ ] **Monitoring:** Metrics and logs are accessible for verification
-- [ ] **Communication:** Stakeholders are notified (for planned failover)
-- [ ] **Application readiness:** Applications can handle brief connection interruption
-- [ ] **kubectl-documentdb plugin:** Install the plugin for streamlined failover operations [kubectl-plugin.md](../kubectl-plugin.md)
+- **Replica health:** Target replica cluster is running and replication is current
+- **Network access:** You have kubectl access to all clusters involved
+- **Backup available:** Recent backup exists for rollback if needed
+- **Monitoring:** Metrics and logs are accessible for verification
+- **Communication:** Stakeholders are notified (for planned failover)
+- **Application readiness:** Applications can handle brief connection interruption
+- **kubectl-documentdb plugin:** Install the plugin for streamlined failover operations [kubectl-plugin](../kubectl-plugin.md)
 
 ### Check Current Replication Status
 
@@ -69,7 +70,7 @@ kubectl --context primary exec -it -n documentdb-preview-ns \
 
 Expected output shows active replication to all replicas:
 
-```
+```text
  pid | usename  | application_name | client_addr | state     | sent_lsn   | write_lsn  | flush_lsn  | replay_lsn | sync_state
 -----+----------+------------------+-------------+-----------+------------+------------+------------+------------+------------
  123 | postgres | replica1         | 10.2.1.5    | streaming | 0/30000A8  | 0/30000A8  | 0/30000A8  | 0/30000A8  | async
