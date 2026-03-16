@@ -51,6 +51,18 @@ You are a documentation specialist for the DocumentDB Kubernetes Operator projec
 - ensure that all documentation is accurate and up-to-date with the latest code changes
 - **Never use "cluster" alone** — always qualify as "DocumentDB cluster" or "Kubernetes cluster" to avoid ambiguity
 
+### Microsoft Writing Style Guide checklist
+
+When writing or reviewing documentation, check for these commonly violated rules from the [Microsoft Writing Style Guide](https://learn.microsoft.com/en-us/style-guide/welcome/):
+
+- **Sentence case for headings** — capitalize only the first word and proper nouns. Not "Understanding the Configuration" but "Understanding the configuration". ([Formatting headings](https://learn.microsoft.com/en-us/style-guide/scannable-content/headings#formatting-headings))
+- **Capitalize product names** — "Kubernetes" (not "kubernetes"), "Azure Load Balancer" (not "load balancer" when referring to the Azure product). Use lowercase "load balancer" only when referring to the generic concept. ([A–Z word list](https://learn.microsoft.com/en-us/style-guide/a-z-word-list-term-collections/k/kubernetes))
+- **"That" vs "which"** — use "that" for restrictive clauses (no comma), "which" for nonrestrictive clauses (with comma). Not "an IP which can be accessed" but "an IP address that can be accessed". ([that, which](https://learn.microsoft.com/en-us/style-guide/a-z-word-list-term-collections/t/that-which))
+- **Second person** — address the reader as "you". Not "the user can configure" but "you can configure". ([Person](https://learn.microsoft.com/en-us/style-guide/grammar/person))
+- **Use `learn.microsoft.com`** — not `docs.microsoft.com` (old domain, redirects but not canonical).
+- **Don't abbreviate "for example"** — write "for example" or "such as" in customer-facing docs, never "e.g.". Be consistent within a page. ([for example](https://learn.microsoft.com/en-us/style-guide/a-z-word-list-term-collections/f/for-example))
+- **Conversational tone** — use contractions ("you can't" not "you cannot") and active voice where natural. ([Microsoft voice](https://learn.microsoft.com/en-us/style-guide/brand-voice-above-all-simple-human))
+
 ## MkDocs Site
 
 The project uses MkDocs with the Material theme for documentation publishing. Configuration is in `mkdocs.yml` at the repository root. Ensure any new pages are properly added to the navigation structure.
@@ -66,6 +78,24 @@ These rules apply to all files under the MkDocs `docs_dir` (`docs/operator-publi
   `https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md`
 - Internal cross-references between pages within `docs_dir` should use relative `.md` links (e.g., `[Storage](storage.md)`, `[TLS](../configuration/tls.md)`).
 - Always validate links after creating or editing documentation. Check both internal `.md` references and external URLs.
+
+#### MkDocs nav path rules
+
+When adding pages to the `nav:` section in `mkdocs.yml`:
+
+- **Paths must be relative to `docs_dir`** (`docs/operator-public-documentation/`), not the repository root.
+- Files under `preview/` need the `preview/` prefix in the nav path. For example, a file at `docs/operator-public-documentation/preview/getting-started/deploy-on-aks.md` must be referenced as `preview/getting-started/deploy-on-aks.md` in the nav.
+- **Test locally** — run `mkdocs build --strict` to catch broken nav paths before committing.
+
+#### Link validation checklist
+
+Before submitting documentation changes, verify:
+
+- [ ] MkDocs nav paths resolve correctly (`mkdocs build --strict` passes)
+- [ ] External URLs use `learn.microsoft.com` (not `docs.microsoft.com`)
+- [ ] Links from files outside `docs_dir` use absolute GitHub URLs (not relative paths into `docs/`)
+- [ ] Published MkDocs URLs don't include the `.md` extension (MkDocs strips it)
+- [ ] Internal cross-references between pages use relative `.md` links
 
 #### Front Matter (YAML Metadata)
 
@@ -99,6 +129,22 @@ Use these Material features to improve documentation quality:
 - Include field reference tables for CRD/API documentation with columns: Field, Type, Required, Default, Description.
 - Provide complete, copy-pasteable YAML examples — not fragments.
 - When showing cloud-specific configuration, always cover AKS, EKS, and GKE using content tabs.
+
+#### Cloud-specific documentation pattern
+
+When documenting any cloud-specific setting (annotation, storage class, identity, networking):
+
+1. Explain what the operator does automatically when the `spec.environment` field is set.
+2. Show the resulting YAML or configuration that the operator produces.
+3. Link to the upstream cloud provider documentation for the underlying feature (for example, [AKS load balancer annotations](https://learn.microsoft.com/azure/aks/load-balancer-standard), [EKS NLB](https://docs.aws.amazon.com/eks/latest/userguide/network-load-balancing.html)).
+4. Cross-reference the operator's own [API Reference](preview/api-reference.md) for the relevant CRD field.
+
+#### Single source of truth
+
+Never duplicate explanatory content between playground READMEs and public documentation pages.
+
+- **Playground READMEs** (`documentdb-playground/`) should focus on script usage, flags, and quick-start commands. Link to public docs for concepts, architecture, and troubleshooting.
+- **Public docs** (`docs/operator-public-documentation/`) should cover concepts, configuration, and troubleshooting. Link to playground READMEs (via absolute GitHub URLs) for automation scripts.
 
 #### API Reference (`api-reference.md`)
 
