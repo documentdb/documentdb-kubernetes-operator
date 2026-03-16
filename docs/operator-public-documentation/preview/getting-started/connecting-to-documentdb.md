@@ -34,7 +34,7 @@ mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanis
 | `<host>` | `127.0.0.1` (port-forward), LoadBalancer IP, or service DNS name |
 | `directConnection=true` | Connect directly to the gateway (required) |
 | `authMechanism=SCRAM-SHA-256` | Authentication mechanism (required) |
-| `tls=true` | TLS is always enabled on the gateway |
+| `tls=true` | TLS is enabled by default on the gateway |
 | `tlsAllowInvalidCertificates=true` | Skip certificate validation (for self-signed certificates) |
 | `replicaSet=rs0` | Replica set name |
 
@@ -420,7 +420,7 @@ MongoDB drivers maintain a connection pool to reuse TCP connections and reduce l
 
 ## TLS configuration
 
-DocumentDB Gateway always serves TLS. The TLS mode is configurable via the `spec.tls` field:
+DocumentDB Gateway serves TLS by default. The TLS mode is configurable via the `spec.tls` field:
 
 | Mode | Description | Certificate validation |
 |------|-------------|----------------------|
@@ -517,7 +517,7 @@ For complete TLS configuration details, see [TLS](../configuration/tls.md).
 **Symptom:** `SSL routines:ssl3_get_record:wrong version number` or `certificate verify failed`
 
 - Add `tlsAllowInvalidCertificates=true` for self-signed certificates
-- Ensure `tls=true` is in the connection string (TLS is always enabled)
+- Ensure `tls=true` is in the connection string (TLS is enabled by default)
 - If using a trusted CA, verify the CA file path is correct
 
 ### Connection timeout
