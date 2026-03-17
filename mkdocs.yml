@@ -9,15 +9,12 @@ theme:
   features:
     - content.code.copy
     - content.code.annotate
-<<<<<<< HEAD
     - content.tabs.link
     - navigation.tabs
     - navigation.sections
     - navigation.top
     - search.suggest
     - search.highlight
-=======
->>>>>>> d454d6b (docs: Add AWS EKS deployment guide with playground script documentation)
 
 # mike (https://github.com/jimporter/mike) enables versioned docs on GitHub Pages.
 # Each release gets a frozen snapshot (e.g., /0.2.0/), and "latest" always points
@@ -64,6 +61,3 @@ markdown_extensions:
           format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
-
-extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js

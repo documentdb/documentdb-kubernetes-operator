@@ -58,7 +58,7 @@ flowchart TB
 |------|---------|---------|--------------|
 | AWS CLI | 2.x | AWS authentication and resource management | [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | eksctl | 0.160+ | EKS cluster creation and management | [Install eksctl](https://eksctl.io/installation/) |
-| kubectl | 1.28+ | Kubernetes cluster interaction | [Install kubectl](https://kubernetes.io/docs/tasks/tools/) |
+| kubectl | 1.35+ | Kubernetes cluster interaction (must match EKS version) | [Install kubectl](https://kubernetes.io/docs/tasks/tools/) |
 | Helm | 3.x | Package management for Kubernetes | [Install Helm](https://helm.sh/docs/intro/install/) |
 | jq | 1.6+ | JSON processing (optional) | `apt install jq` or `brew install jq` |
 
@@ -73,8 +73,8 @@ flowchart TB
     You'll need:
     - AWS Access Key ID
     - AWS Secret Access Key
-    - Default region (e.g., `us-west-2`)
-    - Default output format (e.g., `json`)
+    - Default region (for example, `us-west-2`)
+    - Default output format (for example, `json`)
 
 2. **Verify credentials**:
 
@@ -82,20 +82,13 @@ flowchart TB
     aws sts get-caller-identity
     ```
 
-### GitHub Authentication
+### Helm Repository Setup
 
-The DocumentDB operator is distributed via GitHub Container Registry. You need a GitHub Personal Access Token (PAT) with `read:packages` scope.
-
-1. Go to [GitHub Settings → Tokens](https://github.com/settings/tokens)
-2. Click **Generate new token (classic)**
-3. Select scope: `read:packages`
-4. Copy the generated token
-
-Set the environment variables:
+The DocumentDB operator Helm chart is available from the public GitHub Pages repository.
 
 ```bash
-export GITHUB_USERNAME="your-github-username"
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
+helm repo update
 ```
 
 ## Quick Start with Playground Scripts
@@ -108,10 +101,6 @@ The fastest way to deploy DocumentDB on EKS is using the automation scripts in [
 # Clone the repository
 git clone https://github.com/documentdb/documentdb-kubernetes-operator.git
 cd documentdb-kubernetes-operator/documentdb-playground/aws-setup
-
-# Set GitHub credentials
-export GITHUB_USERNAME="your-github-username"
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
 
 # Create cluster with operator and sample instance
 ./scripts/create-cluster.sh --deploy-instance
@@ -152,22 +141,20 @@ The `create-cluster.sh` script supports several options:
 | `--region REGION` | AWS region | `us-west-2` |
 | `--install-operator` | Install operator only (no instance) | `false` |
 | `--deploy-instance` | Install operator and deploy sample instance | `false` |
-| `--github-username` | GitHub username (alternative to env var) | - |
-| `--github-token` | GitHub token (alternative to env var) | - |
 
-### Clean Up
+### Clean up
 
 !!! danger "Cost Warning"
     EKS clusters incur charges even when idle. The estimated cost is **$140-230/month**. Always delete resources when done testing.
 
 ```bash
-# Delete everything (cluster, operator, instances)
+# Delete everything (EKS cluster, operator, DocumentDB instances)
 ./scripts/delete-cluster.sh
 
-# Delete only DocumentDB instances (keep cluster for reuse)
+# Delete only DocumentDB instances (keep EKS cluster for reuse)
 ./scripts/delete-cluster.sh --instance-only
 
-# Delete instances and operator (keep cluster infrastructure)
+# Delete DocumentDB instances and operator (keep EKS cluster infrastructure)
 ./scripts/delete-cluster.sh --instance-and-operator
 ```
 
@@ -175,7 +162,7 @@ The `create-cluster.sh` script supports several options:
 
 For production deployments or when you need more control, follow these manual steps.
 
-### Step 1: Create EKS Cluster
+### Step 1: Create EKS cluster
 
 ```bash
 export CLUSTER_NAME="documentdb-cluster"
@@ -184,6 +171,7 @@ export REGION="us-west-2"
 eksctl create cluster \
     --name $CLUSTER_NAME \
     --region $REGION \
+    --version 1.35 \
     --node-type m5.large \
     --nodes 2 \
     --nodes-min 1 \
@@ -222,7 +210,7 @@ kubectl get pods -n kube-system -l app=ebs-csi-controller
 The Load Balancer Controller manages AWS Network Load Balancers for Kubernetes services.
 
 ```bash
-# Get cluster VPC ID
+# Get EKS cluster VPC ID
 VPC_ID=$(aws eks describe-cluster \
     --name $CLUSTER_NAME \
     --region $REGION \
@@ -283,7 +271,7 @@ helm install cert-manager jetstack/cert-manager \
 kubectl get pods -n cert-manager
 ```
 
-### Step 5: Create Storage Class
+### Step 5: Create storage class
 
 Create an optimized storage class for DocumentDB workloads:
 
@@ -320,15 +308,12 @@ kubectl apply -f documentdb-storage-class.yaml
 ### Step 6: Install DocumentDB Operator
 
 ```bash
-# Authenticate with GitHub Container Registry
-echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
-    --username "$GITHUB_USERNAME" \
-    --password-stdin
+# Add the Helm repository
+helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
+helm repo update
 
 # Install the operator
-helm install documentdb-operator \
-    oci://ghcr.io/documentdb/documentdb-operator \
-    --version 0.1.0 \
+helm install documentdb-operator documentdb/documentdb-operator \
     --namespace documentdb-operator \
     --create-namespace \
     --wait
@@ -337,7 +322,7 @@ helm install documentdb-operator \
 kubectl get pods -n documentdb-operator
 ```
 
-### Step 7: Deploy DocumentDB Instance
+### Step 7: Deploy DocumentDB instance
 
 Create a namespace and credentials secret:
 
@@ -347,7 +332,7 @@ kubectl create namespace documentdb-instance-ns
 kubectl create secret generic documentdb-credentials \
     --namespace documentdb-instance-ns \
     --from-literal=username=docdbadmin \
-    --from-literal=password='YourSecurePassword123!'
+    --from-literal=password='YourSecurePassword123'
 ```
 
 Deploy a DocumentDB instance:
@@ -379,7 +364,7 @@ spec:
 kubectl apply -f documentdb-instance.yaml
 ```
 
-## AWS-Specific Storage Classes
+## AWS-specific storage classes
 
 EKS supports several EBS volume types. Choose based on your performance requirements:
 
@@ -393,7 +378,7 @@ EKS supports several EBS volume types. Choose based on your performance requirem
 !!! tip "Recommendation"
     Use `gp3` for most workloads. It provides consistent baseline performance and allows independent scaling of IOPS and throughput without increasing volume size.
 
-### High-Performance Storage Class
+### High-performance storage class
 
 For production workloads requiring higher IOPS:
 
@@ -416,14 +401,16 @@ reclaimPolicy: Retain
 
 ## Network Load Balancer Configuration
 
-When `environment: eks` is specified in the DocumentDB spec, the operator automatically applies these NLB annotations:
+When `environment: eks` is specified in the DocumentDB spec, the operator automatically applies these NLB annotations to the generated Kubernetes Service:
 
 ```yaml
-serviceAnnotations:
-  service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-  service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-  service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+# Annotations applied to the Service resource
+metadata:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
 ```
 
 | Annotation | Value | Description |
@@ -438,21 +425,14 @@ serviceAnnotations:
 
 ### Internal Load Balancer
 
-For private access within your VPC, override the annotations in your DocumentDB spec:
+For private access within your VPC, the operator automatically applies internal LB annotations when `environment: eks` is set. To customize annotations beyond the defaults, you can create your own Kubernetes Service resource that targets the DocumentDB pods.
 
-```yaml
-spec:
-  exposeViaService:
-    serviceType: LoadBalancer
-    serviceAnnotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-      service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
-      service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-```
+!!! note "Custom Annotations"
+    The current API applies cloud-specific annotations automatically based on the `environment` field. For advanced customization, manage the Service resource separately from the DocumentDB CR.
 
 ## Verification
 
-### Check Cluster Status
+### Check EKS cluster status
 
 ```bash
 # Verify nodes are ready
@@ -465,10 +445,10 @@ kubectl get pods -n kube-system
 kubectl get pods -n documentdb-operator
 ```
 
-### Check DocumentDB Instance
+### Check DocumentDB instance
 
 ```bash
-# Check instance status
+# Check DocumentDB instance status
 kubectl get documentdb -n documentdb-instance-ns
 
 # Get detailed status
@@ -478,7 +458,7 @@ kubectl describe documentdb my-documentdb -n documentdb-instance-ns
 kubectl get pods -n documentdb-instance-ns
 ```
 
-### Get Connection Information
+### Get connection information
 
 ```bash
 # Wait for LoadBalancer IP
@@ -489,14 +469,14 @@ EXTERNAL_IP=$(kubectl get svc documentdb-service-my-documentdb \
     -n documentdb-instance-ns \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-echo "Connection string: mongodb://docdbadmin:YourSecurePassword123!@${EXTERNAL_IP}:10260/"
+echo "Connection string: mongodb://docdbadmin:YourSecurePassword123@${EXTERNAL_IP}:10260/"
 ```
 
-### Test Connection
+### Test connection
 
 ```bash
 # Using mongosh (if installed)
-mongosh "mongodb://docdbadmin:YourSecurePassword123!@${EXTERNAL_IP}:10260/"
+mongosh 'mongodb://docdbadmin:YourSecurePassword123@'"${EXTERNAL_IP}"':10260/'
 
 # Or using kubectl exec into the pod
 kubectl exec -it -n documentdb-instance-ns \
@@ -527,7 +507,7 @@ eksctl get iamserviceaccount --cluster $CLUSTER_NAME --region $REGION
 - EBS CSI addon not fully installed
 - Insufficient IAM permissions
 
-### Load Balancer Not Created
+### Load balancer not created
 
 **Symptom:** Service shows `<pending>` for EXTERNAL-IP
 
@@ -546,7 +526,7 @@ aws ec2 describe-subnets --filters "Name=tag:kubernetes.io/role/elb,Values=1" \
 - IAM policy missing required permissions
 - VPC configuration issues
 
-### DocumentDB Pod Not Starting
+### DocumentDB pod not starting
 
 **Symptom:** Pods stuck in `Pending` or `CrashLoopBackOff`
 
@@ -576,17 +556,50 @@ kubectl get certificaterequests -A
 kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager
 ```
 
+### Helm chart authentication issues
+
+**Symptom:** Unable to pull the DocumentDB operator Helm chart from the public repository
+
+If the public Helm repository is unavailable or you encounter authentication errors, you can use GitHub Container Registry (GHCR) with a Personal Access Token as a fallback:
+
+```bash
+# Create a GitHub Personal Access Token with read:packages scope
+# Go to: https://github.com/settings/tokens → Generate new token (classic)
+# Select scope: read:packages
+
+# Set credentials
+export GITHUB_USERNAME="your-github-username"
+export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+
+# Authenticate with GitHub Container Registry
+echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
+    --username "$GITHUB_USERNAME" \
+    --password-stdin
+
+# Install using OCI registry
+helm install documentdb-operator \
+    oci://ghcr.io/documentdb/documentdb-operator \
+    --namespace documentdb-operator \
+    --create-namespace \
+    --wait
+```
+
+!!! note "Version Pinning with OCI"
+    When using the OCI registry, you may need to specify a version with `--version`. Check the [releases page](https://github.com/documentdb/documentdb-kubernetes-operator/releases) for available versions.
+
 ## Cost Optimization
 
-### Right-Size Node Groups
+### Right-size node groups
 
 For development/testing, use smaller instances:
 
 ```bash
+# Use smaller instance type for dev/test
 eksctl create cluster \
     --name $CLUSTER_NAME \
     --region $REGION \
-    --node-type t3.medium \  # Smaller instance type
+    --version 1.35 \
+    --node-type t3.medium \
     --nodes 2
 ```
 
@@ -604,13 +617,13 @@ eksctl create nodegroup \
     --spot
 ```
 
-### Clean Up Unused Resources
+### Clean up unused resources
 
 ```bash
 # Delete DocumentDB instances when not in use
 kubectl delete documentdb --all -n documentdb-instance-ns
 
-# Or delete the entire cluster
+# Or delete the entire EKS cluster
 eksctl delete cluster --name $CLUSTER_NAME --region $REGION
 ```
 

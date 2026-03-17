@@ -1,6 +1,6 @@
 ---
 description: 'Agent for documentation tasks in the DocumentDB Kubernetes Operator project.'
-tools: [execute, read, terminal]
+tools: [execute, read, terminal, edit]
 ---
 # Documentation Agent Instructions
 
