@@ -9,11 +9,18 @@ tags:
 
 # Local High Availability
 
-Local high availability (HA) deploys multiple DocumentDB instances within a single Kubernetes cluster, providing automatic failover and zero data loss during instance failures.
+Local high availability (HA) deploys multiple DocumentDB instances within a single Kubernetes cluster, providing automatic failover and minimal data loss during instance failures.
+
+!!! info "Built on CloudNative-PG"
+    DocumentDB uses [CloudNative-PG's](https://cloudnative-pg.io/) default high availability configuration for local HA. For detailed information about the underlying HA mechanisms, see:
+    
+    - [CloudNative-PG Architecture](https://cloudnative-pg.io/documentation/current/architecture/)
+    - [CloudNative-PG Replication](https://cloudnative-pg.io/documentation/current/replication/)
+    - [CloudNative-PG Failover](https://cloudnative-pg.io/documentation/current/failover/)
 
 ## Overview
 
-Local HA uses synchronous replication between a primary instance and one or two replicas. When the primary fails, a replica is automatically promoted to primary.
+Local HA uses streaming replication between a primary instance and one or two replicas. When the primary fails, a replica is automatically promoted to primary.
 
 ```mermaid
 flowchart LR
@@ -28,8 +35,8 @@ flowchart LR
     end
     
     App([Application]) --> P
-    P -->|Sync Replication| R1
-    P -->|Sync Replication| R2
+    P -->|Streaming Replication| R1
+    P -->|Streaming Replication| R2
 ```
 
 ## Instance Configuration
@@ -43,10 +50,12 @@ metadata:
   name: my-documentdb
   namespace: documentdb
 spec:
+  nodeCount: 1
   instancesPerNode: 3  # (1)!
-  storage:
-    size: 10Gi
-    storageClassName: managed-csi
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
 ```
 
 1. Valid values: `1` (no HA), `2` (primary + 1 replica), `3` (primary + 2 replicas, recommended for production)
@@ -60,7 +69,7 @@ spec:
 | `3` | Primary + 2 replicas | **Recommended** for production |
 
 !!! tip "Why 3 instances?"
-    Three instances provide quorum-based failover. With 2 instances, the system cannot distinguish between a network partition and a failed primary. With 3 instances, the system can achieve consensus and safely promote a replica.
+    Three instances provide better fault tolerance: if the primary fails, you still have two replicas, ensuring one can be promoted while retaining a standby. With only 2 instances, after a failover you have no replicas until the former primary recovers. Three instances also allow rolling updates and maintenance without reducing redundancy.
 
 ## Pod Anti-Affinity
 
@@ -77,7 +86,12 @@ metadata:
   name: my-documentdb
   namespace: documentdb
 spec:
+  nodeCount: 1
   instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
   affinity:
     enablePodAntiAffinity: true
     topologyKey: topology.kubernetes.io/zone  # (1)!
@@ -96,7 +110,12 @@ metadata:
   name: my-documentdb
   namespace: documentdb
 spec:
+  nodeCount: 1
   instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 10Gi
+      storageClass: managed-csi
   affinity:
     enablePodAntiAffinity: true
     topologyKey: kubernetes.io/hostname  # (1)!
@@ -134,7 +153,7 @@ sequenceDiagram
     Op->>Op: Wait failoverDelay (default: 0s)
     Op->>P: Mark TargetPrimary pending
     P->>P: Fast shutdown (up to 30s)
-    Op->>R: Leader election
+    Op->>R: Select most up-to-date replica
     R->>R: Promote to primary
     Op->>App: Update service endpoint
     App->>R: Reconnect to new primary
@@ -168,24 +187,65 @@ The failover process occurs in two phases:
 
 **Phase 2: Promotion**
 
-1. Leader election selects the most up-to-date replica
+1. Operator selects the most up-to-date replica based on WAL position
 2. Selected replica promotes to primary and begins accepting writes
 3. Kubernetes service endpoints update to point to new primary
 4. Former primary restarts as a replica when recovered
 
-!!! note "Zero Data Loss"
-    Because replication is synchronous, a committed write exists on at least one replica before acknowledgment. Failover promotes a replica with all committed data.
+!!! note "Replication and Data Durability"
+    DocumentDB relies on [CloudNative-PG's streaming replication](https://cloudnative-pg.io/documentation/current/replication/), which uses asynchronous replication by default. Replicas typically lag only milliseconds behind the primary under normal conditions. During failover, the most up-to-date replica is promoted, minimizing potential data loss to recent uncommitted transactions.
 
 ### RTO and RPO Impact
 
 | Scenario | RTO Impact | RPO Impact |
 |----------|------------|------------|
-| Fast shutdown succeeds | Seconds to tens of seconds | Zero data loss |
-| Fast shutdown times out | Up to `stopDelay` (30s default) | Possible data loss |
-| Network partition | Depends on quorum | Zero if quorum maintained |
+| Fast shutdown succeeds | Seconds to tens of seconds | Minimal (replication lag) |
+| Fast shutdown times out | Up to `stopDelay` (30s default) | Potential data loss |
+| Network partition | Varies by scenario | Depends on replica sync state |
 
 !!! tip "Tuning for RTO vs RPO"
     Lower `stopDelay` values favor faster recovery (RTO) but may increase data loss risk (RPO). Higher values prioritize data safety but may delay recovery.
+
+## Monitoring and Failover Detection
+
+Understanding when a failover has occurred is essential for operations.
+
+### Checking Current Primary
+
+Identify which instance is currently the primary:
+
+```bash
+# Check CNPG cluster status for current primary
+kubectl get cluster my-documentdb -n documentdb -o jsonpath='{.status.currentPrimary}'
+
+# List all pods with their instance roles
+kubectl get pods -n documentdb -l cnpg.io/cluster=my-documentdb \
+  -o custom-columns=NAME:.metadata.name,ROLE:.metadata.labels.cnpg\\.io/instanceRole
+```
+
+### Monitoring Cluster Events
+
+Watch for cluster state changes:
+
+```bash
+# Watch all events for the cluster
+kubectl get events -n documentdb --sort-by='.lastTimestamp' --watch
+
+# Check CNPG cluster conditions
+kubectl get cluster my-documentdb -n documentdb -o jsonpath='{.status.conditions}' | jq
+```
+
+### Monitoring Replication Lag
+
+Track replication health using PostgreSQL system views:
+
+```bash
+# View streaming replication status (run on primary)
+kubectl exec -n documentdb my-documentdb-1 -- psql -U postgres -c "SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
+```
+
+!!! tip "Alerting and Observability"
+    For production monitoring, see the [CloudNative-PG Monitoring documentation](https://cloudnative-pg.io/documentation/current/monitoring/) which covers Prometheus metrics, Grafana dashboards, and alerting rules for failover detection.
 
 ## Testing High Availability
 
@@ -195,7 +255,7 @@ Verify your HA configuration works correctly.
 
 ```bash
 # Check pod distribution across zones/nodes
-kubectl get pods -n documentdb -l documentdb.io/cluster=my-documentdb \
+kubectl get pods -n documentdb -l cnpg.io/cluster=my-documentdb \
   -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,ZONE:.metadata.labels.topology\\.kubernetes\\.io/zone
 ```
 
@@ -220,7 +280,7 @@ kubectl delete pod my-documentdb-1 -n documentdb
 kubectl get pods -n documentdb -w
 
 # Check pod status after failover
-kubectl get pods -n documentdb -l documentdb.io/cluster=my-documentdb
+kubectl get pods -n documentdb -l cnpg.io/cluster=my-documentdb
 ```
 
 ### Test 3: Application Connectivity
@@ -263,7 +323,7 @@ kubectl get nodes -L topology.kubernetes.io/zone
 **Solution**:
 ```bash
 # Check operator logs
-kubectl logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator --tail=100
+kubectl logs deployment/documentdb-operator -n documentdb-operator --tail=100
 
 # Check events
 kubectl get events -n documentdb --sort-by='.lastTimestamp' | tail -20
@@ -286,4 +346,3 @@ kubectl top pod my-documentdb-2 -n documentdb
 # Check pod logs for replication issues
 kubectl logs my-documentdb-2 -n documentdb --tail=50
 ```
-

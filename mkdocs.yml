@@ -26,8 +26,8 @@ extra:
     provider: mike
     default: latest
 
-extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+# Mermaid is configured via pymdownx.superfences custom_fences below.
+# The Material theme handles mermaid rendering without external CDN dependencies.
 
 nav:
   - Preview:

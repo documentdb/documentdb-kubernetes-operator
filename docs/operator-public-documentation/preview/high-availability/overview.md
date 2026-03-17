@@ -18,7 +18,7 @@ High availability (HA) ensures your DocumentDB deployment remains accessible and
 High availability in DocumentDB means:
 
 - **Automatic failover**: When a primary instance fails, a replica is automatically promoted
-- **Data durability**: Data is replicated across multiple instances before acknowledging writes  
+- **Data durability**: Data is replicated across multiple instances
 - **Minimal downtime**: Recovery happens automatically without manual intervention
 - **Continuous operation**: Applications experience brief interruption rather than extended outages
 
@@ -72,7 +72,7 @@ Local HA runs multiple DocumentDB instances within a single Kubernetes cluster, 
 | **Scope** | Single Kubernetes cluster |
 | **Instances** | 1-3 instances (primary + replicas) |
 | **Failover** | Automatic, typically < 30 seconds |
-| **Data Loss** | Zero (synchronous replication) |
+| **Data Loss** | Minimal (async streaming replication) |
 | **Use Case** | Standard production deployments |
 
 **Best for:** Most production workloads requiring high availability without geographic distribution.
@@ -127,7 +127,7 @@ When planning for high availability, understand these key metrics:
 
 | HA Type | Typical RPO |
 |---------|-------------|
-| Local HA | 0 (synchronous) |
+| Local HA | Near-zero (milliseconds of replication lag) |
 | Multi-Region | Seconds (replication lag) |
 | Multi-Cloud | Seconds (replication lag) |
 
@@ -149,8 +149,8 @@ flowchart TD
     
     E --> I[Configure instancesPerNode: 3]
     F --> J[Configure instancesPerNode: 1]
-    G --> K[See Multi-Cloud Guide]
-    H --> L[See Multi-Region Guide]
+    G --> K[Multi-Cloud Guide<br/>Coming soon]
+    H --> L[Multi-Region Guide<br/>Coming soon]
 ```
 
 ## Trade-offs Summary
@@ -160,7 +160,7 @@ flowchart TD
 | **Complexity** | Low | Medium | High |
 | **Cost** | $ | $$ | $$$ |
 | **RTO** | Seconds | Minutes | Minutes |
-| **RPO** | Zero | Replication lag | Replication lag |
+| **RPO** | Near-zero | Replication lag | Replication lag |
 | **Blast radius** | Zone outage | Region outage | Cloud outage |
 | **Network latency** | Minimal | Regional | Variable |
 
