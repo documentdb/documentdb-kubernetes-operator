@@ -1,5 +1,5 @@
 ---
-title: Multi-Region Setup Guide
+title: Multi-region setup guide
 description: Step-by-step instructions for deploying DocumentDB across multiple Kubernetes clusters with replication, prerequisites, and configuration examples.
 tags:
   - multi-region
@@ -10,22 +10,22 @@ tags:
 
 ## Prerequisites
 
-### Infrastructure Requirements
+### Infrastructure requirements
 
 Before deploying DocumentDB in multi-region mode, ensure you have:
 
-- **Multiple Kubernetes clusters:** 2+ clusters in different regions
-- **Network connectivity:** Clusters can communicate over private network or internet
-- **Storage:** CSI-compatible storage class in each cluster with snapshot support
+- **Multiple Kubernetes clusters:** 2 or more Kubernetes clusters in different regions
+- **Network connectivity:** Kubernetes clusters can communicate over private networking or the internet
+- **Storage:** CSI-compatible storage class in each Kubernetes cluster with snapshot support
 - **Load balancing:** LoadBalancer or Ingress capability for external access (optional)
 
-### Required Components
+### Required components
 
 Install these components on **all** Kubernetes clusters:
 
 #### 1. cert-manager
 
-Required for TLS certificate management between clusters.
+Required for TLS certificate management between Kubernetes clusters.
 
 ```bash
 helm repo add jetstack https://charts.jetstack.io
@@ -44,11 +44,9 @@ kubectl get pods -n cert-manager
 
 See [Get Started](../index.md#install-cert-manager) for detailed cert-manager setup.
 
-#### 2. DocumentDB Operator
+#### 2. DocumentDB operator
 
-Install the operator on each Kubernetes cluster. If using KubeFleet (recommended),
-install once on the hub cluster and let it propagate to all member clusters. See
-[KubeFleet Setup](#with-kubefleet-recommended) below.
+Install the operator on each Kubernetes cluster.
 
 ```bash
 helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
@@ -58,37 +56,38 @@ helm install documentdb-operator documentdb/documentdb-operator \
   --create-namespace
 ```
 
-Verify on each cluster:
+Verify installation:
 
 ```bash
 kubectl get pods -n documentdb-operator
 ```
 
-#### Create the cluster identity ConfigMap
+#### 3. Kubernetes cluster identity ConfigMap
 
-Each Kubernetes cluster participating in multi-region deployment must identify
-itself with a unique cluster name. Create a ConfigMap on each cluster:
+Each Kubernetes cluster in a multi-region deployment must identify itself with
+a unique Kubernetes cluster name. Create a ConfigMap on each Kubernetes cluster:
 
 ```bash
-# Run on each cluster - replace with actual cluster name
-CLUSTER_NAME="member-eastus2-cluster"  # e.g., member-eastus2-cluster, member-westus3-cluster
+# Run on each Kubernetes cluster and replace with your actual cluster name.
+CLUSTER_NAME="member-eastus2-cluster"  # for example: member-eastus2-cluster, member-westus3-cluster
 
 kubectl create configmap cluster-identity \
   --namespace kube-system \
   --from-literal=cluster-name="${CLUSTER_NAME}"
 ```
 
-Important: The cluster name in this ConfigMap must exactly match one of the member
-cluster names in the DocumentDB resource's spec.clusterReplication.clusterList[].name. 
+!!! note
+    The Kubernetes cluster name in this ConfigMap must exactly match one
+    of the member Kubernetes cluster names in `spec.clusterReplication.clusterList[].name`.
 
-This is needed since the DocumentDB CRD will be the same across primaries and replicas for ease of use, but the clusters need
-to be able to identify where in the topology they lie.
+This is required because the DocumentDB CRD is the same across primaries and
+replicas, and each Kubernetes cluster must identify its own role in the topology.
 
-### Network Configuration
+### Network configuration
 
-#### VNet/VPC Peering (Single Cloud Provider)
+#### VNet/VPC peering (single cloud provider)
 
-For clusters within the same cloud provider, configure VNet or VPC peering:
+For Kubernetes clusters in the same cloud provider, configure VNet or VPC peering:
 
 === "Azure (AKS)"
 
@@ -103,7 +102,7 @@ For clusters within the same cloud provider, configure VNet or VPC peering:
       --allow-vnet-access
     ```
 
-    Repeat for all cluster pairs in a full mesh topology.
+    Repeat for all Kubernetes cluster pairs in a full mesh topology.
 
     See [AKS Fleet Deployment](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) for automated Azure multi-region setup with VNet peering.
 
@@ -152,136 +151,52 @@ spec:
       - name: member-westus3-cluster
 ```
 
-## Deployment Options
+## Deployment options
 
 Choose a deployment approach based on your infrastructure and operational preferences.
 
-### With KubeFleet (Recommended)
+### With KubeFleet (recommended)
 
 KubeFleet systems simplify multi-region operations by:
 
 - **Centralized control:** Define resources once, deploy everywhere
-- **Automatic propagation:** Resources sync to member clusters automatically
+- **Automatic propagation:** Resources sync to member Kubernetes clusters automatically
 - **Coordinated updates:** Roll out changes across regions consistently
 
-#### Step 1: Deploy Fleet Infrastructure
+#### Step 1: Deploy fleet infrastructure
 
 Install KubeFleet or another fleet management system:
 
-```bash
-# Example: KubeFleet on hub cluster
-kubectl apply -f https://github.com/kubefleet-dev/kubefleet/releases/latest/download/install.yaml
-```
+Configure member Kubernetes clusters to join the fleet. See
+[deploy-fleet-bicep.sh](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/deploy-fleet-bicep.sh)
+"KUBEFLEET SETUP" for a complete automated setup example.
 
-Configure member clusters to join the fleet. See the [AKS Fleet Deployment guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) for a complete automated setup example.
+#### Step 2: Install cert-manager and DocumentDB operator
 
-#### Step 2: Install DocumentDB Operator via KubeFleet
+Install the cert manager and DocumentDB operator to the hub per the
+[Required Components](#required-components) section, then create `ClusterResourcePlacements`
+to deploy them both to all member Kubernetes clusters.
 
-Create a `ClusterResourcePlacement` to deploy the operator to all member clusters:
+- [cert-manager CRP](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/cert-manager-crp.yaml)
+- [documentdb-operator CRP](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/documentdb-operator-crp.yaml)
 
-```yaml title="documentdb-operator-crp.yaml"
-apiVersion: placement.kubernetes-fleet.io/v1beta1
-kind: ClusterResourcePlacement
-metadata:
-  name: documentdb-operator-crp
-  namespace: fleet-system
-spec:
-  resourceSelectors:
-    - group: ""
-      kind: Namespace
-      name: documentdb-operator
-      version: v1
-  placement:
-    strategy:
-      type: PickAll  # Deploy to all member clusters
-```
+#### Step 3: Deploy multi-region DocumentDB
 
-Apply to hub cluster:
+Create a DocumentDB resource with replication configuration. The example uses substitutions
+with a script, so you will need to replace all the {{PLACEHOLDERS}}.
 
-```bash
-kubectl --context hub apply -f documentdb-operator-crp.yaml
-```
+- [DocumentDB CRD, secret, and CRP](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/documentdb-resource-crp.yaml)
 
-The fleet controller will install the operator on all member clusters automatically.
-
-#### Step 3: Deploy Multi-Region DocumentDB
-
-Create a DocumentDB resource with replication configuration:
-
-```yaml title="multi-region-documentdb.yaml"
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-preview
-  namespace: documentdb-preview-ns
-spec:
-  nodeCount: 2
-  instancesPerNode: 1
-  resource:
-    storage:
-      pvcSize: 100Gi
-      storageClass: managed-csi  # Use appropriate storage class per cloud
-  exposeViaService:
-    serviceType: LoadBalancer
-  tls:
-    gateway:
-      mode: SelfSigned
-  clusterReplication:  # (1)!
-    primary: member-eastus2-cluster  # (2)!
-    clusterList:  # (3)!
-      - name: member-westus3-cluster
-      - name: member-uksouth-cluster
-      - name: member-eastus2-cluster
-  documentDbCredentialSecret: documentdb-secret
-```
-
-1. The `clusterReplication` section enables multi-region deployment
-2. `primary` specifies which cluster accepts write operations
-3. `clusterList` lists all member clusters that will host DocumentDB instances (including the primary)
-
-Create the credentials secret:
-
-```bash
-kubectl create secret generic documentdb-secret \
-  --namespace documentdb-preview-ns \
-  --from-literal=password='YourSecurePassword123!'
-```
-
-Apply via KubeFleet to propagate to all clusters:
-
-```yaml title="documentdb-crp.yaml"
-apiVersion: placement.kubernetes-fleet.io/v1beta1
-kind: ClusterResourcePlacement
-metadata:
-  name: documentdb-crp
-  namespace: fleet-system
-spec:
-  resourceSelectors:
-    - group: documentdb.io
-      kind: DocumentDB
-      name: documentdb-preview
-      version: preview
-    - group: ""
-      version: v1
-      kind: Secret
-      name: documentdb-secret
-  placement:
-    strategy:
-      type: PickAll
-```
-
-Apply both resources:
-
-```bash
-kubectl --context hub apply -f multi-region-documentdb.yaml
-kubectl --context hub apply -f documentdb-crp.yaml
-```
+Within the CRD The `clusterReplication` section enables multi-region deployment,
+`primary` specifies which Kubernetes cluster accepts write operations, and `clusterList`
+lists all member Kubernetes clusters that host DocumentDB instances (including the
+primary) and accepts a more granular `environment` and `storageClass` variable.
 
 ### Without KubeFleet
 
-If not using KubeFleet, deploy DocumentDB resources to each cluster individually.
+If you are not using KubeFleet, deploy DocumentDB resources to each Kubernetes cluster individually.
 
-#### Step 1: Identify Cluster Names
+#### Step 1: Identify Kubernetes cluster names
 
 Determine the name for each Kubernetes cluster. These names are used in the replication configuration:
 
@@ -295,115 +210,31 @@ aws eks list-clusters --query "clusters" --output table  # AWS
 gcloud container clusters list --format="table(name)"  # GCP
 ```
 
-#### Step 2: Create Cluster Identification
+#### Step 2: Create Kubernetes cluster identification
 
-On each cluster, create a ConfigMap to identify the cluster name:
+On each Kubernetes cluster, create a ConfigMap to identify the Kubernetes cluster name:
 
 ```bash
-# Run on each cluster
-CLUSTER_NAME="cluster-region-name"  # e.g., member-eastus2-cluster
+# Run on each Kubernetes cluster
+CLUSTER_NAME="cluster-region-name"  # for example: member-eastus2-cluster
 
 kubectl create configmap cluster-identity \
   --namespace kube-system \
   --from-literal=cluster-name="${CLUSTER_NAME}"
 ```
 
-#### Step 3: Deploy DocumentDB to Primary Cluster
+#### Step 3: Deploy cert-manager and DocumentDB operator to each cluster
 
-On the primary cluster:
+Install the cert manager and DocumentDB operator to the hub per the
+[Required Components](#required-components) section on each Kubernetes cluster.
+When making changes to any resource, you must make that same change across
+each Kubernetes cluster so they are all in sync, as the operator works under
+the assumption that all members have the same resources.
 
-```yaml title="primary-documentdb.yaml"
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: documentdb-preview
-  namespace: documentdb-preview-ns
-spec:
-  nodeCount: 2
-  instancesPerNode: 1
-  resource:
-    storage:
-      pvcSize: 100Gi
-  exposeViaService:
-    serviceType: LoadBalancer
-  tls:
-    gateway:
-      mode: SelfSigned
-  clusterReplication:
-    primary: cluster-primary-name  # This cluster's name
-    clusterList:
-      - name: cluster-primary-name
-      - name: cluster-replica1-name
-      - name: cluster-replica2-name
-  documentDbCredentialSecret: documentdb-secret
-```
+### Storage configuration
 
-Apply to primary:
-
-```bash
-kubectl --context primary apply -f primary-documentdb.yaml
-```
-
-#### Step 4: Deploy DocumentDB to Replica Clusters
-
-Use the **same YAML** on each replica cluster. The operator detects whether the cluster is primary or replica based on the `clusterReplication.primary` field.
-
-```bash
-kubectl --context replica1 apply -f primary-documentdb.yaml
-kubectl --context replica2 apply -f primary-documentdb.yaml
-```
-
-Each cluster will:
-
-- **Primary:** Run a read-write DocumentDB cluster
-- **Replicas:** Run read-only DocumentDB clusters replicating from primary
-
-## Configuration Details
-
-### Replication Configuration
-
-The `clusterReplication` section controls multi-region behavior:
-
-```yaml
-spec:
-  clusterReplication:
-    primary: member-eastus2-cluster  # Write cluster
-    clusterList:  # All participating member clusters
-      - name: member-westus3-cluster
-      - name: member-uksouth-cluster
-      - name: member-eastus2-cluster
-```
-
-**Key points:**
-
-- **Primary cluster:** The cluster name specified in `primary` accepts read and write operations
-- **Replica clusters:** All other clusters in `clusterList` are read-only replicas
-- **Include primary in list:** The primary cluster name must appear in the `clusterList`
-- **Cluster name uniqueness:** Each cluster must have a unique name across all regions
-
-### Credential Synchronization
-
-The DocumentDB operator expects the same credentials secret on all clusters. With KubeFleet, create the secret on the hub (or in fleet-managed namespace) and it propagates automatically. Without fleet management, create the secret manually on each cluster:
-
-```bash
-# Same secret on all clusters
-kubectl --context cluster1 create secret generic documentdb-secret \
-  --namespace documentdb-preview-ns \
-  --from-literal=password='YourSecurePassword123!'
-
-kubectl --context cluster2 create secret generic documentdb-secret \
-  --namespace documentdb-preview-ns \
-  --from-literal=password='YourSecurePassword123!'
-
-# And so on...
-```
-
-!!! warning "Credential Management"
-    Synchronize password changes across all clusters manually if not using fleet management. Mismatched credentials will break replication.
-
-### Storage Configuration
-
-Each cluster in a multi-region deployment can use different storage classes. Configure storage at the global level or override per member cluster:
+Each Kubernetes cluster in a multi-region deployment can use different storage classes.
+Configure storage at the global level or override per member Kubernetes cluster:
 
 **Global storage configuration:**
 
@@ -412,10 +243,10 @@ spec:
   resource:
     storage:
       pvcSize: 100Gi
-      storageClass: default-storage-class  # Used by all clusters
+      storageClass: default-storage-class  # Used by all Kubernetes clusters
 ```
 
-**Per-cluster storage override:**
+**Per-Kubernetes-cluster storage override:**
 
 ```yaml
 spec:
@@ -427,9 +258,9 @@ spec:
     primary: member-eastus2-cluster
     clusterList:
       - name: member-westus3-cluster
-        storageClass: managed-csi-premium  # Override for this cluster
+        storageClass: managed-csi-premium  # Override for this Kubernetes cluster
       - name: member-uksouth-cluster
-        storageClass: azuredisk-standard-ssd  # Override for this cluster
+        storageClass: azuredisk-standard-ssd  # Override for this Kubernetes cluster
       - name: member-eastus2-cluster
         # Uses global storageClass
 ```
@@ -460,7 +291,7 @@ spec:
       environment: gke
     ```
 
-### Service Exposure
+### Service exposure
 
 Configure how DocumentDB is exposed in each region:
 
@@ -474,8 +305,9 @@ Configure how DocumentDB is exposed in each region:
         serviceType: LoadBalancer
     ```
 
-    Each cluster gets a public IP for client connections. When using the `environment` configuration at either
-    the DocumentDB cluster or Kubernetes cluster level, the tags for the LoadBalancer will change. See the
+    Each Kubernetes cluster gets a public IP for client connections. When you use the `environment`
+    configuration at either the DocumentDB cluster or Kubernetes cluster level, the tags for the
+    LoadBalancer change. See the
     cloud-specific setup docs for more details.
 
 === "ClusterIP"
@@ -490,48 +322,16 @@ Configure how DocumentDB is exposed in each region:
 
     Clients must access DocumentDB through Ingress or service mesh.
 
-## Verification
-
-### Check Operator Status
-
-Verify the operator is running on all clusters:
-
-```bash
-# With KubeFleet
-kubectl --context hub get clusterresourceplacement
-
-# Without fleet management (run on each cluster)
-kubectl --context cluster1 get pods -n documentdb-operator
-kubectl --context cluster2 get pods -n documentdb-operator
-```
-
-### Check DocumentDB Status
-
-View DocumentDB status on each cluster:
-
-```bash
-kubectl --context primary get documentdb -n documentdb-preview-ns
-kubectl --context replica1 get documentdb -n documentdb-preview-ns
-kubectl --context replica2 get documentdb -n documentdb-preview-ns
-```
-
-Expected output shows `Ready` status and role (primary or replica):
-
-```
-NAME                  STATUS   ROLE      AGE
-documentdb-preview    Ready    primary   10m
-```
-
 ## Troubleshooting
 
-### Replication Not Established
+### Replication not established
 
 If replicas don't receive data from the primary:
 
 1. **Verify network connectivity:**
 
     ```bash
-    # From replica cluster, test connectivity to primary
+    # From a replica Kubernetes cluster, test connectivity to primary
     kubectl --context replica1 run test-pod --rm -it --image=nicolaka/netshoot -- \
       nc -zv primary-service-endpoint 5432
     ```
@@ -550,9 +350,9 @@ If replicas don't receive data from the primary:
       -l app.kubernetes.io/name=documentdb-operator --tail=100
     ```
 
-### Cluster Name Mismatch
+### Kubernetes cluster name mismatch
 
-If a cluster doesn't recognize itself as primary or replica:
+If a Kubernetes cluster doesn't recognize itself as primary or replica:
 
 1. **Check cluster-identity ConfigMap:**
 
@@ -561,9 +361,9 @@ If a cluster doesn't recognize itself as primary or replica:
       -n kube-system -o jsonpath='{.data.cluster-name}'
     ```
 
-2. **Verify name matches DocumentDB spec:**
+2. **Verify the name matches the DocumentDB spec:**
 
-    The returned name must exactly match one of the cluster names in `spec.clusterReplication.clusterList[*].name`.
+    The returned name must exactly match one of the Kubernetes cluster names in `spec.clusterReplication.clusterList[*].name`.
 
 3. **Update ConfigMap if incorrect:**
 
@@ -574,7 +374,7 @@ If a cluster doesn't recognize itself as primary or replica:
       --dry-run=client -o yaml | kubectl apply -f -
     ```
 
-### Storage Issues
+### Storage issues
 
 If PVCs aren't provisioning:
 
@@ -597,9 +397,9 @@ If PVCs aren't provisioning:
       --field-selector involvedObject.kind=PersistentVolumeClaim
     ```
 
-## Next Steps
+## Next steps
 
-- [Failover Procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
-- [Backup and Restore](../backup-and-restore.md) - Configure multi-region backup strategies
-- [TLS Configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
-- [AKS Fleet Deployment Example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup
+- [Failover procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
+- [Backup and restore](../backup-and-restore.md) - Configure multi-region backup strategies
+- [TLS configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
+- [AKS Fleet deployment example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup

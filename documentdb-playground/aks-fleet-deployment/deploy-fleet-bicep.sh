@@ -109,6 +109,8 @@ while read -r cluster; do
   if [[ "$cluster" == *"$HUB_REGION"* ]]; then HUB_CLUSTER="$cluster"; fi
 done <<< "$MEMBER_CLUSTER_NAMES"
 
+######### KUBEFLEET SETUP #########
+
 kubeDir=$(mktemp -d)
 git clone https://github.com/kubefleet-dev/kubefleet.git $kubeDir
 pushd $kubeDir
@@ -199,6 +201,8 @@ while read -r MEMBER_CLUSTER; do
 done <<< "$MEMBER_CLUSTER_NAMES"
 
 popd
+
+####### END KUBEFLEET SETUP ########
 
 # Create kubectl aliases and export FLEET_ID (k-hub and k-<region>) persisted in ~/.bashrc
 ALIASES_BLOCK_START="# BEGIN aks aliases"

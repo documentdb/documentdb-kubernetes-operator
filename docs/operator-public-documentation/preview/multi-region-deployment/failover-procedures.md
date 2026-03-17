@@ -1,5 +1,5 @@
 ---
-title: Multi-Region Failover Procedures
+title: Multi-region failover procedures
 description: Step-by-step runbooks for planned and unplanned DocumentDB failovers across regions, including verification and rollback procedures.
 tags:
   - multi-region
@@ -10,7 +10,7 @@ tags:
 
 ## Overview
 
-A **failover** promotes a replica cluster to become the new primary, making it
+A **failover** promotes a replica Kubernetes cluster to become the new primary, making it
 accept write operations. The previous primary (if still available) becomes a replica
 replicating from the new primary.
 
@@ -21,16 +21,16 @@ replicating from the new primary.
 - **Performance optimization:** Move primary closer to write-heavy workload
 - **Testing:** Validate disaster recovery procedures
 
-## Failover Types
+## Failover types
 
-### Planned Failover
+### Planned failover
 
 This is a failover where the primary is safely demoted, writes are all flushed,
 and then the new primary is promoted. This kind of failover has no data loss, a
 set window where writes aren't accepted, and the same number of replicas before
 and after.
 
-### Unplanned Failover (Disaster Recovery)
+### Unplanned failover (disaster recovery)
 
 This is a failover where the primary becomes unavailable and has to be forced out
 of the DocumentDB cluster entirely. Downtime depends on how quickly primary degradation
@@ -38,7 +38,7 @@ is detected and, if HA is enabled, how long it takes to scale up the new primary
 Some writes to the failed primary might be lost, but with high availability enabled,
 clients can determine when writes were not committed to replicas. After an unplanned
 failover, the DocumentDB cluster has one fewer region, and you will need to add
-the region back when the Kubernetes cluster is back online, or add a replacement
+the region back when the failed Kubernetes cluster is back online, or add a replacement
 region. See the [add region playground guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/fleet-add-region/README.md)
 for an example.
 
@@ -46,15 +46,15 @@ for an example.
 
 Before performing any failover:
 
-- **Replica health:** Target replica cluster is running and replication is current
-- **Network access:** You have kubectl access to all clusters involved
+- **Replica health:** The target replica Kubernetes cluster is running and replication is current
+- **Network access:** You have `kubectl` access to all Kubernetes clusters involved
 - **Backup available:** Recent backup exists for rollback if needed
 - **Monitoring:** Metrics and logs are accessible for verification
 - **Communication:** Stakeholders are notified (for planned failover)
 - **Application readiness:** Applications can handle brief connection interruption
-- **kubectl-documentdb plugin:** Install the plugin for streamlined failover operations [kubectl-plugin](../kubectl-plugin.md)
+- **kubectl-documentdb plugin:** Install the plugin for streamlined failover operations in [kubectl-plugin](../kubectl-plugin.md)
 
-### Check Current Replication Status
+### Check current replication status
 
 Identify the current primary and verify replica health:
 
@@ -82,11 +82,11 @@ Expected output shows active replication to all replicas:
 - **state:** Should be `streaming`
 - **LSN values:** `replay_lsn` should be close to `sent_lsn` (low replication lag)
 
-## Planned Failover Procedure
+## Planned failover procedure
 
-Use this procedure when the primary cluster is healthy and you want to switch primary regions in a controlled manner.
+Use this procedure when the primary Kubernetes cluster is healthy and you want to switch primary regions in a controlled manner.
 
-### Step 1: Pre-Failover Verification
+### Step 1: Pre-failover verification
 
 Verify system health before starting:
 
@@ -105,12 +105,14 @@ kubectl --context new-primary get pods -n documentdb-preview-ns
 
 All checks should show healthy status before proceeding.
 
-### Step 2: Perform Failover
+### Step 2: Perform failover
 
-Promote the replica to become the new primary cluster.
+Promote the replica to become the new primary Kubernetes cluster.
 
-=== "Using kubectl-documentdb Plugin (KubeFleet deployment required)"
+=== "Plugin"
 
+    !!! note
+        KubeFleet deployment required
     The plugin handles the CRD change and automatically waits for convergence:
 
     ```bash
@@ -121,9 +123,9 @@ Promote the replica to become the new primary cluster.
       --hub-context hub
     ```
 
-=== "Using kubectl patch with Fleet"
+=== "kubectl patch (KubeFleet)"
 
-    Update the DocumentDB resource on the hub cluster:
+    Update the DocumentDB resource on the hub Kubernetes cluster:
 
     ```bash
     kubectl --context hub patch documentdb documentdb-preview \
@@ -132,16 +134,16 @@ Promote the replica to become the new primary cluster.
       -p '{"spec":{"clusterReplication":{"primary":"new-primary-cluster-name"}}}'
     ```
 
-    The fleet controller propagates the change to all member clusters automatically.
+    The fleet controller propagates the change to all member Kubernetes clusters automatically.
 
-=== "Using kubectl patch without KubeFleet"
+=== "kubectl patch (manual)"
 
-    Update the DocumentDB resource on **all** clusters:
+    Update the DocumentDB resource on **all** Kubernetes clusters:
 
     ```bash
-    # Update on all clusters (use loop or run individually)
+    # Update on all Kubernetes clusters (use a loop or run individually)
     for context in cluster1 cluster2 cluster3; do
-      kubectl --context $context patch documentdb documentdb-preview \
+      kubectl --context "$context" patch documentdb documentdb-preview \
         -n documentdb-preview-ns \
         --type='merge' \
         -p '{"spec":{"clusterReplication":{"primary":"new-primary-cluster-name"}}}'
@@ -152,10 +154,10 @@ Promote the replica to become the new primary cluster.
 
 1. The operator detects the primary change
 2. The old primary becomes a replica after flushing writes
-3. The new primary cluster scales up (if HA) and starts to accept writes
+3. The new primary Kubernetes cluster scales up (if HA) and starts to accept writes
 4. Replication direction reverses (new primary → replicas including old primary)
 
-### Step 3: Monitor Failover Progress
+### Step 3: Monitor failover progress
 
 Watch operator logs and DocumentDB status:
 
@@ -171,7 +173,7 @@ kubectl --context new-primary logs -n documentdb-operator \
 kubectl --context new-primary get pods -n documentdb-preview-ns -w
 ```
 
-### Step 4: Verify New Primary
+### Step 4: Verify promoted primary
 
 Confirm the new primary accepts writes:
 
@@ -192,7 +194,7 @@ db.testCollection.insertOne({
 # Should succeed without errors
 ```
 
-### Step 5: Verify Old Primary as Replica
+### Step 5: Verify old primary as replica
 
 Check that the old primary is now replicating from the new primary:
 
@@ -204,64 +206,67 @@ kubectl --context new-primary exec -it -n documentdb-preview-ns \
 
 You should see the old primary listed as a replica receiving replication stream.
 
-### Step 6: Post-Failover Validation
+### Step 6: Post-failover validation
 
 Run comprehensive checks:
 
 ```bash
-# 1. Verify all clusters are in sync
+# 1. Verify all Kubernetes clusters are in sync
 for context in cluster1 cluster2 cluster3; do
   echo "=== $context ==="
-  kubectl --context $context get documentdb -n documentdb-preview-ns
+  kubectl --context "$context" get documentdb -n documentdb-preview-ns
 done
 
 # 2. Check application health
 kubectl --context new-primary get pods -n app-namespace
 
 # 3. Review metrics and logs for errors
-# (use your monitoring system: Prometheus, Grafana, CloudWatch, etc.)
+# (use your monitoring system, such as Prometheus, Grafana, or CloudWatch)
 
 # 4. Verify data consistency (read from all replicas)
 ```
 
-## Unplanned Failover Procedure (Disaster Recovery)
+## Unplanned failover procedure (disaster recovery)
 
-Use this procedure when the primary cluster is unavailable and you need to immediately promote a replica.
+Use this procedure when the primary Kubernetes cluster is unavailable and you need to immediately promote a replica.
 
-!!! danger "Data Loss Risk"
-    Unplanned failover may result in data loss if the primary cluster failed before replicating recent writes. Assess replication lag before deciding which replica to promote.
+!!! danger "Data loss risk"
+    Unplanned failover may result in data loss if the primary DocumentDB cluster failed before replicating recent writes. Assess replication lag before deciding which replica to promote.
 
-### Step 1: Assess the Situation
+### Step 1: Assess the situation
 
 Determine the scope of the outage:
 
 ```bash
-# 1. Check primary cluster accessibility
+# 1. Check primary Kubernetes cluster accessibility
 kubectl --context primary get nodes
-# If this fails, primary cluster is unreachable
+# If this fails, the primary Kubernetes cluster is unreachable
 
-# 2. Check replica cluster health
+# 2. Check replica Kubernetes cluster health
 kubectl --context replica1 get documentdb -n documentdb-preview-ns
 kubectl --context replica2 get documentdb -n documentdb-preview-ns
 
 # 3. Check cloud provider status pages for regional outages
 ```
 
-### Step 2: Select Target Replica
+### Step 2: Select target replica
 
 Choose which replica to promote based on:
 
 - **Replication lag:** Prefer the replica with the lowest lag (most recent data)
 - **Geographic location:** Consider application proximity
-- **Cluster health:** Ensure target cluster is fully operational
+- **Kubernetes cluster health:** Ensure the target Kubernetes cluster is fully operational
 
 If you cannot query the primary, check the last known replication status from monitoring dashboards or logs.
 
-### Step 3: Promote Replica to Primary
+### Step 3: Promote replica to primary
 
 Immediately promote the selected replica to become the new primary.
 
-=== "Using kubectl-documentdb Plugin (Recommended)"
+=== "Plugin"
+
+    !!! note
+        KubeFleet deployment required
 
     ```bash
     kubectl documentdb promote \
@@ -273,9 +278,11 @@ Immediately promote the selected replica to become the new primary.
       --wait-timeout 15m
     ```
 
-    The plugin handles the change to clusterList and primary and monitors for successful convergence. Use `--skip-wait` if you need to return immediately and verify manually.
+    The plugin handles the change to `clusterList` and `primary` and monitors for
+    successful convergence. Use `--skip-wait` if you need to return immediately
+    and verify manually.
 
-=== "Using kubectl patch with KubeFleet"
+=== "kubectl patch (KubeFleet)"
 
     ```bash
     # Remove failed primary from cluster list and set new primary in one command
@@ -285,30 +292,30 @@ Immediately promote the selected replica to become the new primary.
       -p '{"spec":{"clusterReplication":{"primary":"replica-cluster-name","clusterList":[{"name":"replica-cluster-name"},{"name":"other-replica-cluster-name"}]}}}'
     ```
 
-    Replace the `clusterList` entries with your actual list of healthy clusters, excluding the failed primary.
+    Replace the `clusterList` entries with your actual list of healthy Kubernetes clusters, excluding the failed primary.
 
-=== "Using kubectl without KubeFleet"
+=== "kubectl patch (manual)"
 
     ```bash
-    # Update on all accessible clusters
+    # Update on all accessible Kubernetes clusters
     # Remove failed primary from cluster list and set new primary in one command
     for context in replica1 replica2; do
-      kubectl --context $context patch documentdb documentdb-preview \
+      kubectl --context "$context" patch documentdb documentdb-preview \
         -n documentdb-preview-ns \
         --type='merge' \
         -p '{"spec":{"clusterReplication":{"primary":"replica-cluster-name","clusterList":[{"name":"replica-cluster-name"},{"name":"other-replica-cluster-name"}]}}}'
     done
     ```
 
-    Replace the `clusterList` entries with your actual list of healthy clusters, excluding the failed primary.
+    Replace the `clusterList` entries with your actual list of healthy Kubernetes clusters, excluding the failed primary.
 
 **What happens:**
 
 1. The operator detects the primary and cluster list changes
-2. The new primary cluster scales up (if HA) and starts to accept writes
+2. The new primary Kubernetes cluster scales up (if HA) and starts to accept writes
 3. The old primary is removed from replication
 
-### Step 4: Verify New Primary
+### Step 4: Verify new primary
 
 Confirm the promoted replica is accepting writes:
 
@@ -325,7 +332,7 @@ mongosh "mongodb://admin:password@localhost:10260/?tls=true&tlsAllowInvalidCerti
 db.testCollection.insertOne({message: "DR failover test"})
 ```
 
-### Step 5: Monitor Recovery
+### Step 5: Monitor recovery
 
 ```bash
 # Application pod logs
@@ -336,7 +343,7 @@ kubectl --context new-primary logs -n documentdb-operator \
   -l app.kubernetes.io/name=documentdb-operator -f
 ```
 
-### Step 6: Handle Failed Primary Recovery
+### Step 6: Handle failed primary recovery
 
 When the failed primary Kubernetes cluster recovers, you need to re-add it to the DocumentDB cluster
 as a replica. For detailed guidance on adding a region back to your DocumentDB cluster,
