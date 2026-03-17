@@ -58,7 +58,7 @@ flowchart TB
 |------|---------|---------|--------------|
 | AWS CLI | 2.x | AWS authentication and resource management | [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | eksctl | 0.160+ | EKS cluster creation and management | [Install eksctl](https://eksctl.io/installation/) |
-| kubectl | 1.35+ | Kubernetes cluster interaction (must match EKS version) | [Install kubectl](https://kubernetes.io/docs/tasks/tools/) |
+| kubectl | 1.32+ | Kubernetes cluster interaction (must match EKS version) | [Install kubectl](https://kubernetes.io/docs/tasks/tools/) |
 | Helm | 3.x | Package management for Kubernetes | [Install Helm](https://helm.sh/docs/intro/install/) |
 | jq | 1.6+ | JSON processing (optional) | `apt install jq` or `brew install jq` |
 
@@ -171,7 +171,7 @@ export REGION="us-west-2"
 eksctl create cluster \
     --name $CLUSTER_NAME \
     --region $REGION \
-    --version 1.35 \
+    --version 1.32 \
     --node-type m5.large \
     --nodes 2 \
     --nodes-min 1 \
@@ -598,7 +598,7 @@ For development/testing, use smaller instances:
 eksctl create cluster \
     --name $CLUSTER_NAME \
     --region $REGION \
-    --version 1.35 \
+    --version 1.32 \
     --node-type t3.medium \
     --nodes 2
 ```
