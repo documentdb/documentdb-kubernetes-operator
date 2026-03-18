@@ -119,6 +119,7 @@ Before creating backups, ensure your Kubernetes cluster has the required snapsho
     apiVersion: documentdb.io/preview
     kind: ScheduledBackup
     metadata:
+      name: nightly-backup
       namespace: default
     spec:
       cluster:

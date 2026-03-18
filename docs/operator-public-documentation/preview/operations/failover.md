@@ -24,7 +24,7 @@ Local automatic failover requires at least two instances (`spec.instancesPerNode
 
 ## Cross-Cluster Failover (Multi-Region)
 
-For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. For end-to-end setup examples, see the [AKS Fleet multi-region deployment](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment) and [multi-cloud deployment](https://github.com/microsoft/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) playgrounds.
+For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. For end-to-end setup examples, see the [AKS Fleet multi-region deployment](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment) and [multi-cloud deployment](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) playgrounds.
 
 ### Architecture
 
