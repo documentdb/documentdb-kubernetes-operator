@@ -13,7 +13,7 @@ search:
 
 This page describes the architecture of the DocumentDB Kubernetes Operator, its components, and how they work together to manage DocumentDB clusters on Kubernetes.
 
-## System Architecture
+## System architecture
 
 The DocumentDB Kubernetes Operator extends Kubernetes with custom resources to declaratively manage DocumentDB clusters. It builds on [CloudNative-PG](https://cloudnative-pg.io/) for PostgreSQL management while adding the DocumentDB Gateway for MongoDB-compatible access.
 
@@ -57,12 +57,12 @@ flowchart TB
     DOC_OP --> BACKUP_CR
     DOC_OP --> CLUSTER_CR
     DOC_OP --> LB
-    DOC_OP --> VS
     
     CNPG_OP --> CLUSTER_CR
     CNPG_OP --> POD1
     CNPG_OP --> POD2
     CNPG_OP --> POD3
+    CNPG_OP --> VS
     
     POD1 --> PVC1
     POD2 --> PVC2
@@ -72,7 +72,7 @@ flowchart TB
     POD1 --> POD3
 ```
 
-## Core Components
+## Core components
 
 ### DocumentDB Operator
 
@@ -108,7 +108,7 @@ The DocumentDB Operator is a Kubernetes controller that manages the lifecycle of
 - Connection pooling and service management
 - Rolling updates and maintenance operations
 
-### DocumentDB Pod Architecture
+### DocumentDB pod architecture
 
 Each DocumentDB instance runs as a Kubernetes pod with two containers:
 
@@ -130,7 +130,7 @@ flowchart LR
 | Container | Image | Purpose |
 |-----------|-------|---------|
 | **PostgreSQL** | `ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` | Database engine with DocumentDB extension |
-| **Gateway** | `ghcr.io/documentdb/documentdb-gateway` | MongoDB wire protocol translation |
+| **Gateway** | `ghcr.io/documentdb/documentdb-kubernetes-operator/gateway` | MongoDB wire protocol translation |
 
 | Volume | Purpose |
 |--------|---------|
@@ -139,18 +139,19 @@ flowchart LR
 
 ### Services
 
-The operator creates Kubernetes Services to expose DocumentDB:
+Kubernetes Services expose DocumentDB to clients:
 
-| Service | Purpose | Selector |
-|---------|---------|----------|
-| `<name>-rw` | Read-write access (primary only) | `cnpg.io/instanceRole: primary` |
-| `<name>-r` | Any instance (for health checks) | All instances |
+| Service | Created By | Purpose |
+|---------|------------|----------|
+| `documentdb-service-<name>` | DocumentDB Operator | External LoadBalancer for client access |
+| `<cluster>-rw` | CNPG | Internal read-write access (primary only) |
+| `<cluster>-r` | CNPG | Internal access to any instance |
 
-For external access, configure `spec.exposeViaService.serviceType: LoadBalancer`. The DocumentDB operator creates an external LoadBalancer service that routes traffic to the primary pod.
+For external access, configure `spec.exposeViaService.serviceType: LoadBalancer`. The DocumentDB operator creates the external LoadBalancer service (`documentdb-service-<name>`) that routes traffic to the primary pod.
 
-## Data Flow
+## Data flow
 
-### Client Connection Flow
+### Client connection flow
 
 ```mermaid
 sequenceDiagram
@@ -170,7 +171,7 @@ sequenceDiagram
     GW-->>Client: BSON response
 ```
 
-### Replication Flow
+### Replication flow
 
 ```mermaid
 flowchart LR
@@ -203,7 +204,7 @@ DocumentDB uses PostgreSQL's native streaming replication:
 3. **WAL Receiver** on replicas applies changes
 4. Replication is **asynchronous** by default (milliseconds of lag)
 
-## Kubernetes Resources
+## Kubernetes resources
 
 When you create a `DocumentDB` resource, the operator creates and manages these Kubernetes resources:
 
@@ -240,7 +241,7 @@ flowchart TD
 | `Certificate` | DocumentDB Operator | TLS certificate request |
 | `Secret` | cert-manager / CNPG | Credentials and certificates |
 
-## High Availability Architecture
+## High availability architecture
 
 With `instancesPerNode: 3`, the operator deploys a highly available configuration:
 
@@ -280,7 +281,7 @@ flowchart TB
 
 For detailed HA configuration, see [Advanced Configuration](../advanced-configuration/README.md#high-availability).
 
-## Backup Architecture
+## Backup architecture
 
 DocumentDB supports volume snapshot-based backups:
 
@@ -318,8 +319,8 @@ For backup configuration, see [Backup and Restore](../backup-and-restore.md).
 | [cert-manager](https://cert-manager.io/) | 1.19+ | TLS certificate management |
 | Kubernetes | 1.35+ | Container orchestration (ImageVolume feature required) |
 
-## Next Steps
+## Next steps
 
 - [Before You Start](../getting-started/before-you-start.md) - Prerequisites and terminology
-- [Quickstart](../index.md) - Deploy your first cluster
+- [Quickstart](../index.md) - Deploy your first DocumentDB cluster
 - [API Reference](../api-reference.md) - Full CRD documentation

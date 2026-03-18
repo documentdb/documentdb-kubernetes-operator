@@ -11,11 +11,11 @@ tags:
 
 This page covers the prerequisites, terminology, and concepts you should understand before deploying DocumentDB on Kubernetes.
 
-## Prerequisites Checklist
+## Prerequisites checklist
 
 Before installing the DocumentDB Kubernetes Operator, ensure you have the following:
 
-### Required Components
+### Required components
 
 | Component | Minimum Version | Purpose | Installation Guide |
 |-----------|-----------------|---------|-------------------|
@@ -27,7 +27,7 @@ Before installing the DocumentDB Kubernetes Operator, ensure you have the follow
 !!! warning "Kubernetes 1.35+ Required"
     The operator requires Kubernetes 1.35 or later because it uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in Kubernetes 1.35) to mount the DocumentDB extension into PostgreSQL pods.
 
-### Optional Components
+### Optional components
 
 | Component | Purpose | When Needed |
 |-----------|---------|-------------|
@@ -36,7 +36,7 @@ Before installing the DocumentDB Kubernetes Operator, ensure you have the follow
 | **AWS CLI + eksctl** | AWS resource management | Deploying on EKS |
 | **gcloud CLI** | Google Cloud resource management | Deploying on GKE |
 
-### Kubernetes Cluster Options
+### Kubernetes cluster options
 
 The operator runs on any conformant Kubernetes distribution (1.35+). Choose based on your environment:
 
@@ -63,7 +63,7 @@ The operator runs on any conformant Kubernetes distribution (1.35+). Choose base
     - **[Amazon EKS](deploy-on-eks.md)** - Amazon Web Services
     - **Google Kubernetes Engine (GKE)** - Google Cloud Platform
 
-### Resource Requirements
+### Resource requirements
 
 Minimum resources for a basic DocumentDB deployment:
 
@@ -76,7 +76,7 @@ Minimum resources for a basic DocumentDB deployment:
 
 ## Terminology
 
-### Kubernetes Concepts
+### Kubernetes concepts
 
 Understanding these Kubernetes concepts helps you work effectively with the DocumentDB operator:
 
@@ -93,7 +93,7 @@ Understanding these Kubernetes concepts helps you work effectively with the Docu
 | **[ConfigMap](https://kubernetes.io/docs/concepts/configuration/configmap/)** | Stores non-sensitive configuration data. The operator uses ConfigMaps for certain settings. |
 | **[Secret](https://kubernetes.io/docs/concepts/configuration/secret/)** | Stores sensitive data like passwords. DocumentDB credentials are stored in Secrets. |
 
-### DocumentDB Concepts
+### DocumentDB concepts
 
 | Term | Definition |
 |------|------------|
@@ -104,7 +104,7 @@ Understanding these Kubernetes concepts helps you work effectively with the Docu
 | **Gateway** | A sidecar container that provides MongoDB-compatible API on top of PostgreSQL. Clients connect to the gateway. |
 | **Node** | In DocumentDB terms, a logical grouping of instances. Currently limited to 1 node per cluster. |
 
-### Cloud and Infrastructure Concepts
+### Cloud and infrastructure concepts
 
 | Term | Definition |
 |------|------------|
@@ -113,7 +113,7 @@ Understanding these Kubernetes concepts helps you work effectively with the Docu
 | **Load Balancer** | Distributes traffic across instances. Use `LoadBalancer` service type for external access. |
 | **Storage Class** | Cloud-specific storage configuration. Examples: `managed-csi` (AKS), `gp3` (EKS). |
 
-### High Availability Concepts
+### High availability concepts
 
 | Term | Definition |
 |------|------------|
@@ -123,7 +123,7 @@ Understanding these Kubernetes concepts helps you work effectively with the Docu
 | **RPO (Recovery Point Objective)** | Maximum acceptable data loss. With streaming replication, RPO is near-zero (milliseconds of lag). |
 | **Replication Lag** | The delay between writes on the primary and their application on replicas. |
 
-## Architecture Overview
+## Architecture overview
 
 For a detailed explanation of how the operator works, see [Architecture Overview](../architecture/overview.md).
 
@@ -176,7 +176,7 @@ flowchart TB
     P1 --> P3
 ```
 
-## Next Steps
+## Next steps
 
 - [Quickstart](../index.md) - Deploy your first DocumentDB cluster
 - [Deploy on AKS](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-setup/README.md) - Production deployment on Azure

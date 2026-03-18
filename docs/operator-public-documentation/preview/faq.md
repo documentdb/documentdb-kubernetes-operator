@@ -1,3 +1,12 @@
+---
+title: Frequently Asked Questions
+description: Common questions about the DocumentDB Kubernetes Operator, installation, configuration, and operations.
+tags:
+  - faq
+  - troubleshooting
+  - getting-started
+---
+
 # Frequently Asked Questions (FAQ)
 
 ## General
@@ -59,7 +68,7 @@ For production workloads, we recommend:
 | Memory | 4Gi+ per instance |
 | Storage | 100Gi+ per instance (SSD-backed) |
 
-Configure resources via `spec.resource.cpu`, `spec.resource.memory`, and `spec.resource.storage.pvcSize` in the DocumentDB CR.
+Configure storage via `spec.resource.storage.pvcSize` in the DocumentDB CR. CPU and memory are managed by the underlying CNPG cluster.
 
 ### Which storage classes should I use?
 
