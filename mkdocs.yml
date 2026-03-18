@@ -28,12 +28,15 @@ extra:
 nav:
   - Preview:
       - Get Started: preview/index.md
+      - Architecture:
+          - Overview: preview/architecture/overview.md
+      - Getting Started:
+          - Before You Start: preview/getting-started/before-you-start.md
+          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
       - Configuration:
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
           - Storage: preview/configuration/storage.md
-      - Getting Started:
-          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
