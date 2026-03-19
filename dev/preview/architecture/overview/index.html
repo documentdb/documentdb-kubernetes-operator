@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Configure persistent storage for DocumentDB including storage classes, PVC sizing, volume expansion, reclaim policies, and disk encryption across AKS, EKS, and GKE.">
+        <meta name="description" content="Understanding the DocumentDB Kubernetes Operator architecture, components, and data flow.">
       
       
       
       
-        <link rel="prev" href="../tls/">
+        <link rel="prev" href="../../">
       
       
-        <link rel="next" href="../../advanced-configuration/">
+        <link rel="next" href="../../getting-started/before-you-start/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Storage Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Architecture Overview - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#storage-configuration" class="md-skip">
+        <a href="#architecture-overview" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Storage Configuration
+              Architecture Overview
             
           </span>
         </div>
@@ -333,6 +333,8 @@
                 
   
   
+    
+  
   
   
     
@@ -347,11 +349,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" checked>
         
           
           <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
@@ -365,7 +367,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_2">
             <span class="md-nav__icon md-icon"></span>
             Architecture
@@ -376,10 +378,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -388,6 +410,164 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#system-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      System architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Core components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB Operator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cloudnative-pg-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudNative-PG Operator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-pod-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB pod architecture
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#services" class="md-nav__link">
+    <span class="md-ellipsis">
+      Services
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data flow
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#client-connection-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Client connection flow
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replication-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication flow
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kubernetes-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Kubernetes resources
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#high-availability-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      High availability architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backup-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Backup architecture
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dependencies
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -498,8 +678,6 @@
                 
   
   
-    
-  
   
   
     
@@ -514,11 +692,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
         
           
           <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
@@ -532,7 +710,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1_4">
             <span class="md-nav__icon md-icon"></span>
             Configuration
@@ -546,7 +724,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../networking/" class="md-nav__link">
+      <a href="../../configuration/networking/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -567,7 +745,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tls/" class="md-nav__link">
+      <a href="../../configuration/tls/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -585,30 +763,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Storage
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -617,80 +775,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overview
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
-    <span class="md-ellipsis">
-      Disk Size (pvcSize)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
-    <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
-    <span class="md-ellipsis">
-      Storage Classes (storageClass)
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
-    <span class="md-ellipsis">
-      Disk Encryption
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
-    <span class="md-ellipsis">
-      PersistentVolume Security
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -890,54 +974,138 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#system-architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Overview
+      System architecture
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#core-components" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Core components
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB Operator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cloudnative-pg-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      CloudNative-PG Operator
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-pod-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB pod architecture
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#services" class="md-nav__link">
+    <span class="md-ellipsis">
+      Services
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data flow
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#client-connection-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Client connection flow
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replication-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication flow
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#kubernetes-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Kubernetes resources
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+  <a href="#high-availability-architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      High availability architecture
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
+  <a href="#backup-architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      Storage Classes (storageClass)
+      Backup architecture
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
+  <a href="#dependencies" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Encryption
+      Dependencies
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Next steps
     </span>
   </a>
   
@@ -961,120 +1129,409 @@
   
 
 
-<h1 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h1>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.</p>
-<p>Each DocumentDB instance stores its data on a Kubernetes <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PersistentVolume (PV)</a> provisioned through a <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">PersistentVolumeClaim (PVC)</a>. You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the <code>spec.resource.storage</code> field:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span><span class="w">                           </span><span class="c1"># Required: storage size</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi-premium</span><span class="w">         </span><span class="c1"># Optional: defaults to Kubernetes default StorageClass</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">     </span><span class="c1"># Optional: Retain (default) or Delete</span>
-</code></pre></div>
-<p>For the full field reference, see <a href="../../api-reference/#storageconfiguration">StorageConfiguration</a> in the API Reference.</p>
-<h2 id="disk-size-pvcsize">Disk Size (<code>pvcSize</code>)<a class="headerlink" href="#disk-size-pvcsize" title="Permanent link">&para;</a></h2>
-<p>The <code>pvcSize</code> field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is <strong>coming soon</strong> — see <a href="https://github.com/documentdb/documentdb-kubernetes-operator/issues/298">#298</a> for tracking.</p>
-<h2 id="reclaim-policy-persistentvolumereclaimpolicy">Reclaim Policy (<code>persistentVolumeReclaimPolicy</code>)<a class="headerlink" href="#reclaim-policy-persistentvolumereclaimpolicy" title="Permanent link">&para;</a></h2>
-<p>The <code>persistentVolumeReclaimPolicy</code> field controls what happens to your data when a DocumentDB cluster is deleted:</p>
+<h1 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
+<p>This page describes the architecture of the DocumentDB Kubernetes Operator, its components, and how they work together to manage DocumentDB clusters on Kubernetes.</p>
+<h2 id="system-architecture">System architecture<a class="headerlink" href="#system-architecture" title="Permanent link">&para;</a></h2>
+<p>The DocumentDB Kubernetes Operator extends Kubernetes with custom resources to declaratively manage DocumentDB clusters. It builds on <a href="https://cloudnative-pg.io/">CloudNative-PG</a> for PostgreSQL management while adding the DocumentDB Gateway for MongoDB-compatible access.</p>
+<pre class="mermaid"><code>flowchart TB
+    API[Kubernetes API Server]
+
+    subgraph DocDBNS[documentdb-operator namespace]
+        DOC_OP[DocumentDB Operator]
+    end
+
+    subgraph CNPGNS[cnpg-system namespace]
+        CNPG_OP[CloudNative-PG Operator]
+    end
+
+    subgraph App[Application Namespace]
+        DOC_CR[DocumentDB CR]
+        BACKUP_CR[Backup CR]
+        CLUSTER_CR[CNPG Cluster CR]
+        LB[External LoadBalancer]
+        POD1[Pod 1 - Primary]
+        POD2[Pod 2 - Replica]
+        POD3[Pod 3 - Replica]
+        PVC1[PVC 1]
+        PVC2[PVC 2]
+        PVC3[PVC 3]
+    end
+
+    subgraph External[External]
+        CLIENT[MongoDB Client]
+        VS[Volume Snapshots]
+    end
+
+    API --&gt; DOC_OP
+    API --&gt; CNPG_OP
+
+    CLIENT --&gt; LB
+    LB --&gt; POD1
+
+    DOC_OP --&gt; DOC_CR
+    DOC_OP --&gt; BACKUP_CR
+    DOC_OP --&gt; CLUSTER_CR
+    DOC_OP --&gt; LB
+
+    CNPG_OP --&gt; CLUSTER_CR
+    CNPG_OP --&gt; POD1
+    CNPG_OP --&gt; POD2
+    CNPG_OP --&gt; POD3
+    CNPG_OP --&gt; VS
+
+    POD1 --&gt; PVC1
+    POD2 --&gt; PVC2
+    POD3 --&gt; PVC3
+
+    POD1 --&gt; POD2
+    POD1 --&gt; POD3</code></pre>
+<h2 id="core-components">Core components<a class="headerlink" href="#core-components" title="Permanent link">&para;</a></h2>
+<h3 id="documentdb-operator">DocumentDB Operator<a class="headerlink" href="#documentdb-operator" title="Permanent link">&para;</a></h3>
+<p>The DocumentDB Operator is a Kubernetes controller that manages the lifecycle of DocumentDB clusters. It is deployed as a single pod in the <code>documentdb-operator</code> namespace.</p>
+<p><strong>Responsibilities:</strong></p>
+<ul>
+<li>Watches <code>DocumentDB</code>, <code>Backup</code>, and <code>ScheduledBackup</code> custom resources</li>
+<li>Creates and configures CNPG <code>Cluster</code> resources</li>
+<li>Manages TLS certificates via cert-manager</li>
+<li>Handles backup creation and retention</li>
+<li>Manages PersistentVolume lifecycle for data recovery</li>
+</ul>
+<p><strong>Controllers:</strong></p>
 <table>
 <thead>
 <tr>
-<th>Policy</th>
-<th>Behavior</th>
+<th>Controller</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Retain</code> (default)</td>
-<td>Data is preserved after DocumentDB deletion. <strong>Recommended for production.</strong></td>
+<td>DocumentDB Controller</td>
+<td>Reconciles <code>DocumentDB</code> CRs, creates CNPG clusters</td>
 </tr>
 <tr>
-<td><code>Delete</code></td>
-<td>Data is permanently deleted with the DocumentDB cluster. Suitable for development.</td>
+<td>Backup Controller</td>
+<td>Handles on-demand backup requests</td>
+</tr>
+<tr>
+<td>ScheduledBackup Controller</td>
+<td>Manages scheduled backup jobs</td>
+</tr>
+<tr>
+<td>Certificate Controller</td>
+<td>Provisions TLS certificates for gateway</td>
+</tr>
+<tr>
+<td>PV Controller</td>
+<td>Manages PV labels and reclaim policies</td>
 </tr>
 </tbody>
 </table>
-<p>With <code>Retain</code>, you can recover data even after the DocumentDB cluster is gone. See <a href="../../backup-and-restore/#persistentvolume-retention-and-recovery">PersistentVolume Retention and Recovery</a> for restore steps.</p>
-<h2 id="storage-classes-storageclass">Storage Classes (<code>storageClass</code>)<a class="headerlink" href="#storage-classes-storageclass" title="Permanent link">&para;</a></h2>
-<p>The <code>storageClass</code> field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See <a href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes StorageClass</a> for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.</p>
-<p>To see available StorageClasses and which one is the default:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
-</code></pre></div>
-<p>The default is marked with <code>(default)</code> in the output.</p>
-<h2 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h2>
-<p>Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.</p>
+<h3 id="cloudnative-pg-operator">CloudNative-PG Operator<a class="headerlink" href="#cloudnative-pg-operator" title="Permanent link">&para;</a></h3>
+<p><a href="https://cloudnative-pg.io/">CloudNative-PG</a> is an open-source PostgreSQL operator that handles the low-level PostgreSQL cluster management. It is installed as a Helm dependency and runs in the <code>cnpg-system</code> namespace.</p>
+<p><strong>Responsibilities:</strong></p>
+<ul>
+<li>Pod lifecycle management (create, delete, restart)</li>
+<li>Streaming replication setup between primary and replicas</li>
+<li>Automatic failover when primary becomes unhealthy</li>
+<li>Connection pooling and service management</li>
+<li>Rolling updates and maintenance operations</li>
+</ul>
+<h3 id="documentdb-pod-architecture">DocumentDB pod architecture<a class="headerlink" href="#documentdb-pod-architecture" title="Permanent link">&para;</a></h3>
+<p>Each DocumentDB instance runs as a Kubernetes pod with two containers:</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph Pod[DocumentDB Pod]
+        PG[PostgreSQL - port 5432]
+        GW[Gateway - port 10260]
+        DATA[PGDATA Volume]
+        EXT[Extension Volume]
+    end
+
+    CLIENT[Client] --&gt; GW
+    GW --&gt; PG
+    PG --&gt; DATA
+    PG --&gt; EXT</code></pre>
 <table>
 <thead>
 <tr>
-<th>Provider</th>
-<th>Default Encryption</th>
-<th>Customer-Managed Keys</th>
+<th>Container</th>
+<th>Image</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>AKS</strong></td>
-<td>✅ Enabled (platform-managed keys)</td>
-<td><a href="https://learn.microsoft.com/azure/aks/azure-disk-customer-managed-keys">Azure Disk Encryption with CMK</a></td>
+<td><strong>PostgreSQL</strong></td>
+<td><code>ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie</code></td>
+<td>Database engine with DocumentDB extension</td>
 </tr>
 <tr>
-<td><strong>GKE</strong></td>
-<td>✅ Enabled (Google-managed keys)</td>
-<td><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">CMEK for GKE persistent disks</a></td>
-</tr>
-<tr>
-<td><strong>EKS</strong></td>
-<td>❌ <strong>Not enabled by default</strong></td>
-<td><a href="https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html">EBS CSI driver encryption</a> — set <code>encrypted: "true"</code> in StorageClass</td>
+<td><strong>Gateway</strong></td>
+<td><code>ghcr.io/documentdb/documentdb-kubernetes-operator/gateway</code></td>
+<td>MongoDB wire protocol translation</td>
 </tr>
 </tbody>
 </table>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>For production on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage.k8s.io/v1</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageClass</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs-sc-encrypted</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gp3</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">encrypted</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="c1"># kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;  # Optional: customer-managed key</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">reclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">volumeBindingMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WaitForFirstConsumer</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">allowVolumeExpansion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</code></pre></div>
-</div>
-<h2 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h2>
-<p>As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:</p>
 <table>
 <thead>
 <tr>
-<th>Mount Option</th>
-<th>What it prevents</th>
+<th>Volume</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>nodev</code></td>
-<td>Blocks creation of device files that could access host hardware</td>
+<td><strong>PGDATA</strong></td>
+<td>PostgreSQL data directory (PVC-backed)</td>
 </tr>
 <tr>
-<td><code>nosuid</code></td>
-<td>Blocks privilege escalation via setuid/setgid binaries</td>
-</tr>
-<tr>
-<td><code>noexec</code></td>
-<td>Blocks execution of malicious binaries written to the data volume</td>
+<td><strong>Extension</strong></td>
+<td>DocumentDB extension files (ImageVolume)</td>
 </tr>
 </tbody>
 </table>
+<h3 id="services">Services<a class="headerlink" href="#services" title="Permanent link">&para;</a></h3>
+<p>Kubernetes Services expose DocumentDB to clients:</p>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Created By</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>documentdb-service-&lt;name&gt;</code></td>
+<td>DocumentDB Operator</td>
+<td>External LoadBalancer for client access</td>
+</tr>
+<tr>
+<td><code>&lt;cluster&gt;-rw</code></td>
+<td>CNPG</td>
+<td>Internal read-write access (primary only)</td>
+</tr>
+<tr>
+<td><code>&lt;cluster&gt;-r</code></td>
+<td>CNPG</td>
+<td>Internal access to any instance</td>
+</tr>
+</tbody>
+</table>
+<p>For external access, configure <code>spec.exposeViaService.serviceType: LoadBalancer</code>. The DocumentDB operator creates the external LoadBalancer service (<code>documentdb-service-&lt;name&gt;</code>) that routes traffic to the primary pod.</p>
+<h2 id="data-flow">Data flow<a class="headerlink" href="#data-flow" title="Permanent link">&para;</a></h2>
+<h3 id="client-connection-flow">Client connection flow<a class="headerlink" href="#client-connection-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Client as MongoDB Client
+    participant LB as Load Balancer
+    participant GW as Gateway
+    participant PG as PostgreSQL
+    participant Disk as Storage
+
+    Client-&gt;&gt;LB: Connect (MongoDB protocol)
+    LB-&gt;&gt;GW: Forward to port 10260
+    GW-&gt;&gt;GW: Parse MongoDB command
+    GW-&gt;&gt;PG: Translate to SQL
+    PG-&gt;&gt;Disk: Read/Write data
+    Disk--&gt;&gt;PG: Data
+    PG--&gt;&gt;GW: Result set
+    GW--&gt;&gt;Client: BSON response</code></pre>
+<h3 id="replication-flow">Replication flow<a class="headerlink" href="#replication-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>flowchart LR
+    subgraph Primary[Primary Instance]
+        PG1[PostgreSQL]
+        WAL1[WAL]
+    end
+
+    subgraph Replica1[Replica 1]
+        PG2[PostgreSQL]
+        WAL2[WAL]
+    end
+
+    subgraph Replica2[Replica 2]
+        PG3[PostgreSQL]
+        WAL3[WAL]
+    end
+
+    PG1 --&gt; WAL1
+    WAL1 --&gt; PG2
+    WAL1 --&gt; PG3
+    PG2 --&gt; WAL2
+    PG3 --&gt; WAL3</code></pre>
+<p>DocumentDB uses PostgreSQL's native streaming replication:</p>
+<ol>
+<li><strong>Primary</strong> writes to the Write-Ahead Log (WAL)</li>
+<li><strong>WAL Sender</strong> streams changes to replicas</li>
+<li><strong>WAL Receiver</strong> on replicas applies changes</li>
+<li>Replication is <strong>asynchronous</strong> by default (milliseconds of lag)</li>
+</ol>
+<h2 id="kubernetes-resources">Kubernetes resources<a class="headerlink" href="#kubernetes-resources" title="Permanent link">&para;</a></h2>
+<p>When you create a <code>DocumentDB</code> resource, the operator creates and manages these Kubernetes resources:</p>
+<pre class="mermaid"><code>flowchart TD
+    DOC[DocumentDB CR] --&gt; CNPG[CNPG Cluster CR]
+    DOC --&gt; SVC_EXT[External Service]
+    DOC --&gt; CERT[Certificate]
+
+    CNPG --&gt; POD1[Pod 1]
+    CNPG --&gt; POD2[Pod 2]
+    CNPG --&gt; POD3[Pod 3]
+    CNPG --&gt; PVC1[PVC 1]
+    CNPG --&gt; PVC2[PVC 2]
+    CNPG --&gt; PVC3[PVC 3]
+    CNPG --&gt; SVC_RW[RW Service]
+    CNPG --&gt; SVC_RO[RO Service]
+    CNPG --&gt; SECRET[Postgres Secrets]
+
+    PVC1 --&gt; PV1[PV 1]
+    PVC2 --&gt; PV2[PV 2]
+    PVC3 --&gt; PV3[PV 3]</code></pre>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Controller</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DocumentDB</code></td>
+<td>User</td>
+<td>Desired state definition</td>
+</tr>
+<tr>
+<td><code>Cluster</code> (CNPG)</td>
+<td>DocumentDB Operator</td>
+<td>PostgreSQL cluster configuration</td>
+</tr>
+<tr>
+<td><code>Pod</code></td>
+<td>CNPG Operator</td>
+<td>Database instances</td>
+</tr>
+<tr>
+<td><code>PVC</code></td>
+<td>CNPG Operator</td>
+<td>Persistent storage claims</td>
+</tr>
+<tr>
+<td><code>PV</code></td>
+<td>Storage provisioner</td>
+<td>Actual storage volumes</td>
+</tr>
+<tr>
+<td><code>Service</code></td>
+<td>CNPG Operator</td>
+<td>Internal cluster access</td>
+</tr>
+<tr>
+<td><code>Service</code> (external)</td>
+<td>DocumentDB Operator</td>
+<td>External LoadBalancer access</td>
+</tr>
+<tr>
+<td><code>Certificate</code></td>
+<td>DocumentDB Operator</td>
+<td>TLS certificate request</td>
+</tr>
+<tr>
+<td><code>Secret</code></td>
+<td>cert-manager / CNPG</td>
+<td>Credentials and certificates</td>
+</tr>
+</tbody>
+</table>
+<h2 id="high-availability-architecture">High availability architecture<a class="headerlink" href="#high-availability-architecture" title="Permanent link">&para;</a></h2>
+<p>With <code>instancesPerNode: 3</code>, the operator deploys a highly available configuration:</p>
+<pre class="mermaid"><code>flowchart TB
+    subgraph AZ1[Availability Zone A]
+        POD1[Primary pod-1]
+        PVC1[Storage]
+    end
+
+    subgraph AZ2[Availability Zone B]
+        POD2[Replica pod-2]
+        PVC2[Storage]
+    end
+
+    subgraph AZ3[Availability Zone C]
+        POD3[Replica pod-3]
+        PVC3[Storage]
+    end
+
+    SVC[Service] --&gt; POD1
+    POD1 --&gt; PVC1
+    POD2 --&gt; PVC2
+    POD3 --&gt; PVC3
+
+    POD1 --&gt; POD2
+    POD1 --&gt; POD3</code></pre>
+<p><strong>Failover behavior:</strong></p>
+<ol>
+<li>Primary becomes unhealthy (readiness probe fails)</li>
+<li>CNPG operator selects most up-to-date replica</li>
+<li>Selected replica promotes to primary (~30 seconds)</li>
+<li>Service endpoints update automatically</li>
+<li>Former primary restarts as replica</li>
+</ol>
+<p>For detailed HA configuration, see <a href="../../advanced-configuration/#high-availability">Advanced Configuration</a>.</p>
+<h2 id="backup-architecture">Backup architecture<a class="headerlink" href="#backup-architecture" title="Permanent link">&para;</a></h2>
+<p>DocumentDB supports volume snapshot-based backups:</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph Cluster[DocumentDB Cluster]
+        PRIMARY[Primary Pod]
+        PVC[PVC]
+    end
+
+    subgraph Backup[Backup Process]
+        BACKUP_CR[Backup CR]
+        VS[VolumeSnapshot]
+    end
+
+    BACKUP_CR --&gt; VS
+    PVC --&gt; VS
+
+    subgraph Recovery[Recovery]
+        NEW_PVC[New PVC]
+        NEW_CLUSTER[New Cluster]
+    end
+
+    VS --&gt; NEW_PVC
+    NEW_PVC --&gt; NEW_CLUSTER</code></pre>
+<p>For backup configuration, see <a href="../../backup-and-restore/">Backup and Restore</a>.</p>
+<h2 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Dependency</th>
+<th>Version</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://cloudnative-pg.io/">CloudNative-PG</a></td>
+<td>1.28+</td>
+<td>PostgreSQL cluster management</td>
+</tr>
+<tr>
+<td><a href="https://cert-manager.io/">cert-manager</a></td>
+<td>1.19+</td>
+<td>TLS certificate management</td>
+</tr>
+<tr>
+<td>Kubernetes</td>
+<td>1.35+</td>
+<td>Container orchestration (ImageVolume feature required)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../getting-started/before-you-start/">Before You Start</a> - Prerequisites and terminology</li>
+<li><a href="../../">Quickstart</a> - Deploy your first DocumentDB cluster</li>
+<li><a href="../../api-reference/">API Reference</a> - Full CRD documentation</li>
+</ul>
 
 
 

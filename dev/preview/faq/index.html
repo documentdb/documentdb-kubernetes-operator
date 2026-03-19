@@ -6,6 +6,8 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Common questions about the DocumentDB Kubernetes Operator, installation, configuration, and operations.">
+      
       
       
       
@@ -20,7 +22,7 @@
     
     
       
-        <title>FAQ - DocumentDB-Kubernetes-Operator</title>
+        <title>Frequently Asked Questions - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              FAQ
+              Frequently Asked Questions
             
           </span>
         </div>
@@ -356,7 +358,7 @@
             
   
   <span class="md-ellipsis">
-    Configuration
+    Architecture
   </span>
   
 
@@ -366,7 +368,7 @@
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1_2">
             <span class="md-nav__icon md-icon"></span>
-            Configuration
+            Architecture
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -377,53 +379,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/networking/" class="md-nav__link">
+      <a href="../architecture/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../configuration/tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../configuration/storage/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Storage
+    Overview
   </span>
   
 
@@ -491,11 +451,146 @@
   
   
     <li class="md-nav__item">
+      <a href="../getting-started/before-you-start/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Before You Start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../getting-started/deploy-on-eks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
     Deploy on EKS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
   </span>
   
 
@@ -699,6 +794,15 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-are-the-minimum-kubernetes-version-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      What are the minimum Kubernetes version requirements?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#do-i-need-to-install-cloudnativepg-separately" class="md-nav__link">
     <span class="md-ellipsis">
       Do I need to install CloudNativePG separately?
@@ -711,6 +815,24 @@
   <a href="#what-is-cert-manager-used-for" class="md-nav__link">
     <span class="md-ellipsis">
       What is cert-manager used for?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-are-the-minimum-resource-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      What are the minimum resource requirements?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#which-storage-classes-should-i-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      Which storage classes should I use?
     </span>
   </a>
   
@@ -730,6 +852,15 @@
   
     <nav class="md-nav" aria-label="Operations">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-connect-to-my-documentdb-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I connect to my DocumentDB cluster?
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#how-do-i-back-up-my-documentdb-cluster" class="md-nav__link">
@@ -753,6 +884,24 @@
   <a href="#can-i-deploy-across-multiple-clouds" class="md-nav__link">
     <span class="md-ellipsis">
       Can I deploy across multiple clouds?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-upgrade-the-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I upgrade the operator?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-monitor-my-documentdb-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I monitor my DocumentDB cluster?
     </span>
   </a>
   
@@ -944,6 +1093,15 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-are-the-minimum-kubernetes-version-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      What are the minimum Kubernetes version requirements?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#do-i-need-to-install-cloudnativepg-separately" class="md-nav__link">
     <span class="md-ellipsis">
       Do I need to install CloudNativePG separately?
@@ -956,6 +1114,24 @@
   <a href="#what-is-cert-manager-used-for" class="md-nav__link">
     <span class="md-ellipsis">
       What is cert-manager used for?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-are-the-minimum-resource-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      What are the minimum resource requirements?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#which-storage-classes-should-i-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      Which storage classes should I use?
     </span>
   </a>
   
@@ -975,6 +1151,15 @@
   
     <nav class="md-nav" aria-label="Operations">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-connect-to-my-documentdb-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I connect to my DocumentDB cluster?
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#how-do-i-back-up-my-documentdb-cluster" class="md-nav__link">
@@ -998,6 +1183,24 @@
   <a href="#can-i-deploy-across-multiple-clouds" class="md-nav__link">
     <span class="md-ellipsis">
       Can I deploy across multiple clouds?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-upgrade-the-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I upgrade the operator?
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-do-i-monitor-my-documentdb-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      How do I monitor my DocumentDB cluster?
     </span>
   </a>
   
@@ -1033,7 +1236,7 @@
 <h3 id="what-is-the-relationship-between-documentdb-and-postgresql">What is the relationship between DocumentDB and PostgreSQL?<a class="headerlink" href="#what-is-the-relationship-between-documentdb-and-postgresql" title="Permanent link">&para;</a></h3>
 <p>DocumentDB uses PostgreSQL as its underlying storage engine. The DocumentDB Gateway provides MongoDB-compatible APIs on top of PostgreSQL, so you connect to your cluster using standard MongoDB drivers and tools (such as <code>mongosh</code>) while the data is stored in PostgreSQL.</p>
 <h3 id="which-kubernetes-distributions-are-supported">Which Kubernetes distributions are supported?<a class="headerlink" href="#which-kubernetes-distributions-are-supported" title="Permanent link">&para;</a></h3>
-<p>The operator works on any conformant Kubernetes distribution (version 1.30 or later). It has been tested on:</p>
+<p>The operator works on any conformant Kubernetes distribution (version 1.35 or later). It has been tested on:</p>
 <ul>
 <li><strong>Azure Kubernetes Service (AKS)</strong></li>
 <li><strong>Amazon Elastic Kubernetes Service (EKS)</strong></li>
@@ -1045,23 +1248,129 @@
 <h3 id="where-can-i-find-the-full-crd-field-reference">Where can I find the full CRD field reference?<a class="headerlink" href="#where-can-i-find-the-full-crd-field-reference" title="Permanent link">&para;</a></h3>
 <p>See the <a href="../api-reference/">API Reference</a> for auto-generated documentation of all DocumentDB, Backup, and ScheduledBackup CRD fields with types, defaults, and validation rules.</p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="what-are-the-minimum-kubernetes-version-requirements">What are the minimum Kubernetes version requirements?<a class="headerlink" href="#what-are-the-minimum-kubernetes-version-requirements" title="Permanent link">&para;</a></h3>
+<p>Kubernetes <strong>1.35 or later</strong> is required. The operator uses the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature, which became generally available in Kubernetes 1.35.</p>
 <h3 id="do-i-need-to-install-cloudnativepg-separately">Do I need to install CloudNativePG separately?<a class="headerlink" href="#do-i-need-to-install-cloudnativepg-separately" title="Permanent link">&para;</a></h3>
 <p>No. The DocumentDB operator Helm chart includes CloudNativePG as a dependency. It is installed automatically when you install the operator.</p>
 <h3 id="what-is-cert-manager-used-for">What is cert-manager used for?<a class="headerlink" href="#what-is-cert-manager-used-for" title="Permanent link">&para;</a></h3>
 <p><a href="https://cert-manager.io">cert-manager</a> manages TLS certificates for the DocumentDB gateway. It must be installed before the operator. See the <a href="../#install-cert-manager">quickstart guide</a> for installation steps.</p>
+<h3 id="what-are-the-minimum-resource-requirements">What are the minimum resource requirements?<a class="headerlink" href="#what-are-the-minimum-resource-requirements" title="Permanent link">&para;</a></h3>
+<p>For a development or testing environment:</p>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Minimum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU</td>
+<td>500m per instance</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>512Mi per instance</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>10Gi per instance</td>
+</tr>
+</tbody>
+</table>
+<p>For production workloads, we recommend:</p>
+<table>
+<thead>
+<tr>
+<th>Resource</th>
+<th>Recommended</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU</td>
+<td>2+ cores per instance</td>
+</tr>
+<tr>
+<td>Memory</td>
+<td>4Gi+ per instance</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>100Gi+ per instance (SSD-backed)</td>
+</tr>
+</tbody>
+</table>
+<p>Configure storage via <code>spec.resource.storage.pvcSize</code> in the DocumentDB CR. CPU and memory are managed by the underlying CNPG cluster.</p>
+<h3 id="which-storage-classes-should-i-use">Which storage classes should I use?<a class="headerlink" href="#which-storage-classes-should-i-use" title="Permanent link">&para;</a></h3>
+<p>Use storage classes that support:</p>
+<ul>
+<li><strong>Volume expansion</strong> (<code>allowVolumeExpansion: true</code>)</li>
+<li><strong>Volume snapshots</strong> (for backup support)</li>
+<li><strong>SSD-backed storage</strong> (for production performance)</li>
+</ul>
+<p>Cloud-specific recommendations:</p>
+<table>
+<thead>
+<tr>
+<th>Cloud</th>
+<th>Recommended Storage Class</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AKS</td>
+<td><code>managed-csi-premium</code></td>
+</tr>
+<tr>
+<td>EKS</td>
+<td><code>gp3</code></td>
+</tr>
+<tr>
+<td>GKE</td>
+<td><code>premium-rwo</code></td>
+</tr>
+</tbody>
+</table>
+<p>See <a href="../configuration/storage/">Storage Configuration</a> for details.</p>
 <h2 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h2>
+<h3 id="how-do-i-connect-to-my-documentdb-cluster">How do I connect to my DocumentDB cluster?<a class="headerlink" href="#how-do-i-connect-to-my-documentdb-cluster" title="Permanent link">&para;</a></h3>
+<p>Get the connection string from the cluster status:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+</code></pre></div>
+<p>For external access via LoadBalancer, the connection string is available once the external IP is assigned.</p>
+<p>See <a href="../configuration/networking/">Networking</a> for connection details.</p>
 <h3 id="how-do-i-back-up-my-documentdb-cluster">How do I back up my DocumentDB cluster?<a class="headerlink" href="#how-do-i-back-up-my-documentdb-cluster" title="Permanent link">&para;</a></h3>
 <p>The operator supports both on-demand and scheduled backups using Kubernetes custom resources. See the <a href="../backup-and-restore/">Backup and Restore</a> guide for details.</p>
 <h3 id="how-does-high-availability-work">How does high availability work?<a class="headerlink" href="#how-does-high-availability-work" title="Permanent link">&para;</a></h3>
-<p>Set <code>spec.instancesPerNode</code> to 3 to deploy one primary and two replicas. The operator manages automatic failover — if the primary fails, a replica is promoted automatically. See <a href="../advanced-configuration/#high-availability">Advanced Configuration</a> for details.</p>
+<p>Set <code>spec.instancesPerNode</code> to 3 to deploy one primary and two replicas. The operator manages automatic failover — if the primary fails, a replica is promoted automatically. See the <a href="../architecture/overview/">Architecture Overview</a> for details on the failover process.</p>
 <h3 id="can-i-deploy-across-multiple-clouds">Can I deploy across multiple clouds?<a class="headerlink" href="#can-i-deploy-across-multiple-clouds" title="Permanent link">&para;</a></h3>
 <p>Yes. The operator supports multi-cloud deployment with cross-cluster replication. See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md">Multi-Cloud Deployment Guide</a> for setup instructions.</p>
+<h3 id="how-do-i-upgrade-the-operator">How do I upgrade the operator?<a class="headerlink" href="#how-do-i-upgrade-the-operator" title="Permanent link">&para;</a></h3>
+<p>Upgrade the operator using Helm:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>helm<span class="w"> </span>repo<span class="w"> </span>update
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator
+</code></pre></div>
+<p>The operator performs rolling updates of DocumentDB clusters automatically. Always review the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md">CHANGELOG</a> before upgrading.</p>
+<h3 id="how-do-i-monitor-my-documentdb-cluster">How do I monitor my DocumentDB cluster?<a class="headerlink" href="#how-do-i-monitor-my-documentdb-cluster" title="Permanent link">&para;</a></h3>
+<p>The operator exposes PostgreSQL metrics via the <a href="https://cloudnative-pg.io/documentation/1.28/monitoring/">CNPG monitoring integration</a>. You can:</p>
+<ol>
+<li><strong>Scrape Prometheus metrics</strong> from pods on port 9187</li>
+<li><strong>View cluster status</strong> with <code>kubectl get documentdb &lt;name&gt;</code></li>
+<li><strong>Check pod health</strong> with <code>kubectl describe pod &lt;pod-name&gt;</code></li>
+<li><strong>Use the kubectl plugin</strong> for status: <code>kubectl documentdb status &lt;name&gt;</code></li>
+</ol>
+<p>See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/README.md">Telemetry setup</a> for Prometheus and Grafana configuration.</p>
 
 
 
 
 
 
+
+  
+  
 
 
 
