@@ -411,3 +411,6 @@ Chart.lock
 # Test output
 *.out
 .DS_Store
+
+# MkDocs build output
+site/

@@ -23,6 +23,10 @@ The operator works on any conformant Kubernetes distribution (version 1.30 or la
 
 The operator is under active development and currently in **preview**. We don't yet recommend it for production workloads. We welcome feedback and contributions as we work toward general availability.
 
+### Where can I find the full CRD field reference?
+
+See the [API Reference](api-reference.md) for auto-generated documentation of all DocumentDB, Backup, and ScheduledBackup CRD fields with types, defaults, and validation rules.
+
 ## Installation
 
 ### Do I need to install CloudNativePG separately?

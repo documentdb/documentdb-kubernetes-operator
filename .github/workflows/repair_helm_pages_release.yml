@@ -1,0 +1,348 @@
+name: REPAIR - Republish Helm Chart to Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Released chart version to rebuild and republish'
+        required: true
+        default: '0.1.3'
+      release_ref:
+        description: 'Immutable git ref to rebuild from (tag recommended)'
+        required: true
+        default: '0.1.3'
+      expected_cnpg_version:
+        description: 'Expected cloudnative-pg dependency version in the rebuilt chart'
+        required: false
+        default: '0.23.2'
+      publish_branch:
+        description: 'Branch to update with the repaired Helm repository files'
+        required: true
+        default: 'gh-pages'
+      repo_url:
+        description: 'Public Helm repository base URL'
+        required: true
+        default: 'https://documentdb.github.io/documentdb-kubernetes-operator'
+      dry_run:
+        description: 'Build artifacts and upload them without pushing a commit'
+        required: true
+        default: true
+        type: boolean
+      confirm_version:
+        description: 'Safety check: repeat the version exactly before publishing'
+        required: true
+        default: '0.1.3'
+      normalize_chart_metadata:
+        description: 'Allow packaging the checked-out source ref at the requested release version even when Chart.yaml still carries pre-release metadata'
+        required: false
+        default: false
+        type: boolean
+      allow_pages_source_mismatch:
+        description: 'Allow publishing even when GitHub Pages is configured from a different branch'
+        required: true
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      version:
+        description: 'Released chart version to rebuild and republish'
+        required: true
+        type: string
+      release_ref:
+        description: 'Immutable git ref to rebuild from (tag recommended)'
+        required: true
+        type: string
+      expected_cnpg_version:
+        description: 'Expected cloudnative-pg dependency version in the rebuilt chart'
+        required: false
+        default: ''
+        type: string
+      publish_branch:
+        description: 'Branch to update with the repaired Helm repository files'
+        required: false
+        default: 'gh-pages'
+        type: string
+      repo_url:
+        description: 'Public Helm repository base URL'
+        required: false
+        default: 'https://documentdb.github.io/documentdb-kubernetes-operator'
+        type: string
+      dry_run:
+        description: 'Build artifacts and upload them without pushing a commit'
+        required: false
+        default: false
+        type: boolean
+      confirm_version:
+        description: 'Safety check: repeat the version exactly before publishing'
+        required: true
+        type: string
+      normalize_chart_metadata:
+        description: 'Allow packaging the checked-out source ref at the requested release version even when Chart.yaml still carries pre-release metadata'
+        required: false
+        default: false
+        type: boolean
+      allow_pages_source_mismatch:
+        description: 'Allow publishing even when GitHub Pages is configured from a different branch'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  repair-published-chart:
+    name: Repair Published Helm Chart
+    runs-on: ubuntu-latest
+    env:
+      CHART_DIR: operator/documentdb-helm-chart
+
+    steps:
+      - name: Validate manual inputs
+        env:
+          VERSION: ${{ inputs.version }}
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::version must be a valid semver string (e.g. 0.1.3 or 0.2.0-rc.1)."
+            exit 1
+          fi
+          if [[ "${VERSION}" != "${CONFIRM_VERSION}" ]]; then
+            echo "::error::confirm_version must exactly match version."
+            exit 1
+          fi
+
+      - name: Inspect GitHub Pages configuration
+        id: pages-config
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = await github.rest.repos.getPages({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const source = result.data.source || {};
+            core.setOutput('branch', source.branch || '');
+            core.setOutput('path', source.path || '');
+            core.info(`GitHub Pages source: ${source.branch || '(unset)'}${source.path || ''}`);
+
+      - name: Require explicit override for publish branch mismatch
+        if: ${{ !inputs.dry_run && !inputs.allow_pages_source_mismatch }}
+        env:
+          PAGES_SOURCE_BRANCH: ${{ steps.pages-config.outputs.branch }}
+          EXPECTED_BRANCH: ${{ inputs.publish_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "${PAGES_SOURCE_BRANCH}" != "${EXPECTED_BRANCH}" ]]; then
+            echo "::error::GitHub Pages source branch is '${PAGES_SOURCE_BRANCH}', not '${EXPECTED_BRANCH}'. Review the Pages configuration before publishing or rerun with allow_pages_source_mismatch=true."
+            exit 1
+          fi
+
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_ref }}
+          fetch-depth: 0
+          path: source
+
+      - name: Checkout publish branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.publish_branch }}
+          fetch-depth: 0
+          path: pages
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Validate chart source from release ref
+        working-directory: source
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_CNPG_VERSION: ${{ inputs.expected_cnpg_version }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+          NORMALIZE_CHART_METADATA: ${{ inputs.normalize_chart_metadata }}
+          CHART_PATH: ${{ env.CHART_DIR }}/Chart.yaml
+        run: |
+          set -euo pipefail
+          test -f "${CHART_PATH}"
+          ruby <<'RUBY'
+          require "yaml"
+
+          chart = YAML.load_file(ENV.fetch("CHART_PATH"))
+          version = ENV.fetch("VERSION")
+          expected = ENV["EXPECTED_CNPG_VERSION"]
+          release_ref = ENV.fetch("RELEASE_REF")
+          normalize_chart_metadata = ENV.fetch("NORMALIZE_CHART_METADATA") == "true"
+          source_version = chart["version"]
+
+          if source_version != version
+            if normalize_chart_metadata
+              puts "::notice::Chart.yaml version #{source_version.inspect} from #{release_ref.inspect} will be normalized to #{version.inspect} during packaging."
+            else
+              abort("::error::Chart.yaml version #{source_version.inspect} does not match #{version.inspect}. Rerun with normalize_chart_metadata=true if this source ref intentionally needs release metadata normalization.")
+            end
+          end
+
+          if expected && !expected.empty?
+            dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
+            abort("::error::Chart.yaml does not pin cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
+          end
+          RUBY
+
+      - name: Normalize chart metadata for packaged release
+        working-directory: source
+        env:
+          VERSION: ${{ inputs.version }}
+          CHART_PATH: ${{ env.CHART_DIR }}/Chart.yaml
+        run: |
+          set -euo pipefail
+          sed -i "s/^version: .*/version: ${VERSION}/" "${CHART_PATH}"
+          sed -i "s/^appVersion: .*/appVersion: \"${VERSION}\"/" "${CHART_PATH}"
+          helm dependency update "${CHART_DIR}"
+
+      - name: Mirror current published chart artifacts
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p build live backups/live-artifacts
+          if curl -fsSL "${REPO_URL}/index.yaml" -o live/index.yaml; then
+            ruby <<'RUBY' > live/chart-urls.txt
+            require "yaml"
+
+            data = YAML.load_file("live/index.yaml")
+            entries = data.fetch("entries", {})
+            urls = entries.values.flatten.flat_map { |entry| Array(entry["urls"]) }.uniq
+
+            puts urls
+            RUBY
+          else
+            printf 'apiVersion: v1\nentries: {}\n' > live/index.yaml
+            : > live/chart-urls.txt
+          fi
+          while IFS= read -r url; do
+            if [[ ! "${url}" =~ ^https?:// ]]; then
+              relative_url="${url#./}"
+              relative_url="${relative_url#/}"
+              url="${REPO_URL%/}/${relative_url}"
+            fi
+            filename="$(basename "${url}")"
+            curl -fsSL "${url}" -o "backups/live-artifacts/${filename}"
+            cp "backups/live-artifacts/${filename}" "pages/${filename}"
+          done < live/chart-urls.txt
+          cp live/index.yaml backups/index.live.yaml
+          if [[ -f pages/index.yaml ]]; then
+            cp pages/index.yaml backups/index.from-branch.yaml
+          fi
+
+      - name: Package corrected chart from release ref
+        working-directory: source
+        env:
+          VERSION: ${{ inputs.version }}
+          EXPECTED_CNPG_VERSION: ${{ inputs.expected_cnpg_version }}
+          PACKAGED_CHART_METADATA: ../build/packaged-chart-metadata.yaml
+        run: |
+          set -euo pipefail
+          helm package "${CHART_DIR}" --version "${VERSION}" --app-version "${VERSION}" --destination ../build
+          helm show chart "../build/documentdb-operator-${VERSION}.tgz" > "${PACKAGED_CHART_METADATA}"
+          ruby <<'RUBY'
+          require "yaml"
+
+          chart = YAML.load_file(ENV.fetch("PACKAGED_CHART_METADATA"))
+          version = ENV.fetch("VERSION")
+          expected = ENV["EXPECTED_CNPG_VERSION"]
+
+          abort("::error::Packaged chart version #{chart["version"].inspect} does not match #{version.inspect}.") unless chart["version"] == version
+          abort("::error::Packaged chart appVersion #{chart["appVersion"].inspect} does not match #{version.inspect}.") unless chart["appVersion"] == version
+
+          if expected && !expected.empty?
+            dependency = Array(chart["dependencies"]).find { |item| item["name"] == "cloudnative-pg" }
+            abort("::error::Packaged chart does not include cloudnative-pg #{expected.inspect}.") unless dependency && dependency["version"] == expected
+          end
+          RUBY
+
+      - name: Rebuild Helm repository files
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO_URL: ${{ inputs.repo_url }}
+        run: |
+          set -euo pipefail
+          cp "build/documentdb-operator-${VERSION}.tgz" "pages/documentdb-operator-${VERSION}.tgz"
+          helm repo index pages --url "${REPO_URL}" --merge live/index.yaml
+          ruby <<'RUBY'
+          require "yaml"
+
+          data = YAML.load_file("pages/index.yaml")
+          version = ENV.fetch("VERSION")
+          entries = Array(data.fetch("entries", {}).fetch("documentdb-operator", []))
+          entry = entries.find { |item| item["version"] == version }
+
+          abort("::error::Generated index.yaml is missing documentdb-operator #{version.inspect}.") unless entry
+          RUBY
+
+      - name: Summarize repair preview
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ inputs.release_ref }}
+          PUBLISH_BRANCH: ${{ inputs.publish_branch }}
+          REPO_URL: ${{ inputs.repo_url }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          NORMALIZE_CHART_METADATA: ${{ inputs.normalize_chart_metadata }}
+          PAGES_SOURCE_BRANCH: ${{ steps.pages-config.outputs.branch }}
+          PAGES_SOURCE_PATH: ${{ steps.pages-config.outputs.path }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Helm Pages Repair Preview"
+            echo ""
+            echo "- Version: \`${VERSION}\`"
+            echo "- Release ref: \`${RELEASE_REF}\`"
+            echo "- Publish branch: \`${PUBLISH_BRANCH}\`"
+            echo "- GitHub Pages source: \`${PAGES_SOURCE_BRANCH}${PAGES_SOURCE_PATH}\`"
+            echo "- Repo URL: \`${REPO_URL}\`"
+            echo "- Dry run: \`${DRY_RUN}\`"
+            echo "- Normalize chart metadata: \`${NORMALIZE_CHART_METADATA}\`"
+            echo ""
+            echo "### Pending git changes"
+            echo '```text'
+            git -C pages status --short
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload repair artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-pages-repair-${{ inputs.version }}
+          path: |
+            build/documentdb-operator-${{ inputs.version }}.tgz
+            build/packaged-chart-metadata.yaml
+            live/index.yaml
+            live/chart-urls.txt
+            backups/**
+            pages/index.yaml
+          if-no-files-found: error
+
+      - name: Publish repaired chart to GitHub Pages branch
+        if: ${{ !inputs.dry_run }}
+        working-directory: pages
+        env:
+          PUBLISH_BRANCH: ${{ inputs.publish_branch }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          artifacts=(./*.tgz)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.yaml "${artifacts[@]}"
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -m "fix: republish released Helm charts from live index and tagged source"
+          git push origin "HEAD:${PUBLISH_BRANCH}"

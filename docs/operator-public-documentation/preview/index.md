@@ -184,7 +184,7 @@ documentdb-preview   Cluster in healthy state   mongodb://...
 
 ### Connect to the DocumentDB cluster
 
-Choose a connection method based on your service type.
+Choose a connection method based on your service type. For more details on service types, load balancers, and Network Policies, see [Networking](configuration/networking.md). For TLS certificate configuration, see [TLS](configuration/tls.md).
 
 #### Option 1: ClusterIP service (default — for local development)
 
@@ -405,14 +405,6 @@ This configuration creates:
 ### Multi-cloud deployment
 
 The operator supports deployment across multiple cloud environments and Kubernetes distributions. For guidance, see the [Multi-Cloud Deployment Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md).
-
-### TLS setup
-
-For advanced TLS configuration and testing:
-
-- [TLS Setup Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/README.md) — Complete TLS configuration guide
-- [E2E Testing](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/tls/E2E-TESTING.md) — Comprehensive testing procedures
-
 
 ## Clean up
 

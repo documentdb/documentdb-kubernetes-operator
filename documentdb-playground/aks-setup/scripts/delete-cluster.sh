@@ -6,9 +6,9 @@
 set -e  # Exit on any error
 
 # Configuration (should match create-cluster.sh)
-CLUSTER_NAME="ray-ddb-cluster"
-RESOURCE_GROUP="ray-documentdb-rg"
-LOCATION="West US 2"
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-cluster}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
+LOCATION="${LOCATION:-westus2}"
 
 # Deletion scope flags
 DELETE_INSTANCE="${DELETE_INSTANCE:-false}"
@@ -58,8 +58,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --delete-operator       Delete DocumentDB operator only"
             echo "  --delete-cluster        Delete AKS cluster only"
             echo "  --delete-all           Delete everything (instance + operator + cluster)"
-            echo "  --cluster-name NAME     AKS cluster name (default: ray-ddb-cluster)"
-            echo "  --resource-group RG     Azure resource group (default: ray-documentdb-rg)"
+            echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
+            echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
             echo "  --force                 Skip confirmation prompts"
             echo "  -h, --help             Show this help message"
             echo ""

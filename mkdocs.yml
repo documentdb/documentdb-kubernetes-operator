@@ -8,6 +8,13 @@ theme:
   name: material
   features:
     - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
 
 # mike (https://github.com/jimporter/mike) enables versioned docs on GitHub Pages.
 # Each release gets a frozen snapshot (e.g., /0.2.0/), and "latest" always points
@@ -21,6 +28,12 @@ extra:
 nav:
   - Preview:
       - Get Started: preview/index.md
+      - Configuration:
+          - Networking: preview/configuration/networking.md
+          - TLS: preview/configuration/tls.md
+          - Storage: preview/configuration/storage.md
+      - Getting Started:
+          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
@@ -33,5 +46,18 @@ plugins:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
