@@ -13,7 +13,7 @@ tags:
 
 Backups protect your DocumentDB cluster against data loss from accidental deletion, corruption, or failed upgrades. A reliable backup strategy is the foundation of any production deployment — without it, recovery may be impossible.
 
-The DocumentDB operator provides a snapshot-based backup system built on Kubernetes [VolumeSnapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/). Each backup captures a point-in-time copy of the primary instance's persistent volume, which can later be used to bootstrap a new DocumentDB cluster.
+The DocumentDB operator provides a snapshot-based backup system built on Kubernetes [VolumeSnapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/). Each backup captures a crash-consistent snapshot of the primary instance's persistent volume, which can later be used to bootstrap a new DocumentDB cluster. Any writes that occurred after the snapshot and before a failure are not captured — these backups do not provide point-in-time recovery (PITR).
 
 Key characteristics:
 
@@ -24,7 +24,7 @@ Key characteristics:
 
 ## Prerequisites
 
-Before creating backups, ensure your Kubernetes cluster has the required snapshot infrastructure.
+Before creating backups, ensure your Kubernetes cluster has the required snapshot support.
 
 === "Kind / Minikube"
 
@@ -163,7 +163,7 @@ You can restore a backup by creating a **new** DocumentDB cluster that reference
 List backups for your DocumentDB cluster and choose one in `completed` status:
 
 ```bash
-kubectl get backups -n default
+kubectl get backups -n <namespace>
 ```
 
 ### Step 2: Create a New DocumentDB Cluster

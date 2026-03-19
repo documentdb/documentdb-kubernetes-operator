@@ -51,6 +51,9 @@ kubectl top pods -n <namespace>
 
 ## Log Management
 
+!!! tip
+    We recommend setting up centralized log collection as part of your observability strategy. See the [telemetry playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry) for OpenTelemetry, Prometheus, and Grafana integration examples.
+
 === "DocumentDB Operator Logs"
 
     ```bash
@@ -96,8 +99,11 @@ The `spec.logLevel` field controls the PostgreSQL instance log verbosity. It doe
 
 ```yaml
 spec:
-  logLevel: "info"  # Options: debug, info, warning, error
+  logLevel: "warning"  # Options: debug, info, warning, error
 ```
+
+!!! tip
+    For production deployments, use `warning` or `error` to reduce log volume. Reserve `info` or `debug` for troubleshooting.
 
 Apply the change:
 
