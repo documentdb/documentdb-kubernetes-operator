@@ -532,7 +532,7 @@ runs:
         
         # Check for CRDs installation
         echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
+        kubectl get crd dbs.documentdb.io || echo "DocumentDB CRD not found"
         
         echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
 

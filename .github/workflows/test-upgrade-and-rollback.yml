@@ -13,12 +13,22 @@ on:
         description: 'Optional: Use existing image tag instead of building locally'
         required: false
         type: string
+      released_chart_version:
+        description: 'Released chart version to upgrade from (default: latest)'
+        required: false
+        type: string
+        default: 'latest'
   workflow_call:
     inputs:
       image_tag:
         description: 'Optional: Use existing image tag instead of building locally'
         required: false
         type: string
+      released_chart_version:
+        description: 'Released chart version to upgrade from (default: latest)'
+        required: false
+        type: string
+        default: 'latest'
 
 permissions:
   contents: read
@@ -68,7 +78,7 @@ jobs:
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
       DOCUMENTDB_COMBINED_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
-      RELEASED_CHART_VERSION: 'latest'
+      RELEASED_CHART_VERSION: ${{ inputs.released_chart_version || 'latest' }}
 
     steps:
     - name: Checkout repository
@@ -146,7 +156,9 @@ jobs:
         # Versions <= 0.1.3 use combined image (no ImageVolume support)
         # Versions > 0.1.3 use extension image (ImageVolume mode)
         THRESHOLD="0.1.3"
-        if [[ "$(printf '%s\n' "$THRESHOLD" "$RESOLVED_VERSION" | sort -V | head -n1)" == "$RESOLVED_VERSION" ]]; then
+        # Strip any pre-release suffix (e.g., 0.1.3-rc1 → 0.1.3) for clean semver comparison
+        CLEAN_VERSION=$(echo "$RESOLVED_VERSION" | sed 's/-.*//')
+        if [[ "$(printf '%s\n' "$THRESHOLD" "$CLEAN_VERSION" | sort -V | head -n1)" == "$CLEAN_VERSION" ]]; then
           echo "Released version $RESOLVED_VERSION <= $THRESHOLD → combined image required"
           USE_COMBINED=true
         else
@@ -328,8 +340,8 @@ jobs:
         echo "--- Verifying Cluster Health ---"
         timeout 300 bash -c '
         while true; do
-          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
-          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
           echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
             echo "✓ Cluster is healthy after operator upgrade"
@@ -337,7 +349,7 @@ jobs:
           fi
           sleep 10
         done
-        '
+        ' -- "$DB_NAME" "$DB_NS"
         
         echo ""
         echo "✅ Step 1 passed: Operator control plane upgraded successfully"
@@ -400,7 +412,7 @@ jobs:
         echo "Waiting for DocumentDB to be deleted..."
         timeout 300 bash -c '
         while true; do
-          db_exists=$(kubectl -n '$DB_NS' get documentdb '$DB_NAME' --ignore-not-found -o name)
+          db_exists=$(kubectl -n "$1" get documentdb "$2" --ignore-not-found -o name)
           if [[ -z "$db_exists" ]]; then
             echo "✓ DocumentDB deleted successfully."
             break
@@ -408,12 +420,12 @@ jobs:
           echo "DocumentDB still exists. Waiting..."
           sleep 10
         done
-        '
+        ' -- "$DB_NS" "$DB_NAME"
         
         echo "Waiting for cluster pods to be cleaned up..."
         timeout 120 bash -c '
         while true; do
-          pod_count=$(kubectl get pods -n '$DB_NS' -l cnpg.io/cluster='$DB_NAME' --no-headers 2>/dev/null | wc -l)
+          pod_count=$(kubectl get pods -n "$1" -l cnpg.io/cluster="$2" --no-headers 2>/dev/null | wc -l)
           if [[ "$pod_count" -eq 0 ]]; then
             echo "✓ All cluster pods cleaned up."
             break
@@ -421,7 +433,10 @@ jobs:
           echo "Still $pod_count pods remaining. Waiting..."
           sleep 5
         done
-        '
+        ' -- "$DB_NS" "$DB_NAME"
+        
+        echo "Cleaning up old PVCs..."
+        kubectl delete pvc -n $DB_NS -l cnpg.io/cluster=$DB_NAME --wait=true --timeout=60s || true
         
         # Create a fresh cluster with extension image under the upgraded operator
         OLD_EXTENSION="${{ env.DOCUMENTDB_OLD_IMAGE }}"
@@ -452,8 +467,8 @@ jobs:
         echo "Waiting for recreated cluster to become healthy..."
         timeout 600 bash -c '
         while true; do
-          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
-          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
           echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
             echo "✓ Recreated cluster is healthy"
@@ -461,7 +476,7 @@ jobs:
           fi
           sleep 10
         done
-        '
+        ' -- "$DB_NAME" "$DB_NS"
         
         # Update DOCUMENTDB_INITIAL_IMAGE so Step 2 baseline check uses the correct image
         echo "DOCUMENTDB_INITIAL_IMAGE=$OLD_EXTENSION" >> $GITHUB_ENV
@@ -500,7 +515,7 @@ jobs:
         echo "✓ Seed data re-written after cluster recreation"
 
     - name: Cleanup port forwarding after re-seeding
-      if: ${{ always() && env.USE_COMBINED == 'true' }}
+      if: always() && env.USE_COMBINED == 'true'
       run: |
         if [ -f /tmp/pf_pid ]; then
           PF_PID=$(cat /tmp/pf_pid)
@@ -560,17 +575,17 @@ jobs:
         echo "Waiting for cluster to be healthy with new images..."
         timeout 600 bash -c '
         while true; do
-          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
-          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
-          SCHEMA_VERSION=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.schemaVersion}" 2>/dev/null || echo "N/A")
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
+          SCHEMA_VERSION=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.schemaVersion}" 2>/dev/null || echo "N/A")
           echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS, schemaVersion: $SCHEMA_VERSION"
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
-            HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+            HEALTHY_PODS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
             if [[ "$HEALTHY_PODS" -ge "1" ]]; then
               # Verify pods are actually running the new extension image
               # With ImageVolume (K8s >= 1.35), the extension image is mounted as a volume, not an init container
-              POD_IMAGES=$(kubectl get pods -n '$DB_NS' -l cnpg.io/cluster='$DB_NAME' -o jsonpath="{.items[*].spec.volumes[*].image.reference}" 2>/dev/null)
-              if echo "$POD_IMAGES" | grep -q "'"$NEW_EXTENSION"'"; then
+              POD_IMAGES=$(kubectl get pods -n "$2" -l cnpg.io/cluster="$1" -o jsonpath="{.items[*].spec.volumes[*].image.reference}" 2>/dev/null)
+              if echo "$POD_IMAGES" | grep -q "$3"; then
                 echo "✓ Cluster healthy with $HEALTHY_PODS pods running new images"
                 break
               else
@@ -580,7 +595,7 @@ jobs:
           fi
           sleep 10
         done
-        '
+        ' -- "$DB_NAME" "$DB_NS" "$NEW_EXTENSION"
         
         # Verify extension image
         FINAL_EXTENSION=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
@@ -691,16 +706,16 @@ jobs:
         echo "Waiting for cluster to stabilize after extension rollback..."
         timeout 600 bash -c '
         while true; do
-          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
-          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
           echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
-            HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+            HEALTHY_PODS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
             if [[ "$HEALTHY_PODS" -ge "1" ]]; then
               # Verify pods are running the rolled-back extension image
               # With ImageVolume (K8s >= 1.35), the extension image is mounted as a volume, not an init container
-              POD_IMAGES=$(kubectl get pods -n '$DB_NS' -l cnpg.io/cluster='$DB_NAME' -o jsonpath="{.items[*].spec.volumes[*].image.reference}" 2>/dev/null)
-              if echo "$POD_IMAGES" | grep -q "'"$OLD_EXTENSION"'"; then
+              POD_IMAGES=$(kubectl get pods -n "$2" -l cnpg.io/cluster="$1" -o jsonpath="{.items[*].spec.volumes[*].image.reference}" 2>/dev/null)
+              if echo "$POD_IMAGES" | grep -q "$3"; then
                 echo "✓ Cluster healthy with $HEALTHY_PODS pods running rolled-back extension image"
                 break
               else
@@ -710,7 +725,7 @@ jobs:
           fi
           sleep 10
         done
-        '
+        ' -- "$DB_NAME" "$DB_NS" "$OLD_EXTENSION"
         
         echo ""
         echo "=== Extension Rollback Verification ==="
@@ -844,15 +859,15 @@ jobs:
         echo "Waiting for cluster to stabilize after gateway rollback..."
         timeout 600 bash -c '
         while true; do
-          DB_STATUS=$(kubectl get documentdb '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.status}" 2>/dev/null)
-          CLUSTER_STATUS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.phase}" 2>/dev/null)
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
           echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
           if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
-            HEALTHY_PODS=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+            HEALTHY_PODS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
             if [[ "$HEALTHY_PODS" -ge "1" ]]; then
               # Verify gateway plugin parameter reflects the rolled-back image
-              CURRENT_GW_PARAM=$(kubectl get cluster '$DB_NAME' -n '$DB_NS' -o jsonpath="{.spec.plugins[0].parameters.gatewayImage}" 2>/dev/null)
-              if [[ "$CURRENT_GW_PARAM" == "'"$OLD_GATEWAY"'" ]]; then
+              CURRENT_GW_PARAM=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.spec.plugins[0].parameters.gatewayImage}" 2>/dev/null)
+              if [[ "$CURRENT_GW_PARAM" == "$3" ]]; then
                 echo "✓ Cluster healthy with $HEALTHY_PODS pods and gateway image rolled back"
                 break
               else
@@ -862,7 +877,7 @@ jobs:
           fi
           sleep 10
         done
-        '
+        ' -- "$DB_NAME" "$DB_NS" "$OLD_GATEWAY"
         
         echo ""
         echo "=== Gateway Rollback Verification ==="
