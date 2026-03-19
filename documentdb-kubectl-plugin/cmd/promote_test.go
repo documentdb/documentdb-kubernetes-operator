@@ -95,6 +95,88 @@ func TestPatchDocumentDB(t *testing.T) {
 	}
 }
 
+func TestPatchDocumentDBFailover(t *testing.T) {
+	t.Parallel()
+	gvr := documentDBGVR()
+
+	namespace := defaultDocumentDBNamespace
+	docName := "sample"
+
+	doc := newDocumentWithClusterList(docName, namespace, "cluster-a", "Ready", []string{"cluster-a", "cluster-b", "cluster-c"})
+
+	client := newFakeDynamicClient(doc.DeepCopy())
+
+	opts := &promoteOptions{
+		documentDBName: docName,
+		namespace:      namespace,
+		targetCluster:  "cluster-b",
+		failover:       true,
+	}
+
+	if err := opts.patchDocumentDB(context.Background(), client); err != nil {
+		t.Fatalf("patchDocumentDB returned error: %v", err)
+	}
+
+	patched, err := client.Resource(gvr).Namespace(namespace).Get(context.Background(), docName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to fetch patched document: %v", err)
+	}
+
+	primary, _, err := unstructured.NestedString(patched.Object, "spec", "clusterReplication", "primary")
+	if err != nil {
+		t.Fatalf("failed to read patched primary: %v", err)
+	}
+	if primary != "cluster-b" {
+		t.Fatalf("expected primary cluster-b, got %q", primary)
+	}
+
+	clusterList, _, err := unstructured.NestedSlice(patched.Object, "spec", "clusterReplication", "clusterList")
+	if err != nil {
+		t.Fatalf("failed to read patched clusterList: %v", err)
+	}
+
+	// Verify old primary (cluster-a) was removed from clusterList
+	for _, cluster := range clusterList {
+		clusterMap, ok := cluster.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _, _ := unstructured.NestedString(clusterMap, "name")
+		if name == "cluster-a" {
+			t.Fatal("expected old primary cluster-a to be removed from clusterList")
+		}
+	}
+
+	// Verify remaining clusters are still present
+	if len(clusterList) != 2 {
+		t.Fatalf("expected 2 clusters in clusterList after failover, got %d", len(clusterList))
+	}
+}
+
+func newDocumentWithClusterList(name, namespace, primary, phase string, clusters []string) *unstructured.Unstructured {
+	clusterList := make([]any, 0, len(clusters))
+	for _, c := range clusters {
+		clusterList = append(clusterList, map[string]any{"name": c})
+	}
+
+	doc := &unstructured.Unstructured{Object: map[string]any{
+		"spec": map[string]any{
+			"clusterReplication": map[string]any{
+				"primary":     primary,
+				"clusterList": clusterList,
+			},
+		},
+		"status": map[string]any{
+			"status": phase,
+		},
+	}}
+	gvk := schema.GroupVersionKind{Group: documentDBGVRGroup, Version: documentDBGVRVersion, Kind: "DocumentDB"}
+	doc.SetGroupVersionKind(gvk)
+	doc.SetName(name)
+	doc.SetNamespace(namespace)
+	return doc
+}
+
 func setDocumentState(ctx context.Context, client dynamic.Interface, gvr schema.GroupVersionResource, namespace, name, primary, phase string) error {
 	for {
 		obj, err := client.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})

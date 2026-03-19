@@ -9,7 +9,7 @@ set -e  # Exit on any error
 CLUSTER_NAME="documentdb-cluster"
 REGION="us-west-2"
 NODE_TYPE="m5.large"
-NODES=2
+NODES=3
 NODES_MIN=1
 NODES_MAX=4
 
@@ -373,7 +373,7 @@ install_documentdb_operator() {
         return 0
     fi
     
-    log "Installing DocumentDB operator from official GitHub registry..."
+    log "Installing DocumentDB operator..."
     
     # Check if operator is already installed
     if helm list -n documentdb-operator | grep -q documentdb-operator; then
@@ -381,18 +381,25 @@ install_documentdb_operator() {
         return 0
     fi
     
-    # Test internet connectivity to GitHub registry
-    log "Testing connectivity to GitHub Container Registry..."
-    if ! curl -s --connect-timeout 10 https://ghcr.io > /dev/null; then
-        error "Cannot reach ghcr.io. Please check your internet connection and firewall settings."
-    fi
+    # Try public Helm repository first (no authentication required)
+    log "Adding DocumentDB public Helm repository..."
+    helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
+    helm repo update documentdb
     
-    # Install DocumentDB operator using fork OCI registry with AWS enhancements
-    log "Installing DocumentDB operator from GitHub Container Registry (fork with AWS support)..."
-    
-    # Check for GitHub authentication
-    if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-        error "DocumentDB operator installation requires GitHub authentication.
+    log "Installing DocumentDB operator from public Helm repository..."
+    if helm install documentdb-operator documentdb/documentdb-operator \
+        --namespace documentdb-operator \
+        --create-namespace \
+        --wait \
+        --timeout 10m 2>/dev/null; then
+        success "DocumentDB operator installed successfully from public Helm repository"
+    else
+        # Fallback to OCI registry with GitHub authentication
+        warn "Public Helm repository installation failed. Falling back to OCI registry..."
+        
+        # Check for GitHub authentication
+        if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
+            error "DocumentDB operator installation requires GitHub authentication as fallback.
 
 Please set the following environment variables:
   export GITHUB_USERNAME='your-github-username'
@@ -404,32 +411,34 @@ To create a GitHub token:
 3. Export the token as shown above
 
 Then run the script again with --install-operator"
-    fi
-    
-    # Authenticate with GitHub Container Registry
-    log "Authenticating with GitHub Container Registry..."
-    if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-        error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
-    fi
-    
-    # Install DocumentDB operator from OCI registry
-    log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
-    helm install documentdb-operator \
-        oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
-        --namespace documentdb-operator \
-        --create-namespace \
-        --wait \
-        --timeout 10m
+        fi
+        
+        # Authenticate with GitHub Container Registry
+        log "Authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
+        fi
+        
+        # Install DocumentDB operator from OCI registry
+        log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+        helm install documentdb-operator \
+            oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
+            --version ${OPERATOR_CHART_VERSION} \
+            --namespace documentdb-operator \
+            --create-namespace \
+            --wait \
+            --timeout 10m
 
-    if [ $? -eq 0 ]; then
-        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
-    else
-        error "Failed to install DocumentDB operator from OCI registry. Please verify:
+        if [ $? -eq 0 ]; then
+            success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        else
+            error "Failed to install DocumentDB operator. Please verify:
 - Your GitHub token has 'read:packages' scope
 - You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
 - The chart version ${OPERATOR_CHART_VERSION} exists"
-    fi    
+        fi
+    fi
+    
     # Wait for operator to be ready
     log "Waiting for DocumentDB operator to be ready..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=documentdb-operator -n documentdb-operator --timeout=300s || warn "DocumentDB operator pods may still be starting"

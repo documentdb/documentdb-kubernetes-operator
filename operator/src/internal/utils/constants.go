@@ -66,6 +66,7 @@ const (
 	JSON_PATCH_PATH_EXTERNAL_CLUSTERS    = "/spec/externalClusters"
 	JSON_PATCH_PATH_MANAGED_SERVICES     = "/spec/managed/services/additional"
 	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
+	JSON_PATCH_PATH_BOOTSTRAP            = "/spec/bootstrap"
 
 	// JSON Patch path format strings for image upgrades (require fmt.Sprintf with index)
 	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT      = "/spec/postgresql/extensions/%d/image/reference"

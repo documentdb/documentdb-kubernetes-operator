@@ -2,6 +2,7 @@ site_name: DocumentDB-Kubernetes-Operator
 repo_url: https://github.com/documentdb/documentdb-kubernetes-operator
 edit_uri: edit/main/docs/operator-public-documentation/
 docs_dir: docs/operator-public-documentation
+
 # Material theme is required for mike's version selector dropdown;
 # the readthedocs theme does not support it.
 theme:
@@ -25,10 +26,17 @@ extra:
     provider: mike
     default: latest
 
+# Mermaid is configured via pymdownx.superfences custom_fences below.
+# The Material theme handles mermaid rendering without external CDN dependencies.
+
 nav:
   - Preview:
+      - Get Started: preview/index.md
+      - Architecture:
+          - Overview: preview/architecture/overview.md
       - Getting Started:
-          - Overview: preview/index.md
+          - Before You Start: preview/getting-started/before-you-start.md
+          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
           - Deploy on AKS: preview/getting-started/deploy-on-aks.md
       - Configuration:
           - Networking: preview/configuration/networking.md
@@ -37,6 +45,9 @@ nav:
       - Advanced Configuration: preview/advanced-configuration/README.md
       - Backup and Restore: preview/backup-and-restore.md
       - API Reference: preview/api-reference.md
+      - High Availability:
+          - Overview: preview/high-availability/overview.md
+          - Local HA: preview/high-availability/local-ha.md
       - FAQ: preview/faq.md
   - Tools:
       - Kubectl Plugin: preview/kubectl-plugin.md
@@ -48,11 +59,16 @@ markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
-  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - toc:
       permalink: true
