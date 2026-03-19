@@ -1,0 +1,1880 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Configure local high availability for DocumentDB with multiple instances, pod anti-affinity, and automatic failover.">
+      
+      
+      
+      
+        <link rel="prev" href="../overview/">
+      
+      
+        <link rel="next" href="../../faq/">
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
+    
+    
+      
+        <title>Local High Availability - DocumentDB-Kubernetes-Operator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#local-high-availability" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DocumentDB-Kubernetes-Operator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Local High Availability
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
+          
+  
+  Preview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../kubectl-plugin/" class="md-tabs__link">
+          
+  
+  Tools
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    DocumentDB-Kubernetes-Operator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Preview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Preview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Get Started
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/before-you-start/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Before You Start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/deploy-on-eks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy on EKS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced-configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1_8" id="__nav_1_8_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    High Availability
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_8">
+            <span class="md-nav__icon md-icon"></span>
+            High Availability
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Local HA
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Local HA
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instance-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Instance Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instance-count-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Count Options
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pod-anti-affinity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pod Anti-Affinity
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pod Anti-Affinity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zone-level-distribution-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      Zone-Level Distribution (Recommended)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node-level-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Node-Level Distribution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#affinity-configuration-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Affinity Configuration Reference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-failover" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Failover
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Failover">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#failover-timeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Timeline
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-timing-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Timing Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Process
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rto-and-rpo-impact" class="md-nav__link">
+    <span class="md-ellipsis">
+      RTO and RPO Impact
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-failover-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Failover Detection
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Failover Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#checking-current-primary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Checking Current Primary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-cluster-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Cluster Events
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-replication-lag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Replication Lag
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-high-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing High Availability
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing High Availability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-1-verify-instance-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 1: Verify Instance Distribution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-2-simulate-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 2: Simulate Failure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-3-application-connectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 3: Application Connectivity
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pods-not-distributing-across-zones" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pods Not Distributing Across Zones
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-taking-too-long" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Taking Too Long
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replica-not-catching-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replica Not Catching Up
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kubectl-plugin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Kubectl Plugin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      Overview
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instance-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Instance Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instance-count-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instance Count Options
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pod-anti-affinity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pod Anti-Affinity
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pod Anti-Affinity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#zone-level-distribution-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      Zone-Level Distribution (Recommended)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node-level-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Node-Level Distribution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#affinity-configuration-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Affinity Configuration Reference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-failover" class="md-nav__link">
+    <span class="md-ellipsis">
+      Automatic Failover
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Failover">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#failover-timeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Timeline
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-timing-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Timing Parameters
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Process
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rto-and-rpo-impact" class="md-nav__link">
+    <span class="md-ellipsis">
+      RTO and RPO Impact
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-failover-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and Failover Detection
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and Failover Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#checking-current-primary" class="md-nav__link">
+    <span class="md-ellipsis">
+      Checking Current Primary
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-cluster-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Cluster Events
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-replication-lag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring Replication Lag
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-high-availability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Testing High Availability
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing High Availability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-1-verify-instance-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 1: Verify Instance Distribution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-2-simulate-failure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 2: Simulate Failure
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test-3-application-connectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Test 3: Application Connectivity
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pods-not-distributing-across-zones" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pods Not Distributing Across Zones
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#failover-taking-too-long" class="md-nav__link">
+    <span class="md-ellipsis">
+      Failover Taking Too Long
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replica-not-catching-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replica Not Catching Up
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="local-high-availability">Local High Availability<a class="headerlink" href="#local-high-availability" title="Permanent link">&para;</a></h1>
+<p>Local high availability (HA) deploys multiple DocumentDB instances within a single Kubernetes cluster, providing automatic failover and minimal data loss during instance failures.</p>
+<div class="admonition info">
+<p class="admonition-title">Built on CloudNative-PG</p>
+<p>DocumentDB uses <a href="https://cloudnative-pg.io/">CloudNative-PG's</a> default high availability configuration for local HA. For detailed information about the underlying HA mechanisms, see:</p>
+<ul>
+<li><a href="https://cloudnative-pg.io/documentation/current/architecture/">CloudNative-PG Architecture</a></li>
+<li><a href="https://cloudnative-pg.io/documentation/current/replication/">CloudNative-PG Replication</a></li>
+<li><a href="https://cloudnative-pg.io/documentation/current/failover/">CloudNative-PG Failover</a></li>
+</ul>
+</div>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Local HA uses streaming replication between a primary instance and one or two replicas. When the primary fails, a replica is automatically promoted to primary.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph zone1[Zone A]
+        P[Primary]
+    end
+    subgraph zone2[Zone B]
+        R1[Replica 1]
+    end
+    subgraph zone3[Zone C]
+        R2[Replica 2]
+    end
+
+    App([Application]) --&gt; P
+    P --&gt;|Streaming Replication| R1
+    P --&gt;|Streaming Replication| R2</code></pre>
+<h2 id="instance-configuration">Instance Configuration<a class="headerlink" href="#instance-configuration" title="Permanent link">&para;</a></h2>
+<p>Configure the number of instances using the <code>instancesPerNode</code> field:</p>
+<div class="highlight"><span class="filename">documentdb-ha.yaml</span><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">  </span><span class="c1"># (1)!</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi</span>
+</code></pre></div>
+<ol>
+<li>Valid values: <code>1</code> (no HA), <code>2</code> (primary + 1 replica), <code>3</code> (primary + 2 replicas, recommended for production)</li>
+</ol>
+<h3 id="instance-count-options">Instance Count Options<a class="headerlink" href="#instance-count-options" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Instances</th>
+<th>Configuration</th>
+<th>Use Case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1</code></td>
+<td>Single instance, no replicas</td>
+<td>Development, testing</td>
+</tr>
+<tr>
+<td><code>2</code></td>
+<td>Primary + 1 replica</td>
+<td>Cost-sensitive production</td>
+</tr>
+<tr>
+<td><code>3</code></td>
+<td>Primary + 2 replicas</td>
+<td><strong>Recommended</strong> for production</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition tip">
+<p class="admonition-title">Why 3 instances?</p>
+<p>Three instances provide better fault tolerance: if the primary fails, you still have two replicas, ensuring one can be promoted while retaining a standby. With only 2 instances, after a failover you have no replicas until the former primary recovers. Three instances also allow rolling updates and maintenance without reducing redundancy.</p>
+</div>
+<h2 id="pod-anti-affinity">Pod Anti-Affinity<a class="headerlink" href="#pod-anti-affinity" title="Permanent link">&para;</a></h2>
+<p>Pod anti-affinity ensures DocumentDB instances are distributed across failure domains (nodes, zones) for resilience.</p>
+<h3 id="zone-level-distribution-recommended">Zone-Level Distribution (Recommended)<a class="headerlink" href="#zone-level-distribution-recommended" title="Permanent link">&para;</a></h3>
+<p>Distribute instances across availability zones:</p>
+<div class="highlight"><span class="filename">documentdb-zone-affinity.yaml</span><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">affinity</span><span class="p">:</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="nt">enablePodAntiAffinity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="nt">topologyKey</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">topology.kubernetes.io/zone</span><span class="w">  </span><span class="c1"># (1)!</span>
+</code></pre></div>
+<ol>
+<li>Distributes pods across different availability zones. Requires a cluster with nodes in multiple zones.</li>
+</ol>
+<h3 id="node-level-distribution">Node-Level Distribution<a class="headerlink" href="#node-level-distribution" title="Permanent link">&para;</a></h3>
+<p>For clusters without multiple zones, distribute across nodes:</p>
+<div class="highlight"><span class="filename">documentdb-node-affinity.yaml</span><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="nt">affinity</span><span class="p">:</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">    </span><span class="nt">enablePodAntiAffinity</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="nt">topologyKey</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kubernetes.io/hostname</span><span class="w">  </span><span class="c1"># (1)!</span>
+</code></pre></div>
+<ol>
+<li>Distributes pods across different nodes. Requires at least 3 nodes in the cluster.</li>
+</ol>
+<h3 id="affinity-configuration-reference">Affinity Configuration Reference<a class="headerlink" href="#affinity-configuration-reference" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enablePodAntiAffinity</code></td>
+<td>boolean</td>
+<td>Enable/disable pod anti-affinity</td>
+</tr>
+<tr>
+<td><code>topologyKey</code></td>
+<td>string</td>
+<td>Kubernetes topology label for distribution</td>
+</tr>
+<tr>
+<td><code>podAntiAffinityType</code></td>
+<td>string</td>
+<td><code>preferred</code> (default) or <code>required</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Required vs Preferred</p>
+<p>Using <code>required</code> anti-affinity prevents scheduling if constraints cannot be met. Use <code>preferred</code> (default) to allow scheduling even when ideal placement isn't possible.</p>
+</div>
+<h2 id="automatic-failover">Automatic Failover<a class="headerlink" href="#automatic-failover" title="Permanent link">&para;</a></h2>
+<p>DocumentDB uses CloudNative-PG's failover mechanism to automatically detect primary failure and promote a replica. No manual intervention is required for local HA failover.</p>
+<h3 id="failover-timeline">Failover Timeline<a class="headerlink" href="#failover-timeline" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant App as Application
+    participant P as Primary
+    participant R as Replica
+    participant Op as Operator
+
+    Note over P: Primary fails
+    App-&gt;&gt;P: Connection fails
+    Op-&gt;&gt;P: Readiness probe fails
+    Op-&gt;&gt;Op: Wait failoverDelay (default: 0s)
+    Op-&gt;&gt;P: Mark TargetPrimary pending
+    P-&gt;&gt;P: Fast shutdown (up to 30s)
+    Op-&gt;&gt;R: Select most up-to-date replica
+    R-&gt;&gt;R: Promote to primary
+    Op-&gt;&gt;App: Update service endpoint
+    App-&gt;&gt;R: Reconnect to new primary
+    Note over R: New Primary</code></pre>
+<h3 id="failover-timing-parameters">Failover Timing Parameters<a class="headerlink" href="#failover-timing-parameters" title="Permanent link">&para;</a></h3>
+<p>DocumentDB inherits these timing controls from CloudNative-PG:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Default</th>
+<th>Configurable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>failoverDelay</code></td>
+<td>0 seconds</td>
+<td>No</td>
+<td>Delay before initiating failover after detecting unhealthy primary</td>
+</tr>
+<tr>
+<td><code>stopDelay</code></td>
+<td>30 seconds</td>
+<td><strong>Yes</strong></td>
+<td>Time allowed for graceful PostgreSQL shutdown</td>
+</tr>
+<tr>
+<td><code>switchoverDelay</code></td>
+<td>3600 seconds</td>
+<td>No</td>
+<td>Time for primary to gracefully shutdown during planned switchover</td>
+</tr>
+<tr>
+<td><code>livenessProbeTimeout</code></td>
+<td>30 seconds</td>
+<td>No</td>
+<td>Time allowed for liveness probe response</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Current Configuration</p>
+<p>Currently, only <code>stopDelay</code> is configurable via <code>spec.timeouts.stopDelay</code>. Other parameters use CloudNative-PG default values. Additional timing parameters may be exposed in future releases.</p>
+</div>
+<h3 id="failover-process">Failover Process<a class="headerlink" href="#failover-process" title="Permanent link">&para;</a></h3>
+<p>The failover process occurs in two phases:</p>
+<p><strong>Phase 1: Primary Shutdown</strong></p>
+<ol>
+<li>Readiness probe detects the primary is unhealthy</li>
+<li>After <code>failoverDelay</code> (default: 0s), operator marks <code>TargetPrimary</code> as pending</li>
+<li>Primary pod initiates fast shutdown (up to <code>stopDelay</code> seconds)</li>
+<li>WAL receivers on replicas stop to prevent timeline discrepancies</li>
+</ol>
+<p><strong>Phase 2: Promotion</strong></p>
+<ol>
+<li>Operator selects the most up-to-date replica based on WAL position</li>
+<li>Selected replica promotes to primary and begins accepting writes</li>
+<li>Kubernetes service endpoints update to point to new primary</li>
+<li>Former primary restarts as a replica when recovered</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Replication and Data Durability</p>
+<p>DocumentDB relies on <a href="https://cloudnative-pg.io/documentation/current/replication/">CloudNative-PG's streaming replication</a>, which uses asynchronous replication by default. Replicas typically lag only milliseconds behind the primary under normal conditions. During failover, the most up-to-date replica is promoted, minimizing potential data loss to recent uncommitted transactions.</p>
+</div>
+<h3 id="rto-and-rpo-impact">RTO and RPO Impact<a class="headerlink" href="#rto-and-rpo-impact" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>RTO Impact</th>
+<th>RPO Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fast shutdown succeeds</td>
+<td>Seconds to tens of seconds</td>
+<td>Minimal (replication lag)</td>
+</tr>
+<tr>
+<td>Fast shutdown times out</td>
+<td>Up to <code>stopDelay</code> (30s default)</td>
+<td>Potential data loss</td>
+</tr>
+<tr>
+<td>Network partition</td>
+<td>Varies by scenario</td>
+<td>Depends on replica sync state</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition tip">
+<p class="admonition-title">Tuning for RTO vs RPO</p>
+<p>Lower <code>stopDelay</code> values favor faster recovery (RTO) but may increase data loss risk (RPO). Higher values prioritize data safety but may delay recovery.</p>
+</div>
+<h2 id="monitoring-and-failover-detection">Monitoring and Failover Detection<a class="headerlink" href="#monitoring-and-failover-detection" title="Permanent link">&para;</a></h2>
+<p>Understanding when a failover has occurred is essential for operations.</p>
+<h3 id="checking-current-primary">Checking Current Primary<a class="headerlink" href="#checking-current-primary" title="Permanent link">&para;</a></h3>
+<p>Identify which instance is currently the primary:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Check CNPG cluster status for current primary</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>cluster<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.currentPrimary}&#39;</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># List all pods with their instance roles</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-l<span class="w"> </span>cnpg.io/cluster<span class="o">=</span>my-documentdb<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>-o<span class="w"> </span>custom-columns<span class="o">=</span>NAME:.metadata.name,ROLE:.metadata.labels.cnpg<span class="se">\\</span>.io/instanceRole
+</code></pre></div>
+<h3 id="monitoring-cluster-events">Monitoring Cluster Events<a class="headerlink" href="#monitoring-cluster-events" title="Permanent link">&para;</a></h3>
+<p>Watch for cluster state changes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Watch all events for the cluster</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>events<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>--sort-by<span class="o">=</span><span class="s1">&#39;.lastTimestamp&#39;</span><span class="w"> </span>--watch
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Check CNPG cluster conditions</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>cluster<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.conditions}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</code></pre></div>
+<h3 id="monitoring-replication-lag">Monitoring Replication Lag<a class="headerlink" href="#monitoring-replication-lag" title="Permanent link">&para;</a></h3>
+<p>Track replication health using PostgreSQL system views:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># View streaming replication status (run on primary)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;&quot;</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Alerting and Observability</p>
+<p>For production monitoring, see the <a href="https://cloudnative-pg.io/documentation/current/monitoring/">CloudNative-PG Monitoring documentation</a> which covers Prometheus metrics, Grafana dashboards, and alerting rules for failover detection.</p>
+</div>
+<h2 id="testing-high-availability">Testing High Availability<a class="headerlink" href="#testing-high-availability" title="Permanent link">&para;</a></h2>
+<p>Verify your HA configuration works correctly.</p>
+<h3 id="test-1-verify-instance-distribution">Test 1: Verify Instance Distribution<a class="headerlink" href="#test-1-verify-instance-distribution" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Check pod distribution across zones/nodes</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-l<span class="w"> </span>cnpg.io/cluster<span class="o">=</span>my-documentdb<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-o<span class="w"> </span>custom-columns<span class="o">=</span>NAME:.metadata.name,NODE:.spec.nodeName,ZONE:.metadata.labels.topology<span class="se">\\</span>.kubernetes<span class="se">\\</span>.io/zone
+</code></pre></div>
+<p>Expected output shows pods on different nodes/zones:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>NAME              NODE           ZONE
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>my-documentdb-1   node-1         zone-a
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>my-documentdb-2   node-2         zone-b
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>my-documentdb-3   node-3         zone-c
+</code></pre></div></p>
+<h3 id="test-2-simulate-failure">Test 2: Simulate Failure<a class="headerlink" href="#test-2-simulate-failure" title="Permanent link">&para;</a></h3>
+<div class="admonition danger">
+<p class="admonition-title">Production Warning</p>
+<p>Only perform failure testing in non-production environments or during planned maintenance windows.</p>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Delete the primary pod to simulate failure</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>pod<span class="w"> </span>my-documentdb-1<span class="w"> </span>-n<span class="w"> </span>documentdb
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Watch failover (in another terminal)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-w
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Check pod status after failover</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-l<span class="w"> </span>cnpg.io/cluster<span class="o">=</span>my-documentdb
+</code></pre></div>
+<h3 id="test-3-application-connectivity">Test 3: Application Connectivity<a class="headerlink" href="#test-3-application-connectivity" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Get the connection string from DocumentDB status</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">CONNECTION_STRING</span><span class="o">=</span><span class="k">$(</span>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span><span class="k">)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;Connection string: </span><span class="nv">$CONNECTION_STRING</span><span class="s2">&quot;</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="c1"># Test application can reconnect after failover</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>mongosh<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$CONNECTION_STRING</span><span class="s2">&quot;</span><span class="w"> </span>--eval<span class="w"> </span><span class="s2">&quot;print(&#39;Connection successful&#39;)&quot;</span>
+</code></pre></div>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="pods-not-distributing-across-zones">Pods Not Distributing Across Zones<a class="headerlink" href="#pods-not-distributing-across-zones" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom</strong>: Multiple DocumentDB pods scheduled on the same node or zone.</p>
+<p><strong>Cause</strong>: Anti-affinity set to <code>preferred</code> and insufficient nodes/zones available.</p>
+<p><strong>Solution</strong>:
+1. Add more nodes to different zones
+2. Or change to <code>required</code> anti-affinity (may prevent scheduling if constraints can't be met)</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Check node zone labels</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>nodes<span class="w"> </span>-L<span class="w"> </span>topology.kubernetes.io/zone
+</code></pre></div>
+<h3 id="failover-taking-too-long">Failover Taking Too Long<a class="headerlink" href="#failover-taking-too-long" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom</strong>: Failover takes longer than expected.</p>
+<p><strong>Possible Causes</strong>:
+- <code>stopDelay</code> set to high value
+- Storage latency affecting shutdown
+- Network issues delaying probe failures</p>
+<p><strong>Solution</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Check operator logs</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>--tail<span class="o">=</span><span class="m">100</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># Check events</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>events<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>--sort-by<span class="o">=</span><span class="s1">&#39;.lastTimestamp&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-20
+</code></pre></div></p>
+<h3 id="replica-not-catching-up">Replica Not Catching Up<a class="headerlink" href="#replica-not-catching-up" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom</strong>: Replica shows increasing replication lag.</p>
+<p><strong>Possible Causes</strong>:
+- Network bandwidth limitation
+- Storage I/O bottleneck on replica
+- High write load on primary</p>
+<p><strong>Solution</strong>:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Check replica pod resources</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>kubectl<span class="w"> </span>top<span class="w"> </span>pod<span class="w"> </span>my-documentdb-2<span class="w"> </span>-n<span class="w"> </span>documentdb
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Check pod logs for replication issues</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>my-documentdb-2<span class="w"> </span>-n<span class="w"> </span>documentdb<span class="w"> </span>--tail<span class="o">=</span><span class="m">50</span>
+</code></pre></div></p>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      
+    
+  </body>
+</html>
