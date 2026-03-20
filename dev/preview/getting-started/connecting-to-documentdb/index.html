@@ -1,0 +1,2106 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Connect to DocumentDB using mongosh, connection strings, and MongoDB-compatible drivers in Python, Node.js, Go, and Java.">
+      
+      
+      
+      
+        <link rel="prev" href="../deploy-on-eks/">
+      
+      
+        <link rel="next" href="../../architecture/overview/">
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
+    
+    
+      
+        <title>Connecting to DocumentDB - DocumentDB-Kubernetes-Operator</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#connecting-to-documentdb" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            DocumentDB-Kubernetes-Operator
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Connecting to DocumentDB
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
+          
+  
+  Preview
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    DocumentDB-Kubernetes-Operator
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/documentdb/documentdb-kubernetes-operator" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Preview
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Preview
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Getting Started
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_2">
+            <span class="md-nav__icon md-icon"></span>
+            Getting Started
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../before-you-start/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Before You Start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart-kind/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart: Kind
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart-k3s/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quickstart: K3s
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy-on-aks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy on AKS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy-on-eks/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Deploy on EKS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Connecting to DocumentDB
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Connecting to DocumentDB
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#connection-string-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection string format
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      Access methods
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Access methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#port-forwarding-local-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      Port forwarding (local development)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#loadbalancer-cloud-deployments" class="md-nav__link">
+    <span class="md-ellipsis">
+      LoadBalancer (cloud deployments)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-cloud-connectivity-multi-region-deployments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-cloud connectivity (multi-region deployments)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kubernetes-service-dns-in-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      Kubernetes service DNS (in-cluster)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-with-mongosh" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connect with mongosh
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-with-documentdb-for-vs-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connect with DocumentDB for VS Code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#driver-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Driver examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Driver examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-pymongo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python (PyMongo)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nodejs-mongodb-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Node.js (MongoDB Driver)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#go-mongodb-go-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Go (MongoDB Go Driver)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#java-mongodb-java-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Java (MongoDB Java Driver)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connection-pooling-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection pooling best practices
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-with-a-trusted-certificate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connecting with a trusted certificate
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-refused" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection refused
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authentication-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication failed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-handshake-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS handshake errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connection-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection timeout
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_3" id="__nav_1_3_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_3">
+            <span class="md-nav__icon md-icon"></span>
+            Architecture
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Operations
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            Operations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_6" id="__nav_1_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    High Availability
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_6">
+            <span class="md-nav__icon md-icon"></span>
+            High Availability
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../high-availability/overview/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../high-availability/local-ha/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Local HA
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../advanced-configuration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Advanced Configuration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    FAQ
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_9" id="__nav_1_9_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_9">
+            <span class="md-nav__icon md-icon"></span>
+            Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kubectl-plugin/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Kubectl Plugin
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api-reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#connection-string-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection string format
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      Access methods
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Access methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#port-forwarding-local-development" class="md-nav__link">
+    <span class="md-ellipsis">
+      Port forwarding (local development)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#loadbalancer-cloud-deployments" class="md-nav__link">
+    <span class="md-ellipsis">
+      LoadBalancer (cloud deployments)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cross-cloud-connectivity-multi-region-deployments" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cross-cloud connectivity (multi-region deployments)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#kubernetes-service-dns-in-cluster" class="md-nav__link">
+    <span class="md-ellipsis">
+      Kubernetes service DNS (in-cluster)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-with-mongosh" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connect with mongosh
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connect-with-documentdb-for-vs-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connect with DocumentDB for VS Code
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#driver-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Driver examples
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Driver examples">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-pymongo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python (PyMongo)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#nodejs-mongodb-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Node.js (MongoDB Driver)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#go-mongodb-go-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Go (MongoDB Go Driver)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#java-mongodb-java-driver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Java (MongoDB Java Driver)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#connection-pooling-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection pooling best practices
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tls-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TLS configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connecting-with-a-trusted-certificate" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connecting with a trusted certificate
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-refused" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection refused
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authentication-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication failed
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tls-handshake-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS handshake errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#connection-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection timeout
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="connecting-to-documentdb">Connecting to DocumentDB<a class="headerlink" href="#connecting-to-documentdb" title="Permanent link">&para;</a></h1>
+<p>DocumentDB exposes a MongoDB-compatible wire protocol through the DocumentDB Gateway on port <strong>10260</strong>. You can connect using <code>mongosh</code>, any MongoDB-compatible driver, or tools that support the MongoDB protocol.</p>
+<h2 id="connection-string-format">Connection string format<a class="headerlink" href="#connection-string-format" title="Permanent link">&para;</a></h2>
+<p>The standard connection string format for DocumentDB:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mongodb://&lt;username&gt;:&lt;password&gt;@&lt;host&gt;:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;username&gt;</code></td>
+<td>Username from your <code>documentdb-credentials</code> Secret</td>
+</tr>
+<tr>
+<td><code>&lt;password&gt;</code></td>
+<td>Password from your <code>documentdb-credentials</code> Secret</td>
+</tr>
+<tr>
+<td><code>&lt;host&gt;</code></td>
+<td><code>127.0.0.1</code> (port-forward), LoadBalancer IP, or service DNS name</td>
+</tr>
+<tr>
+<td><code>directConnection=true</code></td>
+<td>Connect directly to the gateway (required)</td>
+</tr>
+<tr>
+<td><code>authMechanism=SCRAM-SHA-256</code></td>
+<td>Authentication mechanism (required)</td>
+</tr>
+<tr>
+<td><code>tls=true</code></td>
+<td>TLS is enabled by default on the gateway</td>
+</tr>
+<tr>
+<td><code>tlsAllowInvalidCertificates=true</code></td>
+<td>Skip certificate validation (for self-signed certificates)</td>
+</tr>
+<tr>
+<td><code>replicaSet=rs0</code></td>
+<td>Replica set name</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+</div>
+<p>You only need <code>tlsAllowInvalidCertificates=true</code> (or <code>--tlsAllowInvalidCertificates</code>) when using self-signed certificates. For trusted CA-issued certificates, omit it.</p>
+<div class="admonition tip">
+<p class="admonition-title">Get the connection string from the DocumentDB cluster status</p>
+<p>The operator generates a connection string in the DocumentDB resource status. This string contains embedded <code>kubectl</code> commands to extract credentials from the Secret:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+</code></pre></div>
+<p>To get a usable connection string with resolved credentials:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">&quot;documentdb-ns&quot;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">SECRET</span><span class="o">=</span><span class="s2">&quot;documentdb-credentials&quot;</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">USER</span><span class="o">=</span><span class="k">$(</span>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span><span class="nv">$SECRET</span><span class="w"> </span>-n<span class="w"> </span><span class="nv">$NAMESPACE</span><span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.username}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="k">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">PASS</span><span class="o">=</span><span class="k">$(</span>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span><span class="nv">$SECRET</span><span class="w"> </span>-n<span class="w"> </span><span class="nv">$NAMESPACE</span><span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.password}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d<span class="k">)</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nv">HOST</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="w">  </span><span class="c1"># Change to LoadBalancer IP for external access</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;mongodb://</span><span class="si">${</span><span class="nv">USER</span><span class="si">}</span><span class="s2">:</span><span class="si">${</span><span class="nv">PASS</span><span class="si">}</span><span class="s2">@</span><span class="si">${</span><span class="nv">HOST</span><span class="si">}</span><span class="s2">:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+</code></pre></div>
+</div>
+<h2 id="access-methods">Access methods<a class="headerlink" href="#access-methods" title="Permanent link">&para;</a></h2>
+<h3 id="port-forwarding-local-development">Port forwarding (local development)<a class="headerlink" href="#port-forwarding-local-development" title="Permanent link">&para;</a></h3>
+<p>For <code>ClusterIP</code> services, use kubectl port-forward:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>pod/my-documentdb-1<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
+</code></pre></div>
+<p>Then connect to <code>127.0.0.1:10260</code>.</p>
+<h3 id="loadbalancer-cloud-deployments">LoadBalancer (cloud deployments)<a class="headerlink" href="#loadbalancer-cloud-deployments" title="Permanent link">&para;</a></h3>
+<p>For <code>LoadBalancer</code> services, the gateway is reachable through the external IP:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>documentdb-service-my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.loadBalancer.ingress[0].ip}&#39;</span>
+</code></pre></div>
+<p>The service name follows the pattern <code>documentdb-service-&lt;documentdb-name&gt;</code> (truncated to 63 characters).</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Set <code>spec.environment</code> to <code>aks</code>, <code>eks</code>, or <code>gke</code> to apply cloud-specific load balancer annotations automatically. See <a href="../../configuration/networking/">Networking</a> for details.</p>
+</div>
+<h3 id="cross-cloud-connectivity-multi-region-deployments">Cross-cloud connectivity (multi-region deployments)<a class="headerlink" href="#cross-cloud-connectivity-multi-region-deployments" title="Permanent link">&para;</a></h3>
+<p>For multi-region DocumentDB deployments with cross-cluster replication, the operator supports two networking strategies configured via <code>spec.clusterReplication.crossCloudNetworkingStrategy</code>:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Istio (recommended for multi-cloud)</label><label for="__tabbed_1_2">Azure Fleet</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Istio service mesh handles cross-cluster service discovery and mTLS traffic through east-west gateways. Each Kubernetes cluster runs its own Istio control plane, and remote secrets enable mutual discovery. Applications connect to DocumentDB using the LoadBalancer IP of the Istio east-west gateway or the DocumentDB service in the local Kubernetes cluster.</p>
+<p>See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment playground</a> for a complete AKS + GKE + EKS setup with Istio.</p>
+</div>
+<div class="tabbed-block">
+<p>Azure Fleet networking uses <code>ServiceExport</code> and <code>MultiClusterService</code> resources to expose DocumentDB services across fleet member Kubernetes clusters. The operator automatically generates cross-cluster service endpoints using the naming pattern:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>&lt;namespace&gt;-&lt;service-name&gt;.fleet-system.svc
+</code></pre></div>
+<p>See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment">AKS Fleet deployment playground</a> for setup details.</p>
+</div>
+</div>
+</div>
+<details class="tip">
+<summary>Azure DNS for production connection strings</summary>
+<p>The multi-cloud playground can optionally create an <strong>Azure DNS zone</strong> with:</p>
+<ul>
+<li><strong>A/CNAME records</strong> for each Kubernetes cluster's DocumentDB LoadBalancer endpoint (for example, <code>azure-documentdb.&lt;zone&gt;</code>, <code>gcp-documentdb.&lt;zone&gt;</code>)</li>
+<li>An <strong>SRV record</strong> (<code>_mongodb._tcp.&lt;zone&gt;</code>) pointing to the primary DocumentDB cluster on port 10260</li>
+</ul>
+<p>This enables <code>mongodb+srv://</code> connection strings that automatically resolve to the correct endpoint:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb+srv://docdb:&lt;password&gt;@&lt;zone-name&gt;.&lt;parent-zone&gt;/?tls=true&amp;tlsAllowInvalidCertificates=true&amp;authMechanism=SCRAM-SHA-256&quot;</span>
+</code></pre></div>
+<p>Set <code>ENABLE_AZURE_DNS=true</code> when running <code>deploy-documentdb.sh</code> in the multi-cloud playground. See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment README</a> for configuration options.</p>
+</details>
+<h3 id="kubernetes-service-dns-in-cluster">Kubernetes service DNS (in-cluster)<a class="headerlink" href="#kubernetes-service-dns-in-cluster" title="Permanent link">&para;</a></h3>
+<p>Applications running inside the same Kubernetes cluster can connect using the service DNS name:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>documentdb-service-my-documentdb.documentdb-ns.svc.cluster.local:10260
+</code></pre></div>
+<h2 id="connect-with-mongosh">Connect with mongosh<a class="headerlink" href="#connect-with-mongosh" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+</code></pre></div>
+<p>Or use individual flags:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mongosh<span class="w"> </span><span class="m">127</span>.0.0.1:10260<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>-u<span class="w"> </span>dev_user<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>-p<span class="w"> </span>DevPassword123<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>--authenticationMechanism<span class="w"> </span>SCRAM-SHA-256<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span>--tls<span class="w"> </span>--tlsAllowInvalidCertificates
+</code></pre></div>
+<h2 id="connect-with-documentdb-for-vs-code">Connect with DocumentDB for VS Code<a class="headerlink" href="#connect-with-documentdb-for-vs-code" title="Permanent link">&para;</a></h2>
+<p>The <a href="https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-documentdb">DocumentDB for VS Code</a> extension provides a graphical interface for connecting to DocumentDB, browsing databases and collections, and running queries directly from Visual Studio Code.</p>
+<ol>
+<li>Install the <strong>DocumentDB for VS Code</strong> extension from the <a href="https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-documentdb">VS Code Marketplace</a>.</li>
+<li>Open the DocumentDB view in the Activity Bar.</li>
+<li>
+<p>Select <strong>Add Connection</strong> and enter your connection string:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0
+</code></pre></div>
+</li>
+<li>
+<p>Browse databases, collections, and documents. You can also use the built-in playground to run queries interactively.</p>
+</li>
+</ol>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>If you are already using VS Code with the <a href="https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers">Dev Containers</a> extension for operator development, the DocumentDB extension works inside the devcontainer as well — just forward port 10260.</p>
+</div>
+<h2 id="driver-examples">Driver examples<a class="headerlink" href="#driver-examples" title="Permanent link">&para;</a></h2>
+<p>All examples below assume:</p>
+<ul>
+<li>DocumentDB is accessible at <code>127.0.0.1:10260</code> (via port-forward or LoadBalancer)</li>
+<li>Credentials: username <code>dev_user</code>, password <code>DevPassword123</code></li>
+<li>Self-signed TLS (certificate validation skipped)</li>
+</ul>
+<p>For production deployments with trusted certificates, see <a href="../../configuration/tls/">TLS configuration</a>.</p>
+<h3 id="python-pymongo">Python (PyMongo)<a class="headerlink" href="#python-pymongo" title="Permanent link">&para;</a></h3>
+<p>Install the driver:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>pip<span class="w"> </span>install<span class="w"> </span>pymongo
+</code></pre></div>
+<div class="highlight"><span class="filename">connect_documentdb.py</span><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pymongo</span><span class="w"> </span><span class="kn">import</span> <span class="n">MongoClient</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MongoClient</span><span class="p">(</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">host</span><span class="o">=</span><span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">port</span><span class="o">=</span><span class="mi">10260</span><span class="p">,</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">username</span><span class="o">=</span><span class="s2">&quot;dev_user&quot;</span><span class="p">,</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="n">password</span><span class="o">=</span><span class="s2">&quot;DevPassword123&quot;</span><span class="p">,</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="n">authSource</span><span class="o">=</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>    <span class="n">authMechanism</span><span class="o">=</span><span class="s2">&quot;SCRAM-SHA-256&quot;</span><span class="p">,</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>    <span class="n">tls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>    <span class="n">tlsAllowInvalidCertificates</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>    <span class="n">directConnection</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>    <span class="c1"># Connection pool settings</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>    <span class="n">maxPoolSize</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>       <span class="c1"># Maximum connections in the pool</span>
+<a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>    <span class="n">minPoolSize</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>        <span class="c1"># Minimum idle connections</span>
+<a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a>    <span class="n">maxIdleTimeMS</span><span class="o">=</span><span class="mi">30000</span><span class="p">,</span>  <span class="c1"># Close idle connections after 30 seconds</span>
+<a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="p">)</span>
+<a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a>
+<a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="c1"># Insert a document</span>
+<a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="n">db</span> <span class="o">=</span> <span class="n">client</span><span class="p">[</span><span class="s2">&quot;testdb&quot;</span><span class="p">]</span>
+<a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="n">result</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">users</span><span class="o">.</span><span class="n">insert_one</span><span class="p">({</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">,</span> <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;admin&quot;</span><span class="p">})</span>
+<a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inserted: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">inserted_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-23" name="__codelineno-12-23" href="#__codelineno-12-23"></a>
+<a id="__codelineno-12-24" name="__codelineno-12-24" href="#__codelineno-12-24"></a><span class="c1"># Query documents</span>
+<a id="__codelineno-12-25" name="__codelineno-12-25" href="#__codelineno-12-25"></a><span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">db</span><span class="o">.</span><span class="n">users</span><span class="o">.</span><span class="n">find</span><span class="p">():</span>
+<a id="__codelineno-12-26" name="__codelineno-12-26" href="#__codelineno-12-26"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+<a id="__codelineno-12-27" name="__codelineno-12-27" href="#__codelineno-12-27"></a>
+<a id="__codelineno-12-28" name="__codelineno-12-28" href="#__codelineno-12-28"></a><span class="n">client</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</code></pre></div>
+<h3 id="nodejs-mongodb-driver">Node.js (MongoDB Driver)<a class="headerlink" href="#nodejs-mongodb-driver" title="Permanent link">&para;</a></h3>
+<p>Install the driver:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>npm<span class="w"> </span>install<span class="w"> </span>mongodb
+</code></pre></div>
+<div class="highlight"><span class="filename">connect_documentdb.js</span><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">MongoClient</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;mongodb&quot;</span><span class="p">);</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="kd">const</span><span class="w"> </span><span class="nx">uri</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="s2">&quot;mongodb://dev_user:DevPassword123@127.0.0.1:10260/&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="s2">&quot;?directConnection=true&amp;authMechanism=SCRAM-SHA-256&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="s2">&quot;&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span><span class="p">;</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="kd">const</span><span class="w"> </span><span class="nx">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">MongoClient</span><span class="p">(</span><span class="nx">uri</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">  </span><span class="c1">// Connection pool settings</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span><span class="nx">maxPoolSize</span><span class="o">:</span><span class="w"> </span><span class="mf">50</span><span class="p">,</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">  </span><span class="nx">minPoolSize</span><span class="o">:</span><span class="w"> </span><span class="mf">5</span><span class="p">,</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">  </span><span class="nx">maxIdleTimeMS</span><span class="o">:</span><span class="w"> </span><span class="mf">30000</span><span class="p">,</span>
+<a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p">});</span>
+<a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>
+<a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">  </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">connect</span><span class="p">();</span>
+<a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a>
+<a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">db</span><span class="p">(</span><span class="s2">&quot;testdb&quot;</span><span class="p">);</span>
+<a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">db</span><span class="p">.</span><span class="nx">collection</span><span class="p">(</span><span class="s2">&quot;users&quot;</span><span class="p">).</span><span class="nx">insertOne</span><span class="p">({</span>
+<a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a><span class="w">      </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;Alice&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a><span class="w">      </span><span class="nx">role</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a><span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`Inserted: </span><span class="si">${</span><span class="nx">result</span><span class="p">.</span><span class="nx">insertedId</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+<a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a>
+<a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">docs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">db</span><span class="p">.</span><span class="nx">collection</span><span class="p">(</span><span class="s2">&quot;users&quot;</span><span class="p">).</span><span class="nx">find</span><span class="p">().</span><span class="nx">toArray</span><span class="p">();</span>
+<a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a><span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">docs</span><span class="p">);</span>
+<a id="__codelineno-14-28" name="__codelineno-14-28" href="#__codelineno-14-28"></a><span class="w">  </span><span class="p">}</span><span class="w"> </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-29" name="__codelineno-14-29" href="#__codelineno-14-29"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">close</span><span class="p">();</span>
+<a id="__codelineno-14-30" name="__codelineno-14-30" href="#__codelineno-14-30"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-14-31" name="__codelineno-14-31" href="#__codelineno-14-31"></a><span class="p">}</span>
+<a id="__codelineno-14-32" name="__codelineno-14-32" href="#__codelineno-14-32"></a>
+<a id="__codelineno-14-33" name="__codelineno-14-33" href="#__codelineno-14-33"></a><span class="nx">main</span><span class="p">().</span><span class="k">catch</span><span class="p">(</span><span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">);</span>
+</code></pre></div>
+<h3 id="go-mongodb-go-driver">Go (MongoDB Go Driver)<a class="headerlink" href="#go-mongodb-go-driver" title="Permanent link">&para;</a></h3>
+<p>Install the driver:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>go<span class="w"> </span>get<span class="w"> </span>go.mongodb.org/mongo-driver/mongo
+</code></pre></div>
+<div class="highlight"><span class="filename">connect_documentdb.go</span><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="kn">package</span><span class="w"> </span><span class="nx">main</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="s">&quot;context&quot;</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="s">&quot;crypto/tls&quot;</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="s">&quot;fmt&quot;</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="s">&quot;log&quot;</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="s">&quot;time&quot;</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">    </span><span class="s">&quot;go.mongodb.org/mongo-driver/bson&quot;</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">    </span><span class="s">&quot;go.mongodb.org/mongo-driver/mongo&quot;</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="w">    </span><span class="s">&quot;go.mongodb.org/mongo-driver/mongo/options&quot;</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="p">)</span>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a><span class="kd">func</span><span class="w"> </span><span class="nx">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="w">    </span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">cancel</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">WithTimeout</span><span class="p">(</span><span class="nx">context</span><span class="p">.</span><span class="nx">Background</span><span class="p">(),</span><span class="w"> </span><span class="mi">10</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">cancel</span><span class="p">()</span>
+<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>
+<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="w">    </span><span class="nx">uri</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s">&quot;mongodb://dev_user:DevPassword123@127.0.0.1:10260/&quot;</span><span class="w"> </span><span class="o">+</span>
+<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="w">        </span><span class="s">&quot;?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&quot;</span>
+<a id="__codelineno-16-21" name="__codelineno-16-21" href="#__codelineno-16-21"></a>
+<a id="__codelineno-16-22" name="__codelineno-16-22" href="#__codelineno-16-22"></a><span class="w">    </span><span class="c1">// For self-signed certificates, skip verification.</span>
+<a id="__codelineno-16-23" name="__codelineno-16-23" href="#__codelineno-16-23"></a><span class="w">    </span><span class="c1">// For trusted CAs, load the CA cert into a tls.Config instead.</span>
+<a id="__codelineno-16-24" name="__codelineno-16-24" href="#__codelineno-16-24"></a><span class="w">    </span><span class="nx">tlsConfig</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">tls</span><span class="p">.</span><span class="nx">Config</span><span class="p">{</span><span class="nx">InsecureSkipVerify</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
+<a id="__codelineno-16-25" name="__codelineno-16-25" href="#__codelineno-16-25"></a>
+<a id="__codelineno-16-26" name="__codelineno-16-26" href="#__codelineno-16-26"></a><span class="w">    </span><span class="nx">clientOpts</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">options</span><span class="p">.</span><span class="nx">Client</span><span class="p">().</span>
+<a id="__codelineno-16-27" name="__codelineno-16-27" href="#__codelineno-16-27"></a><span class="w">        </span><span class="nx">ApplyURI</span><span class="p">(</span><span class="nx">uri</span><span class="p">).</span>
+<a id="__codelineno-16-28" name="__codelineno-16-28" href="#__codelineno-16-28"></a><span class="w">        </span><span class="nx">SetTLSConfig</span><span class="p">(</span><span class="nx">tlsConfig</span><span class="p">).</span>
+<a id="__codelineno-16-29" name="__codelineno-16-29" href="#__codelineno-16-29"></a><span class="w">        </span><span class="nx">SetMaxPoolSize</span><span class="p">(</span><span class="mi">50</span><span class="p">).</span><span class="w">    </span><span class="c1">// Maximum connections in the pool</span>
+<a id="__codelineno-16-30" name="__codelineno-16-30" href="#__codelineno-16-30"></a><span class="w">        </span><span class="nx">SetMinPoolSize</span><span class="p">(</span><span class="mi">5</span><span class="p">).</span><span class="w">     </span><span class="c1">// Minimum idle connections</span>
+<a id="__codelineno-16-31" name="__codelineno-16-31" href="#__codelineno-16-31"></a><span class="w">        </span><span class="nx">SetMaxConnIdleTime</span><span class="p">(</span><span class="mi">30</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+<a id="__codelineno-16-32" name="__codelineno-16-32" href="#__codelineno-16-32"></a>
+<a id="__codelineno-16-33" name="__codelineno-16-33" href="#__codelineno-16-33"></a><span class="w">    </span><span class="nx">client</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">mongo</span><span class="p">.</span><span class="nx">Connect</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">clientOpts</span><span class="p">)</span>
+<a id="__codelineno-16-34" name="__codelineno-16-34" href="#__codelineno-16-34"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-35" name="__codelineno-16-35" href="#__codelineno-16-35"></a><span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<a id="__codelineno-16-36" name="__codelineno-16-36" href="#__codelineno-16-36"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-37" name="__codelineno-16-37" href="#__codelineno-16-37"></a><span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">Disconnect</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+<a id="__codelineno-16-38" name="__codelineno-16-38" href="#__codelineno-16-38"></a>
+<a id="__codelineno-16-39" name="__codelineno-16-39" href="#__codelineno-16-39"></a><span class="w">    </span><span class="nx">coll</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">client</span><span class="p">.</span><span class="nx">Database</span><span class="p">(</span><span class="s">&quot;testdb&quot;</span><span class="p">).</span><span class="nx">Collection</span><span class="p">(</span><span class="s">&quot;users&quot;</span><span class="p">)</span>
+<a id="__codelineno-16-40" name="__codelineno-16-40" href="#__codelineno-16-40"></a><span class="w">    </span><span class="nx">result</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">coll</span><span class="p">.</span><span class="nx">InsertOne</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">bson</span><span class="p">.</span><span class="nx">M</span><span class="p">{</span><span class="s">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Alice&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;role&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;admin&quot;</span><span class="p">})</span>
+<a id="__codelineno-16-41" name="__codelineno-16-41" href="#__codelineno-16-41"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-42" name="__codelineno-16-42" href="#__codelineno-16-42"></a><span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<a id="__codelineno-16-43" name="__codelineno-16-43" href="#__codelineno-16-43"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-44" name="__codelineno-16-44" href="#__codelineno-16-44"></a><span class="w">    </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Printf</span><span class="p">(</span><span class="s">&quot;Inserted: %v\n&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">InsertedID</span><span class="p">)</span>
+<a id="__codelineno-16-45" name="__codelineno-16-45" href="#__codelineno-16-45"></a>
+<a id="__codelineno-16-46" name="__codelineno-16-46" href="#__codelineno-16-46"></a><span class="w">    </span><span class="nx">cursor</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">coll</span><span class="p">.</span><span class="nx">Find</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="nx">bson</span><span class="p">.</span><span class="nx">M</span><span class="p">{})</span>
+<a id="__codelineno-16-47" name="__codelineno-16-47" href="#__codelineno-16-47"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-48" name="__codelineno-16-48" href="#__codelineno-16-48"></a><span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<a id="__codelineno-16-49" name="__codelineno-16-49" href="#__codelineno-16-49"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-50" name="__codelineno-16-50" href="#__codelineno-16-50"></a><span class="w">    </span><span class="k">defer</span><span class="w"> </span><span class="nx">cursor</span><span class="p">.</span><span class="nx">Close</span><span class="p">(</span><span class="nx">ctx</span><span class="p">)</span>
+<a id="__codelineno-16-51" name="__codelineno-16-51" href="#__codelineno-16-51"></a>
+<a id="__codelineno-16-52" name="__codelineno-16-52" href="#__codelineno-16-52"></a><span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">docs</span><span class="w"> </span><span class="p">[]</span><span class="nx">bson</span><span class="p">.</span><span class="nx">M</span>
+<a id="__codelineno-16-53" name="__codelineno-16-53" href="#__codelineno-16-53"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">cursor</span><span class="p">.</span><span class="nx">All</span><span class="p">(</span><span class="nx">ctx</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">docs</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-54" name="__codelineno-16-54" href="#__codelineno-16-54"></a><span class="w">        </span><span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+<a id="__codelineno-16-55" name="__codelineno-16-55" href="#__codelineno-16-55"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-56" name="__codelineno-16-56" href="#__codelineno-16-56"></a><span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">doc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">docs</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-57" name="__codelineno-16-57" href="#__codelineno-16-57"></a><span class="w">        </span><span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">doc</span><span class="p">)</span>
+<a id="__codelineno-16-58" name="__codelineno-16-58" href="#__codelineno-16-58"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-16-59" name="__codelineno-16-59" href="#__codelineno-16-59"></a><span class="p">}</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Go driver and <code>replicaSet</code></p>
+<p>Do not include <code>replicaSet=rs0</code> in the URI when using <code>directConnection=true</code> with the Go driver. The combination creates a conflicting topology configuration that prevents the driver from connecting. The <code>directConnection=true</code> parameter alone is sufficient.</p>
+</div>
+<h3 id="java-mongodb-java-driver">Java (MongoDB Java Driver)<a class="headerlink" href="#java-mongodb-java-driver" title="Permanent link">&para;</a></h3>
+<p>Add the dependency to your <code>pom.xml</code>:</p>
+<div class="highlight"><span class="filename">pom.xml (dependency)</span><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nt">&lt;dependency&gt;</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="nt">&lt;groupId&gt;</span>org.mongodb<span class="nt">&lt;/groupId&gt;</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">    </span><span class="nt">&lt;artifactId&gt;</span>mongodb-driver-sync<span class="nt">&lt;/artifactId&gt;</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>5.4.0<span class="nt">&lt;/version&gt;</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="nt">&lt;/dependency&gt;</span>
+</code></pre></div>
+<div class="highlight"><span class="filename">ConnectDocumentDB.java</span><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.ConnectionString</span><span class="p">;</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.MongoClientSettings</span><span class="p">;</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.client.MongoClient</span><span class="p">;</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.client.MongoClients</span><span class="p">;</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.client.MongoCollection</span><span class="p">;</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="kn">import</span><span class="w"> </span><span class="nn">com.mongodb.client.MongoDatabase</span><span class="p">;</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="kn">import</span><span class="w"> </span><span class="nn">org.bson.Document</span><span class="p">;</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="kn">import</span><span class="w"> </span><span class="nn">javax.net.ssl.SSLContext</span><span class="p">;</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="kn">import</span><span class="w"> </span><span class="nn">javax.net.ssl.TrustManager</span><span class="p">;</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="kn">import</span><span class="w"> </span><span class="nn">javax.net.ssl.X509TrustManager</span><span class="p">;</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="kn">import</span><span class="w"> </span><span class="nn">java.security.cert.X509Certificate</span><span class="p">;</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="kn">import</span><span class="w"> </span><span class="nn">java.util.concurrent.TimeUnit</span><span class="p">;</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">ConnectDocumentDB</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a><span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a><span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">uri</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;mongodb://dev_user:DevPassword123@127.0.0.1:10260/&quot;</span>
+<a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a><span class="w">            </span><span class="o">+</span><span class="w"> </span><span class="s">&quot;?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&quot;</span><span class="p">;</span>
+<a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a>
+<a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a><span class="w">        </span><span class="c1">// For self-signed certificates, create a trust-all SSLContext.</span>
+<a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a><span class="w">        </span><span class="c1">// For trusted CAs, configure a proper TrustStore instead.</span>
+<a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a><span class="w">        </span><span class="n">TrustManager</span><span class="o">[]</span><span class="w"> </span><span class="n">trustAll</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">TrustManager</span><span class="o">[]</span><span class="p">{</span>
+<a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a><span class="w">            </span><span class="k">new</span><span class="w"> </span><span class="n">X509TrustManager</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-24" name="__codelineno-18-24" href="#__codelineno-18-24"></a><span class="w">                </span><span class="kd">public</span><span class="w"> </span><span class="n">X509Certificate</span><span class="o">[]</span><span class="w"> </span><span class="nf">getAcceptedIssuers</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">X509Certificate</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-18-25" name="__codelineno-18-25" href="#__codelineno-18-25"></a><span class="w">                </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">checkClientTrusted</span><span class="p">(</span><span class="n">X509Certificate</span><span class="o">[]</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-18-26" name="__codelineno-18-26" href="#__codelineno-18-26"></a><span class="w">                </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">checkServerTrusted</span><span class="p">(</span><span class="n">X509Certificate</span><span class="o">[]</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-18-27" name="__codelineno-18-27" href="#__codelineno-18-27"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-18-28" name="__codelineno-18-28" href="#__codelineno-18-28"></a><span class="w">        </span><span class="p">};</span>
+<a id="__codelineno-18-29" name="__codelineno-18-29" href="#__codelineno-18-29"></a><span class="w">        </span><span class="n">SSLContext</span><span class="w"> </span><span class="n">sslContext</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SSLContext</span><span class="p">.</span><span class="na">getInstance</span><span class="p">(</span><span class="s">&quot;TLS&quot;</span><span class="p">);</span>
+<a id="__codelineno-18-30" name="__codelineno-18-30" href="#__codelineno-18-30"></a><span class="w">        </span><span class="n">sslContext</span><span class="p">.</span><span class="na">init</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="n">trustAll</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">java</span><span class="p">.</span><span class="na">security</span><span class="p">.</span><span class="na">SecureRandom</span><span class="p">());</span>
+<a id="__codelineno-18-31" name="__codelineno-18-31" href="#__codelineno-18-31"></a>
+<a id="__codelineno-18-32" name="__codelineno-18-32" href="#__codelineno-18-32"></a><span class="w">        </span><span class="n">MongoClientSettings</span><span class="w"> </span><span class="n">settings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MongoClientSettings</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+<a id="__codelineno-18-33" name="__codelineno-18-33" href="#__codelineno-18-33"></a><span class="w">            </span><span class="p">.</span><span class="na">applyConnectionString</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">ConnectionString</span><span class="p">(</span><span class="n">uri</span><span class="p">))</span>
+<a id="__codelineno-18-34" name="__codelineno-18-34" href="#__codelineno-18-34"></a><span class="w">            </span><span class="p">.</span><span class="na">applyToSslSettings</span><span class="p">(</span><span class="n">builder</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">builder</span>
+<a id="__codelineno-18-35" name="__codelineno-18-35" href="#__codelineno-18-35"></a><span class="w">                </span><span class="p">.</span><span class="na">enabled</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span>
+<a id="__codelineno-18-36" name="__codelineno-18-36" href="#__codelineno-18-36"></a><span class="w">                </span><span class="p">.</span><span class="na">context</span><span class="p">(</span><span class="n">sslContext</span><span class="p">))</span>
+<a id="__codelineno-18-37" name="__codelineno-18-37" href="#__codelineno-18-37"></a><span class="w">            </span><span class="p">.</span><span class="na">applyToConnectionPoolSettings</span><span class="p">(</span><span class="n">builder</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">builder</span>
+<a id="__codelineno-18-38" name="__codelineno-18-38" href="#__codelineno-18-38"></a><span class="w">                </span><span class="p">.</span><span class="na">maxSize</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span><span class="w">           </span><span class="c1">// Maximum connections in the pool</span>
+<a id="__codelineno-18-39" name="__codelineno-18-39" href="#__codelineno-18-39"></a><span class="w">                </span><span class="p">.</span><span class="na">minSize</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="w">            </span><span class="c1">// Minimum idle connections</span>
+<a id="__codelineno-18-40" name="__codelineno-18-40" href="#__codelineno-18-40"></a><span class="w">                </span><span class="p">.</span><span class="na">maxConnectionIdleTime</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span><span class="w"> </span><span class="n">TimeUnit</span><span class="p">.</span><span class="na">SECONDS</span><span class="p">))</span>
+<a id="__codelineno-18-41" name="__codelineno-18-41" href="#__codelineno-18-41"></a><span class="w">            </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+<a id="__codelineno-18-42" name="__codelineno-18-42" href="#__codelineno-18-42"></a>
+<a id="__codelineno-18-43" name="__codelineno-18-43" href="#__codelineno-18-43"></a><span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">(</span><span class="n">MongoClient</span><span class="w"> </span><span class="n">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MongoClients</span><span class="p">.</span><span class="na">create</span><span class="p">(</span><span class="n">settings</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-44" name="__codelineno-18-44" href="#__codelineno-18-44"></a><span class="w">            </span><span class="n">MongoDatabase</span><span class="w"> </span><span class="n">db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">getDatabase</span><span class="p">(</span><span class="s">&quot;testdb&quot;</span><span class="p">);</span>
+<a id="__codelineno-18-45" name="__codelineno-18-45" href="#__codelineno-18-45"></a><span class="w">            </span><span class="n">MongoCollection</span><span class="o">&lt;</span><span class="n">Document</span><span class="o">&gt;</span><span class="w"> </span><span class="n">coll</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">db</span><span class="p">.</span><span class="na">getCollection</span><span class="p">(</span><span class="s">&quot;users&quot;</span><span class="p">);</span>
+<a id="__codelineno-18-46" name="__codelineno-18-46" href="#__codelineno-18-46"></a>
+<a id="__codelineno-18-47" name="__codelineno-18-47" href="#__codelineno-18-47"></a><span class="w">            </span><span class="n">coll</span><span class="p">.</span><span class="na">insertOne</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Document</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Alice&quot;</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;role&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;admin&quot;</span><span class="p">));</span>
+<a id="__codelineno-18-48" name="__codelineno-18-48" href="#__codelineno-18-48"></a><span class="w">            </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="s">&quot;Inserted document&quot;</span><span class="p">);</span>
+<a id="__codelineno-18-49" name="__codelineno-18-49" href="#__codelineno-18-49"></a>
+<a id="__codelineno-18-50" name="__codelineno-18-50" href="#__codelineno-18-50"></a><span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">Document</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">coll</span><span class="p">.</span><span class="na">find</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-18-51" name="__codelineno-18-51" href="#__codelineno-18-51"></a><span class="w">                </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">doc</span><span class="p">.</span><span class="na">toJson</span><span class="p">());</span>
+<a id="__codelineno-18-52" name="__codelineno-18-52" href="#__codelineno-18-52"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-18-53" name="__codelineno-18-53" href="#__codelineno-18-53"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-18-54" name="__codelineno-18-54" href="#__codelineno-18-54"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-18-55" name="__codelineno-18-55" href="#__codelineno-18-55"></a><span class="p">}</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Java driver TLS with self-signed certificates</p>
+<p>The <code>tlsAllowInvalidCertificates=true</code> URI parameter does not work with the Java driver. You must provide an explicit <code>SSLContext</code> that trusts the server certificate. For production, load your CA certificate into a JKS/PKCS12 TrustStore instead of using the trust-all approach shown above.</p>
+</div>
+<h2 id="connection-pooling-best-practices">Connection pooling best practices<a class="headerlink" href="#connection-pooling-best-practices" title="Permanent link">&para;</a></h2>
+<p>MongoDB drivers maintain a connection pool to reuse TCP connections and reduce latency. Follow these best practices:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Recommended</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>maxPoolSize</code></td>
+<td>50–100</td>
+<td>Maximum number of connections. Tune based on your workload.</td>
+</tr>
+<tr>
+<td><code>minPoolSize</code></td>
+<td>5–10</td>
+<td>Keep idle connections warm to avoid cold-start latency.</td>
+</tr>
+<tr>
+<td><code>maxIdleTimeMS</code></td>
+<td>30000</td>
+<td>Close connections idle for more than 30 seconds.</td>
+</tr>
+<tr>
+<td><code>connectTimeoutMS</code></td>
+<td>10000</td>
+<td>Timeout for establishing new connections.</td>
+</tr>
+<tr>
+<td><code>serverSelectionTimeoutMS</code></td>
+<td>30000</td>
+<td>Timeout for selecting a server from the topology.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Avoid creating a new client per request</p>
+<p>Create a <strong>single</strong> <code>MongoClient</code> instance and reuse it for the lifetime of your application. The driver manages connection pooling internally. Creating a new client per request exhausts connections and degrades performance.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Connection pool sizing</p>
+<p>A good starting point is <code>maxPoolSize = number_of_concurrent_requests × 1.5</code>. Monitor connection wait times and adjust as needed. If your application runs multiple replicas (pods), divide the pool size by the number of replicas to avoid overwhelming the database.</p>
+</div>
+<h2 id="tls-configuration">TLS configuration<a class="headerlink" href="#tls-configuration" title="Permanent link">&para;</a></h2>
+<p>DocumentDB Gateway serves TLS by default. The TLS mode is configurable via the <code>spec.tls</code> field:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Description</th>
+<th>Certificate validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SelfSigned</code> (default)</td>
+<td>Operator generates a self-signed certificate</td>
+<td>Use <code>tlsAllowInvalidCertificates=true</code></td>
+</tr>
+<tr>
+<td><code>CertManager</code></td>
+<td>cert-manager issues a trusted certificate</td>
+<td>Validate against your CA bundle</td>
+</tr>
+<tr>
+<td><code>Provided</code></td>
+<td>You supply your own certificate Secret</td>
+<td>Validate against your CA</td>
+</tr>
+<tr>
+<td><code>Disabled</code></td>
+<td>TLS disabled on the gateway</td>
+<td>Not recommended</td>
+</tr>
+</tbody>
+</table>
+<h3 id="connecting-with-a-trusted-certificate">Connecting with a trusted certificate<a class="headerlink" href="#connecting-with-a-trusted-certificate" title="Permanent link">&para;</a></h3>
+<p>When using <code>CertManager</code> or <code>Provided</code> mode with a trusted CA, remove <code>tlsAllowInvalidCertificates</code> and provide the CA certificate:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:5"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><input id="__tabbed_2_3" name="__tabbed_2" type="radio" /><input id="__tabbed_2_4" name="__tabbed_2" type="radio" /><input id="__tabbed_2_5" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">mongosh</label><label for="__tabbed_2_2">Python</label><label for="__tabbed_2_3">Node.js</label><label for="__tabbed_2_4">Go</label><label for="__tabbed_2_5">Java</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://dev_user:DevPassword123@&lt;host&gt;:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;replicaSet=rs0&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span>--tlsCAFile<span class="w"> </span>/path/to/ca.crt
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">client</span> <span class="o">=</span> <span class="n">MongoClient</span><span class="p">(</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    <span class="n">host</span><span class="o">=</span><span class="s2">&quot;&lt;host&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="n">port</span><span class="o">=</span><span class="mi">10260</span><span class="p">,</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    <span class="n">username</span><span class="o">=</span><span class="s2">&quot;dev_user&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>    <span class="n">password</span><span class="o">=</span><span class="s2">&quot;DevPassword123&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>    <span class="n">authSource</span><span class="o">=</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a>    <span class="n">authMechanism</span><span class="o">=</span><span class="s2">&quot;SCRAM-SHA-256&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>    <span class="n">tls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>    <span class="n">tlsCAFile</span><span class="o">=</span><span class="s2">&quot;/path/to/ca.crt&quot;</span><span class="p">,</span>
+<a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a>    <span class="n">directConnection</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a><span class="p">)</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="kd">const</span><span class="w"> </span><span class="nx">fs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;fs&quot;</span><span class="p">);</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="kd">const</span><span class="w"> </span><span class="nx">client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">MongoClient</span><span class="p">(</span><span class="nx">uri</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span><span class="nx">tls</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">  </span><span class="nx">tlsCAFile</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;/path/to/ca.crt&quot;</span><span class="p">,</span>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="p">});</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="c1">// Load CA certificate</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nx">caCert</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">os</span><span class="p">.</span><span class="nx">ReadFile</span><span class="p">(</span><span class="s">&quot;/path/to/ca.crt&quot;</span><span class="p">)</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="nx">caCertPool</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">x509</span><span class="p">.</span><span class="nx">NewCertPool</span><span class="p">()</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="nx">caCertPool</span><span class="p">.</span><span class="nx">AppendCertsFromPEM</span><span class="p">(</span><span class="nx">caCert</span><span class="p">)</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="nx">tlsConfig</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">tls</span><span class="p">.</span><span class="nx">Config</span><span class="p">{</span><span class="nx">RootCAs</span><span class="p">:</span><span class="w"> </span><span class="nx">caCertPool</span><span class="p">}</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="nx">clientOpts</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">options</span><span class="p">.</span><span class="nx">Client</span><span class="p">().</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="w">    </span><span class="nx">ApplyURI</span><span class="p">(</span><span class="nx">uri</span><span class="p">).</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="w">    </span><span class="nx">SetTLSConfig</span><span class="p">(</span><span class="nx">tlsConfig</span><span class="p">)</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1">// Set the CA certificate via JVM trust store</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="n">System</span><span class="p">.</span><span class="na">setProperty</span><span class="p">(</span><span class="s">&quot;javax.net.ssl.trustStore&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;/path/to/truststore.jks&quot;</span><span class="p">);</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="n">System</span><span class="p">.</span><span class="na">setProperty</span><span class="p">(</span><span class="s">&quot;javax.net.ssl.trustStorePassword&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;changeit&quot;</span><span class="p">);</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>For complete TLS configuration details, see <a href="../../configuration/tls/">TLS</a>.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="connection-refused">Connection refused<a class="headerlink" href="#connection-refused" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom:</strong> <code>MongoServerSelectionError: connect ECONNREFUSED</code></p>
+<ul>
+<li>Verify the pod is running: <code>kubectl get pods -n documentdb-ns</code></li>
+<li>Verify port-forward is active (if using ClusterIP)</li>
+<li>Check that you are using port <strong>10260</strong> (DocumentDB Gateway), not 5432 (PostgreSQL)</li>
+</ul>
+<h3 id="authentication-failed">Authentication failed<a class="headerlink" href="#authentication-failed" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom:</strong> <code>MongoServerError: Authentication failed</code></p>
+<ul>
+<li>Verify the credentials match the Secret:
+  <div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.username}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d
+</code></pre></div></li>
+<li>Ensure <code>authMechanism=SCRAM-SHA-256</code> is specified</li>
+<li>Ensure <code>authSource=admin</code> (default for most drivers)</li>
+</ul>
+<h3 id="tls-handshake-errors">TLS handshake errors<a class="headerlink" href="#tls-handshake-errors" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom:</strong> <code>SSL routines:ssl3_get_record:wrong version number</code> or <code>certificate verify failed</code></p>
+<ul>
+<li>Add <code>tlsAllowInvalidCertificates=true</code> for self-signed certificates</li>
+<li>Ensure <code>tls=true</code> is in the connection string (TLS is enabled by default)</li>
+<li>If using a trusted CA, verify the CA file path is correct</li>
+</ul>
+<h3 id="connection-timeout">Connection timeout<a class="headerlink" href="#connection-timeout" title="Permanent link">&para;</a></h3>
+<p><strong>Symptom:</strong> <code>MongoServerSelectionError: Server selection timed out</code></p>
+<ul>
+<li>For LoadBalancer services, verify the external IP is assigned:
+  <div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
+</code></pre></div></li>
+<li>Check network policies or firewall rules blocking port 10260</li>
+<li>Ensure <code>directConnection=true</code> is set</li>
+</ul>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../configuration/networking/">Networking</a> — LoadBalancer configuration and Network Policies</li>
+<li><a href="../../configuration/tls/">TLS</a> — certificate management modes</li>
+<li><a href="../../api-reference/">API Reference</a> — full CRD field reference</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var tab,labels=set.querySelector(".tabbed-labels");for(tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12Z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      
+    
+  </body>
+</html>
