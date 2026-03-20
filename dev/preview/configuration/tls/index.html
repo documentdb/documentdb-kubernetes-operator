@@ -1408,6 +1408,10 @@
 </tr>
 </tbody>
 </table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Changing <code>spec.tls.gateway.provided.secretName</code> to point to a <strong>different</strong> Secret triggers a rolling restart of the DocumentDB cluster pods, which causes a brief period of downtime. To rotate certificates without downtime, update the contents of the <strong>existing</strong> Secret instead of changing the Secret name.</p>
+</div>
 <h3 id="monitoring-certificate-expiration">Monitoring Certificate Expiration<a class="headerlink" href="#monitoring-certificate-expiration" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Check certificate status via cert-manager</span>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>certificate<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
