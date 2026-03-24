@@ -72,9 +72,13 @@ jobs:
       - name: Detect current default version
         id: current
         run: |
-          # Extract current default from constants.go
-          CURRENT=$(grep 'DEFAULT_DOCUMENTDB_IMAGE' operator/src/internal/utils/constants.go \
-            | head -1 | sed -E 's/.*:([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          # Extract the assigned DEFAULT_DOCUMENTDB_IMAGE value from constants.go.
+          CURRENT=$(sed -nE 's|^[[:space:]]*DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:([0-9]+\.[0-9]+\.[0-9]+)".*|\1|p' \
+            operator/src/internal/utils/constants.go | head -1)
+          if [[ -z "$CURRENT" ]]; then
+            echo "Failed to extract current default version from operator/src/internal/utils/constants.go" >&2
+            exit 1
+          fi
           echo "current_version=$CURRENT" >> $GITHUB_OUTPUT
           echo "Current default version: $CURRENT"
 
@@ -109,6 +113,10 @@ jobs:
             .github/workflows/test-backup-and-restore.yml
           sed -i "s|gateway:${OLD_VERSION}|gateway:${NEW_VERSION}|g" \
             .github/workflows/test-backup-and-restore.yml
+
+          # 5. Update the released database baseline used by upgrade tests
+          sed -i "s|RELEASED_DATABASE_VERSION: ${OLD_VERSION}|RELEASED_DATABASE_VERSION: ${NEW_VERSION}|" \
+            .github/workflows/test-upgrade-and-rollback.yml
 
           echo "=== Files modified ==="
           git diff --name-only
