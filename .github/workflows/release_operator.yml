@@ -68,6 +68,7 @@ jobs:
     if: ${{ always() && (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped') && (needs.test-integration.result == 'success' || needs.test-integration.result == 'skipped') && (needs.test-backup-and-restore.result == 'success' || needs.test-backup-and-restore.result == 'skipped') }}
     strategy:
       matrix:
+        # NOTE: wal-replica excluded until its Dockerfile is created (feature-flagged, disabled by default).
         image: [operator, sidecar]
     steps:
       - name: Login to GHCR

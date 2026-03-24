@@ -173,7 +173,7 @@ jobs:
         docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
 
     - name: Install cosign
-      uses: sigstore/cosign-installer@main
+      uses: sigstore/cosign-installer@v3.8.2
 
     - name: Sign manifest (keyless)
       run: |

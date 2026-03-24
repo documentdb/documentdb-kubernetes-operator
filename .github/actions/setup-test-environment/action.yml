@@ -475,7 +475,7 @@ runs:
           HELM_ARGS=(
             --namespace ${{ inputs.operator-namespace }}
             --create-namespace
-            --set documentDbVersion="$LOCAL_IMAGE_TAG"
+            --set documentDbVersion="${DOCDB_IMAGE_TAG:-$LOCAL_IMAGE_TAG}"
             --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG"
             --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG"
             --set image.documentdbk8soperator.pullPolicy=IfNotPresent

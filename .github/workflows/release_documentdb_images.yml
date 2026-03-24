@@ -118,6 +118,24 @@ jobs:
           sed -i "s|RELEASED_DATABASE_VERSION: ${OLD_VERSION}|RELEASED_DATABASE_VERSION: ${NEW_VERSION}|" \
             .github/workflows/test-upgrade-and-rollback.yml
 
+          # 6. Update sidecar plugin config test (hardcoded expected gateway image)
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
+
+          # 7. Update build workflow defaults
+          sed -i "s|DEFAULT_DOCUMENTDB_VERSION: '${OLD_VERSION}'|DEFAULT_DOCUMENTDB_VERSION: '${NEW_VERSION}'|" \
+            .github/workflows/build_documentdb_images.yml
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/build_documentdb_images.yml
+
+          # 8. Update release workflow default version
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/release_documentdb_images.yml
+
+          # 9. Update gateway Dockerfile default source image ARG
+          sed -i "s|pg17-${OLD_VERSION}|pg17-${NEW_VERSION}|" \
+            .github/dockerfiles/Dockerfile_gateway_public_image
+
           echo "=== Files modified ==="
           git diff --name-only
           echo ""
@@ -137,9 +155,11 @@ jobs:
 
             ### Changes
             - Updated `DEFAULT_DOCUMENTDB_IMAGE` and `DEFAULT_GATEWAY_IMAGE` in `constants.go`
-            - Updated sidecar plugin default gateway image in `config.go`
+            - Updated sidecar plugin default gateway image in `config.go` and `config_test.go`
             - Updated `documentDbVersion` in Helm chart `values.yaml`
             - Updated fallback images in `test-backup-and-restore.yml`
+            - Updated build/release workflow defaults in `build_documentdb_images.yml` and `release_documentdb_images.yml`
+            - Updated gateway Dockerfile default source image in `Dockerfile_gateway_public_image`
 
             ### Image References
             - `ghcr.io/${{ github.repository }}/documentdb:${{ inputs.version }}`

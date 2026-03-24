@@ -371,8 +371,13 @@ When bumping database image versions, the following locations must be updated (a
 | `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.109.0` |
 | `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.109.0` |
 | `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.109.0` |
+| `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.109.0` |
 | `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.109.0"` |
 | `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.109.0` |
+| `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.109.0` |
+| `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.109.0` |
+| `.github/workflows/release_documentdb_images.yml` | Input default | `0.109.0` |
+| `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.109.0` |
 
 When bumping operator versions, update:
 

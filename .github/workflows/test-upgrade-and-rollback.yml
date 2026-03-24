@@ -44,7 +44,8 @@ env:
   DB_PASSWORD: K8sSecret100
   DB_PORT: 10260
   RELEASED_DATABASE_VERSION: 0.109.0
-  RELEASED_DATABASE_OWNER: ${{ github.repository_owner }}
+  # Always resolve released baseline images from the canonical org, not the fork owner.
+  RELEASED_DATABASE_OWNER: documentdb
 
 jobs:
   build:
