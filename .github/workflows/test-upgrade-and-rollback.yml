@@ -53,7 +53,7 @@ jobs:
     if: ${{ (inputs.image_tag == '' || inputs.image_tag == null) || github.event_name == 'pull_request' }}
     uses: ./.github/workflows/test-build-and-package.yml
     with:
-      version: '0.1.1'
+      version: '0.2.0'
     secrets: inherit
 
   upgrade-and-rollback-test:

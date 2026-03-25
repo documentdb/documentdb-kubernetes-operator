@@ -6,11 +6,11 @@ on:
       version:
         description: 'Released chart version to rebuild and republish'
         required: true
-        default: '0.1.3'
+        default: '0.2.0'
       release_ref:
         description: 'Immutable git ref to rebuild from (tag recommended)'
         required: true
-        default: '0.1.3'
+        default: '0.2.0'
       expected_cnpg_version:
         description: 'Expected cloudnative-pg dependency version in the rebuilt chart'
         required: false
@@ -31,7 +31,7 @@ on:
       confirm_version:
         description: 'Safety check: repeat the version exactly before publishing'
         required: true
-        default: '0.1.3'
+        default: '0.2.0'
       normalize_chart_metadata:
         description: 'Allow packaging the checked-out source ref at the requested release version even when Chart.yaml still carries pre-release metadata'
         required: false

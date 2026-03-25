@@ -10,7 +10,7 @@ on:
       version:
         description: 'Operator version for the build (will be tagged as {version}-test)'
         required: false
-        default: '0.1.3'
+        default: '0.2.0'
 
   push:
     branches:
@@ -26,8 +26,8 @@ permissions:
   id-token: write
 
 env:
-  VERSION: ${{ github.event.inputs.version || '0.1.3' }}
-  IMAGE_TAG: ${{ github.event.inputs.version || '0.1.3' }}-test
+  VERSION: ${{ github.event.inputs.version || '0.2.0' }}
+  IMAGE_TAG: ${{ github.event.inputs.version || '0.2.0' }}-test
 
 jobs:
   # ---------------------------------------------------------------------------

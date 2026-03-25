@@ -41,7 +41,7 @@ jobs:
     if: ${{ (github.event.inputs.image_tag == '' || github.event.inputs.image_tag == null) || github.event_name == 'pull_request' }}
     uses: ./.github/workflows/test-build-and-package.yml
     with:
-      version: '0.1.0'
+      version: '0.2.0'
     secrets: inherit
 
   integration-test:

@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       candidate_version:
-        description: 'Operator candidate tag to promote (e.g., 0.1.3-test)'
+        description: 'Operator candidate tag to promote (e.g., 0.2.0-test)'
         required: true
-        default: '0.1.3-test'
+        default: '0.2.0-test'
       version:
         description: 'Release version for operator images and Helm chart'
         required: true
-        default: '0.1.3'
+        default: '0.2.0'
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
