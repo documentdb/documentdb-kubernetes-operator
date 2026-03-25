@@ -228,9 +228,17 @@ runs:
       shell: bash
       run: |
         # Resolve early so kind-load and deploy steps both use the same refs.
-        # Priority: explicit input override > external manifest tag > local build tag.
-        # Database images may use a different tag than operator images (decoupled versioning).
-        DOCDB_TAG="${{ inputs.documentdb-image-tag || inputs.image-tag }}"
+        # Priority: explicit input override > values.yaml (external) > local build tag.
+        # Database images use a different version track than operator images.
+        if [[ -n "${{ inputs.documentdb-image-tag }}" ]]; then
+          DOCDB_TAG="${{ inputs.documentdb-image-tag }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          # External images: read documentDbVersion from values.yaml (separate version track).
+          DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+          echo "Using documentDbVersion from values.yaml: $DOCDB_TAG"
+        else
+          DOCDB_TAG="${{ inputs.image-tag }}"
+        fi
 
         if [[ -n "${{ inputs.documentdb-image }}" ]]; then
           DOCDB_IMAGE="${{ inputs.documentdb-image }}"
