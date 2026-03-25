@@ -101,12 +101,16 @@ jobs:
         OLD_GW="ghcr.io/${{ env.RELEASED_DATABASE_OWNER }}/documentdb-kubernetes-operator/gateway:${{ env.RELEASED_DATABASE_VERSION }}"
 
         # New images come from this workflow run (self-built) or from the provided candidate tag.
+        # Database images use a separate version track from operator images.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
           NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
           NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
         else
-          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}"
-          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}"
+          # External images: read documentDbVersion from values.yaml (separate version track from operator).
+          DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+          echo "Using documentDbVersion from values.yaml: $DOCDB_TAG"
+          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}"
+          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}"
         fi
         echo "DOCUMENTDB_IMAGE=$NEW_DOCDB" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE=$NEW_GW" >> $GITHUB_ENV

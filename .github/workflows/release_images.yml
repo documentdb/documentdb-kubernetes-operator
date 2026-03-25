@@ -5,6 +5,11 @@ name: "[DEPRECATED] RELEASE - Promote Candidate Images and Publish Helm Chart"
 #   - release_operator.yml          → promotes operator/sidecar, publishes Helm chart
 #   - release_documentdb_images.yml → promotes documentdb/gateway, auto-PRs version bumps
 # This workflow is kept for backward compatibility during transition.
+#
+# ⚠️ WARNING: This workflow applies the same version tag to both operator-track
+# (operator, sidecar) and database-track (documentdb, gateway) images. Under
+# the current split-track versioning, this is incorrect. Use the replacement
+# workflows above instead.
 
 on:
   workflow_dispatch:
