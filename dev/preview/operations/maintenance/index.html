@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Configure persistent storage for DocumentDB including storage classes, PVC sizing, reclaim policies, and disk encryption across AKS, EKS, and GKE.">
+        <meta name="description" content="Monitor DocumentDB cluster health, review PostgreSQL and gateway logs, track resource usage, and configure Kubernetes events and alerts.">
       
       
       
       
-        <link rel="prev" href="../../architecture/overview/">
+        <link rel="prev" href="../restore-deleted-cluster/">
       
       
-        <link rel="next" href="../networking/">
+        <link rel="next" href="../../high-availability/overview/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Storage Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Maintenance - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#storage-configuration" class="md-skip">
+        <a href="#maintenance" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Storage Configuration
+              Maintenance
             
           </span>
         </div>
@@ -564,6 +564,120 @@
                 
   
   
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -584,26 +698,110 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
             
   
   <span class="md-ellipsis">
-    Configuration
+    Operations
   </span>
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_5">
             <span class="md-nav__icon md-icon"></span>
-            Configuration
+            Operations
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../upgrades/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Upgrades
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../failover/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Failover
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../restore-deleted-cluster/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Restore a Deleted Cluster
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -625,7 +823,7 @@
           
   
   <span class="md-ellipsis">
-    Storage
+    Maintenance
   </span>
   
 
@@ -636,7 +834,7 @@
         
   
   <span class="md-ellipsis">
-    Storage
+    Maintenance
   </span>
   
 
@@ -667,45 +865,90 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#monitoring-documentdb-cluster-health" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Monitoring DocumentDB Cluster Health
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring DocumentDB Cluster Health">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-cluster-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB Cluster Status
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#pod-health" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Pod Health
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
-    <span class="md-ellipsis">
-      Storage Classes (storageClass)
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
+  <a href="#log-management" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Encryption
+      Log Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Log Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-log-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuring Log Level
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+  <a href="#resource-monitoring" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Resource Monitoring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Monitoring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#storage-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#events-and-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Events and Alerts
     </span>
   </a>
   
@@ -715,204 +958,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../networking/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
-            
-  
-  <span class="md-ellipsis">
-    Operations
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1_5">
-            <span class="md-nav__icon md-icon"></span>
-            Operations
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/upgrades/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Upgrades
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/failover/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Failover
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/backup-and-restore/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Backup and Restore
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Restore a Deleted Cluster
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/maintenance/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Maintenance
-  </span>
-  
-
-      </a>
     </li>
   
 
@@ -1197,45 +1242,90 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#monitoring-documentdb-cluster-health" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Monitoring DocumentDB Cluster Health
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring DocumentDB Cluster Health">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-cluster-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB Cluster Status
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#pod-health" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Pod Health
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
-    <span class="md-ellipsis">
-      Storage Classes (storageClass)
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
+  <a href="#log-management" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Encryption
+      Log Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Log Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuring-log-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuring Log Level
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+  <a href="#resource-monitoring" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Resource Monitoring
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Resource Monitoring">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#storage-monitoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Monitoring
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#events-and-alerts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Events and Alerts
     </span>
   </a>
   
@@ -1259,117 +1349,231 @@
   
 
 
-<h1 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h1>
+<h1 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.</p>
-<p>Each DocumentDB instance stores its data on a Kubernetes <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PersistentVolume (PV)</a> provisioned through a <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">PersistentVolumeClaim (PVC)</a>. You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the <code>spec.resource.storage</code> field:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span><span class="w">                           </span><span class="c1"># Required: storage size</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi-premium</span><span class="w">         </span><span class="c1"># Optional: defaults to Kubernetes default StorageClass</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">     </span><span class="c1"># Optional: Retain (default) or Delete</span>
+<p>Maintenance covers the day-to-day tasks that keep your DocumentDB cluster healthy and performant. Regular monitoring, log review, and proactive resource management prevent outages and help you catch issues before they affect applications.</p>
+<h2 id="monitoring-documentdb-cluster-health">Monitoring DocumentDB Cluster Health<a class="headerlink" href="#monitoring-documentdb-cluster-health" title="Permanent link">&para;</a></h2>
+<h3 id="documentdb-cluster-status">DocumentDB Cluster Status<a class="headerlink" href="#documentdb-cluster-status" title="Permanent link">&para;</a></h3>
+<p>Check the overall health of your DocumentDB clusters:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># List all DocumentDB clusters and their status</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Detailed cluster information</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>documentdb<span class="w"> </span>&lt;cluster-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
 </code></pre></div>
-<p>For the full field reference, see <a href="../../api-reference/#storageconfiguration">StorageConfiguration</a> in the API Reference.</p>
-<h2 id="disk-size-pvcsize">Disk Size (<code>pvcSize</code>)<a class="headerlink" href="#disk-size-pvcsize" title="Permanent link">&para;</a></h2>
-<p>The <code>pvcSize</code> field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is <strong>coming soon</strong> — see <a href="https://github.com/documentdb/documentdb-kubernetes-operator/issues/298">#298</a> for tracking.</p>
-<h2 id="reclaim-policy-persistentvolumereclaimpolicy">Reclaim Policy (<code>persistentVolumeReclaimPolicy</code>)<a class="headerlink" href="#reclaim-policy-persistentvolumereclaimpolicy" title="Permanent link">&para;</a></h2>
-<p>The <code>persistentVolumeReclaimPolicy</code> field controls what happens to your data when a DocumentDB cluster is deleted:</p>
 <table>
 <thead>
 <tr>
-<th>Policy</th>
-<th>Behavior</th>
+<th>What to check</th>
+<th>Normal</th>
+<th>Investigate if</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Retain</code> (default)</td>
-<td>Data is preserved after DocumentDB deletion. <strong>Recommended for production.</strong></td>
+<td><code>STATUS</code> column</td>
+<td><code>Cluster in healthy state</code></td>
+<td>Any other status (e.g., <code>Setting up primary</code>, <code>Creating replica</code>) persists longer than a few minutes</td>
 </tr>
 <tr>
-<td><code>Delete</code></td>
-<td>Data is permanently deleted with the DocumentDB cluster. Suitable for development.</td>
+<td><code>AGE</code> column</td>
+<td>Consistent with deployment time</td>
+<td>Unexpectedly recent — may indicate an unplanned restart</td>
 </tr>
 </tbody>
 </table>
-<p>With <code>Retain</code>, you can recover data even after the DocumentDB cluster is gone. See <a href="../../operations/restore-deleted-cluster/#method-2-restore-from-retained-persistentvolume">Restore from Retained PersistentVolume</a> for restore steps.</p>
-<h2 id="storage-classes-storageclass">Storage Classes (<code>storageClass</code>)<a class="headerlink" href="#storage-classes-storageclass" title="Permanent link">&para;</a></h2>
-<p>The <code>storageClass</code> field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See <a href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes StorageClass</a> for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.</p>
-<p>To see available StorageClasses and which one is the default:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
+<h3 id="pod-health">Pod Health<a class="headerlink" href="#pod-health" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Check pod status (each pod runs PostgreSQL + gateway sidecar)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-l<span class="w"> </span><span class="nv">app</span><span class="o">=</span>&lt;cluster-name&gt;
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># View pod resource usage</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>kubectl<span class="w"> </span>top<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
 </code></pre></div>
-<p>The default is marked with <code>(default)</code> in the output.</p>
-<h2 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h2>
-<p>Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.</p>
 <table>
 <thead>
 <tr>
-<th>Provider</th>
-<th>Default Encryption</th>
-<th>Customer-Managed Keys</th>
+<th>What to check</th>
+<th>Normal</th>
+<th>Investigate if</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>AKS</strong></td>
-<td>✅ Enabled (platform-managed keys)</td>
-<td><a href="https://learn.microsoft.com/azure/aks/azure-disk-customer-managed-keys">Azure Disk Encryption with CMK</a></td>
+<td><code>READY</code> column</td>
+<td><code>2/2</code> (PostgreSQL container + gateway sidecar)</td>
+<td>Less than <code>2/2</code> — one or both containers are not ready</td>
 </tr>
 <tr>
-<td><strong>GKE</strong></td>
-<td>✅ Enabled (Google-managed keys)</td>
-<td><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">CMEK for GKE persistent disks</a></td>
+<td><code>STATUS</code> column</td>
+<td><code>Running</code></td>
+<td><code>CrashLoopBackOff</code>, <code>Error</code>, <code>Pending</code>, or <code>Init</code> persisting beyond startup</td>
 </tr>
 <tr>
-<td><strong>EKS</strong></td>
-<td>❌ <strong>Not enabled by default</strong></td>
-<td><a href="https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html">EBS CSI driver encryption</a> — set <code>encrypted: "true"</code> in StorageClass</td>
+<td><code>RESTARTS</code> column</td>
+<td><code>0</code> (or very low over the cluster lifetime)</td>
+<td>High or rapidly increasing — indicates repeated container crashes</td>
+</tr>
+<tr>
+<td>Resource usage (<code>kubectl top</code>)</td>
+<td>CPU and memory stable under normal workload</td>
+<td>CPU consistently maxed out (throttling) or memory climbing steadily (OOMKill risk)</td>
 </tr>
 </tbody>
 </table>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>For production on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage.k8s.io/v1</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageClass</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs-sc-encrypted</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gp3</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">encrypted</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="c1"># kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;  # Optional: customer-managed key</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">reclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">volumeBindingMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WaitForFirstConsumer</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">allowVolumeExpansion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</code></pre></div>
+<h2 id="log-management">Log Management<a class="headerlink" href="#log-management" title="Permanent link">&para;</a></h2>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>We recommend setting up centralized log collection as part of your observability strategy. See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry">telemetry playground</a> for OpenTelemetry, Prometheus, and Grafana integration examples.</p>
 </div>
-<h2 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h2>
-<p>As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">DocumentDB Operator Logs</label><label for="__tabbed_1_2">PostgreSQL Logs</label><label for="__tabbed_1_3">Gateway Logs</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Recent operator logs</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>--tail<span class="o">=</span><span class="m">100</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Follow operator logs in real time</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>-f
+</code></pre></div>
+<p><strong>What's normal:</strong> Periodic reconciliation messages, successful backup notifications.</p>
+<p><strong>Investigate if:</strong> Repeated <code>ERROR</code> or <code>WARNING</code> lines, reconciliation failures, or stack traces appear.</p>
+</div>
+<div class="tabbed-block">
+<p>Access PostgreSQL logs inside a specific pod:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>cat<span class="w"> </span>/controller/log/postgres
+</code></pre></div>
+<p><strong>What's normal:</strong> Startup messages, checkpoint completions, autovacuum activity.</p>
+<p><strong>Investigate if:</strong> <code>FATAL</code>, <code>PANIC</code>, or repeated <code>ERROR</code> entries appear. Watch for <code>out of memory</code>, <code>no space left on device</code>, or <code>too many connections</code> messages.</p>
+</div>
+<div class="tabbed-block">
+<p>Access gateway (sidecar) logs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>documentdb-gateway
+</code></pre></div>
+<p><strong>What's normal:</strong> Successful connection handling, startup messages.</p>
+<p><strong>Investigate if:</strong> Repeated connection refused errors, authentication failures, or TLS handshake errors appear.</p>
+</div>
+</div>
+</div>
+<h3 id="configuring-log-level">Configuring Log Level<a class="headerlink" href="#configuring-log-level" title="Permanent link">&para;</a></h3>
+<p>The <code>spec.logLevel</code> field controls the PostgreSQL instance log verbosity. It does not affect the DocumentDB operator or gateway logs.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">logLevel</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;warning&quot;</span><span class="w">  </span><span class="c1"># Options: debug, info, warning, error</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For production deployments, use <code>warning</code> or <code>error</code> to reduce log volume. Reserve <code>info</code> or <code>debug</code> for troubleshooting.</p>
+</div>
+<p>Apply the change:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+</code></pre></div>
+<h2 id="resource-monitoring">Resource Monitoring<a class="headerlink" href="#resource-monitoring" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Pod resource consumption</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kubectl<span class="w"> </span>top<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Node resource consumption</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>kubectl<span class="w"> </span>top<span class="w"> </span>nodes
+</code></pre></div>
 <table>
 <thead>
 <tr>
-<th>Mount Option</th>
-<th>What it prevents</th>
+<th>What to check</th>
+<th>Normal</th>
+<th>Investigate if</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>nodev</code></td>
-<td>Blocks creation of device files that could access host hardware</td>
+<td>Pod CPU usage</td>
+<td>Varies with workload; no sustained spikes</td>
+<td>Consistently maxed out — queries may be throttled</td>
 </tr>
 <tr>
-<td><code>nosuid</code></td>
-<td>Blocks privilege escalation via setuid/setgid binaries</td>
+<td>Pod memory usage</td>
+<td>Stable and predictable</td>
+<td>Climbing steadily or hitting node limits — pods may be OOMKilled. Check for memory-heavy queries.</td>
 </tr>
 <tr>
-<td><code>noexec</code></td>
-<td>Blocks execution of malicious binaries written to the data volume</td>
+<td>Node resource usage</td>
+<td>Enough headroom for pod scheduling and bursts</td>
+<td>Nodes above 80% utilization — new pods may fail to schedule or existing pods may be evicted.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="storage-monitoring">Storage Monitoring<a class="headerlink" href="#storage-monitoring" title="Permanent link">&para;</a></h3>
+<p>Monitor persistent volume usage:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Check PVC status and capacity</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pvc<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Check actual disk usage inside a pod</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span>df<span class="w"> </span>-h<span class="w"> </span>/var/lib/postgresql/data
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>What to check</th>
+<th>Normal</th>
+<th>Investigate if</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PVC <code>STATUS</code></td>
+<td><code>Bound</code></td>
+<td><code>Pending</code> — the storage class may not be able to provision a volume</td>
+</tr>
+<tr>
+<td>Disk usage (<code>df -h</code>)</td>
+<td>Below 70% of capacity</td>
+<td>Above 80% — risk of the database halting when storage is full. Plan a migration to a larger volume.</td>
+</tr>
+<tr>
+<td>Growth rate</td>
+<td>Gradual and predictable</td>
+<td>Sudden spikes — may indicate a bulk data load, excessive logging, or WAL accumulation</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>PVC resize is not currently supported but is planned for a future release. If storage usage approaches capacity, provision a new DocumentDB cluster with larger <code>pvcSize</code> and restore from a backup. See <a href="../../configuration/storage/">Storage Configuration</a> for details.</p>
+</div>
+<h2 id="events-and-alerts">Events and Alerts<a class="headerlink" href="#events-and-alerts" title="Permanent link">&para;</a></h2>
+<p>The operator emits Kubernetes events for significant state changes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># View events for a DocumentDB cluster</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>events<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>--field-selector<span class="w"> </span>involvedObject.name<span class="o">=</span>&lt;cluster-name&gt;
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># View all DocumentDB-related events</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>events<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>--sort-by<span class="o">=</span>.lastTimestamp
+</code></pre></div>
+<p>Key events to watch for:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Meaning</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BackupSchedule</code></td>
+<td>A scheduled backup created a Backup resource</td>
+<td>No action needed — verify periodically that backups are running on schedule</td>
+</tr>
+<tr>
+<td><code>BackupFailed</code></td>
+<td>A backup failed</td>
+<td><strong>Investigate immediately.</strong> Check operator logs and storage configuration. Ensure your backup target is reachable.</td>
+</tr>
+<tr>
+<td><code>InvalidSchedule</code></td>
+<td>A ScheduledBackup has an invalid cron expression</td>
+<td>Fix the <code>spec.schedule</code> field in your ScheduledBackup resource.</td>
+</tr>
+<tr>
+<td><code>PVsRetained</code></td>
+<td>PVs were retained after DocumentDB cluster deletion</td>
+<td>Expected if <code>reclaimPolicy: Retain</code>. Clean up PVs manually if no longer needed.</td>
 </tr>
 </tbody>
 </table>

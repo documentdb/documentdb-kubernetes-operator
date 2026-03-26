@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Configure persistent storage for DocumentDB including storage classes, PVC sizing, reclaim policies, and disk encryption across AKS, EKS, and GKE.">
+        <meta name="description" content="How DocumentDB handles automatic failover through local replica promotion, cross-cluster failover for multi-region deployments, and application connection considerations.">
       
       
       
       
-        <link rel="prev" href="../../architecture/overview/">
+        <link rel="prev" href="../upgrades/">
       
       
-        <link rel="next" href="../networking/">
+        <link rel="next" href="../backup-and-restore/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Storage Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Failover - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#storage-configuration" class="md-skip">
+        <a href="#failover" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Storage Configuration
+              Failover
             
           </span>
         </div>
@@ -564,6 +564,120 @@
                 
   
   
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -584,26 +698,47 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
             
   
   <span class="md-ellipsis">
-    Configuration
+    Operations
   </span>
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_5">
             <span class="md-nav__icon md-icon"></span>
-            Configuration
+            Operations
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../upgrades/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Upgrades
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -625,7 +760,7 @@
           
   
   <span class="md-ellipsis">
-    Storage
+    Failover
   </span>
   
 
@@ -636,7 +771,7 @@
         
   
   <span class="md-ellipsis">
-    Storage
+    Failover
   </span>
   
 
@@ -667,47 +802,77 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#local-automatic-failover" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Local Automatic Failover
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Cross-Cluster Failover (Multi-Region)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
     <span class="md-ellipsis">
-      Storage Classes (storageClass)
+      Promoting a Standby DocumentDB Cluster
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
-    <span class="md-ellipsis">
-      Disk Encryption
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+  <a href="#application-considerations" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Application Considerations
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Application Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection Handling
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-during-failover" class="md-nav__link">
+    <span class="md-ellipsis">
+      Behavior During Failover
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -727,142 +892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../networking/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
-            
-  
-  <span class="md-ellipsis">
-    Operations
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1_5">
-            <span class="md-nav__icon md-icon"></span>
-            Operations
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/upgrades/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Upgrades
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/failover/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Failover
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/backup-and-restore/" class="md-nav__link">
+      <a href="../backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -883,7 +913,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
+      <a href="../restore-deleted-cluster/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -904,7 +934,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/maintenance/" class="md-nav__link">
+      <a href="../maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1197,47 +1227,77 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#local-automatic-failover" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Local Automatic Failover
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+  <a href="#cross-cluster-failover-multi-region" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Cross-Cluster Failover (Multi-Region)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cross-Cluster Failover (Multi-Region)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#promoting-a-standby-documentdb-cluster" class="md-nav__link">
     <span class="md-ellipsis">
-      Storage Classes (storageClass)
+      Promoting a Standby DocumentDB Cluster
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
-    <span class="md-ellipsis">
-      Disk Encryption
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+  <a href="#application-considerations" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Application Considerations
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Application Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Connection Handling
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#behavior-during-failover" class="md-nav__link">
+    <span class="md-ellipsis">
+      Behavior During Failover
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1259,120 +1319,55 @@
   
 
 
-<h1 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h1>
+<h1 id="failover">Failover<a class="headerlink" href="#failover" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.</p>
-<p>Each DocumentDB instance stores its data on a Kubernetes <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PersistentVolume (PV)</a> provisioned through a <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">PersistentVolumeClaim (PVC)</a>. You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the <code>spec.resource.storage</code> field:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span><span class="w">                           </span><span class="c1"># Required: storage size</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi-premium</span><span class="w">         </span><span class="c1"># Optional: defaults to Kubernetes default StorageClass</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">     </span><span class="c1"># Optional: Retain (default) or Delete</span>
-</code></pre></div>
-<p>For the full field reference, see <a href="../../api-reference/#storageconfiguration">StorageConfiguration</a> in the API Reference.</p>
-<h2 id="disk-size-pvcsize">Disk Size (<code>pvcSize</code>)<a class="headerlink" href="#disk-size-pvcsize" title="Permanent link">&para;</a></h2>
-<p>The <code>pvcSize</code> field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is <strong>coming soon</strong> — see <a href="https://github.com/documentdb/documentdb-kubernetes-operator/issues/298">#298</a> for tracking.</p>
-<h2 id="reclaim-policy-persistentvolumereclaimpolicy">Reclaim Policy (<code>persistentVolumeReclaimPolicy</code>)<a class="headerlink" href="#reclaim-policy-persistentvolumereclaimpolicy" title="Permanent link">&para;</a></h2>
-<p>The <code>persistentVolumeReclaimPolicy</code> field controls what happens to your data when a DocumentDB cluster is deleted:</p>
-<table>
-<thead>
-<tr>
-<th>Policy</th>
-<th>Behavior</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>Retain</code> (default)</td>
-<td>Data is preserved after DocumentDB deletion. <strong>Recommended for production.</strong></td>
-</tr>
-<tr>
-<td><code>Delete</code></td>
-<td>Data is permanently deleted with the DocumentDB cluster. Suitable for development.</td>
-</tr>
-</tbody>
-</table>
-<p>With <code>Retain</code>, you can recover data even after the DocumentDB cluster is gone. See <a href="../../operations/restore-deleted-cluster/#method-2-restore-from-retained-persistentvolume">Restore from Retained PersistentVolume</a> for restore steps.</p>
-<h2 id="storage-classes-storageclass">Storage Classes (<code>storageClass</code>)<a class="headerlink" href="#storage-classes-storageclass" title="Permanent link">&para;</a></h2>
-<p>The <code>storageClass</code> field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See <a href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes StorageClass</a> for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.</p>
-<p>To see available StorageClasses and which one is the default:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
-</code></pre></div>
-<p>The default is marked with <code>(default)</code> in the output.</p>
-<h2 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h2>
-<p>Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.</p>
-<table>
-<thead>
-<tr>
-<th>Provider</th>
-<th>Default Encryption</th>
-<th>Customer-Managed Keys</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>AKS</strong></td>
-<td>✅ Enabled (platform-managed keys)</td>
-<td><a href="https://learn.microsoft.com/azure/aks/azure-disk-customer-managed-keys">Azure Disk Encryption with CMK</a></td>
-</tr>
-<tr>
-<td><strong>GKE</strong></td>
-<td>✅ Enabled (Google-managed keys)</td>
-<td><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">CMEK for GKE persistent disks</a></td>
-</tr>
-<tr>
-<td><strong>EKS</strong></td>
-<td>❌ <strong>Not enabled by default</strong></td>
-<td><a href="https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html">EBS CSI driver encryption</a> — set <code>encrypted: "true"</code> in StorageClass</td>
-</tr>
-</tbody>
-</table>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>For production on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage.k8s.io/v1</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageClass</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs-sc-encrypted</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gp3</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">encrypted</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="c1"># kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;  # Optional: customer-managed key</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">reclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">volumeBindingMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WaitForFirstConsumer</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">allowVolumeExpansion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</code></pre></div>
+<p>Failover promotes a replica to primary when the current primary becomes unavailable. Because all client traffic — both reads and writes — routes through the primary, failover causes a brief period of downtime until the new primary is ready. This typically completes within seconds.</p>
+<p>The DocumentDB operator supports two levels of failover:</p>
+<ul>
+<li><strong>Local failover</strong> — automatic promotion of a replica to primary within a single DocumentDB cluster.</li>
+<li><strong>Cross-cluster failover</strong> — manual promotion of a standby DocumentDB cluster to primary in a multi-region deployment.</li>
+</ul>
+<h2 id="local-automatic-failover">Local Automatic Failover<a class="headerlink" href="#local-automatic-failover" title="Permanent link">&para;</a></h2>
+<p>Local automatic failover requires at least two instances (<code>spec.instancesPerNode &gt;= 2</code>). With a single instance, there is only the primary and no replica available to promote — so failover is not possible. When multiple instances are running, the operator automatically promotes a replica to primary if the current primary becomes unavailable.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Match <code>spec.instancesPerNode</code> to the number of availability zones in your Kubernetes cluster. This distributes replicas across zones and ensures the DocumentDB cluster can survive a zone failure.</p>
 </div>
-<h2 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h2>
-<p>As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:</p>
-<table>
-<thead>
-<tr>
-<th>Mount Option</th>
-<th>What it prevents</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>nodev</code></td>
-<td>Blocks creation of device files that could access host hardware</td>
-</tr>
-<tr>
-<td><code>nosuid</code></td>
-<td>Blocks privilege escalation via setuid/setgid binaries</td>
-</tr>
-<tr>
-<td><code>noexec</code></td>
-<td>Blocks execution of malicious binaries written to the data volume</td>
-</tr>
-</tbody>
-</table>
+<h2 id="cross-cluster-failover-multi-region">Cross-Cluster Failover (Multi-Region)<a class="headerlink" href="#cross-cluster-failover-multi-region" title="Permanent link">&para;</a></h2>
+<p>For multi-region deployments using cluster replication, you can promote a standby (replica) DocumentDB cluster to become the new primary. The primary itself can be a multi-instance HA cluster (with <code>spec.instancesPerNode &gt;= 2</code>), providing local failover within the region. Cross-cluster failover to another region is only needed if the entire primary region becomes unavailable.</p>
+<p>For end-to-end setup examples, see the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/aks-fleet-deployment">AKS Fleet multi-region deployment</a> and <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment">multi-cloud deployment</a> playgrounds.</p>
+<h3 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h3>
+<p>In a multi-region setup:</p>
+<ul>
+<li>One DocumentDB cluster is designated as the <strong>primary</strong> and handles all writes.</li>
+<li>Other DocumentDB clusters are <strong>standbys</strong> that replicate from the primary via streaming replication.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">crossCloudNetworkingStrategy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AzureFleet</span><span class="w">  </span><span class="c1"># or Istio, None</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">primary-cluster</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-1</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standby-cluster-2</span>
+</code></pre></div>
+<h3 id="promoting-a-standby-documentdb-cluster">Promoting a Standby DocumentDB Cluster<a class="headerlink" href="#promoting-a-standby-documentdb-cluster" title="Permanent link">&para;</a></h3>
+<p>To promote a standby DocumentDB cluster to primary, update the <code>primary</code> field in all DocumentDB cluster configurations:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On the new primary cluster</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">&#39;[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;: &quot;standby-cluster-1&quot;}]&#39;</span>
+</code></pre></div>
+<h2 id="application-considerations">Application Considerations<a class="headerlink" href="#application-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="connection-handling">Connection Handling<a class="headerlink" href="#connection-handling" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Use the Kubernetes Service</strong> — always connect through the <a href="../../configuration/networking/#service-types">Kubernetes Service</a> (not directly to pod IPs). The Service automatically routes to the current primary.</li>
+<li><strong>Implement retry logic</strong> — during failover, all connections are briefly interrupted. Applications should retry with exponential backoff.</li>
+</ul>
+<h3 id="behavior-during-failover">Behavior During Failover<a class="headerlink" href="#behavior-during-failover" title="Permanent link">&para;</a></h3>
+<p>During failover:
+- Existing connections to the old primary are dropped.
+- There is a brief period of downtime until the new primary is promoted and ready to accept connections.
+- Once the new primary is available, the Kubernetes Service routes traffic to it automatically.</p>
 
 
 

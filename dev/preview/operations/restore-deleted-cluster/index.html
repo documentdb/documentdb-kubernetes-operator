@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Configure persistent storage for DocumentDB including storage classes, PVC sizing, reclaim policies, and disk encryption across AKS, EKS, and GKE.">
+        <meta name="description" content="Recover a DocumentDB cluster after accidental deletion by restoring from a VolumeSnapshot backup or by reattaching retained PersistentVolumes.">
       
       
       
       
-        <link rel="prev" href="../../architecture/overview/">
+        <link rel="prev" href="../backup-and-restore/">
       
       
-        <link rel="next" href="../networking/">
+        <link rel="next" href="../maintenance/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Storage Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Restore a Deleted DocumentDB Cluster - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#storage-configuration" class="md-skip">
+        <a href="#restore-a-deleted-documentdb-cluster" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Storage Configuration
+              Restore a Deleted DocumentDB Cluster
             
           </span>
         </div>
@@ -564,6 +564,120 @@
                 
   
   
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Configuration
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/storage/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Storage
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/networking/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Networking
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/tls/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    TLS
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -584,26 +698,89 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
             
   
   <span class="md-ellipsis">
-    Configuration
+    Operations
   </span>
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_5">
             <span class="md-nav__icon md-icon"></span>
-            Configuration
+            Operations
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../upgrades/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Upgrades
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../failover/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Failover
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -625,7 +802,7 @@
           
   
   <span class="md-ellipsis">
-    Storage
+    Restore a Deleted Cluster
   </span>
   
 
@@ -636,7 +813,7 @@
         
   
   <span class="md-ellipsis">
-    Storage
+    Restore a Deleted Cluster
   </span>
   
 
@@ -667,47 +844,62 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#method-1-restore-from-backup" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Method 1: Restore from Backup
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+  <a href="#method-2-restore-from-retained-persistentvolume" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Method 2: Restore from Retained PersistentVolume
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Method 2: Restore from Retained PersistentVolume">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-find-the-retained-pv" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Find the Retained PV
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" class="md-nav__link">
     <span class="md-ellipsis">
-      Storage Classes (storageClass)
+      Step 2: Create a New DocumentDB Cluster with PV Recovery
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-3-verify-the-recovery" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Encryption
+      Step 3: Verify the Recovery
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-4-clean-up-the-source-pv" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Step 4: Clean Up the Source PV
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -727,184 +919,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../networking/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
-            
-  
-  <span class="md-ellipsis">
-    Operations
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1_5">
-            <span class="md-nav__icon md-icon"></span>
-            Operations
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/upgrades/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Upgrades
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/failover/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Failover
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/backup-and-restore/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Backup and Restore
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Restore a Deleted Cluster
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../operations/maintenance/" class="md-nav__link">
+      <a href="../maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1197,47 +1212,62 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#disk-size-pvcsize" class="md-nav__link">
+  <a href="#method-1-restore-from-backup" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Size (pvcSize)
+      Method 1: Restore from Backup
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#reclaim-policy-persistentvolumereclaimpolicy" class="md-nav__link">
+  <a href="#method-2-restore-from-retained-persistentvolume" class="md-nav__link">
     <span class="md-ellipsis">
-      Reclaim Policy (persistentVolumeReclaimPolicy)
+      Method 2: Restore from Retained PersistentVolume
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Method 2: Restore from Retained PersistentVolume">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#step-1-find-the-retained-pv" class="md-nav__link">
+    <span class="md-ellipsis">
+      Step 1: Find the Retained PV
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#storage-classes-storageclass" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" class="md-nav__link">
     <span class="md-ellipsis">
-      Storage Classes (storageClass)
+      Step 2: Create a New DocumentDB Cluster with PV Recovery
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#disk-encryption" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-3-verify-the-recovery" class="md-nav__link">
     <span class="md-ellipsis">
-      Disk Encryption
+      Step 3: Verify the Recovery
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#persistentvolume-security" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#step-4-clean-up-the-source-pv" class="md-nav__link">
     <span class="md-ellipsis">
-      PersistentVolume Security
+      Step 4: Clean Up the Source PV
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1259,120 +1289,79 @@
   
 
 
-<h1 id="storage-configuration">Storage Configuration<a class="headerlink" href="#storage-configuration" title="Permanent link">&para;</a></h1>
+<h1 id="restore-a-deleted-documentdb-cluster">Restore a Deleted DocumentDB Cluster<a class="headerlink" href="#restore-a-deleted-documentdb-cluster" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Storage controls how DocumentDB persists data — including disk size, storage type, retention behavior, and encryption.</p>
-<p>Each DocumentDB instance stores its data on a Kubernetes <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PersistentVolume (PV)</a> provisioned through a <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims">PersistentVolumeClaim (PVC)</a>. You need to specify at least the disk size; optionally, you can choose a storage class for your cloud provider and control what happens to the data when the DocumentDB cluster is deleted. Configure storage through the <code>spec.resource.storage</code> field:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span><span class="w">                           </span><span class="c1"># Required: storage size</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">managed-csi-premium</span><span class="w">         </span><span class="c1"># Optional: defaults to Kubernetes default StorageClass</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="nt">persistentVolumeReclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Retain</span><span class="w">     </span><span class="c1"># Optional: Retain (default) or Delete</span>
-</code></pre></div>
-<p>For the full field reference, see <a href="../../api-reference/#storageconfiguration">StorageConfiguration</a> in the API Reference.</p>
-<h2 id="disk-size-pvcsize">Disk Size (<code>pvcSize</code>)<a class="headerlink" href="#disk-size-pvcsize" title="Permanent link">&para;</a></h2>
-<p>The <code>pvcSize</code> field sets how much disk space each DocumentDB instance gets. This is set at DocumentDB cluster creation time. Online resizing is <strong>coming soon</strong> — see <a href="https://github.com/documentdb/documentdb-kubernetes-operator/issues/298">#298</a> for tracking.</p>
-<h2 id="reclaim-policy-persistentvolumereclaimpolicy">Reclaim Policy (<code>persistentVolumeReclaimPolicy</code>)<a class="headerlink" href="#reclaim-policy-persistentvolumereclaimpolicy" title="Permanent link">&para;</a></h2>
-<p>The <code>persistentVolumeReclaimPolicy</code> field controls what happens to your data when a DocumentDB cluster is deleted:</p>
+<p>Restoring a deleted DocumentDB cluster recovers your data after accidental or unplanned DocumentDB cluster removal. Acting quickly matters — retained PersistentVolumes preserve data up to the moment of deletion, while backups restore to the point in time they were taken.</p>
+<p>When a DocumentDB cluster is deleted, there are two paths to recovery:</p>
 <table>
 <thead>
 <tr>
-<th>Policy</th>
-<th>Behavior</th>
+<th>Method</th>
+<th>Requires</th>
+<th>Data Freshness</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>Retain</code> (default)</td>
-<td>Data is preserved after DocumentDB deletion. <strong>Recommended for production.</strong></td>
+<td><strong>Backup recovery</strong></td>
+<td>A <code>Backup</code> resource in <code>completed</code> state</td>
+<td>Point-in-time (when backup was taken)</td>
 </tr>
 <tr>
-<td><code>Delete</code></td>
-<td>Data is permanently deleted with the DocumentDB cluster. Suitable for development.</td>
+<td><strong>PersistentVolume recovery</strong></td>
+<td>PV with <code>persistentVolumeReclaimPolicy: Retain</code></td>
+<td>Latest (up to the moment of deletion)</td>
 </tr>
 </tbody>
 </table>
-<p>With <code>Retain</code>, you can recover data even after the DocumentDB cluster is gone. See <a href="../../operations/restore-deleted-cluster/#method-2-restore-from-retained-persistentvolume">Restore from Retained PersistentVolume</a> for restore steps.</p>
-<h2 id="storage-classes-storageclass">Storage Classes (<code>storageClass</code>)<a class="headerlink" href="#storage-classes-storageclass" title="Permanent link">&para;</a></h2>
-<p>The <code>storageClass</code> field selects which type of underlying disk (e.g., SSD vs HDD) to provision. See <a href="https://kubernetes.io/docs/concepts/storage/storage-classes/">Kubernetes StorageClass</a> for details. If you don't specify one, Kubernetes uses the default StorageClass in your Kubernetes cluster.</p>
-<p>To see available StorageClasses and which one is the default:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
-</code></pre></div>
-<p>The default is marked with <code>(default)</code> in the output.</p>
-<h2 id="disk-encryption">Disk Encryption<a class="headerlink" href="#disk-encryption" title="Permanent link">&para;</a></h2>
-<p>Disk encryption protects your data at rest — if someone gains physical access to the underlying storage, the data is unreadable without the encryption key. Most cloud providers enable this by default, but EKS requires explicit configuration.</p>
-<table>
-<thead>
-<tr>
-<th>Provider</th>
-<th>Default Encryption</th>
-<th>Customer-Managed Keys</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>AKS</strong></td>
-<td>✅ Enabled (platform-managed keys)</td>
-<td><a href="https://learn.microsoft.com/azure/aks/azure-disk-customer-managed-keys">Azure Disk Encryption with CMK</a></td>
-</tr>
-<tr>
-<td><strong>GKE</strong></td>
-<td>✅ Enabled (Google-managed keys)</td>
-<td><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">CMEK for GKE persistent disks</a></td>
-</tr>
-<tr>
-<td><strong>EKS</strong></td>
-<td>❌ <strong>Not enabled by default</strong></td>
-<td><a href="https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html">EBS CSI driver encryption</a> — set <code>encrypted: "true"</code> in StorageClass</td>
-</tr>
-</tbody>
-</table>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>For production on EKS, always create a StorageClass with <code>encrypted: "true"</code> to ensure data at rest is protected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage.k8s.io/v1</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">StorageClass</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs-sc-encrypted</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">provisioner</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ebs.csi.aws.com</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gp3</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">encrypted</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="c1"># kmsKeyId: arn:aws:kms:&lt;region&gt;:&lt;account-id&gt;:key/&lt;key-id&gt;  # Optional: customer-managed key</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">reclaimPolicy</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Delete</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">volumeBindingMode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WaitForFirstConsumer</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">allowVolumeExpansion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>PV recovery preserves data up to the moment of deletion, while backup recovery restores to the point in time when the backup was taken. If both are available, PV recovery provides more recent data.</p>
 </div>
-<h2 id="persistentvolume-security">PersistentVolume Security<a class="headerlink" href="#persistentvolume-security" title="Permanent link">&para;</a></h2>
-<p>As a defense-in-depth measure, the operator automatically applies security-hardening mount options to all DocumentDB volumes. These prevent common attack vectors even if a container is compromised:</p>
-<table>
-<thead>
-<tr>
-<th>Mount Option</th>
-<th>What it prevents</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>nodev</code></td>
-<td>Blocks creation of device files that could access host hardware</td>
-</tr>
-<tr>
-<td><code>nosuid</code></td>
-<td>Blocks privilege escalation via setuid/setgid binaries</td>
-</tr>
-<tr>
-<td><code>noexec</code></td>
-<td>Blocks execution of malicious binaries written to the data volume</td>
-</tr>
-</tbody>
-</table>
+<h2 id="method-1-restore-from-backup">Method 1: Restore from Backup<a class="headerlink" href="#method-1-restore-from-backup" title="Permanent link">&para;</a></h2>
+<p>If you have a <code>Backup</code> resource in <code>completed</code> status, follow the restore procedure in <a href="../backup-and-restore/#restore-from-backup">Backup and Restore — Restore from Backup</a>.</p>
+<h2 id="method-2-restore-from-retained-persistentvolume">Method 2: Restore from Retained PersistentVolume<a class="headerlink" href="#method-2-restore-from-retained-persistentvolume" title="Permanent link">&para;</a></h2>
+<p>Use this method if your deleted DocumentDB cluster had <code>persistentVolumeReclaimPolicy: Retain</code> configured (this is the default). This approach recovers data up to the moment of deletion.</p>
+<h3 id="step-1-find-the-retained-pv">Step 1: Find the Retained PV<a class="headerlink" href="#step-1-find-the-retained-pv" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pv<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;,documentdb.io/namespace<span class="o">=</span>&lt;namespace&gt;
+</code></pre></div>
+<p>Example output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pvc-abc123-def456-789                      10Gi       RWO            Retain           Released   default/data-my-cluster-1
+</code></pre></div>
+<p>The PV should be in <code>Released</code> or <code>Available</code> status.</p>
+<h3 id="step-2-create-a-new-documentdb-cluster-with-pv-recovery">Step 2: Create a New DocumentDB Cluster with PV Recovery<a class="headerlink" href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" title="Permanent link">&para;</a></h3>
+<div class="highlight"><span class="filename">restore-from-pv.yaml</span><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-recovered-cluster</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;namespace&gt;</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">documentDbCredentialSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-credentials</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;original-storage-class&gt;</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">exposeViaService</span><span class="p">:</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="nt">serviceType</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ClusterIP</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">  </span><span class="nt">bootstrap</span><span class="p">:</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">    </span><span class="nt">recovery</span><span class="p">:</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">      </span><span class="nt">persistentVolume</span><span class="p">:</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pvc-abc123-def456-789</span><span class="w">  </span><span class="c1"># The retained PV name</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>restore-from-pv.yaml
+</code></pre></div>
+<h3 id="step-3-verify-the-recovery">Step 3: Verify the Recovery<a class="headerlink" href="#step-3-verify-the-recovery" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Wait for the DocumentDB cluster to be ready</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-recovered-cluster<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-w
+</code></pre></div>
+<p>Once the status shows <code>Cluster in healthy state</code>, connect and verify your data. See <a href="../../configuration/networking/#connect-with-mongosh">Connect with mongosh</a> for connection instructions.</p>
+<h3 id="step-4-clean-up-the-source-pv">Step 4: Clean Up the Source PV<a class="headerlink" href="#step-4-clean-up-the-source-pv" title="Permanent link">&para;</a></h3>
+<p>After confirming the recovery is successful, delete the source PV:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>pv<span class="w"> </span>pvc-abc123-def456-789
+</code></pre></div>
 
 
 
