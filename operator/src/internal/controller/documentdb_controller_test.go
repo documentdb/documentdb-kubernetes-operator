@@ -2505,7 +2505,10 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
 
-		It("should emit warning and skip when explicit schemaVersion exceeds binary version", func() {
+		It("should skip when explicit schemaVersion exceeds binary version", func() {
+			// Note: In production, the validating webhook rejects schemaVersion > binary
+			// at admission time. This test verifies the controller gracefully handles the
+			// case as a no-op (defense-in-depth).
 			cluster := &cnpgv1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
@@ -2638,83 +2641,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls).To(HaveLen(1))
 		})
 
-		It("should block image rollback when new image version is below installed schema version", func() {
-			// Current cluster has old image
-			cluster := &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      clusterName,
-					Namespace: clusterNamespace,
-				},
-				Spec: cnpgv1.ClusterSpec{
-					PostgresConfiguration: cnpgv1.PostgresConfiguration{
-						Extensions: []cnpgv1.ExtensionConfiguration{
-							{
-								Name: "documentdb",
-								ImageVolumeSource: corev1.ImageVolumeSource{
-									Reference: "ghcr.io/documentdb/documentdb:0.110.0",
-								},
-							},
-						},
-					},
-				},
-				Status: cnpgv1.ClusterStatus{
-					CurrentPrimary: "test-cluster-1",
-					InstancesStatus: map[cnpgv1.PodStatus][]string{
-						cnpgv1.PodHealthy: {"test-cluster-1"},
-					},
-				},
-			}
-
-			// Desired cluster has OLDER image (rollback attempt)
-			desiredCluster := cluster.DeepCopy()
-			desiredCluster.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference = "ghcr.io/documentdb/documentdb:0.109.0"
-
-			// Schema is already at 0.110.0 (ALTER EXTENSION was previously applied)
-			documentdb := &dbpreview.DocumentDB{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-documentdb",
-					Namespace: clusterNamespace,
-				},
-				Status: dbpreview.DocumentDBStatus{
-					SchemaVersion: "0.110.0",
-				},
-			}
-
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
-				Build()
-
-			sqlCallCount := 0
-			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					sqlCallCount++
-					return "", nil
-				},
-			}
-
-			err := reconciler.upgradeDocumentDBIfNeeded(ctx, cluster, desiredCluster, documentdb)
-			Expect(err).ToNot(HaveOccurred())
-
-			// No SQL should have been called — image patch was blocked
-			Expect(sqlCallCount).To(Equal(0))
-
-			// Verify the CNPG cluster was NOT patched (extension image unchanged)
-			updatedCluster := &cnpgv1.Cluster{}
-			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: clusterNamespace}, updatedCluster)).To(Succeed())
-			Expect(updatedCluster.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference).To(Equal("ghcr.io/documentdb/documentdb:0.110.0"))
-
-			// Verify ImageRollbackBlocked warning event was emitted
-			Expect(recorder.Events).To(HaveLen(1))
-			event := <-recorder.Events
-			Expect(event).To(ContainSubstring("ImageRollbackBlocked"))
-			Expect(event).To(ContainSubstring("0.109.0"))
-			Expect(event).To(ContainSubstring("0.110.0"))
-		})
+		// Note: Image rollback blocking is now enforced by the validating webhook at
+		// admission time. The controller no longer needs to check for this case.
 	})
 
 	Describe("updateImageStatus", func() {

@@ -853,41 +853,8 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return fmt.Errorf("failed to build image patch operations: %w", err)
 	}
 
-	// Step 1b: Block extension image rollback below installed schema version.
-	// Once ALTER EXTENSION UPDATE has run, the schema is irreversible. Running an older
-	// binary against a newer schema is untested and may cause data corruption.
-	if extensionUpdated && documentdb.Status.SchemaVersion != "" {
-		// Extract the version tag from the desired extension image reference
-		desiredExtImage := ""
-		for _, ext := range desiredCluster.Spec.PostgresConfiguration.Extensions {
-			if ext.Name == "documentdb" {
-				desiredExtImage = ext.ImageVolumeSource.Reference
-				break
-			}
-		}
-		if desiredExtImage != "" {
-			// Extract tag from image reference (e.g., "ghcr.io/.../documentdb:0.112.0" → "0.112.0")
-			if tagIdx := strings.LastIndex(desiredExtImage, ":"); tagIdx >= 0 {
-				newTag := desiredExtImage[tagIdx+1:]
-				// Convert both to extension format for comparison
-				newExtVersion := util.SemverToExtensionVersion(newTag)
-				schemaExtVersion := util.SemverToExtensionVersion(documentdb.Status.SchemaVersion)
-				cmp, err := util.CompareExtensionVersions(newExtVersion, schemaExtVersion)
-				if err == nil && cmp < 0 {
-					msg := fmt.Sprintf(
-						"Image rollback blocked: requested image version %s is older than installed schema version %s. "+
-							"ALTER EXTENSION has no downgrade path — running an older binary with a newer schema may cause data corruption. "+
-							"To recover, restore from backup or update to a version >= %s.",
-						newTag, documentdb.Status.SchemaVersion, documentdb.Status.SchemaVersion)
-					logger.Info(msg)
-					if r.Recorder != nil {
-						r.Recorder.Event(documentdb, corev1.EventTypeWarning, "ImageRollbackBlocked", msg)
-					}
-					return nil
-				}
-			}
-		}
-	}
+	// Note: Image rollback below installed schema version is blocked by the validating
+	// webhook at admission time. The controller trusts that persisted specs are valid.
 
 	// Step 2: Apply patch if any images need updating
 	if len(patchOps) > 0 {
@@ -1092,11 +1059,12 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 		return binaryVersion, "ALTER EXTENSION documentdb UPDATE"
 
 	default:
-		// Explicit version: validate and update to that specific version
-		// Convert semver ("0.112.0") to pg extension format ("0.112-0") for comparison
+		// Explicit version: update to that specific version.
+		// Note: schemaVersion <= binary version is enforced by the validating webhook at
+		// admission time. This is a defense-in-depth guard.
 		targetPgVersion := util.SemverToExtensionVersion(specSchemaVersion)
 
-		// Validate: target must not exceed binary version
+		// Guard: target must not exceed binary version
 		targetCmp, err := util.CompareExtensionVersions(targetPgVersion, binaryVersion)
 		if err != nil {
 			logger.Error(err, "Failed to compare target schema version with binary version",
@@ -1105,18 +1073,13 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 			return "", ""
 		}
 		if targetCmp > 0 {
-			msg := fmt.Sprintf(
-				"Requested schema version %s exceeds binary version %s. "+
-					"Schema version must be <= binary version. Skipping schema update.",
-				specSchemaVersion, util.ExtensionVersionToSemver(binaryVersion))
-			logger.Info(msg)
-			if r.Recorder != nil {
-				r.Recorder.Event(documentdb, corev1.EventTypeWarning, "SchemaVersionExceedsBinary", msg)
-			}
+			logger.Info("Skipping schema update: schemaVersion exceeds binary version (should have been rejected by webhook)",
+				"schemaVersion", specSchemaVersion,
+				"binaryVersion", util.ExtensionVersionToSemver(binaryVersion))
 			return "", ""
 		}
 
-		// Validate: target must be > installed version (otherwise no-op)
+		// Check: target must be > installed version (otherwise no-op)
 		installedCmp, err := util.CompareExtensionVersions(targetPgVersion, installedVersion)
 		if err != nil {
 			logger.Error(err, "Failed to compare target schema version with installed version",

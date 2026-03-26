@@ -116,10 +116,10 @@ func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbprevie
 		return nil
 	}
 
-	schemaPg := util.SemverToExtensionVersion(db.Spec.SchemaVersion)
-	binaryPg := util.SemverToExtensionVersion(binaryVersion)
+	schemaExtensionVersion := util.SemverToExtensionVersion(db.Spec.SchemaVersion)
+	binaryExtensionVersion := util.SemverToExtensionVersion(binaryVersion)
 
-	cmp, err := util.CompareExtensionVersions(schemaPg, binaryPg)
+	cmp, err := util.CompareExtensionVersions(schemaExtensionVersion, binaryExtensionVersion)
 	if err != nil {
 		// If we can't parse versions, let it through — controller will catch it
 		return nil
@@ -166,10 +166,10 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 		return nil
 	}
 
-	newPg := util.SemverToExtensionVersion(newBinaryVersion)
-	schemaPg := util.SemverToExtensionVersion(installedSchemaVersion)
+	newBinaryExtensionVersion := util.SemverToExtensionVersion(newBinaryVersion)
+	schemaExtensionVersion := util.SemverToExtensionVersion(installedSchemaVersion)
 
-	cmp, err := util.CompareExtensionVersions(newPg, schemaPg)
+	cmp, err := util.CompareExtensionVersions(newBinaryExtensionVersion, schemaExtensionVersion)
 	if err != nil {
 		return nil
 	}
