@@ -29,6 +29,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/internal/controller"
+	webhookhandler "github.com/documentdb/documentdb-operator/internal/webhook"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -247,6 +248,12 @@ func main() {
 	}
 
 	// +kubebuilder:scaffold:builder
+
+	// Register the DocumentDB validating webhook
+	if err = (&webhookhandler.DocumentDBValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DocumentDB")
+		os.Exit(1)
+	}
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
