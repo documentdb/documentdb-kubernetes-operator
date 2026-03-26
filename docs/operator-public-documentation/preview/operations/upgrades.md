@@ -114,9 +114,9 @@ Updating `spec.documentDBVersion` upgrades **both** the DocumentDB extension and
 
 ### Pre-Upgrade Checklist
 
-- [ ] **Check the CHANGELOG** — review release notes for breaking changes.
-- [ ] **Verify DocumentDB cluster health** — ensure all instances are running and healthy.
-- [ ] **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before upgrading.
+1. **Check the CHANGELOG** — review release notes for breaking changes.
+2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy.
+3. **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before upgrading.
 
 ### Step 1: Update the DocumentDB Version
 
