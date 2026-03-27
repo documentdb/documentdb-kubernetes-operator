@@ -58,19 +58,17 @@ if [ "$BUILD_CHART" == true ]; then
   fi
 else
   echo "Installing from OCI registry (requires helm v3.8+)..."
+  helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
+  helm repo update
   if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
     echo "Using values file: $VALUES_FILE"
-    helm upgrade --install documentdb-operator \
-      oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator \
-      --version 0.0.1 \
+    helm upgrade --install documentdb-operator documentdb/documentdb-operator \
       --namespace documentdb-operator \
       --kube-context "$HUB_CLUSTER" \
       --create-namespace \
       --values "$VALUES_FILE"
   else
-    helm upgrade --install documentdb-operator \
-      oci://ghcr.io/microsoft/documentdb-kubernetes-operator/documentdb-operator \
-      --version 0.0.1 \
+    helm upgrade --install documentdb-operator documentdb/documentdb-operator \
       --namespace documentdb-operator \
       --kube-context "$HUB_CLUSTER" \
       --create-namespace
