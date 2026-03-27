@@ -256,6 +256,11 @@ kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion
 
 ### Rollback and Recovery
 
+Two rules govern rollback:
+
+1. **Schema cannot be rolled back.** `ALTER EXTENSION UPDATE` modifies database catalog tables permanently. There is no `ALTER EXTENSION DOWNGRADE`.
+2. **`documentDBVersion` cannot be set below `status.schemaVersion`.** The operator blocks this because running an older binary against a newer schema is untested and may cause data corruption.
+
 Whether you can roll back depends on whether the schema has been updated:
 
 === "Schema not yet updated (rollback safe)"
@@ -273,11 +278,14 @@ Whether you can roll back depends on whether the schema has been updated:
     kubectl apply -f documentdb.yaml
     ```
 
-=== "Schema already updated (rollback blocked)"
+=== "Schema already updated (restore from backup)"
 
-    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied and **cannot be reversed**. The operator **blocks** any attempt to set `documentDBVersion` to a version lower than the installed schema version, because running an older binary against a newer schema may cause data corruption.
+    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied. At this point:
 
-    To recover: Use the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist) to restore the DocumentDB cluster to its pre-upgrade state. See [Backup and Restore](backup-and-restore.md) for instructions.
+    - You **cannot** revert `schemaVersion` — the database schema change is permanent.
+    - You **cannot** set `documentDBVersion` to a version older than `status.schemaVersion` — the operator rejects it.
+
+    To recover: restore from the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist). See [Backup and Restore](backup-and-restore.md) for instructions.
 
 !!! tip
     This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting `schemaVersion`.
