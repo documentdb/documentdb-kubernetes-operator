@@ -47,8 +47,8 @@ helm search repo documentdb/documentdb-operator --versions
 Helm only installs CRDs on initial `helm install` — it does **not** update them on `helm upgrade`. If the new operator version introduces CRD schema changes, you must apply them manually first:
 
 ```bash
-# Set this to the release tag you are upgrading to (e.g., v0.2.0)
-TARGET_VERSION=v0.2.0
+# Set this to the release tag you are upgrading to (e.g., 0.2.0)
+TARGET_VERSION=0.2.0
 
 kubectl apply --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
