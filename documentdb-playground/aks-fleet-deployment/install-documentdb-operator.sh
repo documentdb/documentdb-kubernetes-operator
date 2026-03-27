@@ -57,7 +57,7 @@ if [ "$BUILD_CHART" == true ]; then
       --create-namespace
   fi
 else
-  echo "Installing from OCI registry (requires helm v3.8+)..."
+  echo "Installing from Helm repository 'documentdb' (chart documentdb/documentdb-operator)..."
   helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
   helm repo update
   if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
