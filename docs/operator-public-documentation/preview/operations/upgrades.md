@@ -181,6 +181,44 @@ Choose the approach that matches your use case:
     !!! tip
         On subsequent upgrades, just update `documentDBVersion` again. The schema stays pinned at the previous `schemaVersion` value until you update it.
 
+=== "Production (rolling safety gap)"
+
+    Keep the binary always one version ahead of the schema. This ensures you can roll back at any time because the running binary has already been validated with the current schema.
+
+    **Example:** Your cluster is at binary `0.110.0` with schema `0.110.0`. A new version `0.112.0` is available.
+
+    **Step 1: Upgrade the binary and finalize the *previous* schema together.**
+
+    ```yaml title="documentdb.yaml"
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      documentDBVersion: "0.112.0"     # upgrade binary to new version
+      schemaVersion: "0.110.0"          # finalize schema to current (previous) version
+    ```
+
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
+
+    Now the binary is `0.112.0` and the schema is `0.110.0`. The new binary is designed to work with both the old and new schema, so this is safe.
+
+    **Step 2: Validate.** Run your tests. If something goes wrong, revert `documentDBVersion` to `0.110.0` — the schema is still at `0.110.0`, so rollback is safe.
+
+    **On the next upgrade** (e.g., `0.114.0`), repeat the pattern:
+
+    ```yaml
+    spec:
+      documentDBVersion: "0.114.0"     # upgrade binary to next version
+      schemaVersion: "0.112.0"          # finalize schema to previous binary version
+    ```
+
+    !!! info
+        This pattern keeps a permanent rollback window. The schema is always one version behind the binary, so you never commit a schema change until the *next* binary has proven stable with it.
+
 === "Development (auto mode)"
 
     Update both the binary and schema in one step:
