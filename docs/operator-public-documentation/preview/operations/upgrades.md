@@ -263,9 +263,9 @@ Two rules govern rollback:
 
 Whether you can roll back depends on whether the schema has been updated:
 
-=== "Schema not yet updated (rollback safe)"
+=== "Roll back binary only (documentDBVersion ≥ schemaVersion)"
 
-    If `status.schemaVersion` still shows the **previous** version, the schema migration has not run yet. You can safely roll back by reverting `spec.documentDBVersion`:
+    If `status.schemaVersion` still shows the **previous** version, the schema migration has not run yet. You can safely roll back by reverting `spec.documentDBVersion` to any version that is ≥ `status.schemaVersion`:
 
     ```bash
     # Verify the schema version is unchanged
@@ -278,12 +278,12 @@ Whether you can roll back depends on whether the schema has been updated:
     kubectl apply -f documentdb.yaml
     ```
 
-=== "Schema already updated (restore from backup)"
+=== "Roll back both binary and schema (restore from backup)"
 
     If `status.schemaVersion` shows the **new** version, the schema migration has already been applied. At this point:
 
     - You **cannot** revert `schemaVersion` — the database schema change is permanent.
-    - You **cannot** set `documentDBVersion` to a version older than `status.schemaVersion` — the operator rejects it.
+    - You **cannot** set `documentDBVersion` below `status.schemaVersion` — the operator rejects it.
 
     To recover: restore from the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist). See [Backup and Restore](backup-and-restore.md) for instructions.
 
