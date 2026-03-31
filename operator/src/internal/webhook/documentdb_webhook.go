@@ -121,8 +121,11 @@ func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbprevie
 
 	cmp, err := util.CompareExtensionVersions(schemaExtensionVersion, binaryExtensionVersion)
 	if err != nil {
-		// If we can't parse versions, let it through — controller will catch it
-		return nil
+		return field.ErrorList{field.Invalid(
+			field.NewPath("spec", "schemaVersion"),
+			db.Spec.SchemaVersion,
+			fmt.Sprintf("cannot validate schemaVersion: version comparison failed: %v", err),
+		)}
 	}
 	if cmp > 0 {
 		return field.ErrorList{field.Invalid(
@@ -171,7 +174,10 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 
 	cmp, err := util.CompareExtensionVersions(newBinaryExtensionVersion, schemaExtensionVersion)
 	if err != nil {
-		return nil
+		return field.ErrorList{field.Forbidden(
+			field.NewPath("spec"),
+			fmt.Sprintf("cannot validate image rollback: version comparison failed: %v", err),
+		)}
 	}
 	if cmp < 0 {
 		return field.ErrorList{field.Forbidden(
@@ -192,11 +198,42 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 
 // resolveBinaryVersion extracts the effective binary version from a DocumentDB spec.
 // Priority: documentDBImage tag > documentDBVersion > "" (unknown).
+// Digest-only references (e.g., "image@sha256:...") are not parseable as versions
+// and return "".
 func resolveBinaryVersion(db *dbpreview.DocumentDB) string {
 	if db.Spec.DocumentDBImage != "" {
-		if tagIdx := strings.LastIndex(db.Spec.DocumentDBImage, ":"); tagIdx >= 0 {
-			return db.Spec.DocumentDBImage[tagIdx+1:]
+		ref := db.Spec.DocumentDBImage
+		// Ignore digest-only references — they don't carry a version tag
+		if strings.Contains(ref, "@sha256:") {
+			return db.Spec.DocumentDBVersion
+		}
+		if tagIdx := strings.LastIndex(ref, ":"); tagIdx >= 0 {
+			tag := ref[tagIdx+1:]
+			// Extract leading semver (X.Y.Z) from tags like "0.112.0-amd64"
+			if semver := extractSemver(tag); semver != "" {
+				return semver
+			}
 		}
 	}
 	return db.Spec.DocumentDBVersion
+}
+
+// extractSemver returns the leading "X.Y.Z" portion from a tag string,
+// or "" if the tag doesn't start with a valid semver pattern.
+func extractSemver(tag string) string {
+	// Match digits.digits.digits at start of string
+	parts := strings.SplitN(tag, ".", 3)
+	if len(parts) < 3 {
+		return ""
+	}
+	// Third part may have a suffix (e.g., "0-amd64"), take only digits
+	thirdPart := parts[2]
+	i := 0
+	for i < len(thirdPart) && thirdPart[i] >= '0' && thirdPart[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return ""
+	}
+	return parts[0] + "." + parts[1] + "." + thirdPart[:i]
 }

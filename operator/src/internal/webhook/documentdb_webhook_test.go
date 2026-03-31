@@ -96,10 +96,11 @@ var _ = Describe("schema version validation", func() {
 		Expect(result).To(BeEmpty())
 	})
 
-	It("allows through when version comparison fails due to unparseable version", func() {
+	It("rejects when version comparison fails due to unparseable version", func() {
 		db := newTestDocumentDB("invalid", "0.112.0", "")
 		result := v.validateSchemaVersionNotExceedsBinary(db)
-		Expect(result).To(BeEmpty())
+		Expect(result).To(HaveLen(1))
+		Expect(result[0].Detail).To(ContainSubstring("version comparison failed"))
 	})
 })
 
@@ -159,12 +160,13 @@ var _ = Describe("image rollback validation", func() {
 		Expect(result).To(BeEmpty())
 	})
 
-	It("allows through when version comparison fails due to unparseable version", func() {
+	It("rejects when version comparison fails due to unparseable version", func() {
 		oldDB := newTestDocumentDB("invalid", "", "")
 		oldDB.Status.SchemaVersion = "invalid"
 		newDB := newTestDocumentDB("invalid", "", "")
 		result := v.validateImageRollback(newDB, oldDB)
-		Expect(result).To(BeEmpty())
+		Expect(result).To(HaveLen(1))
+		Expect(result[0].Detail).To(ContainSubstring("version comparison failed"))
 	})
 })
 
@@ -266,5 +268,43 @@ var _ = Describe("resolveBinaryVersion helper", func() {
 	It("returns empty when neither image nor version is set", func() {
 		db := newTestDocumentDB("", "", "")
 		Expect(resolveBinaryVersion(db)).To(BeEmpty())
+	})
+
+	It("extracts semver from tag with architecture suffix", func() {
+		db := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb:0.112.0-amd64")
+		Expect(resolveBinaryVersion(db)).To(Equal("0.112.0"))
+	})
+
+	It("falls back to documentDBVersion for digest-only references", func() {
+		db := newTestDocumentDB("0.112.0", "", "ghcr.io/documentdb/documentdb@sha256:abc123")
+		Expect(resolveBinaryVersion(db)).To(Equal("0.112.0"))
+	})
+
+	It("returns empty for digest-only reference with no documentDBVersion", func() {
+		db := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb@sha256:abc123")
+		Expect(resolveBinaryVersion(db)).To(BeEmpty())
+	})
+
+	It("handles image with port in registry and tag", func() {
+		db := newTestDocumentDB("", "", "localhost:5000/documentdb:0.112.0")
+		Expect(resolveBinaryVersion(db)).To(Equal("0.112.0"))
+	})
+})
+
+var _ = Describe("extractSemver helper", func() {
+	It("extracts clean semver", func() {
+		Expect(extractSemver("0.112.0")).To(Equal("0.112.0"))
+	})
+
+	It("extracts semver from tag with suffix", func() {
+		Expect(extractSemver("0.112.0-amd64")).To(Equal("0.112.0"))
+	})
+
+	It("returns empty for non-semver tag", func() {
+		Expect(extractSemver("latest")).To(BeEmpty())
+	})
+
+	It("returns empty for empty string", func() {
+		Expect(extractSemver("")).To(BeEmpty())
 	})
 })

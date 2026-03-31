@@ -1038,12 +1038,16 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 
 	switch {
 	case specSchemaVersion == "":
-		// Two-phase mode: schema stays at current version until user explicitly sets schemaVersion
-		logger.Info("Schema update available but not requested (two-phase mode). "+
+		// Two-phase mode: schema stays at current version until user explicitly sets schemaVersion.
+		// Use V(1) to avoid log spam — this fires every reconcile while upgrade is pending.
+		logger.V(1).Info("Schema update available but not requested (two-phase mode). "+
 			"Set spec.schemaVersion to finalize the upgrade.",
 			"binaryVersion", binaryVersion,
 			"installedVersion", installedVersion)
-		if r.Recorder != nil {
+		// Only emit the event when the schema upgrade is newly detected (avoids
+		// flooding the event stream on every reconcile loop). Kubernetes deduplicates
+		// events with the same reason+message, but skipping entirely is cleaner.
+		if r.Recorder != nil && documentdb.Status.SchemaVersion != util.ExtensionVersionToSemver(installedVersion) {
 			msg := fmt.Sprintf(
 				"Schema update available: binary version is %s, schema is at %s. "+
 					"Set spec.schemaVersion to %q or \"auto\" to finalize the upgrade.",

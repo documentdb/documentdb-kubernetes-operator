@@ -1081,7 +1081,13 @@ jobs:
         SCHEMA_BASELINE="${{ env.SCHEMA_BASELINE }}"
         
         # Determine the new schema version from the new extension image tag
-        NEW_SCHEMA_VERSION=$(echo "$NEW_EXTENSION" | sed 's/.*://')
+        # Strip any architecture suffix (e.g., "0.112.0-amd64" → "0.112.0")
+        RAW_TAG=$(echo "$NEW_EXTENSION" | sed 's/.*://')
+        NEW_SCHEMA_VERSION=$(echo "$RAW_TAG" | grep -oP '^\d+\.\d+\.\d+')
+        if [[ -z "$NEW_SCHEMA_VERSION" ]]; then
+          echo "✗ Could not extract semver from image tag: $RAW_TAG"
+          exit 1
+        fi
         echo "Baseline schema version: $SCHEMA_BASELINE"
         echo "Target schema version:   $NEW_SCHEMA_VERSION"
         
