@@ -131,8 +131,13 @@ Think of it as: **`documentDBVersion` installs the software, `schemaVersion` app
 
 ### Pre-Upgrade Checklist
 
-1. **Check the [CHANGELOG](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md)** — review release notes for breaking changes.
-2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy.
+1. **Check the [DocumentDB release notes](https://github.com/documentdb/documentdb/releases)** — review for breaking changes or new features.
+2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy:
+
+    ```bash
+    kubectl get documentdb my-cluster -n default
+    kubectl get pods -n default -l documentdb.io/cluster=my-cluster
+    ```
 3. **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before upgrading.
 
 ### Upgrade Walkthrough
