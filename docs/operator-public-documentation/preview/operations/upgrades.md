@@ -103,7 +103,7 @@ helm rollback documentdb-operator -n documentdb-operator
 ```
 
 !!! note
-    `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the release notes explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
+    `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the [release notes](https://github.com/documentdb/documentdb-kubernetes-operator/releases) explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
 
 ---
 
@@ -131,7 +131,7 @@ Think of it as: **`documentDBVersion` installs the software, `schemaVersion` app
 
 ### Pre-Upgrade Checklist
 
-1. **Check the CHANGELOG** — review release notes for breaking changes.
+1. **Check the [CHANGELOG](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md)** — review release notes for breaking changes.
 2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy.
 3. **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before upgrading.
 
