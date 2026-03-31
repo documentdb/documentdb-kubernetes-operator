@@ -15,19 +15,19 @@ Upgrades keep your DocumentDB deployment current with the latest features, secur
 
 A DocumentDB deployment has two independently upgradable components:
 
-| Component | What Changes | How to Trigger |
+| Component | What Changes | How to Upgrade |
 |-----------|-------------|----------------|
 | **DocumentDB Operator** | Operator binary + bundled CloudNative-PG | `helm upgrade` |
-| **DocumentDB Clusters** | Extension binary + gateway sidecar + database schema | Update `spec.documentDBVersion` and `spec.schemaVersion` |
-
-!!! info
-    The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
+| **DocumentDB Clusters** | Extension binary + gateway sidecar + database schema | Update `spec.documentDBVersion` and optionally `spec.schemaVersion` |
 
 ---
 
 ## Upgrading the Operator
 
 The operator is deployed via Helm. Upgrading it does **not** restart your DocumentDB cluster pods or change any cluster components.
+
+!!! info
+    The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
 
 ### Step 1: Update the Helm Repository
 
@@ -109,7 +109,7 @@ helm rollback documentdb-operator -n documentdb-operator
 
 ## Upgrading DocumentDB Clusters
 
-Upgrading DocumentDB involves two distinct steps that can be performed together or separately:
+Upgrading a DocumentDB cluster has two dimensions: the **binary** (container images) and the **schema** (database catalog). You control each independently:
 
 | Field | What It Does | Reversible? |
 |-------|-------------|-------------|
@@ -125,7 +125,7 @@ Think of it as: **`documentDBVersion` installs the software, `schemaVersion` app
 
 | `spec.schemaVersion` | Behavior | Recommended For |
 |----------------------|----------|-----------------|
-| *(not set)* — default | Binary upgrades. Schema stays at its current version until you explicitly set `schemaVersion`. | **Production** — gives you a rollback-safe window before committing the schema change. |
+| *(not set)* — default | Only the binary upgrades. The schema stays at its current version until you explicitly set `schemaVersion`. | **Production** — gives you a rollback-safe window before committing the schema change. |
 | `"auto"` | Schema updates automatically whenever the binary version changes. | **Development and testing** — simple, one-step upgrades. |
 | Explicit version (e.g., `"0.112.0"`) | Schema updates to exactly that version. | **Controlled rollouts** — you choose when and what version to finalize. |
 
@@ -204,7 +204,7 @@ Choose the approach that matches your use case:
     kubectl apply -f documentdb.yaml
     ```
 
-    Now the binary is `0.111.0` and the schema is `0.110.0`. The new binary is designed to work with both the old and new schema, so this is safe.
+    Now the binary is `0.111.0` and the schema is `0.110.0`. Each new binary version is backward-compatible with the previous schema version, so this is safe.
 
     **Step 2: Validate.** Run your tests. If something goes wrong, revert `documentDBVersion` to `0.110.0` — the schema is still at `0.110.0`, so rollback is safe.
 
@@ -296,9 +296,11 @@ Whether you can roll back depends on whether the schema has been updated:
 
 When running DocumentDB across multiple regions or clusters, use the two-phase upgrade pattern across all regions:
 
-1. **Upgrade the binary in all regions first.** Update `spec.documentDBVersion` in every cluster. Validate that all regions are healthy and replication is working correctly with the new binary.
-2. **Finalize the schema in all regions.** Once every region is running the new binary successfully, set `spec.schemaVersion` across all clusters. This keeps a rollback-safe window — if any region fails the binary upgrade, you can revert `documentDBVersion` everywhere before any schema change is committed.
-3. **Back up before each region's upgrade.** Create a backup in each region before starting its upgrade.
+1. **Back up every region.** Create a backup in each region before starting.
+2. **Upgrade the binary in all regions.** Update `spec.documentDBVersion` in every cluster. Validate that all regions are healthy and replication is working correctly with the new binary.
+3. **Finalize the schema in all regions.** Once every region is running the new binary successfully, set `spec.schemaVersion` across all clusters.
+
+This keeps a rollback-safe window — if any region fails the binary upgrade, you can revert `documentDBVersion` everywhere before any schema change is committed.
 
 !!! note
     Multi-region upgrade orchestration is performed manually — the operator manages individual clusters and does not coordinate across regions automatically.
