@@ -290,17 +290,6 @@ Whether you can roll back depends on whether the schema has been updated:
 !!! tip
     This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting `schemaVersion`.
 
-### How It Works Internally
-
-1. You update `spec.documentDBVersion`.
-2. The operator updates the extension and gateway container images.
-3. The underlying cluster manager performs a **rolling update**: replicas are restarted first one at a time, then the primary is updated via **switchover** — a healthy replica is promoted to primary, and the old primary restarts as a replica. This minimizes downtime.
-4. After the primary pod is healthy, the operator checks `spec.schemaVersion`:
-    - **Not set (default)**: The operator **skips** the schema migration and emits a `SchemaUpdateAvailable` event. You can safely roll back by reverting `documentDBVersion`.
-    - **`"auto"`**: The operator runs `ALTER EXTENSION documentdb UPDATE` to update the schema to match the binary. This is irreversible.
-    - **Explicit version**: The operator runs `ALTER EXTENSION documentdb UPDATE TO '<version>'` to update to that exact version. This is irreversible.
-5. The operator records the installed schema version in `status.schemaVersion`.
-
 ---
 
 ## Multi-Region Upgrades
