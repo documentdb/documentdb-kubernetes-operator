@@ -11,12 +11,14 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
 LOCATION="${LOCATION:-westus2}"
 NODE_COUNT="${NODE_COUNT:-3}"
 NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
-KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34.3}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.35.0}"
 
 # DocumentDB Operator Configuration
 # For testing: update with your account/org if using a fork
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.3"
+# Optional: Pin specific versions (by default, installs latest)
+# OPERATOR_CHART_VERSION="0.2.0"    # Operator and sidecar image versions (matches Chart.appVersion)
+# DOCUMENTDB_VERSION="0.109.0"      # Database image version (matches values.yaml documentDbVersion)
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -391,26 +393,27 @@ Then run the script again with --install-operator"
         error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
     fi
     
-    # Install DocumentDB operator from OCI registry
-    log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+    # Install from GitHub Container Registry using OCI protocol
+    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
     helm install documentdb-operator \
         oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
         --namespace documentdb-operator \
         --create-namespace \
-        --set documentDbVersion=${OPERATOR_CHART_VERSION} \
-        --set image.documentdbk8soperator.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/operator \
-        --set image.sidecarinjector.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/sidecar \
         --wait \
         --timeout 10m
+    # To pin specific versions, add these options:
+    #   --version ${OPERATOR_CHART_VERSION}                    # Pin operator chart version (e.g., 0.2.0)
+    #   --set documentDbVersion=${DOCUMENTDB_VERSION}          # Pin database image version (e.g., 0.109.0)
+    # To use custom image repositories (e.g., for forks), add:
+    #   --set image.documentdbk8soperator.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/operator
+    #   --set image.sidecarinjector.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/sidecar
 
     if [ $? -eq 0 ]; then
-        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        success "DocumentDB operator installed successfully from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
     else
-        error "Failed to install DocumentDB operator from OCI registry. Please verify:
+        error "Failed to install DocumentDB operator. Please verify:
 - Your GitHub token has 'read:packages' scope
-- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
+- You have access to ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
     fi
     
     # Wait for operator to be ready
