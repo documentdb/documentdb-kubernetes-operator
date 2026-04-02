@@ -132,7 +132,7 @@ Interactive walkthrough that seeds jobs, watches scaling, drains jobs, and watch
 > (`documentdb-ns`) and the ScaledObject (`app`) are in different namespaces. If you deploy
 > everything in the same namespace, you can use a namespace-scoped `TriggerAuthentication` instead.
 
-> **Note:** The `mongodb/mongodb-community-server:8.0-ubuntu2404` image is used for the seed and
+> **Note:** The `mongo:8.0` image is used for the seed and
 > drain jobs because it includes `mongosh`. Any image with `mongosh` installed works.
 
 ## Cleanup

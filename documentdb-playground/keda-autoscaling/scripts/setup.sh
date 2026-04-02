@@ -1,10 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Configuration
 DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-ns}"
 DOCUMENTDB_NAME="${DOCUMENTDB_NAME:-keda-demo}"
 DOCUMENTDB_SECRET="${DOCUMENTDB_SECRET:-documentdb-credentials}"
+DOCUMENTDB_USER="${DOCUMENTDB_USER:-docdbadmin}"
+DOCUMENTDB_PASS="${DOCUMENTDB_PASS:-KedaDemo2024!}"
 APP_NAMESPACE="${APP_NAMESPACE:-app}"
 KEDA_NAMESPACE="${KEDA_NAMESPACE:-keda}"
 KEDA_VERSION="${KEDA_VERSION:-2.17.0}"
@@ -82,8 +84,8 @@ deploy_documentdb() {
     else
         kubectl create secret generic "$DOCUMENTDB_SECRET" \
             --namespace "$DOCUMENTDB_NAMESPACE" \
-            --from-literal=username=docdbadmin \
-            --from-literal=password='KedaDemo2024!'
+            --from-literal=username="$DOCUMENTDB_USER" \
+            --from-literal=password="$DOCUMENTDB_PASS"
     fi
 
     kubectl apply -f "${MANIFESTS_DIR}/documentdb-instance.yaml"
@@ -128,12 +130,25 @@ wait_for_documentdb() {
 create_keda_connection_secret() {
     log "Creating KEDA connection secrets..."
 
-    local user pass conn_string svc_name
-    user=$(kubectl get secret "$DOCUMENTDB_SECRET" -n "$DOCUMENTDB_NAMESPACE" -o jsonpath='{.data.username}' | base64 -d)
-    pass=$(kubectl get secret "$DOCUMENTDB_SECRET" -n "$DOCUMENTDB_NAMESPACE" -o jsonpath='{.data.password}' | base64 -d)
-    svc_name="documentdb-service-${DOCUMENTDB_NAME}.${DOCUMENTDB_NAMESPACE}.svc.cluster.local"
+    local raw_conn conn_string
 
-    conn_string="mongodb://${user}:${pass}@${svc_name}:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true"
+    # Get connection string from DocumentDB resource status.
+    # The status field contains embedded kubectl commands for credentials
+    # that are resolved via eval.
+    raw_conn=$(kubectl get documentdb "$DOCUMENTDB_NAME" -n "$DOCUMENTDB_NAMESPACE" \
+        -o jsonpath='{.status.connectionString}' 2>/dev/null) || true
+
+    if [ -z "$raw_conn" ]; then
+        error "Could not read status.connectionString from DocumentDB resource."
+        error "Ensure the DocumentDB instance is ready: kubectl get documentdb -n $DOCUMENTDB_NAMESPACE"
+        exit 1
+    fi
+
+    conn_string=$(eval echo "$raw_conn")
+
+    # KEDA's Go MongoDB driver requires tlsInsecure=true (not tlsAllowInvalidCertificates)
+    # for skipping both certificate AND hostname verification with self-signed certs.
+    conn_string=$(echo "$conn_string" | sed 's/tlsAllowInvalidCertificates=true/tlsInsecure=true/g')
 
     # Create in keda namespace (for ClusterTriggerAuthentication)
     kubectl create secret generic documentdb-keda-connection \

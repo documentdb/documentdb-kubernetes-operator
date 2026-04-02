@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 APP_NAMESPACE="${APP_NAMESPACE:-app}"
