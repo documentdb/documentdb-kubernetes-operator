@@ -29,24 +29,22 @@ kubectl exec -n "$NAMESPACE" "$OLLAMA_POD" -- ollama pull nomic-embed-text
 echo "Pulling qwen2.5:3b (LLM, ~1.9GB)..."
 kubectl exec -n "$NAMESPACE" "$OLLAMA_POD" -- ollama pull qwen2.5:3b
 
-# 3. Get DocumentDB connection details
+# 3. Get DocumentDB connection string from resource status
 echo ""
 echo "--- Step 3: DocumentDB connection ---"
-SVC_NAME="documentdb-service-${DOCUMENTDB_CLUSTER}"
-SVC_HOST="${SVC_NAME}.${DOCUMENTDB_NAMESPACE}.svc.cluster.local"
-# Try to extract credentials from the DocumentDB secret
-SECRET_NAME="${DOCUMENTDB_CLUSTER}-superuser"
-if kubectl get secret "$SECRET_NAME" -n "$DOCUMENTDB_NAMESPACE" &>/dev/null; then
-    DB_USER=$(kubectl get secret "$SECRET_NAME" -n "$DOCUMENTDB_NAMESPACE" -o jsonpath='{.data.username}' | base64 -d)
-    DB_PASS=$(kubectl get secret "$SECRET_NAME" -n "$DOCUMENTDB_NAMESPACE" -o jsonpath='{.data.password}' | base64 -d)
+RAW_CONN=$(kubectl get documentdb "$DOCUMENTDB_CLUSTER" -n "$DOCUMENTDB_NAMESPACE" \
+    -o jsonpath='{.status.connectionString}' 2>/dev/null) || true
+
+if [ -n "$RAW_CONN" ]; then
+    # The connection string contains embedded kubectl commands for credentials.
+    # eval resolves them into a usable URI.
+    MONGO_URI=$(eval echo "$RAW_CONN")
+    echo "Connection string retrieved from DocumentDB status."
 else
-    echo "Could not find secret $SECRET_NAME in namespace $DOCUMENTDB_NAMESPACE."
+    echo "Could not read status.connectionString from DocumentDB resource."
     echo "Please set MONGO_URI in $VALUES_FILE manually."
-    DB_USER="admin"
-    DB_PASS="CHANGEME"
+    MONGO_URI=""
 fi
-MONGO_URI="mongodb://${DB_USER}:${DB_PASS}@${SVC_HOST}:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
-echo "DocumentDB endpoint: ${SVC_HOST}:10260"
 
 # 4. Deploy LightRAG via Helm
 echo ""
