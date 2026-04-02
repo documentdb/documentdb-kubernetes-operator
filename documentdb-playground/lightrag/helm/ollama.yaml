@@ -1,0 +1,56 @@
+# Ollama deployment for LightRAG LLM and embedding inference.
+# After the pod is running, pull models with:
+#   OLLAMA_POD=$(kubectl get pod -l app=ollama -n lightrag -o jsonpath='{.items[0].metadata.name}')
+#   kubectl exec -n lightrag "$OLLAMA_POD" -- ollama pull nomic-embed-text
+#   kubectl exec -n lightrag "$OLLAMA_POD" -- ollama pull qwen2.5:3b
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lightrag
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: lightrag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        resources:
+          requests:
+            cpu: 500m
+            memory: 3Gi
+          limits:
+            cpu: "4"
+            memory: 4Gi
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+      volumes:
+      - name: ollama-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: lightrag
+spec:
+  selector:
+    app: ollama
+  ports:
+  - port: 11434
+    targetPort: 11434
+  type: ClusterIP
