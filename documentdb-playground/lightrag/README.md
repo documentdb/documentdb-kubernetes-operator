@@ -161,7 +161,30 @@ LightRAG's MongoDB storage assumes MongoDB Atlas features. This playground inclu
 | Basic CRUD operations | ✅ | ✅ | Works natively |
 | Aggregation pipelines | ✅ | ✅ | `$group`, `$match`, `$sort` work |
 
-The init container applies these patches automatically — no manual configuration is needed.
+### How the Init-Container Patches Work
+
+The Helm chart's `deployment.yaml` includes an init container (`patch-for-documentdb`) that runs before the main LightRAG container starts. It modifies LightRAG's MongoDB storage layer in-place to skip operations that are incompatible with DocumentDB.
+
+**What gets patched:**
+
+Three async methods in `lightrag/kg/mongo_impl.py` are stubbed out with an early `return`:
+
+| Method | Why it's patched |
+|---|---|
+| `create_and_migrate_indexes_if_not_exists` | Calls `createIndex` with collation and secondary indexes. DocumentDB rejects collation (`"not implemented yet"`) and hangs indefinitely on secondary index creation. |
+| `create_search_index_if_not_exists` | Calls `$listSearchIndexes` which DocumentDB doesn't support. While LightRAG catches the `PyMongoError` gracefully, skipping it avoids unnecessary error logs. |
+| `create_vector_index_if_not_exists` | Creates Atlas `$vectorSearch` indexes. Not applicable because this playground uses `NanoVectorDBStorage` (local) instead of `MongoVectorDBStorage`. |
+
+**How it works:**
+
+1. The init container shares the same image as the main LightRAG container.
+2. A Python script inserts `return` statements at the top of each method, effectively making them no-ops.
+3. Both code locations are patched — `/app/lightrag/` (dev install) and `/app/.venv/lib/python3.12/site-packages/lightrag/` (venv install) — because the LightRAG Docker image includes two copies.
+4. Bytecode caches (`__pycache__/mongo_impl*.pyc`) are cleared to prevent stale compiled code from being loaded.
+
+**Impact:** LightRAG operates normally without indexes. All CRUD, aggregation, and graph traversal operations work correctly. The only trade-off is that queries on large datasets may be slower without secondary indexes, which is acceptable for a playground.
+
+The patches are applied automatically — no manual configuration is needed.
 
 ## Verified Operations
 
