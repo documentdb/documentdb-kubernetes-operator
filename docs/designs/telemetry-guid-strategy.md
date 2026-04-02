@@ -105,15 +105,6 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 | Matches user mental model |  Yes |  No |
 | Telemetry continuity on recreate |  Yes |  No |
 
-### Recommendation
-
-**Option A (without UID)** is recommended for most telemetry use cases because:
-1. Users think of clusters by name, not by internal Kubernetes UIDs
-2. Recreating a cluster to fix issues should maintain telemetry continuity
-3. Aggregate telemetry doesn't usually need to distinguish cluster "versions"
-
-Use **Option B (with UID)** only if you need to track distinct resource lifecycles for debugging or auditing purposes.
-
 ## Comparison (UUID vs Deterministic Hash)
 
 ### UUID Approach
@@ -164,17 +155,9 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 - No persistence needed
 - Survives operator restarts
 
-## Recommendation
+## Implementation Examples
 
-**Use deterministic SHA256 hashing without UID (Option A)** for the following reasons:
-
-1. **Reliability**: No dependency on successful annotation persistence
-2. **Simplicity**: No additional Kubernetes API calls
-3. **Operator Restart Safe**: ID is recomputable without state
-4. **User Mental Model**: Same cluster name = same ID, as users expect
-5. **Telemetry Continuity**: Cluster recreations maintain history
-
-### Proposed Implementation
+### Option A Implementation (Without UID)
 
 ```go
 package telemetry
@@ -190,10 +173,7 @@ import (
 const hashPrefix = "documentdb-telemetry"
 
 // GenerateClusterID creates a deterministic telemetry ID for a DocumentDB cluster.
-// The ID is derived from namespace and name only - ensuring:
-// - Same cluster name always gets the same ID (survives operator restarts)
-// - Recreated clusters with same name maintain telemetry continuity
-// - ID matches user's mental model of cluster identity
+// The ID is derived from namespace and name only.
 func GenerateClusterID(obj client.Object) string {
     return generateHash("cluster", obj.GetNamespace(), obj.GetName())
 }
@@ -224,6 +204,35 @@ If migrating from UUID to deterministic hash:
 2. **Mitigation**: Could check for existing UUID annotation first, fall back to hash for new resources
 3. **Clean Break**: If telemetry history isn't critical, simply switch to deterministic hashing
 
+### Option B Implementation (With UID)
+
+```go
+package telemetry
+
+import (
+    "crypto/sha256"
+    "encoding/hex"
+    "fmt"
+    
+    "k8s.io/apimachinery/pkg/types"
+    "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const hashPrefix = "documentdb-telemetry"
+
+// GenerateClusterID creates a deterministic telemetry ID for a DocumentDB cluster.
+// The ID is derived from namespace, name, and UID.
+func GenerateClusterID(obj client.Object) string {
+    return generateHash("cluster", obj.GetNamespace(), obj.GetName(), obj.GetUID())
+}
+
+func generateHash(resourceType, namespace, name string, uid types.UID) string {
+    data := fmt.Sprintf("%s:%s:%s/%s/%s", hashPrefix, resourceType, namespace, name, uid)
+    hash := sha256.Sum256([]byte(data))
+    return hex.EncodeToString(hash[:16])
+}
+```
+
 ### Backward-Compatible Migration
 
 ```go
@@ -250,5 +259,3 @@ func GetOrGenerateClusterID(obj client.Object) string {
 | Implementation complexity | Higher | Lower | Lower |
 
 *Only if annotation was successfully persisted before restart
-
-**Recommendation**: Switch to deterministic SHA256 hashing without UID (Option A) for improved reliability, simplicity, and alignment with user expectations.
