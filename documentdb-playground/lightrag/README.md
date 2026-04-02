@@ -111,18 +111,16 @@ env:
   MONGO_DATABASE: "LightRAG"
 ```
 
-To get your connection details:
+To get your connection string from the DocumentDB resource status:
 
 ```bash
-# Get the gateway service
-kubectl get svc -n <documentdb-namespace> | grep documentdb-service
-
-# Get credentials
-kubectl get secret documentdb-credentials -n <documentdb-namespace> \
-  -o jsonpath='{.data.username}' | base64 -d
-kubectl get secret documentdb-credentials -n <documentdb-namespace> \
-  -o jsonpath='{.data.password}' | base64 -d
+# The connection string contains embedded kubectl commands for credentials.
+# Use eval to resolve them into a usable URI.
+CONNECTION_STRING=$(eval echo "$(kubectl get documentdb <cluster-name> -n <documentdb-namespace> -o jsonpath='{.status.connectionString}')")
+echo "$CONNECTION_STRING"
 ```
+
+> **Note:** The `eval` command executes shell expansions in the connection string. This is safe when the string comes from your own DocumentDB resource, but never pipe untrusted input through `eval`.
 
 ### LLM Configuration
 
