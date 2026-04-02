@@ -40,8 +40,8 @@ spec:
 # Service fronting the operator's webhook server on port 9443.
 # NOTE: The service name is hardcoded because the operator currently assumes
 # a single installation per cluster. If multi-instance support is needed,
-# template the name with {{ include "documentdb-chart.fullname" . }} and update
-# the ValidatingWebhookConfiguration's clientConfig.service.name to match.
+# template the name using a fullname helper and update the
+# ValidatingWebhookConfiguration's clientConfig.service.name to match.
 apiVersion: v1
 kind: Service
 metadata:
