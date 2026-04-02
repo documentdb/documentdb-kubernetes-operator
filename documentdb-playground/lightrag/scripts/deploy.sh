@@ -37,8 +37,17 @@ RAW_CONN=$(kubectl get documentdb "$DOCUMENTDB_CLUSTER" -n "$DOCUMENTDB_NAMESPAC
 
 if [ -n "$RAW_CONN" ]; then
     # The connection string contains embedded kubectl commands for credentials.
-    # eval resolves them into a usable URI.
-    MONGO_URI=$(eval echo "$RAW_CONN")
+    # eval resolves them into a usable URI. The inner quoting prevents & from
+    # being interpreted as a shell background operator.
+    MONGO_URI=$(eval "echo \"$RAW_CONN\"")
+
+    # Replace ClusterIP with DNS name for cross-namespace resolution.
+    SVC_IP=$(kubectl get svc "documentdb-service-${DOCUMENTDB_CLUSTER}" -n "$DOCUMENTDB_NAMESPACE"         -o jsonpath='{.spec.clusterIP}' 2>/dev/null) || true
+    if [ -n "$SVC_IP" ]; then
+        SVC_DNS="documentdb-service-${DOCUMENTDB_CLUSTER}.${DOCUMENTDB_NAMESPACE}.svc.cluster.local"
+        MONGO_URI=$(echo "$MONGO_URI" | sed "s/$SVC_IP/$SVC_DNS/g")
+    fi
+
     echo "Connection string retrieved from DocumentDB status."
 else
     echo "Could not read status.connectionString from DocumentDB resource."

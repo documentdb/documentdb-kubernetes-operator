@@ -116,7 +116,8 @@ To get your connection string from the DocumentDB resource status:
 ```bash
 # The connection string contains embedded kubectl commands for credentials.
 # Use eval to resolve them into a usable URI.
-CONNECTION_STRING=$(eval echo "$(kubectl get documentdb <cluster-name> -n <documentdb-namespace> -o jsonpath='{.status.connectionString}')")
+RAW_CONN=$(kubectl get documentdb <cluster-name> -n <documentdb-namespace> -o jsonpath='{.status.connectionString}')
+CONNECTION_STRING=$(eval "echo \"$RAW_CONN\"")
 echo "$CONNECTION_STRING"
 ```
 
