@@ -4,9 +4,9 @@
 
 This document analyzes the trade-offs between using randomly generated UUIDs versus deterministic hashes (SHA256) for telemetry correlation IDs in the DocumentDB Kubernetes Operator.
 
-## Current Implementation: UUID with Annotation Persistence
+## Option 1: UUID with Annotation Persistence
 
-The current approach generates a random UUID and persists it as a Kubernetes annotation on the resource:
+This approach generates a random UUID and persists it as a Kubernetes annotation on the resource:
 
 ```go
 func (m *GUIDManager) getOrCreateID(ctx context.Context, obj client.Object, annotationKey string) (string, error) {
@@ -24,27 +24,25 @@ func (m *GUIDManager) getOrCreateID(ctx context.Context, obj client.Object, anno
 }
 ```
 
-## The Problem
+### Failure Scenarios
 
 If the operator restarts **before** the UUID annotation is successfully persisted:
 1. A new UUID is generated on the next reconciliation
 2. Telemetry events before and after the restart cannot be correlated
 3. The same cluster appears as two different entities in Application Insights
 
-### Failure Scenarios
-
 | Scenario | UUID Behavior | Impact |
 |----------|---------------|--------|
-| Operator restart after annotation persisted | Same UUID retrieved |  No impact |
-| Operator restart before annotation persisted | New UUID generated |  Correlation broken |
-| Annotation accidentally deleted | New UUID generated |  Correlation broken |
-| Resource recreated with same name | New UUID generated |  Correct (different resource) |
+| Operator restart after annotation persisted | Same UUID retrieved | No impact |
+| Operator restart before annotation persisted | New UUID generated | Correlation broken |
+| Annotation accidentally deleted | New UUID generated | Correlation broken |
+| Resource recreated with same name | New UUID generated | Correct (different resource) |
 
-## Alternative: Deterministic Hash (SHA256)
+## Option 2: Deterministic Hash (SHA256)
 
 Generate a hash from resource properties. There are two options:
 
-### Option A: User-Determined ID (Without UID)
+## Option 2A: User-Determined ID (Without UID)
 
 ```go
 func GenerateClusterID(namespace, name string) string {
@@ -69,7 +67,7 @@ func GenerateClusterID(namespace, name string) string {
 - Cannot distinguish between original cluster and replacement cluster
 - If user reuses names for unrelated clusters, telemetry gets mixed
 
-### Option B: Resource-Determined ID (With UID)
+## Option 2B: Resource-Determined ID (With UID)
 
 ```go
 func GenerateClusterID(namespace, name string, uid types.UID) string {
@@ -94,9 +92,9 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 - Telemetry history fragmented across cluster recreations
 - UID is not user-visible, making correlation harder to reason about
 
-### Option Comparison
+### Option 2A vs 2B Comparison
 
-| Scenario | Option A (No UID) | Option B (With UID) |
+| Scenario | Option 2A (No UID) | Option 2B (With UID) |
 |----------|-------------------|---------------------|
 | Operator restart | Same ID  | Same ID  |
 | Cluster recreated with same name | Same ID | Different ID |
@@ -105,9 +103,9 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 | Matches user mental model |  Yes |  No |
 | Telemetry continuity on recreate |  Yes |  No |
 
-## Comparison (UUID vs Deterministic Hash)
+## Comparison
 
-### UUID Approach
+### Option 1: UUID Approach
 
 **Advantages:**
 - Guaranteed uniqueness across all systems globally
@@ -121,7 +119,7 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 - Adds write operation to every new resource
 - Annotation could be accidentally modified/deleted
 
-### Deterministic Hash Approach
+### Option 2: Deterministic Hash Approach
 
 **Advantages:**
 - Always produces same ID for same resource (namespace + name + UID)
@@ -136,28 +134,9 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 - Less "random" - determined by resource properties
 - Hashes are less human-readable than UUIDs
 
-## Hybrid Approach
-
-A hybrid approach uses deterministic hashing but includes the resource UID:
-
-```go
-func GenerateClusterID(namespace, name string, uid types.UID) string {
-    // Include UID to ensure uniqueness across resource recreations
-    data := fmt.Sprintf("documentdb-telemetry:cluster:%s/%s/%s", namespace, name, uid)
-    hash := sha256.Sum256([]byte(data))
-    return hex.EncodeToString(hash[:16])
-}
-```
-
-**Properties:**
-- Same resource (same UID) always gets same ID
-- Recreated resource (new UID) gets different ID
-- No persistence needed
-- Survives operator restarts
-
 ## Implementation Examples
 
-### Option A Implementation (Without UID)
+### Option 2A Implementation (Without UID)
 
 ```go
 package telemetry
@@ -196,15 +175,7 @@ func generateHash(resourceType, namespace, name string) string {
 }
 ```
 
-### Migration Considerations
-
-If migrating from UUID to deterministic hash:
-
-1. **Breaking Change**: Existing telemetry correlation will be lost for existing clusters
-2. **Mitigation**: Could check for existing UUID annotation first, fall back to hash for new resources
-3. **Clean Break**: If telemetry history isn't critical, simply switch to deterministic hashing
-
-### Option B Implementation (With UID)
+### Option 2B Implementation (With UID)
 
 ```go
 package telemetry
@@ -233,23 +204,10 @@ func generateHash(resourceType, namespace, name string, uid types.UID) string {
 }
 ```
 
-### Backward-Compatible Migration
-
-```go
-func GetOrGenerateClusterID(obj client.Object) string {
-    // Check for legacy UUID annotation first
-    if existingID := obj.GetAnnotations()[ClusterIDAnnotation]; existingID != "" {
-        return existingID
-    }
-    // New resources use deterministic hash (no annotation needed)
-    return GenerateClusterID(obj)
-}
-```
-
 ## Summary
 
-| Criteria | UUID + Annotation | Hash (Option A, No UID) | Hash (Option B, With UID) |
-|----------|-------------------|-------------------------|---------------------------|
+| Criteria | Option 1 (UUID) | Option 2A (Hash, No UID) | Option 2B (Hash, With UID) |
+|----------|-----------------|--------------------------|----------------------------|
 | Survives operator restart | Sometimes* | Always | Always |
 | Requires persistence | Yes | No | No |
 | API calls | 1 write per resource | 0 | 0 |
