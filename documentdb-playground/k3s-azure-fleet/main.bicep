@@ -26,8 +26,8 @@ param adminUsername string = 'azureuser'
 @description('Kubernetes version for AKS (empty string uses region default)')
 param kubernetesVersion string = ''
 
-@description('k3s version')
-param k3sVersion string = 'v1.30.4+k3s1'
+@description('k3s version (must be 1.35+ for DocumentDB operator ImageVolume support)')
+param k3sVersion string = 'v1.35.3+k3s1'
 
 @description('Allowed source IP for Kube API (port 6443) access. WARNING: Default \'*\' opens the Kubernetes API to the public internet. For production, restrict to your IP/CIDR (e.g., \'203.0.113.0/24\').')
 param allowedSourceIP string = '*'

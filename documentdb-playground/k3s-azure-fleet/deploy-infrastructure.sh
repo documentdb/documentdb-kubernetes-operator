@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-k3s-fleet-rg}"
 HUB_REGION="${HUB_REGION:-westus3}"
 K3S_REGIONS="${K3S_REGIONS_CSV:-eastus2,uksouth}"
+AKS_K8S_VERSION="${AKS_K8S_VERSION:-1.35.0}"
 
 # Convert comma-separated to array
 IFS=',' read -ra K3S_REGION_ARRAY <<< "$K3S_REGIONS"
@@ -141,6 +142,7 @@ if [ "$SKIP_BICEP" = "false" ]; then
         --parameters k3sRegions="$K3S_REGIONS_JSON" \
         --parameters sshPublicKey="$SSH_PUBLIC_KEY" \
         --parameters istioCerts="$ISTIO_CERTS_JSON" \
+        --parameters kubernetesVersion="$AKS_K8S_VERSION" \
         --output none
     
     echo "✓ Infrastructure deployed"
@@ -172,20 +174,25 @@ echo "k3s IPs: $K3S_PUBLIC_IPS"
 # Configure kubectl for AKS
 echo ""
 echo "Configuring kubectl for AKS hub cluster..."
+CONTEXT_NAME="hub-${HUB_REGION}"
 az aks get-credentials \
     --resource-group "$RESOURCE_GROUP" \
     --name "$AKS_CLUSTER_NAME" \
     --overwrite-existing \
     --admin \
-    --context "hub-${HUB_REGION}" \
     2>/dev/null || \
 az aks get-credentials \
     --resource-group "$RESOURCE_GROUP" \
     --name "$AKS_CLUSTER_NAME" \
-    --overwrite-existing \
-    --context "hub-${HUB_REGION}"
+    --overwrite-existing
 
-echo "✓ AKS kubectl context: hub-${HUB_REGION}"
+# Rename context to expected name (--admin appends "-admin" suffix)
+CURRENT_CONTEXT=$(kubectl config current-context)
+if [ "$CURRENT_CONTEXT" != "$CONTEXT_NAME" ]; then
+    kubectl config rename-context "$CURRENT_CONTEXT" "$CONTEXT_NAME" 2>/dev/null || true
+fi
+
+echo "✓ AKS kubectl context: ${CONTEXT_NAME}"
 
 # Wait for k3s VMs to be ready and get kubeconfig via Run Command
 echo ""
