@@ -91,8 +91,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
             echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
             echo "  --location LOCATION     Azure location (default: westus2)"
-            echo "  --github-username       GitHub username for operator installation"
-            echo "  --github-token          GitHub token for operator installation"
+            echo "  --github-username       GitHub username (optional, for private registries only)"
+            echo "  --github-token          GitHub token (optional, for private registries only)"
             echo "  -h, --help             Show this help message"
             echo ""
             echo "Examples:"
@@ -371,26 +371,18 @@ install_documentdb_operator() {
     # Install DocumentDB operator using enhanced fork with Azure support
     log "Installing DocumentDB operator from GitHub Container Registry (enhanced fork with Azure support)..."
     
-    # Check for GitHub authentication
-    if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-Please set the following environment variables:
-  export GITHUB_USERNAME='your-github-username'
-  export GITHUB_TOKEN='your-github-token'
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Export the token as shown above
-
-Then run the script again with --install-operator"
-    fi
-    
-    # Authenticate with GitHub Container Registry
-    log "Authenticating with GitHub Container Registry..."
-    if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-        error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
+    # GitHub authentication is optional - only needed for private registries or personal forks
+    # The public registry at oci://ghcr.io/documentdb/documentdb-operator is accessible without authentication
+    if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_USERNAME" ]; then
+        log "GitHub credentials provided - authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            warn "Failed to authenticate with GitHub Container Registry. Continuing without authentication..."
+        else
+            success "Authenticated with GitHub Container Registry"
+        fi
+    else
+        log "No GitHub credentials provided - using public registry access"
+        log "Note: Set GITHUB_USERNAME and GITHUB_TOKEN if using a private registry or personal fork"
     fi
     
     # Install from GitHub Container Registry using OCI protocol
@@ -412,8 +404,9 @@ Then run the script again with --install-operator"
         success "DocumentDB operator installed successfully from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
     else
         error "Failed to install DocumentDB operator. Please verify:
-- Your GitHub token has 'read:packages' scope
-- You have access to ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
+- Network connectivity to ghcr.io
+- The chart exists at ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator
+- If using a private registry, set GITHUB_USERNAME and GITHUB_TOKEN"
     fi
     
     # Wait for operator to be ready
