@@ -337,6 +337,21 @@ Multi-region deployment with automatic failover capabilities:
 
 ## Troubleshooting
 
+### AKS RBAC / Forbidden Errors
+
+If you see `User does not have access to the resource in Azure` or `pods is forbidden` when running `kubectl` against the AKS hub cluster, your Azure identity needs an AKS RBAC role assignment. Even subscription Owners need explicit Kubernetes RBAC:
+
+```bash
+# Grant yourself cluster admin access (one-time)
+AKS_ID=$(az aks show -g $RESOURCE_GROUP -n $AKS_CLUSTER_NAME --query id -o tsv)
+az role assignment create \
+  --assignee $(az ad signed-in-user show --query id -o tsv) \
+  --role "Azure Kubernetes Service RBAC Cluster Admin" \
+  --scope "$AKS_ID"
+```
+
+> **Note:** The `deploy-infrastructure.sh` script tries `az aks get-credentials --admin` first (which bypasses Entra auth). If `--admin` is disabled on your cluster, you must have an AKS RBAC role assigned.
+
 ### k3s VM Issues
 
 ```bash
