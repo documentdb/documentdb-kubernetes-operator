@@ -384,11 +384,12 @@ export APPINSIGHTS_INSTRUMENTATIONKEY="your-instrumentation-key"
 
 # 2. Deploy operator to AKS/Kind cluster with telemetry enabled
 helm install documentdb-operator ./operator/documentdb-helm-chart \
+  --namespace documentdb-operator --create-namespace \
   --set telemetry.enabled=true \
-  --set telemetry.appInsightsKey=$APPINSIGHTS_INSTRUMENTATIONKEY
+  --set telemetry.instrumentationKey=$APPINSIGHTS_INSTRUMENTATIONKEY
 
 # 3. Create a DocumentDB cluster to trigger telemetry events
-kubectl apply -f documentdb-playground/telemetry/sample-cluster.yaml
+kubectl apply -f documentdb-playground/telemetry/sample-appinsights-cluster.yaml
 
 # 4. Verify in Azure Portal → Application Insights → Live Metrics / Logs
 ```
