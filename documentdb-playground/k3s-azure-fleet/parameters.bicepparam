@@ -16,4 +16,4 @@ param sshPublicKey = ''
 
 param adminUsername = 'azureuser'
 
-param k3sVersion = 'v1.30.4+k3s1'
+param k3sVersion = 'v1.35.3+k3s1'

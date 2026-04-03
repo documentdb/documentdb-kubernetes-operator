@@ -222,7 +222,7 @@ Deploys multi-region DocumentDB with Istio networking:
 | `K3S_REGIONS` | `eastus2,uksouth` | k3s VM regions |
 | `VM_SIZE` | `Standard_D2s_v3` | Azure VM size for k3s |
 | `AKS_VM_SIZE` | `Standard_DS2_v2` | AKS node VM size |
-| `K3S_VERSION` | `v1.30.4+k3s1` | k3s version |
+| `K3S_VERSION` | `v1.35.3+k3s1` | k3s version (must be 1.35+ for DocumentDB) |
 | `ISTIO_VERSION` | `1.24.0` | Istio version |
 
 ### Network Configuration (Istio)
