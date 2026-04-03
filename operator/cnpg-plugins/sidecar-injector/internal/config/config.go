@@ -107,7 +107,7 @@ func (config *Configuration) applyDefaults() {
 	// Set defaults
 	if config.GatewayImage == "" {
 		// NOTE: Keep in sync with operator/src/internal/utils/constants.go:DEFAULT_GATEWAY_IMAGE
-		config.GatewayImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0"
+		config.GatewayImage = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0"
 	}
 	if config.GatewayImagePullPolicy == "" {
 		config.GatewayImagePullPolicy = corev1.PullIfNotPresent

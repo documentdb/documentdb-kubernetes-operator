@@ -26,9 +26,9 @@ const (
 	MinK8sMinorVersion = 35
 
 	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
-	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
+	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.109.0"
 	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
-	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
+	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.109.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 
 	// TODO: remove these constants once change stream support is included in the official images.
@@ -66,6 +66,7 @@ const (
 	JSON_PATCH_PATH_EXTERNAL_CLUSTERS    = "/spec/externalClusters"
 	JSON_PATCH_PATH_MANAGED_SERVICES     = "/spec/managed/services/additional"
 	JSON_PATCH_PATH_SYNCHRONOUS          = "/spec/postgresql/synchronous"
+	JSON_PATCH_PATH_BOOTSTRAP            = "/spec/bootstrap"
 
 	// JSON Patch path format strings for image upgrades (require fmt.Sprintf with index)
 	JSON_PATCH_PATH_EXTENSION_IMAGE_FMT      = "/spec/postgresql/extensions/%d/image/reference"

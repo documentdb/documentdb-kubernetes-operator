@@ -36,7 +36,7 @@ func TestApplyDefaults(t *testing.T) {
 	t.Run("sets default gateway image when empty", func(t *testing.T) {
 		config := &Configuration{}
 		config.applyDefaults()
-		expected := "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0"
+		expected := "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.109.0"
 		if config.GatewayImage != expected {
 			t.Errorf("expected %q, got %q", expected, config.GatewayImage)
 		}

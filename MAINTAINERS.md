@@ -15,6 +15,7 @@
 | German Eichberger | Microsoft |
 | Alexander Laye | Microsoft |
 | Rayhan Hossain | Microsoft |
+| Wenting Wu | Microsoft |
 
 ## Current Project Chair
 

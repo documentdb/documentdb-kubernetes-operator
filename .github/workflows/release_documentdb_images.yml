@@ -1,0 +1,188 @@
+name: RELEASE - Promote DocumentDB Images
+
+# Promotes documentdb extension and gateway candidate images to release tags,
+# then creates a PR to update default versions across the codebase.
+# This workflow handles only the DATABASE version track (documentDbVersion).
+# For operator/sidecar releases, see release_operator.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: 'Database candidate tag to promote (e.g., 0.111.0-build-123456789-1-deadbee)'
+        required: true
+      version:
+        description: 'Database image release version (e.g., 0.111.0)'
+        required: true
+        default: '0.109.0'
+      update_defaults:
+        description: 'Create PR to update default image versions in code'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Promote documentdb and gateway images (retag candidate → release)
+  # ---------------------------------------------------------------------------
+  promote-database-images:
+    name: Promote ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [documentdb, gateway]
+    steps:
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Verify candidate exists
+        run: |
+          echo "Verifying ${{ matrix.image }}:${{ inputs.candidate_version }} exists..."
+          docker buildx imagetools inspect \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ inputs.candidate_version }}
+
+      - name: Retag existing manifest
+        env:
+          SOURCE_TAG: ${{ inputs.candidate_version }}
+          TARGET_TAG: ${{ inputs.version }}
+        run: |
+          echo "Promoting ${{ matrix.image }} from $SOURCE_TAG to $TARGET_TAG"
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.TARGET_TAG }} \
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.SOURCE_TAG }}
+
+  # ---------------------------------------------------------------------------
+  # Update default versions in code and create PR
+  # ---------------------------------------------------------------------------
+  update-defaults:
+    name: Update Default Versions
+    runs-on: ubuntu-latest
+    needs: promote-database-images
+    if: ${{ inputs.update_defaults == true }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect current default version
+        id: current
+        run: |
+          # Extract the assigned DEFAULT_DOCUMENTDB_IMAGE value from constants.go.
+          CURRENT=$(sed -nE 's|^[[:space:]]*DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:([0-9]+\.[0-9]+\.[0-9]+)".*|\1|p' \
+            operator/src/internal/utils/constants.go | head -1)
+          if [[ -z "$CURRENT" ]]; then
+            echo "Failed to extract current default version from operator/src/internal/utils/constants.go" >&2
+            exit 1
+          fi
+          echo "current_version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current default version: $CURRENT"
+
+      - name: Update version references
+        env:
+          OLD_VERSION: ${{ steps.current.outputs.current_version }}
+          NEW_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+            echo "Version $NEW_VERSION is already the default. No changes needed."
+            exit 0
+          fi
+
+          echo "Updating default versions: $OLD_VERSION → $NEW_VERSION"
+
+          # 1. Update operator constants.go
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/src/internal/utils/constants.go
+
+          # 2. Update sidecar plugin config.go
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/cnpg-plugins/sidecar-injector/internal/config/config.go
+
+          # 3. Update Helm chart values.yaml
+          sed -i "s|documentDbVersion: \"${OLD_VERSION}\"|documentDbVersion: \"${NEW_VERSION}\"|" \
+            operator/documentdb-helm-chart/values.yaml
+
+          # 4. Update test workflow fallback images
+          sed -i "s|documentdb:${OLD_VERSION}|documentdb:${NEW_VERSION}|g" \
+            .github/workflows/test-backup-and-restore.yml
+          sed -i "s|gateway:${OLD_VERSION}|gateway:${NEW_VERSION}|g" \
+            .github/workflows/test-backup-and-restore.yml
+
+          # 5. Update the released database baseline used by upgrade tests
+          sed -i "s|RELEASED_DATABASE_VERSION: ${OLD_VERSION}|RELEASED_DATABASE_VERSION: ${NEW_VERSION}|" \
+            .github/workflows/test-upgrade-and-rollback.yml
+
+          # 6. Update sidecar plugin config test (hardcoded expected gateway image)
+          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+            operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
+
+          # 7. Update build workflow defaults
+          sed -i "s|DEFAULT_DOCUMENTDB_VERSION: '${OLD_VERSION}'|DEFAULT_DOCUMENTDB_VERSION: '${NEW_VERSION}'|" \
+            .github/workflows/build_documentdb_images.yml
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/build_documentdb_images.yml
+
+          # 8. Update release workflow default version
+          sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
+            .github/workflows/release_documentdb_images.yml
+
+          # 9. Update gateway Dockerfile default source image ARG
+          sed -i "s|pg17-${OLD_VERSION}|pg17-${NEW_VERSION}|" \
+            .github/dockerfiles/Dockerfile_gateway_public_image
+
+          echo "=== Files modified ==="
+          git diff --name-only
+          echo ""
+          echo "=== Diff ==="
+          git diff
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump DocumentDB default images to ${{ inputs.version }}"
+          title: "chore: bump DocumentDB default images to ${{ inputs.version }}"
+          body: |
+            ## Automated DocumentDB Version Bump
+
+            Promoted images `documentdb` and `gateway` from candidate `${{ inputs.candidate_version }}` to release `${{ inputs.version }}`.
+
+            ### Changes
+            - Updated `DEFAULT_DOCUMENTDB_IMAGE` and `DEFAULT_GATEWAY_IMAGE` in `constants.go`
+            - Updated sidecar plugin default gateway image in `config.go` and `config_test.go`
+            - Updated `documentDbVersion` in Helm chart `values.yaml`
+            - Updated fallback images in `test-backup-and-restore.yml`
+            - Updated build/release workflow defaults in `build_documentdb_images.yml` and `release_documentdb_images.yml`
+            - Updated gateway Dockerfile default source image in `Dockerfile_gateway_public_image`
+
+            ### Image References
+            - `ghcr.io/${{ github.repository }}/documentdb:${{ inputs.version }}`
+            - `ghcr.io/${{ github.repository }}/gateway:${{ inputs.version }}`
+
+            ---
+            *Auto-generated by `release_documentdb_images.yml`*
+          branch: auto/documentdb-${{ inputs.version }}
+          delete-branch: true
+          labels: |
+            automated
+            version-bump
+
+      - name: Release summary
+        run: |
+          echo "## DocumentDB Image Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Database Version**: \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images Promoted**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.current.outputs.current_version }}" != "${{ inputs.version }}" ]]; then
+            echo "- **PR Created**: Updates default versions from \`${{ steps.current.outputs.current_version }}\` to \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **No PR needed**: Version \`${{ inputs.version }}\` is already the default" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,6 +1,6 @@
 ---
 title: Networking Configuration
-description: Configure service types, external access, DNS, load balancer annotations, and Network Policies for DocumentDB on AKS, EKS, and GKE.
+description: Configure service types (ClusterIP, LoadBalancer), connect with mongosh, and secure traffic with Network Policies for DocumentDB on AKS, EKS, and GKE.
 tags:
   - configuration
   - networking

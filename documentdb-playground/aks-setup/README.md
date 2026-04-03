@@ -1,11 +1,17 @@
 # DocumentDB on Azure Kubernetes Service (AKS)
 
-This directory contains comprehensive automation scripts for deploying DocumentDB on Azure Kubernetes Service (AKS) with production-ready configurations.
+This directory contains comprehensive automation scripts for deploying DocumentDB
+on Azure Kubernetes Service (AKS) with production-ready configurations.
+
+For general AKS guidance (architecture, configuration, troubleshooting, cost, and
+security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/deploy-on-aks/)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) installed and configured
+
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
+  installed and configured
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed
 - [Helm](https://helm.sh/docs/intro/install/) v3.0+ installed
 - [mongosh](https://www.mongodb.com/try/download/shell) (MongoDB Shell) for testing connections
@@ -25,28 +31,32 @@ cd scripts
 ./delete-cluster.sh
 ```
 
-## 📋 Features
+## Features
 
-### ✅ **Automated AKS Setup**
+### Automated AKS Setup
+
 - Complete AKS cluster with managed node pools
 - Azure CNI networking with network policies
 - Cluster autoscaler (2-5 nodes)
 - Monitoring addon enabled
 - Managed identity integration
 
-### ✅ **Storage & Networking**
+### Storage & Networking
+
 - Azure Disk CSI driver (uses StandardSSD_LRS by default)
 - Azure File CSI driver for shared storage
 - Azure Load Balancer (Standard SKU)
 - Optional Premium SSD storage class for production
 
-### ✅ **DocumentDB Integration**
+### DocumentDB Integration
+
 - Enhanced DocumentDB operator with Azure support
 - Automatic Azure LoadBalancer annotations
 - Environment-specific configuration (`environment: aks`)
 - Uses AKS default StandardSSD_LRS storage (Premium SSD optional)
 
-### ✅ **Production Features**
+### Production Features
+
 - cert-manager for TLS certificate management
 - Comprehensive resource cleanup
 - Multi-environment support
@@ -55,6 +65,7 @@ cd scripts
 ## 🛠️ Scripts Overview
 
 ### `create-cluster.sh`
+
 Creates a complete AKS environment with all dependencies.
 
 ```bash
@@ -74,6 +85,7 @@ Creates a complete AKS environment with all dependencies.
 ```
 
 ### `delete-cluster.sh`
+
 Comprehensively removes all Azure resources and stops billing.
 
 ```bash
@@ -87,7 +99,7 @@ Comprehensively removes all Azure resources and stops billing.
 ./delete-cluster.sh --resource-group my-rg
 ```
 
-## 🏗️ Architecture
+## Example Configuration Defaults
 
 ### **Azure Resources Created:**
 - **AKS Cluster**: Managed Kubernetes with Azure CNI
@@ -116,8 +128,10 @@ KUBERNETES_VERSION="1.34.3"
 OPERATOR_CHART_VERSION="0.1.3"
 ```
 
-### **Storage Configuration:**
-By default, uses AKS built-in StandardSSD_LRS storage. For production, optionally create Premium SSD:
+### Storage Configuration
+
+By default, uses AKS built-in StandardSSD_LRS storage. For production, optionally
+create Premium SSD:
 
 ```bash
 # Use AKS default (StandardSSD_LRS) - recommended for development
@@ -128,6 +142,7 @@ By default, uses AKS built-in StandardSSD_LRS storage. For production, optionall
 ```
 
 Custom Premium SSD storage class (created with `--create-storage-class`):
+
 ```yaml
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -142,19 +157,10 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Retain
 ```
 
-### **Azure LoadBalancer Annotations:**
-The enhanced operator automatically applies Azure-specific annotations:
-
-```yaml
-annotations:
-  service.beta.kubernetes.io/azure-load-balancer-internal: "false"
-  service.beta.kubernetes.io/azure-load-balancer-mode: "auto"
-  service.beta.kubernetes.io/azure-pip-name: "documentdb-pip"
-```
-
-## 📖 Usage Examples
+## Usage Examples
 
 ### **Complete Deployment:**
+
 ```bash
 # Development setup (uses AKS default StandardSSD_LRS)
 ./create-cluster.sh --deploy-instance
@@ -169,6 +175,7 @@ export GITHUB_TOKEN="your-token"
 ```
 
 ### **Step-by-Step Deployment:**
+
 ```bash
 # 1. Create basic cluster
 ./create-cluster.sh
@@ -198,6 +205,7 @@ EOF
 ```
 
 ### **Custom Configuration:**
+
 ```bash
 # Custom cluster in different region
 ./create-cluster.sh \
@@ -210,6 +218,7 @@ EOF
 ## 🔍 Monitoring & Troubleshooting
 
 ### **Check Cluster Status:**
+
 ```bash
 # Verify cluster
 kubectl get nodes
@@ -224,6 +233,7 @@ kubectl get svc -A -w
 ```
 
 ### **Access DocumentDB:**
+
 ```bash
 # Get connection string (easiest method)
 kubectl get dbs -A -o wide
@@ -240,28 +250,33 @@ kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath=
 mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
 ```
 
-### **Common Issues:**
+### Common Issues
 
-**Issue: LoadBalancer pending**
+#### Issue: LoadBalancer pending
+
 ```bash
 # Check Azure quota and subnet configuration
 az aks show --resource-group RESOURCE_GROUP --name CLUSTER_NAME --query networkProfile
 ```
 
-**Issue: PVC binding failures**
+#### Issue: PVC binding failures
+
 ```bash
 # Check storage class and CSI drivers
 kubectl get storageclass
 kubectl get pods -n kube-system | grep csi-azuredisk
 ```
 
-**Issue: Operator not starting**
+#### Issue: Operator not starting
+
 ```bash
 # Check operator logs
 kubectl logs -n documentdb-operator deployment/documentdb-operator
 ```
 
-## 💰 Cost Management
+## Cost Management
+
+### Estimated Monthly Costs (East US)
 
 ### **Estimated Monthly Costs (West US 2):**
 - **AKS Cluster**: ~$73/month (managed control plane)
@@ -270,10 +285,7 @@ kubectl logs -n documentdb-operator deployment/documentdb-operator
 - **Standard Load Balancer**: ~$18/month
 - **Total**: ~$512/month
 
-### **Cost Optimization:**
-```bash
-# Use smaller VMs for development
-NODE_SIZE="Standard_B2s"  # ~$30/month per node
+### Cleanup
 
 # Reduce node count
 NODE_COUNT=1
@@ -288,39 +300,21 @@ NODE_COUNT=1
 ./delete-cluster.sh --force
 ```
 
-## 🔐 Security
+## Additional Resources
 
-### **Built-in Security Features:**
-- Azure managed identity (no service principal needed)
-- Network policies enabled
-- Encryption at rest for storage
-- TLS for all communications
-- Azure RBAC integration
-
-### **Additional Security:**
-```bash
-# Enable Azure Policy for AKS
-az aks enable-addons --resource-group RESOURCE_GROUP --name CLUSTER_NAME --addons azure-policy
-
-# Enable Azure Key Vault integration
-az aks enable-addons --resource-group RESOURCE_GROUP --name CLUSTER_NAME --addons azure-keyvault-secrets-provider
-```
-
-## 📚 Additional Resources
-
-- [AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
-- [Azure CNI Networking](https://docs.microsoft.com/en-us/azure/aks/configure-azure-cni)
-- [Azure Load Balancer](https://docs.microsoft.com/en-us/azure/load-balancer/)
+- [Deploy on AKS Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/getting-started/deploy-on-aks.md)
+- [AKS Documentation](https://learn.microsoft.com/azure/aks/)
 - [DocumentDB Operator GitHub](https://github.com/documentdb/documentdb-operator)
 - [MongoDB Shell (mongosh)](https://www.mongodb.com/try/download/shell)
 
-## 🆘 Support
+## Support
 
 For issues specific to:
-- **AKS**: Check Azure support documentation
-- **DocumentDB Operator**: Open issues on the GitHub repository
-- **Scripts**: Review logs and check prerequisites
+
+- AKS platform issues: Check Azure support documentation
+- DocumentDB operator issues: Open issues on the GitHub repository
+- Script issues: Review logs and verify prerequisites
 
 ---
 
-**⚠️  Remember to run `./delete-cluster.sh` when done to avoid Azure charges!**
+Remember to run `./delete-cluster.sh` when done to avoid Azure charges.

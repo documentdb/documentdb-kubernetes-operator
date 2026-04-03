@@ -224,7 +224,11 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				if currentCnpgCluster.Annotations == nil {
 					currentCnpgCluster.Annotations = map[string]string{}
 				}
-				currentCnpgCluster.Annotations["documentdb.io/gateway-tls-rev"] = time.Now().Format(time.RFC3339Nano)
+				// CNPG does not auto-restart pods for plugin parameter changes.
+				// The gatewayTLSSecret is mounted as a volume by the sidecar injector,
+				// so pods must be restarted to pick up the new secret name.
+				// CNPG specifically handles kubectl.kubernetes.io/restartedAt for pod restarts.
+				currentCnpgCluster.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339Nano)
 				if err := r.Client.Update(ctx, currentCnpgCluster); err == nil {
 					logger.Info("Patched CNPG Cluster with TLS settings; requeueing for pod update")
 					return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil

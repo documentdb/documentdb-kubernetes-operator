@@ -7,8 +7,8 @@ param memberRegions array = [
   'eastus2'
 ]
 
-@description('Kubernetes version. Leave empty to use the region default GA version.')
-param kubernetesVersion string = ''
+@description('Kubernetes version. Defaults to ''1.35.0''. Set to '''' to use the region default GA version.')
+param kubernetesVersion string = '1.35.0'
 
 @description('VM size for the cluster nodes')
 param vmSize string = 'Standard_DS2_v2'

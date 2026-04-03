@@ -59,11 +59,25 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
 | Component | Version | Notes |
 |-----------|---------|-------|
 | Kubernetes | 1.30+ | Based on k8s.io/api v0.34.2 |
-| CloudNative-PG | 1.28.0 | Helm chart uses CNPG chart 0.26.1 |
+| CloudNative-PG | 1.28.0 | Helm chart uses CNPG chart 0.27.0 |
 | cert-manager | 1.19.2 | Required for TLS certificate management |
 | controller-runtime | 0.22.4 | Kubebuilder framework |
 | Go | 1.25.0 | See `operator/src/go.mod` |
 | Helm | 3.x | Required for deployment |
+
+### Image Version Tracks
+
+The project uses **two independent version tracks** for container images:
+
+| Track | Images | Version Source | Tag Example |
+|-------|--------|---------------|-------------|
+| **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.1.3` |
+| **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.109.0` |
+
+- Operator images are built from this repo's Go source
+- Database images are built from public `documentdb/documentdb` release artifacts (extension `.deb` + gateway payload from `documentdb-local`)
+- Each track has its own build and release workflows
+- Database image defaults are also hardcoded in `constants.go` and `config.go` as fallbacks
 
 > **Note:** When the project moves to GA, maintain a separate version compatibility matrix for each release to track dependency versions across operator releases.
 
@@ -268,8 +282,12 @@ Types:
 - `test-integration.yml` - Integration tests
 - `test-E2E.yml` - End-to-end tests
 - `test-backup-and-restore.yml` - Backup feature tests
-- `build_images.yml` - Docker image builds
-- `release_images.yml` - Release automation
+- `build_operator_images.yml` - Build operator/sidecar candidate images (operator version track)
+- `build_documentdb_images.yml` - Build documentdb/gateway candidate images (database version track)
+- `release_operator.yml` - Promote operator/sidecar images and publish Helm chart
+- `release_documentdb_images.yml` - Promote documentdb/gateway images and auto-PR version bumps
+- `build_images.yml` - [DEPRECATED] Combined image builds (replaced by split workflows above)
+- `release_images.yml` - [DEPRECATED] Combined release (replaced by split workflows above)
 - `deploy_docs.yml` - Documentation deployment
 
 ---
@@ -395,7 +413,7 @@ The `documentdb-playground/` directory contains production-ready deployment exam
 ## Additional Resources
 
 - [Development Environment Guide](docs/developer-guides/development-environment.md)
-- [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/)
+- [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
