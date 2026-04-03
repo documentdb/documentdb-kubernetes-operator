@@ -2,7 +2,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: seed-pending-jobs
-  namespace: app
   labels:
     app.kubernetes.io/part-of: keda-documentdb-demo
 spec:

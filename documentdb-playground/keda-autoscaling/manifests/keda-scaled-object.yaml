@@ -2,7 +2,6 @@ apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: documentdb-worker-scaler
-  namespace: app
   labels:
     app.kubernetes.io/part-of: keda-documentdb-demo
 spec:

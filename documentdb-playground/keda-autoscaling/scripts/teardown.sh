@@ -4,6 +4,7 @@ set -euo pipefail
 # Configuration
 DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-ns}"
 DOCUMENTDB_NAME="${DOCUMENTDB_NAME:-keda-demo}"
+DOCUMENTDB_SECRET="${DOCUMENTDB_SECRET:-documentdb-credentials}"
 APP_NAMESPACE="${APP_NAMESPACE:-app}"
 KEDA_NAMESPACE="${KEDA_NAMESPACE:-keda}"
 
@@ -80,7 +81,7 @@ fi
 if [ "$DELETE_DOCUMENTDB" = true ]; then
     log "Deleting DocumentDB instance..."
     kubectl delete documentdb "$DOCUMENTDB_NAME" -n "$DOCUMENTDB_NAMESPACE" --ignore-not-found=true 2>/dev/null || true
-    kubectl delete secret documentdb-credentials -n "$DOCUMENTDB_NAMESPACE" --ignore-not-found=true 2>/dev/null || true
+    kubectl delete secret "$DOCUMENTDB_SECRET" -n "$DOCUMENTDB_NAMESPACE" --ignore-not-found=true 2>/dev/null || true
 fi
 
 log "Teardown complete"

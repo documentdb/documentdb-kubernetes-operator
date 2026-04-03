@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: job-worker
-  namespace: app
   labels:
     app: job-worker
     app.kubernetes.io/part-of: keda-documentdb-demo

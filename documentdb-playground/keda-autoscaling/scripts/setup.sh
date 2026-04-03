@@ -6,7 +6,7 @@ DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-ns}"
 DOCUMENTDB_NAME="${DOCUMENTDB_NAME:-keda-demo}"
 DOCUMENTDB_SECRET="${DOCUMENTDB_SECRET:-documentdb-credentials}"
 DOCUMENTDB_USER="${DOCUMENTDB_USER:-docdbadmin}"
-DOCUMENTDB_PASS="${DOCUMENTDB_PASS:-KedaDemo2024!}"
+DOCUMENTDB_PASS="${DOCUMENTDB_PASS:-$(openssl rand -base64 16 | tr -d '/+=' | head -c 20)}"
 APP_NAMESPACE="${APP_NAMESPACE:-app}"
 KEDA_NAMESPACE="${KEDA_NAMESPACE:-keda}"
 KEDA_VERSION="${KEDA_VERSION:-2.17.0}"
@@ -88,7 +88,10 @@ deploy_documentdb() {
             --from-literal=password="$DOCUMENTDB_PASS"
     fi
 
-    kubectl apply -f "${MANIFESTS_DIR}/documentdb-instance.yaml"
+    sed -e "s/DOCUMENTDB_NAME_PLACEHOLDER/$DOCUMENTDB_NAME/g" \
+        -e "s/DOCUMENTDB_SECRET_PLACEHOLDER/$DOCUMENTDB_SECRET/g" \
+        "${MANIFESTS_DIR}/documentdb-instance.yaml" \
+        | kubectl apply -n "$DOCUMENTDB_NAMESPACE" -f -
 
     wait_for_documentdb
 }
@@ -188,8 +191,8 @@ deploy_keda_resources() {
     create_keda_connection_secret
 
     kubectl apply -f "${MANIFESTS_DIR}/keda-trigger-auth.yaml"
-    kubectl apply -f "${MANIFESTS_DIR}/job-worker.yaml"
-    kubectl apply -f "${MANIFESTS_DIR}/keda-scaled-object.yaml"
+    kubectl apply -n "$APP_NAMESPACE" -f "${MANIFESTS_DIR}/job-worker.yaml"
+    kubectl apply -n "$APP_NAMESPACE" -f "${MANIFESTS_DIR}/keda-scaled-object.yaml"
 
     log "KEDA resources deployed"
     kubectl get scaledobject -n "$APP_NAMESPACE" 2>/dev/null || true
@@ -201,7 +204,7 @@ seed_test_data() {
     # Delete previous seed job if it exists
     kubectl delete job seed-pending-jobs -n "$APP_NAMESPACE" --ignore-not-found=true
 
-    kubectl apply -f "${MANIFESTS_DIR}/seed-jobs.yaml"
+    kubectl apply -n "$APP_NAMESPACE" -f "${MANIFESTS_DIR}/seed-jobs.yaml"
 
     log "Waiting for seed job to complete..."
     if kubectl wait --for=condition=complete job/seed-pending-jobs \
@@ -237,11 +240,11 @@ main() {
     echo ""
     echo "  Add more pending jobs:"
     echo "    kubectl delete job seed-pending-jobs -n ${APP_NAMESPACE} --ignore-not-found"
-    echo "    kubectl apply -f ${MANIFESTS_DIR}/seed-jobs.yaml"
+    echo "    kubectl apply -n ${APP_NAMESPACE} -f ${MANIFESTS_DIR}/seed-jobs.yaml"
     echo ""
     echo "  Drain all pending jobs (scale back to 0):"
     echo "    kubectl delete job drain-pending-jobs -n ${APP_NAMESPACE} --ignore-not-found"
-    echo "    kubectl apply -f ${MANIFESTS_DIR}/drain-jobs.yaml"
+    echo "    kubectl apply -n ${APP_NAMESPACE} -f ${MANIFESTS_DIR}/drain-jobs.yaml"
     echo ""
     echo "  Tear down:"
     echo "    ./scripts/teardown.sh"
