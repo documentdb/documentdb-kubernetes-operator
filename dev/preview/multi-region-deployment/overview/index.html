@@ -6,15 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Understanding high availability options for DocumentDB on Kubernetes - local HA, multi-region, and multi-cloud deployments.">
+        <meta name="description" content="Understand multi-region DocumentDB deployments for disaster recovery, low-latency access, and compliance with geographic data residency requirements.">
       
       
       
       
-        <link rel="prev" href="../../operations/maintenance/">
+        <link rel="prev" href="../../advanced-configuration/">
       
       
-        <link rel="next" href="../local-ha/">
+        <link rel="next" href="../setup/">
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>High Availability Overview - DocumentDB-Kubernetes-Operator</title>
+        <title>Multi-region deployment overview - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -64,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#high-availability-overview" class="md-skip">
+        <a href="#use-cases" class="md-skip">
           Skip to content
         </a>
       
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              High Availability Overview
+              Multi-region deployment overview
             
           </span>
         </div>
@@ -834,8 +834,6 @@
                 
   
   
-    
-  
   
   
     
@@ -850,11 +848,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_6" >
         
           
           <label class="md-nav__link" for="__nav_1_6" id="__nav_1_6_label" tabindex="">
@@ -868,7 +866,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1_6">
             <span class="md-nav__icon md-icon"></span>
             High Availability
@@ -879,30 +877,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Overview
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../high-availability/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -911,137 +889,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-is-high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      What is High Availability?
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#types-of-high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      Types of High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Types of High Availability">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#local-high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      Local High Availability
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#multi-region-deployment" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Region Deployment
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#multi-cloud-deployment" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Cloud Deployment
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rto-and-rpo-concepts" class="md-nav__link">
-    <span class="md-ellipsis">
-      RTO and RPO Concepts
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="RTO and RPO Concepts">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#recovery-time-objective-rto" class="md-nav__link">
-    <span class="md-ellipsis">
-      Recovery Time Objective (RTO)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#recovery-point-objective-rpo" class="md-nav__link">
-    <span class="md-ellipsis">
-      Recovery Point Objective (RPO)
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#decision-tree" class="md-nav__link">
-    <span class="md-ellipsis">
-      Decision Tree
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#trade-offs-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      Trade-offs Summary
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      Next Steps
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1054,7 +901,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../local-ha/" class="md-nav__link">
+      <a href="../../high-availability/local-ha/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1101,6 +948,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1115,11 +964,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_8" checked>
         
           
           <label class="md-nav__link" for="__nav_1_8" id="__nav_1_8_label" tabindex="">
@@ -1133,7 +982,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_8_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_8_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_8">
             <span class="md-nav__icon md-icon"></span>
             Multi-Region Deployment
@@ -1144,10 +993,28 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../multi-region-deployment/overview/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -1156,6 +1023,300 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      Use cases
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Use cases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disaster-recovery-dr" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disaster recovery (DR)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#low-latency-global-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      Low-latency global access
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compliance-and-data-residency" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compliance and data residency
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#primary-replica-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Primary-replica model
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentdb-cluster-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      DocumentDB cluster components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replication-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication configuration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network requirements
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#inter-region-connectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inter-region connectivity
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#port-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Port requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dns-and-service-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS and service discovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DNS and service discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#istio-networking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Istio networking
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fleet-networking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fleet networking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      Deployment models
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deployment models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#managed-fleet-orchestration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Managed fleet orchestration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-multi-cluster-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual multi-cluster management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replication-lag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication lag
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage performance
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tls-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS encryption
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authentication-and-authorization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication and authorization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and observability
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1168,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/setup/" class="md-nav__link">
+      <a href="../setup/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1189,7 +1350,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/failover-procedures/" class="md-nav__link">
+      <a href="../failover-procedures/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1349,8 +1510,6 @@
   
   
   
-    
-  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1359,46 +1518,37 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-is-high-availability" class="md-nav__link">
+  <a href="#use-cases" class="md-nav__link">
     <span class="md-ellipsis">
-      What is High Availability?
+      Use cases
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#types-of-high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      Types of High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Types of High Availability">
+    <nav class="md-nav" aria-label="Use cases">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#local-high-availability" class="md-nav__link">
+  <a href="#disaster-recovery-dr" class="md-nav__link">
     <span class="md-ellipsis">
-      Local High Availability
+      Disaster recovery (DR)
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#multi-region-deployment" class="md-nav__link">
+  <a href="#low-latency-global-access" class="md-nav__link">
     <span class="md-ellipsis">
-      Multi-Region Deployment
+      Low-latency global access
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#multi-cloud-deployment" class="md-nav__link">
+  <a href="#compliance-and-data-residency" class="md-nav__link">
     <span class="md-ellipsis">
-      Multi-Cloud Deployment
+      Compliance and data residency
     </span>
   </a>
   
@@ -1410,28 +1560,37 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rto-and-rpo-concepts" class="md-nav__link">
+  <a href="#architecture" class="md-nav__link">
     <span class="md-ellipsis">
-      RTO and RPO Concepts
+      Architecture
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="RTO and RPO Concepts">
+    <nav class="md-nav" aria-label="Architecture">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#recovery-time-objective-rto" class="md-nav__link">
+  <a href="#primary-replica-model" class="md-nav__link">
     <span class="md-ellipsis">
-      Recovery Time Objective (RTO)
+      Primary-replica model
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#recovery-point-objective-rpo" class="md-nav__link">
+  <a href="#documentdb-cluster-components" class="md-nav__link">
     <span class="md-ellipsis">
-      Recovery Point Objective (RPO)
+      DocumentDB cluster components
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replication-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication configuration
     </span>
   </a>
   
@@ -1443,18 +1602,183 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#decision-tree" class="md-nav__link">
+  <a href="#network-requirements" class="md-nav__link">
     <span class="md-ellipsis">
-      Decision Tree
+      Network requirements
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Network requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#inter-region-connectivity" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inter-region connectivity
     </span>
   </a>
   
 </li>
+        
+          <li class="md-nav__item">
+  <a href="#port-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      Port requirements
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dns-and-service-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      DNS and service discovery
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DNS and service discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#istio-networking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Istio networking
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fleet-networking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fleet networking
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#trade-offs-summary" class="md-nav__link">
+  <a href="#deployment-models" class="md-nav__link">
     <span class="md-ellipsis">
-      Trade-offs Summary
+      Deployment models
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Deployment models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#managed-fleet-orchestration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Managed fleet orchestration
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-multi-cluster-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Manual multi-cluster management
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replication-lag" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication lag
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage performance
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tls-encryption" class="md-nav__link">
+    <span class="md-ellipsis">
+      TLS encryption
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authentication-and-authorization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication and authorization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-security" class="md-nav__link">
+    <span class="md-ellipsis">
+      Network security
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and observability
     </span>
   </a>
   
@@ -1463,7 +1787,7 @@
         <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      Next Steps
+      Next steps
     </span>
   </a>
   
@@ -1487,271 +1811,170 @@
   
 
 
-<h1 id="high-availability-overview">High Availability Overview<a class="headerlink" href="#high-availability-overview" title="Permanent link">&para;</a></h1>
-<p>High availability (HA) ensures your DocumentDB deployment remains accessible and operational despite component failures. This guide covers the HA options available and helps you choose the right approach for your requirements.</p>
-<h2 id="what-is-high-availability">What is High Availability?<a class="headerlink" href="#what-is-high-availability" title="Permanent link">&para;</a></h2>
-<p>High availability in DocumentDB means:</p>
+  <h1>Overview</h1>
+
+<h2 id="use-cases">Use cases<a class="headerlink" href="#use-cases" title="Permanent link">&para;</a></h2>
+<h3 id="disaster-recovery-dr">Disaster recovery (DR)<a class="headerlink" href="#disaster-recovery-dr" title="Permanent link">&para;</a></h3>
+<p>Protect against regional outages by maintaining database replicas in separate
+geographic regions. If the primary region fails, promote a replica in another
+region to maintain service availability.</p>
+<h3 id="low-latency-global-access">Low-latency global access<a class="headerlink" href="#low-latency-global-access" title="Permanent link">&para;</a></h3>
+<p>Reduce application response times and distribute load by deploying read replicas
+closer to end users.</p>
+<h3 id="compliance-and-data-residency">Compliance and data residency<a class="headerlink" href="#compliance-and-data-residency" title="Permanent link">&para;</a></h3>
+<p>Meet regulatory requirements for data storage location by deploying replicas in
+specific regions. Ensure that data resides within required geographic
+boundaries while maintaining availability.</p>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<h3 id="primary-replica-model">Primary-replica model<a class="headerlink" href="#primary-replica-model" title="Permanent link">&para;</a></h3>
+<p>DocumentDB uses a primary-replica architecture where:</p>
 <ul>
-<li><strong>Automatic failover</strong>: When a primary instance fails, a replica is automatically promoted</li>
-<li><strong>Data durability</strong>: Data is replicated across multiple instances</li>
-<li><strong>Minimal downtime</strong>: Recovery happens automatically without manual intervention</li>
-<li><strong>Continuous operation</strong>: Applications experience brief interruption rather than extended outages</li>
+<li><strong>Primary cluster:</strong> Accepts both read and write operations</li>
+<li><strong>Replica clusters:</strong> Accept read-only operations and replicate changes from
+  the primary Kubernetes cluster</li>
+<li><strong>Replication:</strong> PostgreSQL streaming replication propagates changes from
+  the primary Kubernetes cluster to replica Kubernetes clusters</li>
 </ul>
-<h2 id="types-of-high-availability">Types of High Availability<a class="headerlink" href="#types-of-high-availability" title="Permanent link">&para;</a></h2>
-<p>DocumentDB supports three levels of high availability, each providing different trade-offs between complexity, cost, and resilience:</p>
-<pre class="mermaid"><code>flowchart LR
-    subgraph Local["Local HA (Single Cluster)"]
-        direction TB
-        P1[Primary] --&gt; R1[Replica 1]
-        P1 --&gt; R2[Replica 2]
-    end
-
-    subgraph MultiRegion["Multi-Region (Same Cloud)"]
-        direction TB
-        subgraph Region1[Region A]
-            P2[Primary Cluster]
-        end
-        subgraph Region2[Region B]
-            S2[Standby Cluster]
-        end
-        P2 -.-&gt;|Async Replication| S2
-    end
-
-    subgraph MultiCloud["Multi-Cloud"]
-        direction TB
-        subgraph Cloud1[Azure]
-            P3[Primary]
-        end
-        subgraph Cloud2[GCP]
-            S3a[Replica]
-        end
-        subgraph Cloud3[AWS]
-            S3b[Replica]
-        end
-        P3 -.-&gt;|Cross-Cloud| S3a
-        P3 -.-&gt;|Cross-Cloud| S3b
-    end
-
-    Local ~~~ MultiRegion ~~~ MultiCloud</code></pre>
-<h3 id="local-high-availability">Local High Availability<a class="headerlink" href="#local-high-availability" title="Permanent link">&para;</a></h3>
-<p>Local HA runs multiple DocumentDB instances within a single Kubernetes cluster, distributed across availability zones.</p>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Scope</strong></td>
-<td>Single Kubernetes cluster</td>
-</tr>
-<tr>
-<td><strong>Instances</strong></td>
-<td>1-3 instances (primary + replicas)</td>
-</tr>
-<tr>
-<td><strong>Failover</strong></td>
-<td>Automatic, typically &lt; 30 seconds</td>
-</tr>
-<tr>
-<td><strong>Data Loss</strong></td>
-<td>Minimal (async streaming replication)</td>
-</tr>
-<tr>
-<td><strong>Use Case</strong></td>
-<td>Standard production deployments</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Best for:</strong> Most production workloads requiring high availability without geographic distribution.</p>
-<p><a href="../local-ha/">Configure Local HA →</a></p>
-<h3 id="multi-region-deployment">Multi-Region Deployment<a class="headerlink" href="#multi-region-deployment" title="Permanent link">&para;</a></h3>
-<p>Multi-region runs DocumentDB clusters across multiple regions within the same cloud provider, connected via the cloud's native networking.</p>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Scope</strong></td>
-<td>Multiple regions, single cloud provider</td>
-</tr>
-<tr>
-<td><strong>Networking</strong></td>
-<td>Azure Fleet, VNet peering</td>
-</tr>
-<tr>
-<td><strong>Failover</strong></td>
-<td>Manual promotion required</td>
-</tr>
-<tr>
-<td><strong>Data Loss</strong></td>
-<td>Minimal (async replication lag)</td>
-</tr>
-<tr>
-<td><strong>Use Case</strong></td>
-<td>Disaster recovery, data locality</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Best for:</strong> Disaster recovery requirements, regulatory compliance requiring data in specific regions, or reducing latency for geographically distributed users.</p>
-<h3 id="multi-cloud-deployment">Multi-Cloud Deployment<a class="headerlink" href="#multi-cloud-deployment" title="Permanent link">&para;</a></h3>
-<p>Multi-cloud runs DocumentDB across different cloud providers (Azure, AWS, GCP), connected via service mesh.</p>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Scope</strong></td>
-<td>Multiple cloud providers</td>
-</tr>
-<tr>
-<td><strong>Networking</strong></td>
-<td>Istio service mesh</td>
-</tr>
-<tr>
-<td><strong>Failover</strong></td>
-<td>Manual promotion required</td>
-</tr>
-<tr>
-<td><strong>Data Loss</strong></td>
-<td>Minimal (async replication lag)</td>
-</tr>
-<tr>
-<td><strong>Use Case</strong></td>
-<td>Vendor independence, maximum resilience</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Best for:</strong> Organizations requiring cloud vendor independence, maximum disaster resilience, or hybrid cloud strategies.</p>
-<h2 id="rto-and-rpo-concepts">RTO and RPO Concepts<a class="headerlink" href="#rto-and-rpo-concepts" title="Permanent link">&para;</a></h2>
-<p>When planning for high availability, understand these key metrics:</p>
-<h3 id="recovery-time-objective-rto">Recovery Time Objective (RTO)<a class="headerlink" href="#recovery-time-objective-rto" title="Permanent link">&para;</a></h3>
-<p><strong>RTO</strong> is the maximum acceptable time your application can be unavailable after a failure.</p>
-<table>
-<thead>
-<tr>
-<th>HA Type</th>
-<th>Typical RTO</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Local HA</td>
-<td>&lt; 30 seconds</td>
-</tr>
-<tr>
-<td>Multi-Region</td>
-<td>Minutes (manual failover)</td>
-</tr>
-<tr>
-<td>Multi-Cloud</td>
-<td>Minutes (manual failover)</td>
-</tr>
-</tbody>
-</table>
-<h3 id="recovery-point-objective-rpo">Recovery Point Objective (RPO)<a class="headerlink" href="#recovery-point-objective-rpo" title="Permanent link">&para;</a></h3>
-<p><strong>RPO</strong> is the maximum acceptable amount of data loss measured in time.</p>
-<table>
-<thead>
-<tr>
-<th>HA Type</th>
-<th>Typical RPO</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Local HA</td>
-<td>Near-zero (milliseconds of replication lag)</td>
-</tr>
-<tr>
-<td>Multi-Region</td>
-<td>Seconds (replication lag)</td>
-</tr>
-<tr>
-<td>Multi-Cloud</td>
-<td>Seconds (replication lag)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="decision-tree">Decision Tree<a class="headerlink" href="#decision-tree" title="Permanent link">&para;</a></h2>
-<p>Use this guide to select the appropriate HA strategy:</p>
-<pre class="mermaid"><code>flowchart TD
-    A[Start] --&gt; B{Need geographic&lt;br/&gt;distribution?}
-    B --&gt;|No| C{Need zone-level&lt;br/&gt;resilience?}
-    B --&gt;|Yes| D{Need cloud vendor&lt;br/&gt;independence?}
-
-    C --&gt;|Yes| E[Local HA&lt;br/&gt;Multiple instances]
-    C --&gt;|No| F[Single instance&lt;br/&gt;Development only]
-
-    D --&gt;|Yes| G[Multi-Cloud&lt;br/&gt;Istio mesh]
-    D --&gt;|No| H[Multi-Region&lt;br/&gt;Same cloud provider]
-
-    E --&gt; I[Configure instancesPerNode: 3]
-    F --&gt; J[Configure instancesPerNode: 1]
-    G --&gt; K[Multi-Cloud Guide&lt;br/&gt;Coming soon]
-    H --&gt; L[Multi-Region Guide&lt;br/&gt;Coming soon]</code></pre>
-<h2 id="trade-offs-summary">Trade-offs Summary<a class="headerlink" href="#trade-offs-summary" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Factor</th>
-<th>Local HA</th>
-<th>Multi-Region</th>
-<th>Multi-Cloud</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Complexity</strong></td>
-<td>Low</td>
-<td>Medium</td>
-<td>High</td>
-</tr>
-<tr>
-<td><strong>Cost</strong></td>
-<td>$</td>
-<td>$$</td>
-<td>$$$</td>
-</tr>
-<tr>
-<td><strong>RTO</strong></td>
-<td>Seconds</td>
-<td>Minutes</td>
-<td>Minutes</td>
-</tr>
-<tr>
-<td><strong>RPO</strong></td>
-<td>Near-zero</td>
-<td>Replication lag</td>
-<td>Replication lag</td>
-</tr>
-<tr>
-<td><strong>Blast radius</strong></td>
-<td>Zone outage</td>
-<td>Region outage</td>
-<td>Cloud outage</td>
-</tr>
-<tr>
-<td><strong>Network latency</strong></td>
-<td>Minimal</td>
-<td>Regional</td>
-<td>Variable</td>
-</tr>
-</tbody>
-</table>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<h3 id="documentdb-cluster-components">DocumentDB cluster components<a class="headerlink" href="#documentdb-cluster-components" title="Permanent link">&para;</a></h3>
+<p>Each regional Kubernetes cluster includes:</p>
 <ul>
-<li><a href="../local-ha/">Configure Local HA</a> - Set up high availability within a single cluster</li>
+<li><strong>Gateway containers:</strong> Provide MongoDB-compatible API and connection management</li>
+<li><strong>PostgreSQL containers:</strong> Store data and handle replication (managed by
+  CloudNative-PG)</li>
+<li><strong>Persistent storage:</strong> Regional block storage for data persistence</li>
+<li><strong>Service endpoints:</strong> LoadBalancer or ClusterIP for client connections</li>
+<li><strong>Self-name ConfigMap:</strong> A ConfigMap that stores the Kubernetes cluster name
+  (must match <code>clusterList[].name</code>)</li>
+</ul>
+<h3 id="replication-configuration">Replication configuration<a class="headerlink" href="#replication-configuration" title="Permanent link">&para;</a></h3>
+<p>Multi-region replication is configured in the <code>DocumentDB</code> resource:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-preview</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-preview-ns</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">clusterReplication</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nt">primary</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">member-eastus2-cluster</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">clusterList</span><span class="p">:</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">member-westus3-cluster</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">member-uksouth-cluster</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">member-eastus2-cluster</span>
+</code></pre></div>
+<p>The operator handles:</p>
+<ul>
+<li>Creating replica Kubernetes clusters in specified regions</li>
+<li>Establishing streaming replication from the primary to replicas</li>
+<li>Monitoring replication lag and health</li>
+<li>Coordinating failover operations</li>
+</ul>
+<h2 id="network-requirements">Network requirements<a class="headerlink" href="#network-requirements" title="Permanent link">&para;</a></h2>
+<h3 id="inter-region-connectivity">Inter-region connectivity<a class="headerlink" href="#inter-region-connectivity" title="Permanent link">&para;</a></h3>
+<p>Use cloud-native VNet/VPC peering for direct Kubernetes cluster-to-cluster communication:</p>
+<ul>
+<li><strong>Azure:</strong> VNet peering between AKS clusters</li>
+<li><strong>AWS:</strong> VPC peering between EKS clusters</li>
+<li><strong>GCP:</strong> VPC peering between GKE clusters</li>
+</ul>
+<h3 id="port-requirements">Port requirements<a class="headerlink" href="#port-requirements" title="Permanent link">&para;</a></h3>
+<p>DocumentDB replication requires these ports between Kubernetes clusters:</p>
+<table>
+<thead>
+<tr>
+<th>Port</th>
+<th>Protocol</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5432</td>
+<td>TCP</td>
+<td>PostgreSQL streaming replication</td>
+</tr>
+<tr>
+<td>443</td>
+<td>TCP</td>
+<td>Kubernetes API (for KubeFleet, optional)</td>
+</tr>
+</tbody>
+</table>
+<p>Ensure firewall rules and network security groups allow traffic on these ports
+between regional Kubernetes clusters.</p>
+<h3 id="dns-and-service-discovery">DNS and service discovery<a class="headerlink" href="#dns-and-service-discovery" title="Permanent link">&para;</a></h3>
+<p>The operator uses the DocumentDB cluster name and the generated service for the
+corresponding CNPG cluster to connect regional deployments. You must make sure
+those connections can resolve and route correctly between Kubernetes clusters.
+You can also use either of the built-in networking integrations.</p>
+<h4 id="istio-networking">Istio networking<a class="headerlink" href="#istio-networking" title="Permanent link">&para;</a></h4>
+<p>If Istio is installed on the Kubernetes cluster, Istio networking is enabled,
+and an east-west gateway is present connecting each Kubernetes cluster, then
+the operator generates services that automatically route the default service
+names across regions.</p>
+<h4 id="fleet-networking">Fleet networking<a class="headerlink" href="#fleet-networking" title="Permanent link">&para;</a></h4>
+<p>If Fleet networking is installed on each Kubernetes cluster, instead of using
+default service names, the operator creates ServiceExports and
+MultiClusterServices on each Kubernetes cluster. It then uses those generated
+cross-regional services to connect CNPG instances to one another.</p>
+<h2 id="deployment-models">Deployment models<a class="headerlink" href="#deployment-models" title="Permanent link">&para;</a></h2>
+<h3 id="managed-fleet-orchestration">Managed fleet orchestration<a class="headerlink" href="#managed-fleet-orchestration" title="Permanent link">&para;</a></h3>
+<p>Use a multi-cluster orchestration system such as KubeFleet to manage
+deployments of resources across Kubernetes clusters and centrally manage
+changes, ensuring your topology stays synchronized between regions.</p>
+<p><strong>Example:</strong> <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md">AKS Fleet Deployment</a></p>
+<h3 id="manual-multi-cluster-management">Manual multi-cluster management<a class="headerlink" href="#manual-multi-cluster-management" title="Permanent link">&para;</a></h3>
+<p>Deploy DocumentDB resources individually to each Kubernetes cluster, manually
+ensuring that each DocumentDB CRD is in sync.</p>
+<h2 id="performance-considerations">Performance considerations<a class="headerlink" href="#performance-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="replication-lag">Replication lag<a class="headerlink" href="#replication-lag" title="Permanent link">&para;</a></h3>
+<p>Distance between regions affects replication lag. Monitor replication lag with
+PostgreSQL metrics and adjust application read patterns accordingly.</p>
+<h3 id="storage-performance">Storage performance<a class="headerlink" href="#storage-performance" title="Permanent link">&para;</a></h3>
+<p>Each region requires independent storage resources, and each replica must have
+an equal or greater volume of available storage compared to the primary.</p>
+<h2 id="security-considerations">Security considerations<a class="headerlink" href="#security-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="tls-encryption">TLS encryption<a class="headerlink" href="#tls-encryption" title="Permanent link">&para;</a></h3>
+<p>Enable TLS for all connections:</p>
+<ul>
+<li><strong>Client-to-gateway:</strong> Encrypt application connections (see <a href="../../configuration/tls/">TLS configuration</a>)</li>
+<li><strong>Replication traffic:</strong> PostgreSQL SSL for inter-cluster replication</li>
+<li><strong>Service mesh:</strong> mTLS for cross-cluster service communication</li>
+</ul>
+<h3 id="authentication-and-authorization">Authentication and authorization<a class="headerlink" href="#authentication-and-authorization" title="Permanent link">&para;</a></h3>
+<p>Credentials must be synchronized across regions:</p>
+<ul>
+<li><strong>Kubernetes Secrets:</strong> Replicate secrets to all Kubernetes clusters
+  (KubeFleet handles this automatically)</li>
+<li><strong>RBAC policies:</strong> Apply consistent access controls across regions</li>
+<li><strong>Credential rotation:</strong> Coordinate credential changes across all Kubernetes
+  clusters</li>
+</ul>
+<h3 id="network-security">Network security<a class="headerlink" href="#network-security" title="Permanent link">&para;</a></h3>
+<p>Restrict network access between regions:</p>
+<ul>
+<li><strong>Private connectivity:</strong> Use VNet/VPC peering instead of public internet</li>
+<li><strong>Network policies:</strong> Kubernetes NetworkPolicy to limit pod-to-pod
+  communication</li>
+<li><strong>Firewall rules:</strong> Allow only required ports between regional Kubernetes
+  clusters</li>
+</ul>
+<h2 id="monitoring-and-observability">Monitoring and observability<a class="headerlink" href="#monitoring-and-observability" title="Permanent link">&para;</a></h2>
+<p>Track multi-region health and performance:</p>
+<ul>
+<li><strong>Replication lag:</strong> Monitor <code>pg_stat_replication</code> metrics</li>
+<li><strong>Kubernetes cluster health:</strong> Pod status, resource usage, and connection counts</li>
+<li><strong>Network metrics:</strong> Bandwidth, latency, packet loss between regions</li>
+<li><strong>Application performance:</strong> Request latency, error rates per region</li>
+</ul>
+<p>See <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/telemetry/README.md">Telemetry examples</a>
+for OpenTelemetry, Prometheus, and Grafana setup.</p>
+<h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../setup/">Multi-region setup guide</a> - Deploy your first multi-region
+  DocumentDB cluster</li>
+<li><a href="../failover-procedures/">Failover procedures</a> - Learn how to handle planned
+  and unplanned failovers</li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md">AKS Fleet deployment example</a></li>
 </ul>
 
 
