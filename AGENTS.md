@@ -353,6 +353,30 @@ Types:
 - Mock external dependencies appropriately
 - Ensure tests are idempotent and isolated
 
+### Telemetry Testing
+
+The operator includes Application Insights telemetry. For design details, see:
+- [docs/designs/appinsights-metrics.md](docs/designs/appinsights-metrics.md) - Metrics design and implementation
+- [docs/designs/telemetry-guid-strategy.md](docs/designs/telemetry-guid-strategy.md) - GUID strategy options
+
+**Quick E2E Test:**
+```bash
+# 1. Set instrumentation key (use test App Insights resource)
+export APPINSIGHTS_INSTRUMENTATIONKEY="your-instrumentation-key"
+
+# 2. Deploy operator to AKS/Kind cluster with telemetry enabled
+helm install documentdb-operator ./operator/documentdb-helm-chart \
+  --set telemetry.enabled=true \
+  --set telemetry.appInsightsKey=$APPINSIGHTS_INSTRUMENTATIONKEY
+
+# 3. Create a DocumentDB cluster to trigger telemetry events
+kubectl apply -f documentdb-playground/telemetry/sample-cluster.yaml
+
+# 4. Verify in Azure Portal → Application Insights → Live Metrics / Logs
+```
+
+For full observability setup (Prometheus, Grafana, OpenTelemetry), see `documentdb-playground/telemetry/`.
+
 ### Code Review
 
 For thorough code reviews, reference the code review agent:
