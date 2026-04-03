@@ -62,6 +62,10 @@ inputs:
     description: 'Optional gateway image override for the cluster'
     required: false
     default: ''
+  documentdb-image-tag:
+    description: 'Tag for documentdb/gateway images (defaults to image-tag if not set, for backward compat)'
+    required: false
+    default: ''
   # GitHub configuration
   github-token:
     description: 'GitHub token for accessing packages'
@@ -73,6 +77,10 @@ inputs:
     description: 'Kubernetes version for Kind cluster (e.g., v1.35.0, v1.34.0)'
     required: false
     default: 'v1.35.0'
+  released-chart-version:
+    description: 'Install operator from public Helm repo instead of built artifacts. Use "latest" for latest version or a specific version string.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -220,25 +228,37 @@ runs:
       shell: bash
       run: |
         # Resolve early so kind-load and deploy steps both use the same refs.
-        # Priority: explicit input override > external manifest tag > local build tag.
+        # Priority: explicit input override > values.yaml (external) > local build tag.
+        # Database images use a different version track than operator images.
+        if [[ -n "${{ inputs.documentdb-image-tag }}" ]]; then
+          DOCDB_TAG="${{ inputs.documentdb-image-tag }}"
+        elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
+          # External images: read documentDbVersion from values.yaml (separate version track).
+          DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+          echo "Using documentDbVersion from values.yaml: $DOCDB_TAG"
+        else
+          DOCDB_TAG="${{ inputs.image-tag }}"
+        fi
+
         if [[ -n "${{ inputs.documentdb-image }}" ]]; then
           DOCDB_IMAGE="${{ inputs.documentdb-image }}"
         elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
-          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}"
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}"
         else
-          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+          DOCDB_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/documentdb:${DOCDB_TAG}-${{ inputs.architecture }}"
         fi
 
         if [[ -n "${{ inputs.gateway-image }}" ]]; then
           GW_IMAGE="${{ inputs.gateway-image }}"
         elif [[ "${{ inputs.use-external-images }}" == "true" ]]; then
-          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}"
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}"
         else
-          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${{ inputs.image-tag }}-${{ inputs.architecture }}"
+          GW_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/gateway:${DOCDB_TAG}-${{ inputs.architecture }}"
         fi
 
         echo "DOCUMENTDB_IMAGE_RESOLVED=$DOCDB_IMAGE" >> $GITHUB_ENV
         echo "GATEWAY_IMAGE_RESOLVED=$GW_IMAGE" >> $GITHUB_ENV
+        echo "DOCDB_IMAGE_TAG=${DOCDB_TAG}" >> $GITHUB_ENV
         echo "Resolved DocumentDB image: $DOCDB_IMAGE"
         echo "Resolved Gateway image: $GW_IMAGE"
 
@@ -422,7 +442,7 @@ runs:
         fi
 
     - name: Install DocumentDB Operator (local chart)
-      if: inputs.use-external-images == 'false'
+      if: inputs.use-external-images == 'false' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Installing DocumentDB Operator on ${{ inputs.architecture }} using local chart version: ${{ inputs.chart-version }}"
@@ -458,30 +478,25 @@ runs:
           fi
           
           # Install the operator using the platform-specific local chart with image tag overrides
-          if [[ "$CERT_MANAGER_READY" == "true" ]]; then
-            helm install documentdb-operator ./documentdb-chart \
-              --namespace ${{ inputs.operator-namespace }} \
-              --create-namespace \
-              --set documentDbVersion="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
-              --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
-              --set image.sidecarinjector.pullPolicy=IfNotPresent \
-              --set image.walreplica.pullPolicy=IfNotPresent \
-              --wait --timeout=15m
-          else
-            helm install documentdb-operator ./documentdb-chart \
-              --namespace ${{ inputs.operator-namespace }} \
-              --create-namespace \
-              --set documentDbVersion="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG" \
-              --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG" \
-              --set image.documentdbk8soperator.pullPolicy=IfNotPresent \
-              --set image.sidecarinjector.pullPolicy=IfNotPresent \
-              --set image.walreplica.pullPolicy=IfNotPresent \
-              --values /tmp/values-override.yaml \
-              --wait --timeout=15m
+          # Operator/sidecar use the operator track tag (LOCAL_IMAGE_TAG).
+          # Database images (documentdb/gateway) use DOCDB_IMAGE_TAG (may differ from operator tag).
+          HELM_ARGS=(
+            --namespace ${{ inputs.operator-namespace }}
+            --create-namespace
+            --set documentDbVersion="${DOCDB_IMAGE_TAG:-$LOCAL_IMAGE_TAG}"
+            --set image.documentdbk8soperator.tag="$LOCAL_IMAGE_TAG"
+            --set image.sidecarinjector.tag="$LOCAL_IMAGE_TAG"
+            --set image.documentdbk8soperator.pullPolicy=IfNotPresent
+            --set image.sidecarinjector.pullPolicy=IfNotPresent
+            --set image.walreplica.pullPolicy=IfNotPresent
+            --wait --timeout=15m
+          )
+
+          if [[ "$CERT_MANAGER_READY" != "true" ]]; then
+            HELM_ARGS+=(--values /tmp/values-override.yaml)
           fi
+
+          helm install documentdb-operator ./documentdb-chart "${HELM_ARGS[@]}"
         else
           echo "❌ Platform-specific Helm chart artifact not found: $EXPECTED_CHART_FILE"
           echo "Available files in chart artifact directory:"
@@ -528,12 +543,12 @@ runs:
         
         # Check for CRDs installation
         echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
+        kubectl get crd dbs.documentdb.io || echo "DocumentDB CRD not found"
         
         echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
 
     - name: Install DocumentDB Operator (external images)
-      if: inputs.use-external-images == 'true'
+      if: inputs.use-external-images == 'true' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Installing DocumentDB Operator on ${{ inputs.architecture }} using external images with tag: ${{ inputs.image-tag }}"
@@ -588,33 +603,66 @@ runs:
             --values /tmp/values-override.yaml \
             --wait --timeout=15m
         fi
+
+    - name: Install DocumentDB Operator (released chart)
+      if: inputs.released-chart-version != ''
+      shell: bash
+      run: |
+        echo "Installing DocumentDB Operator from public Helm repo..."
+        echo "Requested chart version: ${{ inputs.released-chart-version }}"
         
-        # Verify operator installation
-        echo "Verifying DocumentDB operator installation..."
+        # Add the public DocumentDB Helm repository
+        helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
+        helm repo update
+        
+        # Install the released chart
+        # If version is 'latest', omit --version to get the latest available
+        CHART_VERSION="${{ inputs.released-chart-version }}"
+        if [[ "$CHART_VERSION" == "latest" ]]; then
+          echo "Installing latest released version..."
+          helm install documentdb-operator documentdb/documentdb-operator \
+            --namespace ${{ inputs.operator-namespace }} \
+            --create-namespace \
+            --wait --timeout=15m
+        else
+          echo "Installing version $CHART_VERSION..."
+          helm install documentdb-operator documentdb/documentdb-operator \
+            --namespace ${{ inputs.operator-namespace }} \
+            --create-namespace \
+            --version "$CHART_VERSION" \
+            --wait --timeout=15m
+        fi
+        
+        # Log resolved version
+        echo "Installed Helm releases:"
+        helm list -n ${{ inputs.operator-namespace }}
+
+    - name: Verify operator installation
+      shell: bash
+      run: |
+        echo "Verifying DocumentDB operator installation on ${{ inputs.architecture }}..."
         kubectl wait --for=condition=Available deployment/documentdb-operator -n ${{ inputs.operator-namespace }} --timeout=300s
         
-        # Verify that the external images are being used with chart defaults
-        echo "Verifying operator deployment uses external images with chart default version..."
+        echo "Installed Helm releases:"
+        helm list -n ${{ inputs.operator-namespace }}
+        
         echo "Operator image:"
         kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[0].image}'
         echo ""
         echo "Sidecar injector image (if present):"
-        kubectl get deployment documentdb-operator -n ${{ inputs.operator-namespace }} -o jsonpath='{.spec.template.spec.containers[1].image}' || echo "No sidecar container found"
+        kubectl get deployment sidecar-injector -n cnpg-system -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "No sidecar injector deployment found"
         echo ""
         
-        # Additional verification - check that operator is actually running
         echo "Checking operator pod status..."
         kubectl get pods -n ${{ inputs.operator-namespace }} -l app.kubernetes.io/name=documentdb-operator
         
-        # Verify operator logs for any immediate issues
         echo "Checking operator logs for any startup issues..."
         kubectl logs -n ${{ inputs.operator-namespace }} deployment/documentdb-operator --tail=20 || echo "Could not retrieve operator logs"
         
-        # Check for CRDs installation
         echo "Verifying DocumentDB CRDs are installed..."
-        kubectl get crd db.documentdb.io || echo "DocumentDB CRD not found"
+        kubectl get crd dbs.documentdb.io || echo "DocumentDB CRD not found"
         
-        echo "✓ DocumentDB Operator installation completed on ${{ inputs.architecture }}"
+        echo "✓ DocumentDB Operator installation verified on ${{ inputs.architecture }}"
 
     - name: Create DocumentDB credentials secret
       shell: bash

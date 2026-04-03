@@ -20,7 +20,7 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       containers:
       - name: documentdb-operator
-        image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Values.documentDbVersion | default .Chart.AppVersion }}"
+        image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Chart.AppVersion }}"
         imagePullPolicy: "{{ .Values.image.documentdbk8soperator.pullPolicy }}"
         env:
         - name: GATEWAY_PORT
@@ -29,9 +29,9 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        {{- if .Values.documentDbVersion | default .Chart.AppVersion }}
+        {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
-          value: "{{ .Values.documentDbVersion | default .Chart.AppVersion }}"
+          value: "{{ .Values.documentDbVersion }}"
         {{- end }}
         # Telemetry configuration
         {{- if not .Values.telemetry.enabled }}

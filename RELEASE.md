@@ -69,8 +69,19 @@ This creates a branch `release/v{version}` and opens a PR.
 
 After the PR is approved and merged:
 
-1. Run **"RELEASE - Build Candidate Images"** workflow with the version number
-2. Run **"RELEASE - Promote Candidate Images and Publish Helm Chart"** workflow to publish
+#### Operator Release (operator + sidecar images + Helm chart)
+
+1. Run **"RELEASE - Build Operator Candidate Images"** (`build_operator_images.yml`) with the operator version
+2. Run **"RELEASE - Promote Operator Images and Publish Helm Chart"** (`release_operator.yml`) to promote and publish
+
+#### Database Image Release (documentdb extension + gateway)
+
+Database images follow an **independent release cycle** from the operator:
+
+1. Run **"RELEASE - Build DocumentDB Candidate Images"** (`build_documentdb_images.yml`) with the released DocumentDB `version`
+2. Run **"RELEASE - Promote DocumentDB Images"** (`release_documentdb_images.yml`) to promote and auto-create a PR that bumps default image versions across the codebase
+
+> **Note:** The deprecated combined workflows (`build_images.yml`, `release_images.yml`) are still available but will be removed in a future release.
 
 ---
 

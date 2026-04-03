@@ -3562,6 +3562,97 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(result.Requeue).To(BeFalse())
 		})
+
+		It("should add restart annotation when TLS secret name changes", func() {
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "1Gi",
+						},
+					},
+				},
+				Status: dbpreview.DocumentDBStatus{
+					TLS: &dbpreview.TLSStatus{
+						Ready:      true,
+						SecretName: "new-tls-secret",
+					},
+				},
+			}
+
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+								"gatewayTLSSecret":           "old-tls-secret",
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: documentDBName + "-1",
+					TargetPrimary:  documentDBName + "-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			})
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+
+			// Verify CNPG cluster was updated with new TLS secret and restart annotation
+			updatedCluster := &cnpgv1.Cluster{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updatedCluster)).To(Succeed())
+			Expect(updatedCluster.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("new-tls-secret"))
+			Expect(updatedCluster.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+		})
 	})
 
 	Describe("validateK8sVersion", func() {

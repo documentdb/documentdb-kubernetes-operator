@@ -1,0 +1,115 @@
+name: RELEASE - Build Operator Candidate Images
+
+# Builds operator and sidecar images from this repo's Go source.
+# These images follow the OPERATOR version track (Chart.appVersion).
+# For database images (documentdb extension + gateway), see build_documentdb_images.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Operator version for the build (will be tagged as {version}-test)'
+        required: false
+        default: '0.2.0'
+
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'operator/src/**'
+      - 'operator/cnpg-plugins/**'
+      - '.github/workflows/build_operator_images.yml'
+
+permissions:
+  packages: write
+  contents: read
+  id-token: write
+
+env:
+  VERSION: ${{ github.event.inputs.version || '0.2.0' }}
+  IMAGE_TAG: ${{ github.event.inputs.version || '0.2.0' }}-test
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build and push operator + sidecar images (per-arch)
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        image:
+          - name: operator
+            dockerfile: operator/src/Dockerfile
+            context: operator/src/
+          - name: sidecar
+            dockerfile: operator/cnpg-plugins/sidecar-injector/Dockerfile
+            context: operator/cnpg-plugins/sidecar-injector/
+          # NOTE: wal-replica is part of the operator track but excluded here until
+          # its Dockerfile is created. The Helm chart already templates a wal-replica
+          # image tag via Chart.AppVersion, but the feature is disabled by default.
+        include:
+          - arch: amd64
+            base_arch: AMD64
+            runner: ubuntu-22.04
+          - arch: arm64
+            base_arch: ARM64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+      run: |
+        set -euo pipefail
+        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+        IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
+
+        docker build --build-arg ARCH=${{ matrix.base_arch }} \
+          -t $IMAGE \
+          -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+        docker push $IMAGE
+
+  # ---------------------------------------------------------------------------
+  # Create multi-arch manifests, sign, and verify
+  # ---------------------------------------------------------------------------
+  create-manifest:
+    name: Create, Push, Sign & Verify Manifest (${{ matrix.image }})
+    strategy:
+      matrix:
+        image: [operator, sidecar]
+    runs-on: ubuntu-22.04
+    needs: [build-and-push]
+    steps:
+    - name: Login to GHCR
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+    - name: Create and Push Manifest
+      run: |
+        docker manifest create ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-amd64 \
+          --amend ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}-arm64
+        docker manifest push ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3.8.2
+
+    - name: Sign manifest (keyless)
+      run: |
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          | awk '/^Digest:/ { print $2 }')
+        echo "Signing manifest-list@${DIGEST}"
+        cosign sign ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST} -y
+
+    - name: Verify manifest signature (keyless)
+      run: |
+        DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
+          | awk '/^Digest:/ { print $2 }')
+        cosign verify \
+          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_operator_images.yml@${{ github.ref }}" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}

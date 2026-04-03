@@ -1,4 +1,10 @@
-name: RELEASE - Build Candidate Images
+name: "[DEPRECATED] RELEASE - Build Candidate Images"
+
+# ⚠️ DEPRECATED: This workflow builds ALL images (operator + sidecar + documentdb + gateway) together.
+# It has been replaced by two focused workflows:
+#   - build_operator_images.yml  → operator, sidecar (operator version track)
+#   - build_documentdb_images.yml → documentdb, gateway (database version track)
+# This workflow is kept for backward compatibility during transition.
 
 on:
   workflow_dispatch:

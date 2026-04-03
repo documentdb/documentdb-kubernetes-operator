@@ -1,10 +1,12 @@
 namespace: documentdb-operator
 replicaCount: 1
 
-# DocumentDB version - global default for all components when individual tags are not set
-# Priority: individual component tag > documentDbVersion > Chart.appVersion
-# Defaults to Chart.appVersion if not specified  
-documentDbVersion: ""
+# DocumentDB database image version (extension + gateway images).
+# This controls the DOCUMENTDB_VERSION env var passed to the operator and sidecar,
+# which determines the default documentdb extension and gateway image tags at runtime.
+# This version is INDEPENDENT of Chart.appVersion (which controls operator/sidecar image tags).
+# When empty, the operator falls back to its compiled-in defaults (see constants.go).
+documentDbVersion: "0.109.0"
 
 # Telemetry configuration for Application Insights
 telemetry:
@@ -48,3 +50,6 @@ image:
     pullPolicy: Always
 cloudnative-pg:
   namespaceOverride: cnpg-system
+  additionalEnv:
+    - name: ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES
+      value: "true"

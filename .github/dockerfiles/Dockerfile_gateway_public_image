@@ -1,0 +1,43 @@
+ARG SOURCE_IMAGE=ghcr.io/documentdb/documentdb/documentdb-local:pg17-0.109.0
+FROM ${SOURCE_IMAGE} AS source
+
+FROM debian:trixie-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
+      gnupg \
+      jq \
+      openssl && \
+    # Add PGDG repository for PostgreSQL 18 client
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      postgresql-client-18 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1000 -s /bin/bash documentdb
+
+RUN mkdir -p \
+      /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols \
+      /home/documentdb/gateway/scripts
+
+COPY --from=source /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols/documentdb_gateway /usr/bin/documentdb_gateway
+COPY --from=source /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json
+COPY --from=source /home/documentdb/gateway/scripts/utils.sh /home/documentdb/gateway/scripts/utils.sh
+COPY .github/dockerfiles/gateway_entrypoint.sh /home/documentdb/gateway/scripts/gateway_entrypoint.sh
+
+RUN chmod +x \
+      /usr/bin/documentdb_gateway \
+      /home/documentdb/gateway/scripts/utils.sh \
+      /home/documentdb/gateway/scripts/gateway_entrypoint.sh && \
+    chown -R documentdb:documentdb /home/documentdb
+
+USER documentdb
+WORKDIR /home/documentdb/gateway
+
+ENTRYPOINT ["/bin/bash", "/home/documentdb/gateway/scripts/gateway_entrypoint.sh"]

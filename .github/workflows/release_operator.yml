@@ -1,27 +1,20 @@
-name: "[DEPRECATED] RELEASE - Promote Candidate Images and Publish Helm Chart"
+name: RELEASE - Promote Operator Images and Publish Helm Chart
 
-# ⚠️ DEPRECATED: This workflow promotes ALL images and publishes the Helm chart together.
-# It has been replaced by two focused workflows:
-#   - release_operator.yml          → promotes operator/sidecar, publishes Helm chart
-#   - release_documentdb_images.yml → promotes documentdb/gateway, auto-PRs version bumps
-# This workflow is kept for backward compatibility during transition.
-#
-# ⚠️ WARNING: This workflow applies the same version tag to both operator-track
-# (operator, sidecar) and database-track (documentdb, gateway) images. Under
-# the current split-track versioning, this is incorrect. Use the replacement
-# workflows above instead.
+# Promotes operator/sidecar candidate images to release tags and publishes the Helm chart.
+# This workflow handles only the OPERATOR version track (Chart.appVersion).
+# For database image releases (documentdb + gateway), see release_documentdb_images.yml.
 
 on:
   workflow_dispatch:
     inputs:
       candidate_version:
-        description: 'Version of the build candidate to promote (will be tagged as {version})'
+        description: 'Operator candidate tag to promote (e.g., 0.2.0-test)'
         required: true
-        default: '0.1.1-test'
+        default: '0.2.0-test'
       version:
-        description: 'Version to release (used for images and Helm chart)'
+        description: 'Release version for operator images and Helm chart'
         required: true
-        default: '0.1.1'
+        default: '0.2.0'
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
@@ -38,7 +31,9 @@ permissions:
   id-token: write
 
 jobs:
-  # Optional test jobs - run both E2E and integration tests in parallel if enabled
+  # ---------------------------------------------------------------------------
+  # Optional test gate — run E2E, integration, and backup tests in parallel
+  # ---------------------------------------------------------------------------
   test-e2e:
     name: E2E Test Images Before Release
     if: ${{ inputs.run_tests == true }}
@@ -63,33 +58,40 @@ jobs:
       image_tag: ${{ inputs.candidate_version }}
     secrets: inherit
 
-  copy-and-push-manifest:
-    name: Release Images
+  # ---------------------------------------------------------------------------
+  # Promote operator and sidecar images (retag candidate → release)
+  # ---------------------------------------------------------------------------
+  promote-operator-images:
+    name: Promote ${{ matrix.image }}
     runs-on: ubuntu-latest
     needs: [test-e2e, test-integration, test-backup-and-restore]
     if: ${{ always() && (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped') && (needs.test-integration.result == 'success' || needs.test-integration.result == 'skipped') && (needs.test-backup-and-restore.result == 'success' || needs.test-backup-and-restore.result == 'skipped') }}
     strategy:
       matrix:
-        image: [operator, sidecar, documentdb, gateway]
+        # NOTE: wal-replica excluded until its Dockerfile is created (feature-flagged, disabled by default).
+        image: [operator, sidecar]
     steps:
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Retag existing manifest
         env:
-          SOURCE_TAG: ${{ github.event.inputs.candidate_version }}
-          TARGET_TAG: ${{ github.event.inputs.version }}
+          SOURCE_TAG: ${{ inputs.candidate_version }}
+          TARGET_TAG: ${{ inputs.version }}
         run: |
-          echo "Releasing ${{ matrix.image }} image from tag $SOURCE_TAG to $TARGET_TAG"
+          echo "Promoting ${{ matrix.image }} from $SOURCE_TAG to $TARGET_TAG"
           docker buildx imagetools create \
             -t ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.TARGET_TAG }} \
             ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.SOURCE_TAG }}
 
+  # ---------------------------------------------------------------------------
+  # Package and publish Helm chart
+  # ---------------------------------------------------------------------------
   publish-helm-chart:
     name: Publish Helm Chart
     runs-on: ubuntu-latest
-    needs: copy-and-push-manifest
-    if: ${{ always() && needs.copy-and-push-manifest.result == 'success' }}
+    needs: promote-operator-images
+    if: ${{ always() && needs.promote-operator-images.result == 'success' }}
     permissions:
       contents: read
       id-token: write
@@ -106,28 +108,26 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
-      - name: Update values.yaml with version tag
-        run: |
-          echo "Chart uses Chart.appVersion for image tags (no tag: field in values.yaml)"
-          echo "values.yaml content:"
-          cat operator/documentdb-helm-chart/values.yaml
-
-      - name: Inject telemetry connection string
-        if: ${{ secrets.APPINSIGHTS_CONNECTION_STRING != '' }}
-        run: |
-          echo "Injecting Application Insights connection string for telemetry"
-          # Use yq to update the connectionString field in values.yaml
-          sed -i 's|connectionString: ""|connectionString: "${{ secrets.APPINSIGHTS_CONNECTION_STRING }}"|g' operator/documentdb-helm-chart/values.yaml
-
       - name: Set chart version
         run: |
-            echo "CHART_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-            echo "Using chart version: ${{ github.event.inputs.version }}"
+            echo "CHART_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+            echo "Using chart version: ${{ inputs.version }}"
 
       - name: Update Chart.yaml metadata
         run: |
           sed -i "s/^version: .*/version: ${CHART_VERSION}/" operator/documentdb-helm-chart/Chart.yaml
           sed -i "s/^appVersion: .*/appVersion: \"${CHART_VERSION}\"/" operator/documentdb-helm-chart/Chart.yaml
+          echo "Chart.yaml after update:"
+          cat operator/documentdb-helm-chart/Chart.yaml
+
+      - name: Verify values.yaml has explicit documentDbVersion
+        run: |
+          DOCDB_VERSION=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+          if [[ -z "$DOCDB_VERSION" || "$DOCDB_VERSION" == '""' ]]; then
+            echo "WARNING: documentDbVersion is empty in values.yaml. Database images will use compiled defaults."
+          else
+            echo "documentDbVersion is set to: $DOCDB_VERSION"
+          fi
 
       - name: Package Helm chart
         run: |
@@ -140,21 +140,24 @@ jobs:
 
       - name: Push Helm chart to GHCR
         run: |
-          helm push /home/runner/work/documentdb-kubernetes-operator/documentdb-kubernetes-operator/documentdb-operator-${CHART_VERSION}.tgz oci://${GHCR_REPO}
+          CHART_FILE=$(ls documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null || ls */documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null)
+          helm push "$CHART_FILE" oci://${GHCR_REPO}
 
-      - name: Helm release summary
+      - name: Release summary
         run: |
-          echo "## Helm Chart Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Operator Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Chart Name**: \`$CHART_NAME\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: \`$CHART_VERSION\` (unified for chart and images)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Chart Source Ref**: \`${{ github.event.inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Source Tag**: \`${{ github.event.inputs.candidate_version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Tag**: \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Operator Version**: \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images Promoted**: operator, sidecar" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Chart Source Ref**: \`${{ inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: \`$GHCR_REPO\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Note**: Images promoted from \`${{ github.event.inputs.candidate_version }}\` to \`${{ github.event.inputs.version }}\` and Helm chart published" >> $GITHUB_STEP_SUMMARY
+          echo "**Note**: Database images (documentdb, gateway) are released independently via \`release_documentdb_images.yml\`." >> $GITHUB_STEP_SUMMARY
 
+  # ---------------------------------------------------------------------------
+  # Publish Helm repository to GitHub Pages
+  # ---------------------------------------------------------------------------
   publish-helm-pages:
     name: Publish Helm Repository
     needs: publish-helm-chart
@@ -170,7 +173,5 @@ jobs:
       dry_run: false
       confirm_version: ${{ inputs.version }}
       normalize_chart_metadata: true
-      # Follow the same gh-pages branch used by mike in deploy_docs.yml.
       allow_pages_source_mismatch: true
     secrets: inherit
-  
