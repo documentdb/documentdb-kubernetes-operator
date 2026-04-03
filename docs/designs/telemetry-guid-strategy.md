@@ -103,6 +103,63 @@ func GenerateClusterID(namespace, name string, uid types.UID) string {
 | Matches user mental model |  Yes |  No |
 | Telemetry continuity on recreate |  Yes |  No |
 
+## Option 3: Hybrid Cloud-Native ID Strategy
+
+This approach uses cloud-native identifiers when available, with `kube-system` namespace UID as a universal fallback. All values are hashed for privacy.
+
+### Detection Chain (Priority Order)
+
+1. **AKS** → `hash(subscription + resourceGroup)` from node providerID or `kubernetes.azure.com` labels
+2. **EKS** → `hash(accountId + region + clusterName)` from node labels (IMDS as last resort)
+3. **GKE** → `hash(project + clusterName)` from providerID + labels
+4. **Fallback** → `hash(kube-system namespace UID)` - works everywhere
+
+```go
+func GenerateClusterID(ctx context.Context, client client.Client) (string, error) {
+    // Try cloud-specific detection first
+    if id, err := detectAKSClusterID(ctx, client); err == nil {
+        return hashForPrivacy(id), nil
+    }
+    if id, err := detectEKSClusterID(ctx, client); err == nil {
+        return hashForPrivacy(id), nil
+    }
+    if id, err := detectGKEClusterID(ctx, client); err == nil {
+        return hashForPrivacy(id), nil
+    }
+    
+    // Universal fallback: kube-system namespace UID
+    ns := &corev1.Namespace{}
+    if err := client.Get(ctx, types.NamespacedName{Name: "kube-system"}, ns); err != nil {
+        return "", err
+    }
+    return hashForPrivacy(string(ns.UID)), nil
+}
+
+func hashForPrivacy(data string) string {
+    hash := sha256.Sum256([]byte(data))
+    return hex.EncodeToString(hash[:16])
+}
+```
+
+**Behavior:**
+- ID represents the **Kubernetes cluster** itself, not individual DocumentDB resources
+- Same cluster ID across all DocumentDB instances in that cluster
+- Survives operator restarts, pod migrations, and cluster upgrades
+- Hashing ensures no sensitive cloud account info is exposed in telemetry
+
+**Advantages:**
+- Zero writes - read-only operations only, no annotation persistence needed
+- Deterministic - same cluster always produces same ID
+- No race conditions - nothing to persist before a crash
+- Cloud-aware - leverages existing cloud provider metadata
+- Universal fallback - works on any Kubernetes cluster (on-prem, bare-metal, etc.)
+
+**Disadvantages:**
+- Additional complexity in detection logic
+- Requires read access to nodes and kube-system namespace
+- Cloud provider detection may need updates as providers change metadata formats
+- Single ID per cluster - cannot distinguish individual DocumentDB resources
+
 ## Comparison
 
 ### Option 1: UUID Approach
@@ -204,16 +261,139 @@ func generateHash(resourceType, namespace, name string, uid types.UID) string {
 }
 ```
 
+### Option 3 Implementation (Hybrid Cloud-Native)
+
+```go
+package telemetry
+
+import (
+    "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "fmt"
+    "strings"
+
+    corev1 "k8s.io/api/core/v1"
+    "k8s.io/apimachinery/pkg/types"
+    "sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// GenerateKubernetesClusterID creates a deterministic ID for the Kubernetes cluster.
+// Uses cloud-native identifiers when available, falls back to kube-system UID.
+func GenerateKubernetesClusterID(ctx context.Context, c client.Client) (string, error) {
+    // Try cloud-specific detection in priority order
+    if id, err := detectAKSClusterID(ctx, c); err == nil && id != "" {
+        return hashForPrivacy("aks", id), nil
+    }
+    if id, err := detectEKSClusterID(ctx, c); err == nil && id != "" {
+        return hashForPrivacy("eks", id), nil
+    }
+    if id, err := detectGKEClusterID(ctx, c); err == nil && id != "" {
+        return hashForPrivacy("gke", id), nil
+    }
+    
+    // Universal fallback: kube-system namespace UID
+    ns := &corev1.Namespace{}
+    if err := c.Get(ctx, types.NamespacedName{Name: "kube-system"}, ns); err != nil {
+        return "", fmt.Errorf("failed to get kube-system namespace: %w", err)
+    }
+    return hashForPrivacy("k8s", string(ns.UID)), nil
+}
+
+func detectAKSClusterID(ctx context.Context, c client.Client) (string, error) {
+    node, err := getAnyNode(ctx, c)
+    if err != nil {
+        return "", err
+    }
+    
+    // Check for AKS labels
+    if sub := node.Labels["kubernetes.azure.com/subscription"]; sub != "" {
+        rg := node.Labels["kubernetes.azure.com/resource-group"]
+        return fmt.Sprintf("%s/%s", sub, rg), nil
+    }
+    
+    // Parse from providerID: azure:///subscriptions/{sub}/resourceGroups/{rg}/...
+    if strings.HasPrefix(node.Spec.ProviderID, "azure://") {
+        parts := strings.Split(node.Spec.ProviderID, "/")
+        // Extract subscription and resource group from path
+        for i, p := range parts {
+            if p == "subscriptions" && i+1 < len(parts) {
+                sub := parts[i+1]
+                for j := i; j < len(parts); j++ {
+                    if parts[j] == "resourceGroups" && j+1 < len(parts) {
+                        return fmt.Sprintf("%s/%s", sub, parts[j+1]), nil
+                    }
+                }
+            }
+        }
+    }
+    return "", fmt.Errorf("not an AKS cluster")
+}
+
+func detectEKSClusterID(ctx context.Context, c client.Client) (string, error) {
+    node, err := getAnyNode(ctx, c)
+    if err != nil {
+        return "", err
+    }
+    
+    // EKS nodes have these labels
+    region := node.Labels["topology.kubernetes.io/region"]
+    clusterName := node.Labels["alpha.eksctl.io/cluster-name"]
+    if region != "" && clusterName != "" {
+        return fmt.Sprintf("%s/%s", region, clusterName), nil
+    }
+    return "", fmt.Errorf("not an EKS cluster")
+}
+
+func detectGKEClusterID(ctx context.Context, c client.Client) (string, error) {
+    node, err := getAnyNode(ctx, c)
+    if err != nil {
+        return "", err
+    }
+    
+    // GKE providerID format: gce://project/zone/instance-name
+    if strings.HasPrefix(node.Spec.ProviderID, "gce://") {
+        parts := strings.Split(strings.TrimPrefix(node.Spec.ProviderID, "gce://"), "/")
+        if len(parts) >= 2 {
+            project := parts[0]
+            clusterName := node.Labels["cloud.google.com/gke-nodepool"]
+            return fmt.Sprintf("%s/%s", project, clusterName), nil
+        }
+    }
+    return "", fmt.Errorf("not a GKE cluster")
+}
+
+func getAnyNode(ctx context.Context, c client.Client) (*corev1.Node, error) {
+    nodes := &corev1.NodeList{}
+    if err := c.List(ctx, nodes); err != nil {
+        return nil, err
+    }
+    if len(nodes.Items) == 0 {
+        return nil, fmt.Errorf("no nodes found")
+    }
+    return &nodes.Items[0], nil
+}
+
+func hashForPrivacy(provider, data string) string {
+    input := fmt.Sprintf("documentdb-cluster:%s:%s", provider, data)
+    hash := sha256.Sum256([]byte(input))
+    return hex.EncodeToString(hash[:16])
+}
+```
+
 ## Summary
 
-| Criteria | Option 1 (UUID) | Option 2A (Hash, No UID) | Option 2B (Hash, With UID) |
-|----------|-----------------|--------------------------|----------------------------|
-| Survives operator restart | Sometimes* | Always | Always |
-| Requires persistence | Yes | No | No |
-| API calls | 1 write per resource | 0 | 0 |
-| Collision risk | None | Negligible | Negligible |
-| Cluster recreated same name | New ID | Same ID | New ID |
-| Matches user mental model | No | Yes | No |
-| Implementation complexity | Higher | Lower | Lower |
+| Criteria | Option 1 (UUID) | Option 2A (Hash, No UID) | Option 2B (Hash, With UID) | Option 3 (Hybrid Cloud) |
+|----------|-----------------|--------------------------|----------------------------|-------------------------|
+| Survives operator restart | Sometimes* | Always | Always | Always |
+| Requires persistence | Yes | No | No | No |
+| API calls | 1 write per resource | 0 | 0 | 1-2 reads (cached) |
+| Collision risk | None | Negligible | Negligible | Negligible |
+| Cluster recreated same name | New ID | Same ID | New ID | Same ID** |
+| Matches user mental model | No | Yes | No | Yes** |
+| Implementation complexity | Higher | Lower | Lower | Medium |
+| Cloud-aware | No | No | No | Yes |
+| Works on-prem | Yes | Yes | Yes | Yes (fallback) |
 
 *Only if annotation was successfully persisted before restart
+**ID represents the Kubernetes cluster, not individual DocumentDB resources
