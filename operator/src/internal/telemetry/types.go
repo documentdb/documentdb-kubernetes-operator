@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// TelemetryAnnotations defines the annotation keys used for telemetry correlation.
-const (
-	// ClusterIDAnnotation is the annotation key for storing auto-generated cluster GUID.
-	ClusterIDAnnotation = "telemetry.documentdb.io/cluster-id"
-	// BackupIDAnnotation is the annotation key for storing auto-generated backup GUID.
-	BackupIDAnnotation = "telemetry.documentdb.io/backup-id"
-	// ScheduledBackupIDAnnotation is the annotation key for storing auto-generated scheduled backup GUID.
-	ScheduledBackupIDAnnotation = "telemetry.documentdb.io/scheduled-backup-id"
-)
-
 // CloudProvider represents the detected cloud environment.
 type CloudProvider string
 
