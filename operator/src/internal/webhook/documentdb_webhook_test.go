@@ -178,6 +178,14 @@ var _ = Describe("image rollback validation", func() {
 		Expect(result).To(HaveLen(1))
 		Expect(result[0].Detail).To(ContainSubstring("version comparison failed"))
 	})
+
+	It("skips validation when image changes to unparseable tag", func() {
+		oldDB := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb:0.112.0")
+		oldDB.Status.SchemaVersion = "0.112.0"
+		newDB := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb:latest")
+		result := v.validateImageRollback(newDB, oldDB)
+		Expect(result).To(BeEmpty())
+	})
 })
 
 var _ = Describe("ValidateCreate admission handler", func() {
@@ -324,5 +332,9 @@ var _ = Describe("extractSemver helper", func() {
 
 	It("returns empty for non-numeric minor", func() {
 		Expect(extractSemver("0.abc.0")).To(BeEmpty())
+	})
+
+	It("returns empty for non-numeric patch", func() {
+		Expect(extractSemver("0.112.abc")).To(BeEmpty())
 	})
 })
