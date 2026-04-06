@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 )
 
 var _ = Describe("Backup Controller", func() {
@@ -49,6 +50,7 @@ var _ = Describe("Backup Controller", func() {
 				Build()
 
 			reconciler := &BackupReconciler{
+				Telemetry: telemetry.NoopBackupTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -124,6 +126,7 @@ var _ = Describe("Backup Controller", func() {
 				Build()
 
 			reconciler := &BackupReconciler{
+				Telemetry: telemetry.NoopBackupTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -178,6 +181,7 @@ var _ = Describe("Backup Controller", func() {
 				Build()
 
 			reconciler := &BackupReconciler{
+				Telemetry: telemetry.NoopBackupTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -234,6 +238,7 @@ var _ = Describe("Backup Controller", func() {
 				Build()
 
 			reconciler := &BackupReconciler{
+				Telemetry: telemetry.NoopBackupTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}

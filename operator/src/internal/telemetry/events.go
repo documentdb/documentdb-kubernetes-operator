@@ -9,15 +9,13 @@ import (
 
 // EventTracker provides high-level methods for tracking telemetry events.
 type EventTracker struct {
-	client      *TelemetryClient
-	guidManager *GUIDManager
+	client *TelemetryClient
 }
 
 // NewEventTracker creates a new EventTracker.
-func NewEventTracker(client *TelemetryClient, guidManager *GUIDManager) *EventTracker {
+func NewEventTracker(client *TelemetryClient) *EventTracker {
 	return &EventTracker{
-		client:      client,
-		guidManager: guidManager,
+		client: client,
 	}
 }
 

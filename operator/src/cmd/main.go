@@ -239,32 +239,37 @@ func main() {
 		setupLog.Info("Telemetry initialized", "enabled", telemetryMgr.IsEnabled())
 	}
 
+	// Create telemetry adapters (noop if telemetry is disabled)
+	docdbTelemetry := telemetry.NewDocumentDBTelemetry(telemetryMgr)
+	backupTelemetry := telemetry.NewBackupTelemetry(telemetryMgr)
+	scheduledBackupTelemetry := telemetry.NewScheduledBackupTelemetry(telemetryMgr)
+
 	if err = (&controller.DocumentDBReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Config:       mgr.GetConfig(),
-		Clientset:    clientset,
-		TelemetryMgr: telemetryMgr,
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Config:    mgr.GetConfig(),
+		Clientset: clientset,
+		Telemetry: docdbTelemetry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DocumentDB")
 		os.Exit(1)
 	}
 
 	if err = (&controller.BackupReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Recorder:     mgr.GetEventRecorderFor("backup-controller"),
-		TelemetryMgr: telemetryMgr,
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("backup-controller"),
+		Telemetry: backupTelemetry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Backup")
 		os.Exit(1)
 	}
 
 	if err = (&controller.ScheduledBackupReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Recorder:     mgr.GetEventRecorderFor("scheduled-backup-controller"),
-		TelemetryMgr: telemetryMgr,
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		Recorder:  mgr.GetEventRecorderFor("scheduled-backup-controller"),
+		Telemetry: scheduledBackupTelemetry,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ScheduledBackup")
 		os.Exit(1)

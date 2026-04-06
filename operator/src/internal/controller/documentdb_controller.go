@@ -59,7 +59,7 @@ type DocumentDBReconciler struct {
 	Scheme       *runtime.Scheme
 	Config       *rest.Config
 	Clientset    kubernetes.Interface
-	TelemetryMgr *telemetry.Manager
+	Telemetry    telemetry.DocumentDBTelemetry // interface, never nil
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
 	// SQLExecutor executes SQL commands against a CNPG cluster's primary pod.
@@ -77,16 +77,10 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
-	reconcileStart := time.Now()
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
 
 	logger := log.FromContext(ctx)
-
-	// Track reconciliation duration at the end using named return value
-	defer func() {
-		r.trackReconcileDuration(ctx, "DocumentDB", "reconcile", time.Since(reconcileStart).Seconds(), retErr == nil)
-	}()
 
 	// Fetch the DocumentDB instance
 	documentdb := &dbpreview.DocumentDB{}
@@ -101,16 +95,8 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return result, nil
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
-		r.trackReconcileError(ctx, "DocumentDB", req.Name, req.Namespace, "get-resource", err)
 		retErr = err
 		return result, retErr
-	}
-
-	// Ensure cluster has telemetry ID
-	if r.TelemetryMgr != nil && r.TelemetryMgr.IsEnabled() {
-		if _, err := r.TelemetryMgr.GUIDs.GetOrCreateClusterID(ctx, documentdb); err != nil {
-			logger.V(1).Info("Failed to create telemetry ID for cluster", "error", err)
-		}
 	}
 
 	// Handle finalizer lifecycle (add on create, remove on delete)
@@ -202,7 +188,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
 			// Track cluster creation telemetry
-			r.TrackClusterCreated(ctx, documentdb, time.Since(clusterCreateStart).Seconds())
+			r.Telemetry.ClusterCreated(ctx, documentdb, time.Since(clusterCreateStart).Seconds())
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 		logger.Error(err, "Failed to get CNPG Cluster")
@@ -217,7 +203,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 	if requeueTime > 0 {
 		// Track cluster update if something changed
-		r.trackClusterUpdated(ctx, documentdb, "configuration", time.Since(updateStart).Seconds())
+		r.Telemetry.ClusterUpdated(ctx, documentdb, "configuration", time.Since(updateStart).Seconds())
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
@@ -412,7 +398,7 @@ func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentd
 		}
 
 		// Track cluster deletion telemetry
-		r.trackClusterDeleted(ctx, documentdb)
+		r.Telemetry.ClusterDeleted(ctx, documentdb, r.Client)
 
 		// Remove finalizer to allow deletion to proceed
 		controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
@@ -729,137 +715,6 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 	}
 
 	return stdout.String(), nil
-}
-
-// trackReconcileError tracks reconciliation errors to telemetry.
-// Note: ResourceID is omitted to avoid PII - errors are tracked by namespace hash and error type only.
-func (r *DocumentDBReconciler) trackReconcileError(ctx context.Context, resourceType, resourceName, namespace, errorType string, err error) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	// Do not include resourceName as it may contain PII (user-provided names)
-	// Errors can be correlated by namespace_hash + error_type + timestamp
-	r.TelemetryMgr.Events.TrackReconciliationError(telemetry.ReconciliationErrorEvent{
-		ResourceType:     resourceType,
-		ResourceID:       "", // Omitted to avoid PII - use namespace_hash for correlation
-		NamespaceHash:    telemetry.HashNamespace(namespace),
-		ErrorType:        errorType,
-		ErrorMessage:     sanitizeError(err),
-		ResolutionStatus: "pending",
-	})
-}
-
-// trackReconcileDuration tracks reconciliation duration to telemetry.
-func (r *DocumentDBReconciler) trackReconcileDuration(ctx context.Context, resourceType, operation string, durationSeconds float64, success bool) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	status := "success"
-	if !success {
-		status = "error"
-	}
-
-	r.TelemetryMgr.Metrics.TrackReconciliationDuration(telemetry.ReconciliationDurationMetric{
-		ResourceType:    resourceType,
-		Operation:       operation,
-		Status:          status,
-		DurationSeconds: durationSeconds,
-	})
-}
-
-// trackClusterUpdated tracks when a cluster is updated.
-func (r *DocumentDBReconciler) trackClusterUpdated(ctx context.Context, documentdb *dbpreview.DocumentDB, updateType string, durationSeconds float64) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
-	if clusterID == "" {
-		return
-	}
-
-	r.TelemetryMgr.Events.TrackClusterUpdated(telemetry.ClusterUpdatedEvent{
-		ClusterID:             clusterID,
-		NamespaceHash:         telemetry.HashNamespace(documentdb.Namespace),
-		UpdateType:            updateType,
-		UpdateDurationSeconds: durationSeconds,
-	})
-}
-
-// trackClusterDeleted tracks when a cluster is deleted.
-func (r *DocumentDBReconciler) trackClusterDeleted(ctx context.Context, documentdb *dbpreview.DocumentDB) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
-	if clusterID == "" {
-		return
-	}
-
-	clusterAgeDays := 0
-	if !documentdb.CreationTimestamp.IsZero() {
-		clusterAgeDays = int(time.Since(documentdb.CreationTimestamp.Time).Hours() / 24)
-	}
-
-	// Count associated backups
-	backupList := &dbpreview.BackupList{}
-	backupCount := 0
-	if err := r.Client.List(ctx, backupList, client.InNamespace(documentdb.Namespace)); err == nil {
-		for _, b := range backupList.Items {
-			if b.Spec.Cluster.Name == documentdb.Name {
-				backupCount++
-			}
-		}
-	}
-
-	r.TelemetryMgr.Events.TrackClusterDeleted(telemetry.ClusterDeletedEvent{
-		ClusterID:                clusterID,
-		NamespaceHash:            telemetry.HashNamespace(documentdb.Namespace),
-		DeletionDurationSeconds:  0, // Deletion just started
-		ClusterAgeDays:           clusterAgeDays,
-		BackupCount:              backupCount,
-	})
-}
-
-// TrackClusterCreated tracks when a new cluster is created.
-func (r *DocumentDBReconciler) TrackClusterCreated(ctx context.Context, documentdb *dbpreview.DocumentDB, durationSeconds float64) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
-	bootstrapType := "new"
-	if documentdb.Spec.Bootstrap != nil && documentdb.Spec.Bootstrap.Recovery != nil {
-		bootstrapType = "recovery"
-	}
-
-	r.TelemetryMgr.Events.TrackClusterCreated(telemetry.ClusterCreatedEvent{
-		ClusterID:               clusterID,
-		NamespaceHash:           telemetry.HashNamespace(documentdb.Namespace),
-		CreationDurationSeconds: durationSeconds,
-		NodeCount:               documentdb.Spec.NodeCount,
-		InstancesPerNode:        documentdb.Spec.InstancesPerNode,
-		StorageSize:             documentdb.Spec.Resource.Storage.PvcSize,
-		CloudProvider:           telemetry.MapCloudProviderToString(documentdb.Spec.Environment),
-		TLSEnabled:              documentdb.Spec.TLS != nil,
-		BootstrapType:           bootstrapType,
-		SidecarInjectorPlugin:   documentdb.Spec.SidecarInjectorPluginName != "",
-		ServiceType:             documentdb.Spec.ExposeViaService.ServiceType,
-	})
-
-	// Also track cluster configuration metric
-	r.TelemetryMgr.Metrics.TrackClusterConfiguration(telemetry.ClusterConfigurationMetric{
-		ClusterID:         clusterID,
-		NamespaceHash:     telemetry.HashNamespace(documentdb.Namespace),
-		NodeCount:         documentdb.Spec.NodeCount,
-		InstancesPerNode:  documentdb.Spec.InstancesPerNode,
-		TotalInstances:    documentdb.Spec.NodeCount * documentdb.Spec.InstancesPerNode,
-		PVCSizeCategory:   telemetry.CategorizePVCSize(documentdb.Spec.Resource.Storage.PvcSize),
-		DocumentDBVersion: documentdb.Spec.DocumentDBVersion,
-	})
 }
 
 // sanitizeError returns a coarse, non-PII classification of the error.

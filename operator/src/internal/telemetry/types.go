@@ -67,6 +67,7 @@ type OperatorContext struct {
 	KubernetesVersion      string
 	KubernetesDistribution KubernetesDistribution
 	CloudProvider          CloudProvider
+	KubernetesClusterID    string // Deterministic ID for the K8s cluster (Option 3: cloud-native + kube-system UID fallback)
 	Region                 string
 	OperatorNamespaceHash  string
 	InstallationMethod     string

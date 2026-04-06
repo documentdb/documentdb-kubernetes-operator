@@ -102,6 +102,9 @@ func NewTelemetryClient(ctx *OperatorContext, opts ...ClientOption) *TelemetryCl
 	tc.client.Context().CommonProperties["kubernetes_distribution"] = string(ctx.KubernetesDistribution)
 	tc.client.Context().CommonProperties["kubernetes_version"] = ctx.KubernetesVersion
 	tc.client.Context().CommonProperties["operator_version"] = ctx.OperatorVersion
+	if ctx.KubernetesClusterID != "" {
+		tc.client.Context().CommonProperties["kubernetes_cluster_id"] = ctx.KubernetesClusterID
+	}
 	if ctx.Region != "" {
 		tc.client.Context().CommonProperties["region"] = ctx.Region
 	}

@@ -26,7 +26,7 @@ type ScheduledBackupReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
-	TelemetryMgr *telemetry.Manager
+	Telemetry    telemetry.ScheduledBackupTelemetry // interface, never nil
 }
 
 // Reconcile handles the reconciliation loop for ScheduledBackup resources.
@@ -85,7 +85,10 @@ func (r *ScheduledBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		// Track scheduled backup execution telemetry
-		r.trackScheduledBackupTriggered(ctx, scheduledBackup)
+		cluster := &dbpreview.DocumentDB{}
+		if err := r.Get(ctx, client.ObjectKey{Name: scheduledBackup.Spec.Cluster.Name, Namespace: scheduledBackup.Namespace}, cluster); err == nil {
+			r.Telemetry.ScheduledBackupCreated(ctx, scheduledBackup, cluster)
+		}
 
 		scheduledBackup.Status.LastScheduledTime = &metav1.Time{Time: now}
 
@@ -142,53 +145,6 @@ func (r *ScheduledBackupReconciler) ensureOwnerReference(ctx context.Context, sc
 	}
 
 	return nil
-}
-
-// trackScheduledBackupCreated tracks scheduled backup creation telemetry.
-func (r *ScheduledBackupReconciler) trackScheduledBackupCreated(ctx context.Context, scheduledBackup *dbpreview.ScheduledBackup, cluster *dbpreview.DocumentDB) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	// Get or create scheduled backup ID
-	scheduledBackupID, err := r.TelemetryMgr.GUIDs.GetOrCreateScheduledBackupID(ctx, scheduledBackup)
-	if err != nil {
-		log.FromContext(ctx).V(1).Info("Failed to get scheduled backup telemetry ID", "error", err)
-		return
-	}
-
-	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(cluster)
-
-	retentionDays := 30 // default
-	if cluster.Spec.Backup != nil && cluster.Spec.Backup.RetentionDays > 0 {
-		retentionDays = cluster.Spec.Backup.RetentionDays
-	}
-
-	r.TelemetryMgr.Events.TrackScheduledBackupCreated(telemetry.ScheduledBackupCreatedEvent{
-		ScheduledBackupID: scheduledBackupID,
-		ClusterID:         clusterID,
-		ScheduleFrequency: string(telemetry.CategorizeScheduleFrequency(scheduledBackup.Spec.Schedule)),
-		RetentionDays:     retentionDays,
-	})
-}
-
-// trackScheduledBackupTriggered tracks when a scheduled backup actually triggers.
-func (r *ScheduledBackupReconciler) trackScheduledBackupTriggered(ctx context.Context, scheduledBackup *dbpreview.ScheduledBackup) {
-	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
-		return
-	}
-
-	// Fetch the cluster to get telemetry IDs
-	cluster := &dbpreview.DocumentDB{}
-	clusterKey := client.ObjectKey{
-		Name:      scheduledBackup.Spec.Cluster.Name,
-		Namespace: scheduledBackup.Namespace,
-	}
-	if err := r.Get(ctx, clusterKey, cluster); err != nil {
-		return
-	}
-
-	r.trackScheduledBackupCreated(ctx, scheduledBackup, cluster)
 }
 
 // SetupWithManager sets up the controller with the Manager.

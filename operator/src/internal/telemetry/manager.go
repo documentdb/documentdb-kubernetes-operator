@@ -5,7 +5,11 @@ package telemetry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -18,14 +22,13 @@ import (
 
 // Manager is the main entry point for telemetry operations.
 type Manager struct {
-	Client         *TelemetryClient
-	Events         *EventTracker
-	Metrics        *MetricsTracker
-	GUIDs          *GUIDManager
-	operatorCtx    *OperatorContext
-	logger         logr.Logger
-	k8sClient      client.Client
-	stopCh         chan struct{}
+	Client      *TelemetryClient
+	Events      *EventTracker
+	Metrics     *MetricsTracker
+	operatorCtx *OperatorContext
+	logger      logr.Logger
+	k8sClient   client.Client
+	stopCh      chan struct{}
 }
 
 // ManagerConfig contains configuration for the telemetry manager.
@@ -52,18 +55,14 @@ func NewManager(ctx context.Context, cfg ManagerConfig, k8sClient client.Client,
 	// Create telemetry client
 	telemetryClient := NewTelemetryClient(operatorCtx, WithLogger(cfg.Logger))
 
-	// Create GUID manager
-	guidManager := NewGUIDManager(k8sClient)
-
 	// Create event and metrics trackers
-	eventTracker := NewEventTracker(telemetryClient, guidManager)
+	eventTracker := NewEventTracker(telemetryClient)
 	metricsTracker := NewMetricsTracker(telemetryClient)
 
 	return &Manager{
 		Client:      telemetryClient,
 		Events:      eventTracker,
 		Metrics:     metricsTracker,
-		GUIDs:       guidManager,
 		operatorCtx: operatorCtx,
 		logger:      cfg.Logger,
 		k8sClient:   k8sClient,
@@ -162,7 +161,7 @@ func (m *Manager) collectPeriodicMetrics() {
 
 	for i := range clusterList.Items {
 		cluster := &clusterList.Items[i]
-		clusterID := m.GUIDs.GetClusterID(cluster)
+		clusterID := GetResourceTelemetryID(cluster)
 
 		// Track cluster configuration
 		m.Metrics.TrackClusterConfiguration(ClusterConfigurationMetric{
@@ -274,6 +273,9 @@ func detectOperatorContext(ctx context.Context, cfg ManagerConfig, clientset kub
 	// Detect cloud provider from environment or node labels
 	opCtx.CloudProvider = detectCloudProvider(ctx, clientset)
 
+	// Detect Kubernetes cluster ID using Option 3: cloud-native identifiers + kube-system UID fallback
+	opCtx.KubernetesClusterID = detectKubernetesClusterID(ctx, clientset, opCtx.CloudProvider)
+
 	// Get operator namespace (hashed)
 	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
 		opCtx.OperatorNamespaceHash = HashNamespace(ns)
@@ -328,6 +330,103 @@ func detectCloudProvider(ctx context.Context, clientset kubernetes.Interface) Cl
 	}
 
 	return CloudProviderUnknown
+}
+
+// detectKubernetesClusterID generates a deterministic ID for the Kubernetes cluster
+// using the Option 3 strategy: cloud-native identifiers when available, kube-system
+// namespace UID as universal fallback. All values are hashed for privacy.
+func detectKubernetesClusterID(ctx context.Context, clientset kubernetes.Interface, provider CloudProvider) string {
+	if clientset == nil {
+		return ""
+	}
+
+	// Try cloud-specific detection based on already-detected provider
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{Limit: 1})
+	if err == nil && len(nodes.Items) > 0 {
+		node := nodes.Items[0]
+
+		switch provider {
+		case CloudProviderAKS:
+			if id := detectAKSClusterIdentity(node.Labels, node.Spec.ProviderID); id != "" {
+				return hashForClusterID("aks", id)
+			}
+		case CloudProviderEKS:
+			if id := detectEKSClusterIdentity(node.Labels); id != "" {
+				return hashForClusterID("eks", id)
+			}
+		case CloudProviderGKE:
+			if id := detectGKEClusterIdentity(node.Labels, node.Spec.ProviderID); id != "" {
+				return hashForClusterID("gke", id)
+			}
+		}
+	}
+
+	// Universal fallback: kube-system namespace UID
+	ns, err := clientset.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	if err == nil {
+		return hashForClusterID("k8s", string(ns.UID))
+	}
+
+	return ""
+}
+
+// detectAKSClusterIdentity extracts AKS cluster identity from node metadata.
+func detectAKSClusterIdentity(labels map[string]string, providerID string) string {
+	// Check for AKS labels
+	if sub, ok := labels["kubernetes.azure.com/subscription"]; ok && sub != "" {
+		rg := labels["kubernetes.azure.com/resource-group"]
+		return sub + "/" + rg
+	}
+
+	// Parse from providerID: azure:///subscriptions/{sub}/resourceGroups/{rg}/...
+	if strings.HasPrefix(providerID, "azure://") {
+		parts := strings.Split(providerID, "/")
+		for i, p := range parts {
+			if p == "subscriptions" && i+1 < len(parts) {
+				sub := parts[i+1]
+				for j := i; j < len(parts); j++ {
+					if parts[j] == "resourceGroups" && j+1 < len(parts) {
+						return sub + "/" + parts[j+1]
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// detectEKSClusterIdentity extracts EKS cluster identity from node labels.
+func detectEKSClusterIdentity(labels map[string]string) string {
+	region := labels["topology.kubernetes.io/region"]
+	clusterName := labels["alpha.eksctl.io/cluster-name"]
+	if region != "" && clusterName != "" {
+		return region + "/" + clusterName
+	}
+	return ""
+}
+
+// detectGKEClusterIdentity extracts GKE cluster identity from node metadata.
+func detectGKEClusterIdentity(labels map[string]string, providerID string) string {
+	// GKE providerID format: gce://project/zone/instance-name
+	if strings.HasPrefix(providerID, "gce://") {
+		parts := strings.Split(strings.TrimPrefix(providerID, "gce://"), "/")
+		if len(parts) >= 1 {
+			project := parts[0]
+			clusterName := labels["cloud.google.com/gke-nodepool"]
+			if clusterName != "" {
+				return project + "/" + clusterName
+			}
+			return project
+		}
+	}
+	return ""
+}
+
+// hashForClusterID hashes cloud identity data for privacy.
+func hashForClusterID(provider, data string) string {
+	input := fmt.Sprintf("documentdb-cluster:%s:%s", provider, data)
+	hash := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(hash[:16])
 }
 
 // detectRegion attempts to detect the cloud region.
