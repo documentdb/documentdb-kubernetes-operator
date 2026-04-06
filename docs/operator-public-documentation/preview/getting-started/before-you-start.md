@@ -24,8 +24,8 @@ Before installing the DocumentDB Kubernetes Operator, ensure you have the follow
 | **Helm** | 3.x | Package manager for Kubernetes | [Install Helm](https://helm.sh/docs/intro/install/) |
 | **cert-manager** | 1.19+ | TLS certificate management | [Install cert-manager](https://cert-manager.io/docs/installation/) |
 
-!!! warning "Kubernetes 1.35+ Required"
-    The operator requires Kubernetes 1.35 or later because it uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in Kubernetes 1.35) to mount the DocumentDB extension into PostgreSQL pods.
+!!! warning "Kubernetes 1.35+ with containerd or CRI-O Required"
+    The operator requires Kubernetes 1.35 or later because it uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in Kubernetes 1.35) to mount the DocumentDB extension into PostgreSQL pods. The cluster must use a **containerd** or **CRI-O** container runtime — Docker does not support ImageVolumes.
 
 ### Optional components
 
@@ -48,11 +48,11 @@ The operator runs on any conformant Kubernetes distribution (1.35+). Choose base
     - **[minikube](https://minikube.sigs.k8s.io/)** - Local Kubernetes cluster
     
     ```bash
-    # Kind (recommended)
+    # Kind (recommended — uses containerd by default)
     kind create cluster --image kindest/node:v1.35.0
     
-    # Minikube
-    minikube start --kubernetes-version=v1.35.0
+    # Minikube (--container-runtime=containerd is required for ImageVolume support)
+    minikube start --kubernetes-version=v1.35.0 --container-runtime=containerd
     ```
 
 === "Cloud Production"
