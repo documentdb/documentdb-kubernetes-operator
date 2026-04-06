@@ -118,10 +118,12 @@ func (t *documentDBTelemetryImpl) ClusterDeleted(ctx context.Context, cluster *d
 	// Count associated backups
 	backupList := &dbpreview.BackupList{}
 	backupCount := 0
-	if err := k8sClient.List(ctx, backupList, client.InNamespace(cluster.Namespace)); err == nil {
-		for _, b := range backupList.Items {
-			if b.Spec.Cluster.Name == cluster.Name {
-				backupCount++
+	if k8sClient != nil {
+		if err := k8sClient.List(ctx, backupList, client.InNamespace(cluster.Namespace)); err == nil {
+			for _, b := range backupList.Items {
+				if b.Spec.Cluster.Name == cluster.Name {
+					backupCount++
+				}
 			}
 		}
 	}
