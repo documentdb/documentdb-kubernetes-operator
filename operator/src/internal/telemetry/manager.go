@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -29,6 +30,18 @@ type Manager struct {
 	logger      logr.Logger
 	k8sClient   client.Client
 	stopCh      chan struct{}
+
+	// metricsBuffer holds collected metrics until flushed (hourly or when cap is reached).
+	metricsBuffer []bufferedMetric
+	bufferMu      sync.Mutex
+	bufferCap     int // max items before auto-flush
+}
+
+// bufferedMetric represents a metric waiting to be sent.
+type bufferedMetric struct {
+	name       string
+	value      float64
+	properties map[string]interface{}
 }
 
 // ManagerConfig contains configuration for the telemetry manager.
@@ -67,6 +80,7 @@ func NewManager(ctx context.Context, cfg ManagerConfig, k8sClient client.Client,
 		logger:      cfg.Logger,
 		k8sClient:   k8sClient,
 		stopCh:      make(chan struct{}),
+		bufferCap:   500, // Max buffered metrics before auto-flush; sized for ~4 collections/hour × ~15 metrics each with headroom
 	}, nil
 }
 
@@ -113,12 +127,16 @@ func (m *Manager) GetOperatorContext() *OperatorContext {
 	return m.operatorCtx
 }
 
-// runPeriodicMetrics reports gauge-style metrics on a timer.
+// runPeriodicMetrics collects metrics every 15 minutes into a buffer,
+// and flushes the buffer to Application Insights every hour.
+// If the buffer reaches its cap before the hour, it auto-flushes.
 func (m *Manager) runPeriodicMetrics() {
 	// Initial delay to let controllers start
 	initialDelay := 30 * time.Second
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
+	collectTicker := time.NewTicker(15 * time.Minute)
+	flushTicker := time.NewTicker(1 * time.Hour)
+	defer collectTicker.Stop()
+	defer flushTicker.Stop()
 
 	select {
 	case <-time.After(initialDelay):
@@ -126,24 +144,65 @@ func (m *Manager) runPeriodicMetrics() {
 		return
 	}
 
-	// Run immediately after initial delay, then on ticker
+	// Collect immediately after initial delay
 	m.collectPeriodicMetrics()
 	for {
 		select {
-		case <-ticker.C:
+		case <-collectTicker.C:
 			m.collectPeriodicMetrics()
+		case <-flushTicker.C:
+			m.flushMetricsBuffer()
 		case <-m.stopCh:
+			// Flush remaining buffer on shutdown
+			m.flushMetricsBuffer()
 			return
 		}
 	}
 }
 
-// collectPeriodicMetrics gathers and reports all gauge-style metrics.
+// bufferMetric adds a metric to the buffer. Auto-flushes if cap is reached.
+func (m *Manager) bufferMetric(name string, value float64, properties map[string]interface{}) {
+	m.bufferMu.Lock()
+	m.metricsBuffer = append(m.metricsBuffer, bufferedMetric{
+		name:       name,
+		value:      value,
+		properties: properties,
+	})
+	shouldFlush := len(m.metricsBuffer) >= m.bufferCap
+	m.bufferMu.Unlock()
+
+	if shouldFlush {
+		m.flushMetricsBuffer()
+	}
+}
+
+// flushMetricsBuffer sends all buffered metrics to Application Insights.
+func (m *Manager) flushMetricsBuffer() {
+	m.bufferMu.Lock()
+	if len(m.metricsBuffer) == 0 {
+		m.bufferMu.Unlock()
+		return
+	}
+	batch := m.metricsBuffer
+	m.metricsBuffer = nil
+	m.bufferMu.Unlock()
+
+	m.logger.V(1).Info("Flushing metrics buffer", "count", len(batch))
+	for _, metric := range batch {
+		m.Client.TrackMetric(metric.name, metric.value, metric.properties)
+	}
+}
+
+// collectPeriodicMetrics gathers gauge-style metrics and buffers them.
+// Metrics are flushed to Application Insights hourly or when buffer cap is reached.
 func (m *Manager) collectPeriodicMetrics() {
 	ctx := context.Background()
 
-	// Track operator health
-	m.Metrics.TrackOperatorHealthStatus(true, os.Getenv("HOSTNAME"), m.operatorCtx.OperatorNamespaceHash)
+	// Buffer operator health
+	m.bufferMetric("operator.health.status", 1, map[string]interface{}{
+		"pod_name":       os.Getenv("HOSTNAME"),
+		"namespace_hash": m.operatorCtx.OperatorNamespaceHash,
+	})
 
 	// List all DocumentDB clusters
 	clusterList := &dbpreview.DocumentDBList{}
@@ -152,8 +211,10 @@ func (m *Manager) collectPeriodicMetrics() {
 		return
 	}
 
-	// Track active cluster count
-	m.Metrics.TrackActiveClustersCount(len(clusterList.Items), "", string(m.operatorCtx.CloudProvider), "")
+	// Buffer active cluster count
+	m.bufferMetric("documentdb.clusters.active.count", float64(len(clusterList.Items)), map[string]interface{}{
+		"cloud_provider": string(m.operatorCtx.CloudProvider),
+	})
 
 	tlsCount := 0
 	lbCount := 0
@@ -163,26 +224,26 @@ func (m *Manager) collectPeriodicMetrics() {
 		cluster := &clusterList.Items[i]
 		clusterID := GetResourceTelemetryID(cluster)
 
-		// Track cluster configuration
-		m.Metrics.TrackClusterConfiguration(ClusterConfigurationMetric{
-			ClusterID:         clusterID,
-			NamespaceHash:     HashNamespace(cluster.Namespace),
-			NodeCount:         cluster.Spec.NodeCount,
-			InstancesPerNode:  cluster.Spec.InstancesPerNode,
-			TotalInstances:    cluster.Spec.NodeCount * cluster.Spec.InstancesPerNode,
-			PVCSizeCategory:   categorizePVCSize(cluster.Spec.Resource.Storage.PvcSize),
-			DocumentDBVersion: cluster.Spec.DocumentDBVersion,
+		// Buffer cluster configuration
+		m.bufferMetric("documentdb.cluster.configuration", 1, map[string]interface{}{
+			"cluster_id":         clusterID,
+			"namespace_hash":     HashNamespace(cluster.Namespace),
+			"node_count":         cluster.Spec.NodeCount,
+			"instances_per_node": cluster.Spec.InstancesPerNode,
+			"total_instances":    cluster.Spec.NodeCount * cluster.Spec.InstancesPerNode,
+			"pvc_size_category":  string(categorizePVCSize(cluster.Spec.Resource.Storage.PvcSize)),
+			"documentdb_version": cluster.Spec.DocumentDBVersion,
 		})
 
-		// Track replication
+		// Buffer replication
 		if cluster.Spec.ClusterReplication != nil {
 			replicaCount := len(cluster.Spec.ClusterReplication.ClusterList)
-			m.Metrics.TrackReplicationEnabled(true, ReplicationEnabledMetric{
-				ClusterID:                    clusterID,
-				CrossCloudNetworkingStrategy: cluster.Spec.ClusterReplication.CrossCloudNetworkingStrategy,
-				ReplicaCount:                 replicaCount,
-				HighAvailability:             cluster.Spec.ClusterReplication.HighAvailability,
-				ParticipatingClusterCount:    replicaCount,
+			m.bufferMetric("documentdb.cluster.replication.enabled", 1, map[string]interface{}{
+				"cluster_id":                      clusterID,
+				"cross_cloud_networking_strategy": cluster.Spec.ClusterReplication.CrossCloudNetworkingStrategy,
+				"replica_count":                   replicaCount,
+				"high_availability":               cluster.Spec.ClusterReplication.HighAvailability,
+				"participating_cluster_count":     replicaCount,
 			})
 		}
 
@@ -200,33 +261,42 @@ func (m *Manager) collectPeriodicMetrics() {
 
 		// Plugin usage
 		if cluster.Spec.SidecarInjectorPluginName != "" {
-			m.Metrics.TrackPluginUsageCount(true, cluster.Spec.WalReplicaPluginName != "")
+			m.bufferMetric("documentdb.plugin.usage.count", 1, map[string]interface{}{
+				"sidecar_injector_plugin_enabled": true,
+				"wal_replica_plugin_enabled":      cluster.Spec.WalReplicaPluginName != "",
+			})
 		}
 	}
 
-	// Track TLS count
+	// Buffer TLS count
 	if tlsCount > 0 {
-		m.Metrics.TrackTLSEnabledCount(tlsCount, "", false, false)
+		m.bufferMetric("documentdb.tls.enabled.count", float64(tlsCount), nil)
 	}
 
-	// Track service exposure
+	// Buffer service exposure
 	if lbCount > 0 {
-		m.Metrics.TrackServiceExposureCount(lbCount, "LoadBalancer", string(m.operatorCtx.CloudProvider))
+		m.bufferMetric("documentdb.service_exposure.count", float64(lbCount), map[string]interface{}{
+			"service_type":   "LoadBalancer",
+			"cloud_provider": string(m.operatorCtx.CloudProvider),
+		})
 	}
 	if cipCount > 0 {
-		m.Metrics.TrackServiceExposureCount(cipCount, "ClusterIP", string(m.operatorCtx.CloudProvider))
+		m.bufferMetric("documentdb.service_exposure.count", float64(cipCount), map[string]interface{}{
+			"service_type":   "ClusterIP",
+			"cloud_provider": string(m.operatorCtx.CloudProvider),
+		})
 	}
 
-	// List backups
+	// Buffer backup counts
 	backupList := &dbpreview.BackupList{}
 	if err := m.k8sClient.List(ctx, backupList); err == nil {
-		m.Metrics.TrackActiveBackupsCount(len(backupList.Items), "", "", "")
+		m.bufferMetric("documentdb.backups.active.count", float64(len(backupList.Items)), nil)
 	}
 
-	// List scheduled backups
+	// Buffer scheduled backup counts
 	scheduledBackupList := &dbpreview.ScheduledBackupList{}
 	if err := m.k8sClient.List(ctx, scheduledBackupList); err == nil {
-		m.Metrics.TrackScheduledBackupsCount(len(scheduledBackupList.Items))
+		m.bufferMetric("documentdb.scheduled_backups.active.count", float64(len(scheduledBackupList.Items)), nil)
 	}
 }
 

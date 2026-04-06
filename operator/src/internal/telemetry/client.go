@@ -80,9 +80,9 @@ func NewTelemetryClient(ctx *OperatorContext, opts ...ClientOption) *TelemetryCl
 	// Create telemetry configuration
 	telemetryConfig := appinsights.NewTelemetryConfiguration(instrumentationKey)
 
-	// Configure batching - send every 30 seconds or when batch reaches 100 items
-	telemetryConfig.MaxBatchSize = 100
-	telemetryConfig.MaxBatchInterval = 30 * time.Second
+	// Configure batching - flush every hour or when batch reaches 500 items
+	telemetryConfig.MaxBatchSize = 500
+	telemetryConfig.MaxBatchInterval = 1 * time.Hour
 
 	// Check for custom endpoint from connection string
 	connStr := os.Getenv(EnvAppInsightsConnectionString)
