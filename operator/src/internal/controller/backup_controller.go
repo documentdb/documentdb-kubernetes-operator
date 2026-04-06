@@ -49,7 +49,8 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Delete the Backup resource if it has expired
 	if backup.Status.IsExpired() {
 		r.Recorder.Event(backup, "Normal", "BackupExpired", "Backup has expired and will be deleted")
-		// Track backup deletion telemetry before deleting
+		// Track backup expiration and deletion telemetry before deleting
+		r.trackBackupExpired(ctx, backup)
 		r.trackBackupDeleted(ctx, backup, "expired")
 		if err := r.Delete(ctx, backup); err != nil {
 			r.Recorder.Event(backup, "Warning", "BackupDeleteFailed", "Failed to delete expired Backup: "+err.Error())
@@ -315,6 +316,44 @@ func (r *BackupReconciler) trackBackupCreated(ctx context.Context, backup *dbpre
 		RetentionDays:    retentionDays,
 		CloudProvider:    telemetry.MapCloudProviderToString(cluster.Spec.Environment),
 		IsPrimaryCluster: isPrimary,
+	})
+}
+
+// trackBackupExpired tracks the BackupExpired telemetry event with retention details.
+func (r *BackupReconciler) trackBackupExpired(ctx context.Context, backup *dbpreview.Backup) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	backupID := r.TelemetryMgr.GUIDs.GetBackupID(backup)
+	if backupID == "" {
+		return
+	}
+
+	// Get cluster ID from the backup's cluster reference
+	clusterID := ""
+	if backup.Spec.Cluster.Name != "" {
+		cluster := &dbpreview.DocumentDB{}
+		if err := r.Get(ctx, client.ObjectKey{Name: backup.Spec.Cluster.Name, Namespace: backup.Namespace}, cluster); err == nil {
+			clusterID = r.TelemetryMgr.GUIDs.GetClusterID(cluster)
+		}
+	}
+
+	actualAgeDays := 0
+	if backup.CreationTimestamp.Time.Year() > 1 {
+		actualAgeDays = int(time.Since(backup.CreationTimestamp.Time).Hours() / 24)
+	}
+
+	retentionDays := 0
+	if backup.Spec.RetentionDays != nil {
+		retentionDays = *backup.Spec.RetentionDays
+	}
+
+	r.TelemetryMgr.Events.TrackBackupExpired(telemetry.BackupExpiredEvent{
+		BackupID:      backupID,
+		ClusterID:     clusterID,
+		RetentionDays: retentionDays,
+		ActualAgeDays: actualAgeDays,
 	})
 }
 

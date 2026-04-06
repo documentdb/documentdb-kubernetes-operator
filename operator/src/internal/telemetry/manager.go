@@ -12,6 +12,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
 // Manager is the main entry point for telemetry operations.
@@ -22,6 +24,8 @@ type Manager struct {
 	GUIDs          *GUIDManager
 	operatorCtx    *OperatorContext
 	logger         logr.Logger
+	k8sClient      client.Client
+	stopCh         chan struct{}
 }
 
 // ManagerConfig contains configuration for the telemetry manager.
@@ -62,6 +66,8 @@ func NewManager(ctx context.Context, cfg ManagerConfig, k8sClient client.Client,
 		GUIDs:       guidManager,
 		operatorCtx: operatorCtx,
 		logger:      cfg.Logger,
+		k8sClient:   k8sClient,
+		stopCh:      make(chan struct{}),
 	}, nil
 }
 
@@ -84,10 +90,16 @@ func (m *Manager) Start() {
 		"operatorVersion", m.operatorCtx.OperatorVersion,
 		"k8sVersion", m.operatorCtx.KubernetesVersion,
 	)
+
+	// Start periodic metrics reporting
+	if m.Client.IsEnabled() && m.k8sClient != nil {
+		go m.runPeriodicMetrics()
+	}
 }
 
 // Stop gracefully stops telemetry collection.
 func (m *Manager) Stop() {
+	close(m.stopCh)
 	m.Client.Stop()
 	m.logger.Info("Telemetry collection stopped")
 }
@@ -100,6 +112,146 @@ func (m *Manager) IsEnabled() bool {
 // GetOperatorContext returns the detected operator context.
 func (m *Manager) GetOperatorContext() *OperatorContext {
 	return m.operatorCtx
+}
+
+// runPeriodicMetrics reports gauge-style metrics on a timer.
+func (m *Manager) runPeriodicMetrics() {
+	// Initial delay to let controllers start
+	initialDelay := 30 * time.Second
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	select {
+	case <-time.After(initialDelay):
+	case <-m.stopCh:
+		return
+	}
+
+	// Run immediately after initial delay, then on ticker
+	m.collectPeriodicMetrics()
+	for {
+		select {
+		case <-ticker.C:
+			m.collectPeriodicMetrics()
+		case <-m.stopCh:
+			return
+		}
+	}
+}
+
+// collectPeriodicMetrics gathers and reports all gauge-style metrics.
+func (m *Manager) collectPeriodicMetrics() {
+	ctx := context.Background()
+
+	// Track operator health
+	m.Metrics.TrackOperatorHealthStatus(true, os.Getenv("HOSTNAME"), m.operatorCtx.OperatorNamespaceHash)
+
+	// List all DocumentDB clusters
+	clusterList := &dbpreview.DocumentDBList{}
+	if err := m.k8sClient.List(ctx, clusterList); err != nil {
+		m.logger.V(1).Info("Failed to list DocumentDB clusters for periodic metrics", "error", err)
+		return
+	}
+
+	// Track active cluster count
+	m.Metrics.TrackActiveClustersCount(len(clusterList.Items), "", string(m.operatorCtx.CloudProvider), "")
+
+	tlsCount := 0
+	lbCount := 0
+	cipCount := 0
+
+	for i := range clusterList.Items {
+		cluster := &clusterList.Items[i]
+		clusterID := m.GUIDs.GetClusterID(cluster)
+
+		// Track cluster configuration
+		m.Metrics.TrackClusterConfiguration(ClusterConfigurationMetric{
+			ClusterID:         clusterID,
+			NamespaceHash:     HashNamespace(cluster.Namespace),
+			NodeCount:         cluster.Spec.NodeCount,
+			InstancesPerNode:  cluster.Spec.InstancesPerNode,
+			TotalInstances:    cluster.Spec.NodeCount * cluster.Spec.InstancesPerNode,
+			PVCSizeCategory:   categorizePVCSize(cluster.Spec.Resource.Storage.PvcSize),
+			DocumentDBVersion: cluster.Spec.DocumentDBVersion,
+		})
+
+		// Track replication
+		if cluster.Spec.ClusterReplication != nil {
+			replicaCount := len(cluster.Spec.ClusterReplication.ClusterList)
+			m.Metrics.TrackReplicationEnabled(true, ReplicationEnabledMetric{
+				ClusterID:                    clusterID,
+				CrossCloudNetworkingStrategy: cluster.Spec.ClusterReplication.CrossCloudNetworkingStrategy,
+				ReplicaCount:                 replicaCount,
+				HighAvailability:             cluster.Spec.ClusterReplication.HighAvailability,
+				ParticipatingClusterCount:    replicaCount,
+			})
+		}
+
+		// TLS
+		if cluster.Spec.TLS != nil {
+			tlsCount++
+		}
+
+		// Service exposure
+		if cluster.Spec.ExposeViaService.ServiceType == "LoadBalancer" {
+			lbCount++
+		} else if cluster.Spec.ExposeViaService.ServiceType != "" {
+			cipCount++
+		}
+
+		// Plugin usage
+		if cluster.Spec.SidecarInjectorPluginName != "" {
+			m.Metrics.TrackPluginUsageCount(true, cluster.Spec.WalReplicaPluginName != "")
+		}
+	}
+
+	// Track TLS count
+	if tlsCount > 0 {
+		m.Metrics.TrackTLSEnabledCount(tlsCount, "", false, false)
+	}
+
+	// Track service exposure
+	if lbCount > 0 {
+		m.Metrics.TrackServiceExposureCount(lbCount, "LoadBalancer", string(m.operatorCtx.CloudProvider))
+	}
+	if cipCount > 0 {
+		m.Metrics.TrackServiceExposureCount(cipCount, "ClusterIP", string(m.operatorCtx.CloudProvider))
+	}
+
+	// List backups
+	backupList := &dbpreview.BackupList{}
+	if err := m.k8sClient.List(ctx, backupList); err == nil {
+		m.Metrics.TrackActiveBackupsCount(len(backupList.Items), "", "", "")
+	}
+
+	// List scheduled backups
+	scheduledBackupList := &dbpreview.ScheduledBackupList{}
+	if err := m.k8sClient.List(ctx, scheduledBackupList); err == nil {
+		m.Metrics.TrackScheduledBackupsCount(len(scheduledBackupList.Items))
+	}
+}
+
+// categorizePVCSize categorizes PVC size into small/medium/large.
+func categorizePVCSize(size string) PVCSizeCategory {
+	if size == "" {
+		return "unknown"
+	}
+	num := 0
+	for _, c := range size {
+		if c >= '0' && c <= '9' {
+			num = num*10 + int(c-'0')
+		} else {
+			break
+		}
+	}
+	switch {
+	case num < 50:
+		return PVCSizeSmall
+	case num <= 200:
+		return PVCSizeMedium
+	default:
+		return PVCSizeLarge
+	}
 }
 
 // detectOperatorContext detects the deployment environment.

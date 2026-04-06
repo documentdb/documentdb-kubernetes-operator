@@ -411,6 +411,9 @@ func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentd
 			}
 		}
 
+		// Track cluster deletion telemetry
+		r.trackClusterDeleted(ctx, documentdb)
+
 		// Remove finalizer to allow deletion to proceed
 		controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
 		if err := r.Update(ctx, documentdb); err != nil {
@@ -782,6 +785,42 @@ func (r *DocumentDBReconciler) trackClusterUpdated(ctx context.Context, document
 		NamespaceHash:         telemetry.HashNamespace(documentdb.Namespace),
 		UpdateType:            updateType,
 		UpdateDurationSeconds: durationSeconds,
+	})
+}
+
+// trackClusterDeleted tracks when a cluster is deleted.
+func (r *DocumentDBReconciler) trackClusterDeleted(ctx context.Context, documentdb *dbpreview.DocumentDB) {
+	if r.TelemetryMgr == nil || !r.TelemetryMgr.IsEnabled() {
+		return
+	}
+
+	clusterID := r.TelemetryMgr.GUIDs.GetClusterID(documentdb)
+	if clusterID == "" {
+		return
+	}
+
+	clusterAgeDays := 0
+	if !documentdb.CreationTimestamp.IsZero() {
+		clusterAgeDays = int(time.Since(documentdb.CreationTimestamp.Time).Hours() / 24)
+	}
+
+	// Count associated backups
+	backupList := &dbpreview.BackupList{}
+	backupCount := 0
+	if err := r.Client.List(ctx, backupList, client.InNamespace(documentdb.Namespace)); err == nil {
+		for _, b := range backupList.Items {
+			if b.Spec.Cluster.Name == documentdb.Name {
+				backupCount++
+			}
+		}
+	}
+
+	r.TelemetryMgr.Events.TrackClusterDeleted(telemetry.ClusterDeletedEvent{
+		ClusterID:                clusterID,
+		NamespaceHash:            telemetry.HashNamespace(documentdb.Namespace),
+		DeletionDurationSeconds:  0, // Deletion just started
+		ClusterAgeDays:           clusterAgeDays,
+		BackupCount:              backupCount,
 	})
 }
 
