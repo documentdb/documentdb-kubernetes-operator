@@ -1241,6 +1241,8 @@ jobs:
         
         echo ""
         echo "✅ Step 8 passed: Webhook correctly blocked schema version exceeding binary"
+
+    - name: Collect logs on failure
       if: failure()
       uses: ./.github/actions/collect-logs
       with:
