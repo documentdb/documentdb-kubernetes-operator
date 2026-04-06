@@ -1711,14 +1711,18 @@
 <ul>
 <li><a href="https://helm.sh/docs/intro/install/">Helm</a> installed.</li>
 <li><a href="https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/">kubectl</a> installed.</li>
-<li>A <strong>Kubernetes 1.35+</strong> cluster. The operator uses the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature (GA in K8s 1.35) to mount the DocumentDB extension. A local cluster such as <a href="https://minikube.sigs.k8s.io/docs/start/">minikube</a> or <a href="https://kind.sigs.k8s.io/docs/user/quick-start/#installation">kind</a> (v0.31+) works for this quickstart.</li>
+<li>A <strong>Kubernetes 1.35+</strong> cluster with a <strong>containerd</strong> or <strong>CRI-O</strong> container runtime. The operator uses the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature (GA in K8s 1.35) to mount the DocumentDB extension, which is not supported by the Docker container runtime. A local cluster such as <a href="https://minikube.sigs.k8s.io/docs/start/">minikube</a> or <a href="https://kind.sigs.k8s.io/docs/user/quick-start/#installation">kind</a> (v0.31+) works for this quickstart.</li>
 <li><a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a> installed to connect to the DocumentDB cluster.</li>
 </ul>
 <h3 id="start-a-local-kubernetes-cluster">Start a local Kubernetes cluster<a class="headerlink" href="#start-a-local-kubernetes-cluster" title="Permanent link">&para;</a></h3>
 <p>If you're using <code>minikube</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>minikube<span class="w"> </span>start<span class="w"> </span>--kubernetes-version<span class="o">=</span>v1.35.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>minikube<span class="w"> </span>start<span class="w"> </span>--kubernetes-version<span class="o">=</span>v1.35.0<span class="w"> </span>--container-runtime<span class="o">=</span>containerd
 </code></pre></div>
-<p>If you are using <code>kind</code> (v0.31+), use the following command:</p>
+<div class="admonition important">
+<p class="admonition-title">Important</p>
+<p>The <code>--container-runtime=containerd</code> flag is required. Minikube defaults to Docker, which does not support ImageVolumes. Without this flag, pods will fail with <code>CreateContainerError: invalid mount config for type "bind": field Source must not be empty</code>.</p>
+</div>
+<p>If you are using <code>kind</code> (v0.31+), use the following command (kind uses containerd by default):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kind<span class="w"> </span>create<span class="w"> </span>cluster<span class="w"> </span>--image<span class="w"> </span>kindest/node:v1.35.0
 </code></pre></div>
 <h3 id="install-cert-manager">Install cert-manager<a class="headerlink" href="#install-cert-manager" title="Permanent link">&para;</a></h3>

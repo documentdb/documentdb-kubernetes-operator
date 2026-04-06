@@ -1547,8 +1547,8 @@
 </tbody>
 </table>
 <div class="admonition warning">
-<p class="admonition-title">Kubernetes 1.35+ Required</p>
-<p>The operator requires Kubernetes 1.35 or later because it uses the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature (GA in Kubernetes 1.35) to mount the DocumentDB extension into PostgreSQL pods.</p>
+<p class="admonition-title">Kubernetes 1.35+ with containerd or CRI-O Required</p>
+<p>The operator requires Kubernetes 1.35 or later because it uses the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature (GA in Kubernetes 1.35) to mount the DocumentDB extension into PostgreSQL pods. The cluster must use a <strong>containerd</strong> or <strong>CRI-O</strong> container runtime — Docker does not support ImageVolumes.</p>
 </div>
 <h3 id="optional-components">Optional components<a class="headerlink" href="#optional-components" title="Permanent link">&para;</a></h3>
 <table>
@@ -1592,11 +1592,11 @@
 <li><strong><a href="https://kind.sigs.k8s.io/">kind</a></strong> (v0.31+) - Kubernetes in Docker, recommended for development</li>
 <li><strong><a href="https://minikube.sigs.k8s.io/">minikube</a></strong> - Local Kubernetes cluster</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Kind (recommended)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Kind (recommended — uses containerd by default)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>kind<span class="w"> </span>create<span class="w"> </span>cluster<span class="w"> </span>--image<span class="w"> </span>kindest/node:v1.35.0
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Minikube</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>minikube<span class="w"> </span>start<span class="w"> </span>--kubernetes-version<span class="o">=</span>v1.35.0
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Minikube (--container-runtime=containerd is required for ImageVolume support)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>minikube<span class="w"> </span>start<span class="w"> </span>--kubernetes-version<span class="o">=</span>v1.35.0<span class="w"> </span>--container-runtime<span class="o">=</span>containerd
 </code></pre></div>
 </div>
 <div class="tabbed-block">
