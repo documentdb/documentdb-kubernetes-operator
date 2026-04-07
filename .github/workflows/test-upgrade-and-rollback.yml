@@ -79,6 +79,7 @@ jobs:
 
     env:
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag || '' }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
       DOCUMENTDB_COMBINED_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
       RELEASED_CHART_VERSION: ${{ inputs.released_chart_version || 'latest' }}
@@ -102,18 +103,11 @@ jobs:
 
         # New images come from this workflow run (self-built) or from the provided candidate tag.
         # Database images use a separate version track from operator images.
+        # CI-built images are now tagged with the extension version (e.g., 0.109.0-test-RUNID-arch)
+        # by test-build-and-package.yml, so no re-tagging is needed.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
-          # CI-built images are tagged with the chart version (e.g., 0.2.0-test-RUNID).
-          # The webhook's rollback check extracts the semver from the image tag to determine
-          # the binary version. We compute a re-tagged reference using the real extension
-          # version so the webhook sees the correct version (e.g., 0.109.0, not 0.2.0).
-          # The actual docker tag + kind load happens after setup-test-environment loads images.
-          EXT_VERSION=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
-          echo "Real extension version from values.yaml: $EXT_VERSION"
-          echo "NEEDS_RETAG=true" >> $GITHUB_ENV
-
-          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${EXT_VERSION}-test-${{ github.run_id }}-${{ matrix.architecture }}"
-          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${EXT_VERSION}-test-${{ github.run_id }}-${{ matrix.architecture }}"
+          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.architecture }}"
+          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.architecture }}"
         else
           # External images: read documentDbVersion from values.yaml (separate version track from operator).
           DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
@@ -219,6 +213,7 @@ jobs:
         db-password: ${{ env.DB_PASSWORD }}
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
+        documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
         documentdb-image: ${{ env.DOCUMENTDB_INITIAL_IMAGE }}
         gateway-image: ${{ env.GATEWAY_OLD_IMAGE }}
@@ -226,26 +221,6 @@ jobs:
         released-chart-version: ${{ env.RELEASED_CHART_VERSION }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
         repository-owner: ${{ github.repository_owner }}
-
-    - name: Re-tag CI images with extension version for rollback check
-      if: env.NEEDS_RETAG == 'true'
-      run: |
-        # Images are now loaded into Docker by setup-test-environment.
-        # Re-tag documentdb/gateway from chart version to extension version
-        # so the webhook's rollback check sees the correct binary version.
-        CI_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
-        CI_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
-
-        echo "Re-tagging CI images:"
-        echo "  $CI_DOCDB → ${{ env.DOCUMENTDB_IMAGE }}"
-        echo "  $CI_GW → ${{ env.GATEWAY_IMAGE }}"
-        docker tag "$CI_DOCDB" "${{ env.DOCUMENTDB_IMAGE }}"
-        docker tag "$CI_GW" "${{ env.GATEWAY_IMAGE }}"
-
-        CLUSTER_NAME="documentdb-e2e-${{ matrix.architecture }}-${{ matrix.test_scenario_name }}"
-        kind load docker-image "${{ env.DOCUMENTDB_IMAGE }}" --name "$CLUSTER_NAME"
-        kind load docker-image "${{ env.GATEWAY_IMAGE }}" --name "$CLUSTER_NAME"
-        echo "✓ Re-tagged images loaded into kind cluster"
 
     - name: Setup port forwarding for data seeding
       uses: ./.github/actions/setup-port-forwarding
