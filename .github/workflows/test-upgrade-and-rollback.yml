@@ -327,6 +327,15 @@ jobs:
         echo "Built chart version:"
         cat ./documentdb-chart/Chart.yaml | grep -E "^(version|appVersion):"
         
+        # --- Apply CRDs before Helm Upgrade ---
+        # Helm does not upgrade CRDs on `helm upgrade` (only on `helm install`).
+        # We must apply them separately so new fields (e.g. spec.schemaVersion) are
+        # recognised by the API server and passed to the validating webhook.
+        echo ""
+        echo "--- Applying CRDs from new chart ---"
+        kubectl apply --server-side --force-conflicts -f ./documentdb-chart/crds/
+        echo "CRDs applied."
+        
         # --- Perform Helm Upgrade ---
         echo ""
         echo "--- Performing Helm Upgrade ---"
