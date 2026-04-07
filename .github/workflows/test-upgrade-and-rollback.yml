@@ -1192,15 +1192,18 @@ jobs:
         echo "=== Step 7: Webhook — Reject Rollback Below Schema ==="
         echo "Attempting to roll back documentDBImage below status.schemaVersion..."
         
-        OLD_EXTENSION="${{ env.DOCUMENTDB_OLD_IMAGE }}"
         CURRENT_SCHEMA="${{ env.NEW_SCHEMA_VERSION }}"
+        # Use a synthetic image reference with a version guaranteed to be below
+        # the finalized schema. The webhook extracts the semver from the tag and
+        # rejects the patch before any pod changes, so the image needn't exist.
+        ROLLBACK_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:0.1.0-rollback-test"
         
         echo "Current schema version:  $CURRENT_SCHEMA"
-        echo "Attempting rollback to:  $OLD_EXTENSION"
+        echo "Attempting rollback to:  $ROLLBACK_IMAGE (synthetic lower version)"
         
         # This SHOULD fail — the webhook must reject rollback below schema version
         PATCH_OUTPUT=$(kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
-          -p "{\"spec\":{\"documentDBImage\":\"$OLD_EXTENSION\"}}" 2>&1) && {
+          -p "{\"spec\":{\"documentDBImage\":\"$ROLLBACK_IMAGE\"}}" 2>&1) && {
           echo "❌ Webhook did NOT reject the rollback — patch succeeded unexpectedly"
           echo "Output: $PATCH_OUTPUT"
           exit 1
