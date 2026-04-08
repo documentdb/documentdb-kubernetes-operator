@@ -1104,6 +1104,13 @@ jobs:
         echo "Baseline schema version: $SCHEMA_BASELINE"
         echo "Target schema version:   $NEW_SCHEMA_VERSION"
         
+        # Ensure we're actually testing a version upgrade, not a no-op
+        if [[ "$SCHEMA_BASELINE" == "$NEW_SCHEMA_VERSION" ]]; then
+          echo "❌ Baseline and target schema versions are identical ($SCHEMA_BASELINE)."
+          echo "   The upgrade test requires different versions to validate the two-phase commit."
+          exit 1
+        fi
+        
         # Set spec.schemaVersion to trigger ALTER EXTENSION UPDATE
         kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
           -p "{\"spec\":{\"schemaVersion\":\"$NEW_SCHEMA_VERSION\"}}"
