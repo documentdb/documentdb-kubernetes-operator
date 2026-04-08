@@ -34,19 +34,32 @@ env:
   CHART_VERSION: ${{ inputs.version }}-test-${{ github.run_id }}
 
 jobs:
-  # Read the extension version from values.yaml once, shared by documentdb/gateway builds.
+  # Read the extension version from the built deb package (source of truth).
+  # Runs after build-packages so the actual compiled version is used, not values.yaml.
   read-extension-version:
     name: Read Extension Version
+    needs: [build-packages]
     runs-on: ubuntu-latest
     outputs:
       ext_image_tag: ${{ steps.read.outputs.ext_image_tag }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    - name: Read documentDbVersion from values.yaml
+    - name: Download packages (amd64)
+      uses: actions/download-artifact@v4
+      with:
+        name: build-packages-amd64
+        path: packages/
+    - name: Extract version from deb filename
       id: read
       run: |
-        EXT_VER=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+        DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+        echo "Found deb: $DEB_FILE"
+        # deb filename format: deb13-postgresql-18-documentdb_0.111-0_amd64.deb
+        # Extract version: strip prefix up to 'documentdb_', then take chars before '_<arch>'
+        EXT_VER=$(echo "$DEB_FILE" | sed -n 's/.*documentdb_\([0-9]*\.[0-9]*\)-[0-9]*_.*/\1.0/p')
+        if [[ -z "$EXT_VER" ]]; then
+          echo "::error::Could not extract version from deb filename: $DEB_FILE"
+          exit 1
+        fi
         EXT_TAG="${EXT_VER}-test-${{ github.run_id }}"
         echo "Extension version: $EXT_VER → image tag: $EXT_TAG"
         echo "ext_image_tag=$EXT_TAG" >> "$GITHUB_OUTPUT"
