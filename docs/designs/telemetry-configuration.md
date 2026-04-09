@@ -18,6 +18,10 @@ Configure telemetry by setting these environment variables in the operator deplo
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string (alternative to instrumentation key) | Yes (or instrumentation key) |
 | `DOCUMENTDB_TELEMETRY_ENABLED` | Set to `false` to disable telemetry collection | No (default: `true`) |
 
+> **Note on naming convention:** `APPINSIGHTS_INSTRUMENTATIONKEY` and `APPLICATIONINSIGHTS_CONNECTION_STRING` are the
+> [official Microsoft Application Insights SDK variable names](https://learn.microsoft.com/en-us/azure/azure-monitor/app/configuration-with-applicationinsights-config).
+> The naming difference (`APPINSIGHTS_` vs `APPLICATIONINSIGHTS_`) reflects Microsoft's SDK conventions, not an inconsistency in this project.
+
 ### Helm Chart Configuration
 
 When installing via Helm, you can configure telemetry in your values.yaml:
@@ -97,13 +101,21 @@ To completely disable telemetry collection:
        value: "false"
    ```
 
-2. **Via Helm**:
+2. **Via Helm** (at install time):
    ```yaml
    telemetry:
      enabled: false
    ```
 
-3. **Don't provide instrumentation key**: If no `APPINSIGHTS_INSTRUMENTATIONKEY` or `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, telemetry is automatically disabled.
+3. **Via Helm upgrade** (on an already running cluster):
+   ```bash
+   helm upgrade documentdb-operator ./operator/documentdb-helm-chart \
+     --namespace documentdb-operator \
+     --set telemetry.enabled=false
+   ```
+   This restarts the operator pod with telemetry disabled. No data loss or downtime for DocumentDB clusters — only the operator pod restarts.
+
+4. **Don't provide instrumentation key**: If no `APPINSIGHTS_INSTRUMENTATIONKEY` or `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, telemetry is automatically disabled.
 
 ## Telemetry Events Reference
 

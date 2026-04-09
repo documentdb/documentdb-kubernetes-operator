@@ -55,6 +55,10 @@ nav:
           - Overview: preview/high-availability/overview.md
           - Local HA: preview/high-availability/local-ha.md
       - Advanced Configuration: preview/advanced-configuration/README.md
+      - Multi-Region Deployment:
+          - Overview: preview/multi-region-deployment/overview.md
+          - Setup Guide: preview/multi-region-deployment/setup.md
+          - Failover Procedures: preview/multi-region-deployment/failover-procedures.md
       - FAQ: preview/faq.md
       - Tools:
           - Kubectl Plugin: preview/kubectl-plugin.md

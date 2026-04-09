@@ -11,12 +11,14 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-rg}"
 LOCATION="${LOCATION:-westus2}"
 NODE_COUNT="${NODE_COUNT:-3}"
 NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
-KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34.3}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.35.0}"
 
 # DocumentDB Operator Configuration
 # For testing: update with your account/org if using a fork
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.3"
+# Optional: Pin specific versions (by default, installs latest)
+# OPERATOR_CHART_VERSION="0.2.0"    # Operator and sidecar image versions (matches Chart.appVersion)
+# DOCUMENTDB_VERSION="0.109.0"      # Database image version (matches values.yaml documentDbVersion)
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -89,8 +91,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --cluster-name NAME     AKS cluster name (default: documentdb-cluster)"
             echo "  --resource-group RG     Azure resource group (default: documentdb-rg)"
             echo "  --location LOCATION     Azure location (default: westus2)"
-            echo "  --github-username       GitHub username for operator installation"
-            echo "  --github-token          GitHub token for operator installation"
+            echo "  --github-username       GitHub username (optional, for private registries only)"
+            echo "  --github-token          GitHub token (optional, for private registries only)"
             echo "  -h, --help             Show this help message"
             echo ""
             echo "Examples:"
@@ -369,48 +371,42 @@ install_documentdb_operator() {
     # Install DocumentDB operator using enhanced fork with Azure support
     log "Installing DocumentDB operator from GitHub Container Registry (enhanced fork with Azure support)..."
     
-    # Check for GitHub authentication
-    if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-Please set the following environment variables:
-  export GITHUB_USERNAME='your-github-username'
-  export GITHUB_TOKEN='your-github-token'
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Export the token as shown above
-
-Then run the script again with --install-operator"
+    # GitHub authentication is optional - only needed for private registries or personal forks
+    # The public registry at oci://ghcr.io/documentdb/documentdb-operator is accessible without authentication
+    if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_USERNAME" ]; then
+        log "GitHub credentials provided - authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            warn "Failed to authenticate with GitHub Container Registry. Continuing without authentication..."
+        else
+            success "Authenticated with GitHub Container Registry"
+        fi
+    else
+        log "No GitHub credentials provided - using public registry access"
+        log "Note: Set GITHUB_USERNAME and GITHUB_TOKEN if using a private registry or personal fork"
     fi
     
-    # Authenticate with GitHub Container Registry
-    log "Authenticating with GitHub Container Registry..."
-    if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-        error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
-    fi
-    
-    # Install DocumentDB operator from OCI registry
-    log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+    # Install from GitHub Container Registry using OCI protocol
+    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
     helm install documentdb-operator \
         oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
         --namespace documentdb-operator \
         --create-namespace \
-        --set documentDbVersion=${OPERATOR_CHART_VERSION} \
-        --set image.documentdbk8soperator.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/operator \
-        --set image.sidecarinjector.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/sidecar \
         --wait \
         --timeout 10m
+    # To pin specific versions, add these options:
+    #   --version ${OPERATOR_CHART_VERSION}                    # Pin operator chart version (e.g., 0.2.0)
+    #   --set documentDbVersion=${DOCUMENTDB_VERSION}          # Pin database image version (e.g., 0.109.0)
+    # To use custom image repositories (e.g., for forks), add:
+    #   --set image.documentdbk8soperator.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/operator
+    #   --set image.sidecarinjector.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/sidecar
 
     if [ $? -eq 0 ]; then
-        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        success "DocumentDB operator installed successfully from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
     else
-        error "Failed to install DocumentDB operator from OCI registry. Please verify:
-- Your GitHub token has 'read:packages' scope
-- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
+        error "Failed to install DocumentDB operator. Please verify:
+- Network connectivity to ghcr.io
+- The chart exists at ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator
+- If using a private registry, set GITHUB_USERNAME and GITHUB_TOKEN"
     fi
     
     # Wait for operator to be ready

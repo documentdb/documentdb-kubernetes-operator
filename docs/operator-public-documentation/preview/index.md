@@ -17,7 +17,7 @@ Follow these steps to install the operator, deploy a DocumentDB cluster, and con
 
 - [Helm](https://helm.sh/docs/intro/install/) installed.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) installed.
-- A **Kubernetes 1.35+** cluster. The operator uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in K8s 1.35) to mount the DocumentDB extension. A local cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/) or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (v0.31+) works for this quickstart.
+- A **Kubernetes 1.35+** cluster with a **containerd** or **CRI-O** container runtime. The operator uses the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature (GA in K8s 1.35) to mount the DocumentDB extension, which is not supported by the Docker container runtime. A local cluster such as [minikube](https://minikube.sigs.k8s.io/docs/start/) or [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (v0.31+) works for this quickstart.
 - [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/) installed to connect to the DocumentDB cluster.
 
 ### Start a local Kubernetes cluster
@@ -25,10 +25,13 @@ Follow these steps to install the operator, deploy a DocumentDB cluster, and con
 If you're using `minikube`:
 
 ```sh
-minikube start --kubernetes-version=v1.35.0
+minikube start --kubernetes-version=v1.35.0 --container-runtime=containerd
 ```
 
-If you are using `kind` (v0.31+), use the following command:
+!!! important
+    The `--container-runtime=containerd` flag is required. Minikube defaults to Docker, which does not support ImageVolumes. Without this flag, pods will fail with `CreateContainerError: invalid mount config for type "bind": field Source must not be empty`.
+
+If you are using `kind` (v0.31+), use the following command (kind uses containerd by default):
 
 ```sh
 kind create cluster --image kindest/node:v1.35.0

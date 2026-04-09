@@ -41,6 +41,7 @@ jobs:
         module:
           - operator/src
           - documentdb-kubectl-plugin
+          - operator/cnpg-plugins/sidecar-injector
     steps:
       - uses: actions/checkout@v4
         with:
