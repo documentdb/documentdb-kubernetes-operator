@@ -19,7 +19,7 @@ Configure telemetry by setting these environment variables in the operator deplo
 | `DOCUMENTDB_TELEMETRY_ENABLED` | Set to `false` to disable telemetry collection | No (default: `true`) |
 
 > **Note on naming convention:** `APPINSIGHTS_INSTRUMENTATIONKEY` and `APPLICATIONINSIGHTS_CONNECTION_STRING` are the
-> [official Microsoft Application Insights SDK variable names](https://learn.microsoft.com/en-us/azure/azure-monitor/app/configuration-with-applicationinsights-config).
+> [official Microsoft Application Insights SDK environment variable names](https://learn.microsoft.com/en-us/azure/azure-monitor/app/connection-strings).
 > The naming difference (`APPINSIGHTS_` vs `APPLICATIONINSIGHTS_`) reflects Microsoft's SDK conventions, not an inconsistency in this project.
 
 ### Helm Chart Configuration
