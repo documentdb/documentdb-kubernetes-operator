@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Upgrade the DocumentDB operator Helm chart and CRDs, update DocumentDB extension and gateway images per cluster, and roll back to a previous version.">
+        <meta name="description" content="Upgrade the DocumentDB operator and DocumentDB clusters, including version and schema management.">
       
       
       
@@ -781,13 +781,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentdb-operator-upgrade" class="md-nav__link">
+  <a href="#upgrading-the-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      DocumentDB Operator Upgrade
+      Upgrading the Operator
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="DocumentDB Operator Upgrade">
+    <nav class="md-nav" aria-label="Upgrading the Operator">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -818,9 +818,9 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-4-upgrade-the-documentdb-operator" class="md-nav__link">
+  <a href="#step-4-upgrade-the-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 4: Upgrade the DocumentDB Operator
+      Step 4: Upgrade the Operator
     </span>
   </a>
   
@@ -836,18 +836,9 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rollback" class="md-nav__link">
+  <a href="#operator-rollback" class="md-nav__link">
     <span class="md-ellipsis">
-      Rollback
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#documentdb-operator-upgrade-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      DocumentDB Operator Upgrade Notes
+      Operator Rollback
     </span>
   </a>
   
@@ -859,14 +850,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-upgrades" class="md-nav__link">
+  <a href="#upgrading-documentdb-clusters" class="md-nav__link">
     <span class="md-ellipsis">
-      Component Upgrades
+      Upgrading DocumentDB Clusters
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Component Upgrades">
+    <nav class="md-nav" aria-label="Upgrading DocumentDB Clusters">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-version-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schema Version Modes
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#pre-upgrade-checklist" class="md-nav__link">
@@ -878,18 +878,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-1-update-the-documentdb-version" class="md-nav__link">
+  <a href="#upgrade-walkthrough" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Update the DocumentDB Version
+      Upgrade Walkthrough
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-monitor-the-upgrade" class="md-nav__link">
+  <a href="#monitoring-the-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Monitor the Upgrade
+      Monitoring the Upgrade
     </span>
   </a>
   
@@ -904,26 +904,26 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-region-upgrades" class="md-nav__link">
     <span class="md-ellipsis">
-      How It Works
+      Multi-Region Upgrades
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#advanced-independent-image-overrides" class="md-nav__link">
     <span class="md-ellipsis">
       Advanced: Independent Image Overrides
     </span>
   </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1413,13 +1413,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#documentdb-operator-upgrade" class="md-nav__link">
+  <a href="#upgrading-the-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      DocumentDB Operator Upgrade
+      Upgrading the Operator
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="DocumentDB Operator Upgrade">
+    <nav class="md-nav" aria-label="Upgrading the Operator">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1450,9 +1450,9 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-4-upgrade-the-documentdb-operator" class="md-nav__link">
+  <a href="#step-4-upgrade-the-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 4: Upgrade the DocumentDB Operator
+      Step 4: Upgrade the Operator
     </span>
   </a>
   
@@ -1468,18 +1468,9 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rollback" class="md-nav__link">
+  <a href="#operator-rollback" class="md-nav__link">
     <span class="md-ellipsis">
-      Rollback
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#documentdb-operator-upgrade-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      DocumentDB Operator Upgrade Notes
+      Operator Rollback
     </span>
   </a>
   
@@ -1491,14 +1482,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-upgrades" class="md-nav__link">
+  <a href="#upgrading-documentdb-clusters" class="md-nav__link">
     <span class="md-ellipsis">
-      Component Upgrades
+      Upgrading DocumentDB Clusters
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Component Upgrades">
+    <nav class="md-nav" aria-label="Upgrading DocumentDB Clusters">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schema-version-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schema Version Modes
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#pre-upgrade-checklist" class="md-nav__link">
@@ -1510,18 +1510,18 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-1-update-the-documentdb-version" class="md-nav__link">
+  <a href="#upgrade-walkthrough" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Update the DocumentDB Version
+      Upgrade Walkthrough
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-monitor-the-upgrade" class="md-nav__link">
+  <a href="#monitoring-the-upgrade" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Monitor the Upgrade
+      Monitoring the Upgrade
     </span>
   </a>
   
@@ -1536,26 +1536,26 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-region-upgrades" class="md-nav__link">
     <span class="md-ellipsis">
-      How It Works
+      Multi-Region Upgrades
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
+      
+        <li class="md-nav__item">
   <a href="#advanced-independent-image-overrides" class="md-nav__link">
     <span class="md-ellipsis">
       Advanced: Independent Image Overrides
     </span>
   </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1580,34 +1580,35 @@
 <h1 id="upgrades">Upgrades<a class="headerlink" href="#upgrades" title="Permanent link">&para;</a></h1>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <p>Upgrades keep your DocumentDB deployment current with the latest features, security patches, and bug fixes.</p>
-<p>There are two types of upgrades in a DocumentDB deployment:</p>
+<p>A DocumentDB deployment has two independently upgradable components:</p>
 <table>
 <thead>
 <tr>
-<th>Upgrade Type</th>
+<th>Component</th>
 <th>What Changes</th>
-<th>How to Trigger</th>
+<th>How to Upgrade</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>DocumentDB operator</strong></td>
-<td>The Kubernetes operator + bundled CloudNative-PG</td>
-<td>Helm chart upgrade</td>
+<td><strong>DocumentDB Operator</strong></td>
+<td>Operator binary + bundled CloudNative-PG</td>
+<td><code>helm upgrade</code></td>
 </tr>
 <tr>
-<td><strong>DocumentDB components</strong></td>
-<td>Extension + gateway (same version)</td>
-<td>Update <code>spec.documentDBVersion</code></td>
+<td><strong>DocumentDB Clusters</strong></td>
+<td>Extension binary + gateway sidecar + database schema</td>
+<td>Update <code>spec.documentDBVersion</code> and optionally <code>spec.schemaVersion</code></td>
 </tr>
 </tbody>
 </table>
+<hr />
+<h2 id="upgrading-the-operator">Upgrading the Operator<a class="headerlink" href="#upgrading-the-operator" title="Permanent link">&para;</a></h2>
+<p>The operator is deployed via Helm. Upgrading it does <strong>not</strong> restart your DocumentDB cluster pods or change any cluster components.</p>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
-<p>The operator Helm chart bundles <a href="https://cloudnative-pg.io/">CloudNative-PG</a> as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version — this cannot be skipped separately.</p>
+<p>The operator Helm chart bundles <a href="https://cloudnative-pg.io/">CloudNative-PG</a> as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.</p>
 </div>
-<h2 id="documentdb-operator-upgrade">DocumentDB Operator Upgrade<a class="headerlink" href="#documentdb-operator-upgrade" title="Permanent link">&para;</a></h2>
-<p>The DocumentDB operator is deployed via Helm. Upgrade it by updating the Helm release.</p>
 <h3 id="step-1-update-the-helm-repository">Step 1: Update the Helm Repository<a class="headerlink" href="#step-1-update-the-helm-repository" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>helm<span class="w"> </span>repo<span class="w"> </span>update<span class="w"> </span>documentdb
 </code></pre></div>
@@ -1620,8 +1621,8 @@
 </div>
 <h3 id="step-3-apply-updated-crds">Step 3: Apply Updated CRDs<a class="headerlink" href="#step-3-apply-updated-crds" title="Permanent link">&para;</a></h3>
 <p>Helm only installs CRDs on initial <code>helm install</code> — it does <strong>not</strong> update them on <code>helm upgrade</code>. If the new operator version introduces CRD schema changes, you must apply them manually first:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Set this to the release tag you are upgrading to (e.g., v0.2.0)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span>v0.2.0
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Set this to the release tag you are upgrading to (e.g., 0.2.0)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">0</span>.2.0
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>--server-side<span class="w"> </span>--force-conflicts<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml<span class="w"> </span><span class="se">\</span>
@@ -1633,7 +1634,7 @@
 <p class="admonition-title">Warning</p>
 <p>Always use CRDs from the <strong>same version</strong> as the Helm chart you are installing. Using CRDs from <code>main</code> or a different release may introduce schema mismatches.</p>
 </div>
-<h3 id="step-4-upgrade-the-documentdb-operator">Step 4: Upgrade the DocumentDB Operator<a class="headerlink" href="#step-4-upgrade-the-documentdb-operator" title="Permanent link">&para;</a></h3>
+<h3 id="step-4-upgrade-the-operator">Step 4: Upgrade the Operator<a class="headerlink" href="#step-4-upgrade-the-operator" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--wait
@@ -1653,7 +1654,7 @@
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Check operator logs for errors</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>--tail<span class="o">=</span><span class="m">50</span>
 </code></pre></div>
-<h3 id="rollback">Rollback<a class="headerlink" href="#rollback" title="Permanent link">&para;</a></h3>
+<h3 id="operator-rollback">Operator Rollback<a class="headerlink" href="#operator-rollback" title="Permanent link">&para;</a></h3>
 <p>If the new operator version causes issues, roll back to the previous Helm release:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># List release history</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>helm<span class="w"> </span><span class="nb">history</span><span class="w"> </span>documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
@@ -1663,89 +1664,231 @@
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code>helm rollback</code> reverts the operator deployment but does <strong>not</strong> revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do <strong>not</strong> revert CRDs unless the release notes explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.</p>
+<p><code>helm rollback</code> reverts the operator deployment but does <strong>not</strong> revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do <strong>not</strong> revert CRDs unless the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">release notes</a> explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.</p>
 </div>
-<h3 id="documentdb-operator-upgrade-notes">DocumentDB Operator Upgrade Notes<a class="headerlink" href="#documentdb-operator-upgrade-notes" title="Permanent link">&para;</a></h3>
-<ul>
-<li>The DocumentDB operator upgrade does <strong>not</strong> restart your DocumentDB cluster pods.</li>
-<li>After upgrading the operator, update individual DocumentDB clusters to the latest component version. See <a href="#component-upgrades">Component Upgrades</a> below.</li>
-</ul>
-<h2 id="component-upgrades">Component Upgrades<a class="headerlink" href="#component-upgrades" title="Permanent link">&para;</a></h2>
-<p>Updating <code>spec.documentDBVersion</code> upgrades <strong>both</strong> the DocumentDB extension and the gateway together, since they share the same version.</p>
+<hr />
+<h2 id="upgrading-documentdb-clusters">Upgrading DocumentDB Clusters<a class="headerlink" href="#upgrading-documentdb-clusters" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Migration note for existing clusters</p>
+<p>If you are upgrading from operator version 0.2.0 or earlier, the new operator introduces a validating webhook and the <code>spec.schemaVersion</code> field. After upgrading the operator, your existing clusters will continue to work without changes — <code>schemaVersion</code> defaults to unset (binary-only upgrades). No action is needed unless you want to enable automatic schema upgrades via <code>schemaVersion: "auto"</code>.</p>
+</div>
+<p>Upgrading a DocumentDB cluster has two dimensions: the <strong>binary</strong> (container images) and the <strong>schema</strong> (database catalog). You control each independently:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What It Does</th>
+<th>Reversible?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>spec.documentDBVersion</code></td>
+<td>Updates the <strong>binary</strong> — the extension image and gateway sidecar are replaced via rolling restart.</td>
+<td>✅ Yes — revert the field to roll back.</td>
+</tr>
+<tr>
+<td><code>spec.schemaVersion</code></td>
+<td>Runs <code>ALTER EXTENSION UPDATE</code> to migrate the <strong>database schema</strong> to match the binary.</td>
+<td>❌ No — schema changes are permanent.</td>
+</tr>
+</tbody>
+</table>
+<p>Think of it as: <strong><code>documentDBVersion</code> installs the software, <code>schemaVersion</code> applies the database migration.</strong></p>
+<div class="admonition info">
+<p class="admonition-title">Why two fields?</p>
+<p>The binary (container image) can be swapped freely — if something goes wrong, revert <code>documentDBVersion</code> and the pods roll back to the previous image. But <code>ALTER EXTENSION UPDATE</code> modifies database catalog tables and cannot be undone. Separating these two steps gives you a safe rollback window between deploying new code and committing the schema change.</p>
+</div>
+<h3 id="schema-version-modes">Schema Version Modes<a class="headerlink" href="#schema-version-modes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th><code>spec.schemaVersion</code></th>
+<th>Behavior</th>
+<th>Recommended For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(not set)</em> — default</td>
+<td>Only the binary upgrades. The schema stays at its current version until you explicitly set <code>schemaVersion</code>.</td>
+<td><strong>Production</strong> — gives you a rollback-safe window before committing the schema change.</td>
+</tr>
+<tr>
+<td><code>"auto"</code></td>
+<td>Schema updates automatically whenever the binary version changes.</td>
+<td><strong>Development and testing</strong> — simple, one-step upgrades.</td>
+</tr>
+<tr>
+<td>Explicit version (e.g., <code>"0.112.0"</code>)</td>
+<td>Schema updates to exactly that version.</td>
+<td><strong>Controlled rollouts</strong> — you choose when and what version to finalize.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="pre-upgrade-checklist">Pre-Upgrade Checklist<a class="headerlink" href="#pre-upgrade-checklist" title="Permanent link">&para;</a></h3>
 <ol>
-<li><strong>Check the CHANGELOG</strong> — review release notes for breaking changes.</li>
-<li><strong>Verify DocumentDB cluster health</strong> — ensure all instances are running and healthy.</li>
-<li><strong>Back up the DocumentDB cluster</strong> — create an on-demand <a href="../backup-and-restore/">backup</a> before upgrading.</li>
+<li><strong>Check the <a href="https://github.com/documentdb/documentdb/releases">DocumentDB release notes</a></strong> — review for breaking changes or new features.</li>
+<li>
+<p><strong>Verify DocumentDB cluster health</strong> — ensure all instances are running and healthy:</p>
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>my-cluster
+</code></pre></div>
+3. <strong>Back up the DocumentDB cluster</strong> — create an on-demand <a href="../backup-and-restore/">backup</a> before upgrading.</p>
+</li>
 </ol>
-<h3 id="step-1-update-the-documentdb-version">Step 1: Update the DocumentDB Version<a class="headerlink" href="#step-1-update-the-documentdb-version" title="Permanent link">&para;</a></h3>
-<div class="admonition danger">
-<p class="admonition-title">Danger</p>
-<p><strong>Downgrades are not supported.</strong> If you set <code>documentDBVersion</code> to a version lower than the currently installed schema version, the operator will still update the container images but will <strong>skip the schema migration</strong> (<code>ALTER EXTENSION UPDATE</code>) and emit a warning event. This leaves the DocumentDB cluster running an older binary against a newer schema, which may cause unexpected behavior. Always move forward to a newer version or restore from backup.</p>
-</div>
-<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
-</code></pre></div>
-<h3 id="step-2-monitor-the-upgrade">Step 2: Monitor the Upgrade<a class="headerlink" href="#step-2-monitor-the-upgrade" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Watch the rolling restart</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Check DocumentDB cluster status</span>
-<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
-<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Check the schema version after upgrade</span>
-<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
-</code></pre></div>
-<h3 id="rollback-and-recovery">Rollback and Recovery<a class="headerlink" href="#rollback-and-recovery" title="Permanent link">&para;</a></h3>
-<p>Whether you can roll back depends on whether the schema has been updated:</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Schema not yet updated</label><label for="__tabbed_1_2">Schema already updated</label></div>
+<h3 id="upgrade-walkthrough">Upgrade Walkthrough<a class="headerlink" href="#upgrade-walkthrough" title="Permanent link">&para;</a></h3>
+<p>Choose the approach that matches your use case:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Production (two-phase upgrade)</label><label for="__tabbed_1_2">Production (rolling safety gap)</label><label for="__tabbed_1_3">Development (auto mode)</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<p>If <code>status.schemaVersion</code> still shows the <strong>previous</strong> version, the extension schema migration has not run yet. You can roll back by reverting <code>spec.documentDBVersion</code> to the previous value:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Check the current schema version</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+<p><strong>Step 1: Update the binary version.</strong> The schema stays unchanged — this is safe to roll back.</p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="c1"># schemaVersion is not set — schema stays at current version</span>
 </code></pre></div>
-<p>If the schema version is unchanged, revert the <code>spec.documentDBVersion</code> field in your manifest and reapply:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+</code></pre></div>
+<p><strong>Step 2: Validate.</strong> Confirm the cluster is healthy and the new binary works as expected.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Watch the rolling restart</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Check cluster status</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Verify the schema version has NOT changed</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+</code></pre></div>
+<p><strong>Step 3: Finalize the schema.</strong> Once you're confident the new binary is stable, commit the schema migration:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;schemaVersion&quot;:&quot;&lt;new-version&gt;&quot;}}&#39;</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>On subsequent upgrades, just update <code>documentDBVersion</code> again. The schema stays pinned at the previous <code>schemaVersion</code> value until you update it.</p>
+</div>
+</div>
+<div class="tabbed-block">
+<p>Keep the binary always one version ahead of the schema. This ensures you can roll back at any time because the running binary has already been validated with the current schema.</p>
+<p><strong>Example:</strong> Your cluster is at binary <code>0.110.0</code> with schema <code>0.110.0</code>. A new version <code>0.111.0</code> is available.</p>
+<p><strong>Step 1: Upgrade the binary and finalize the <em>previous</em> schema together.</strong></p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to new version</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.110.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to current (previous) version</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+</code></pre></div>
+<p>Now the binary is <code>0.111.0</code> and the schema is <code>0.110.0</code>. Each new binary version is backward-compatible with the previous schema version, so this is safe.</p>
+<p><strong>Step 2: Validate.</strong> Run your tests. If something goes wrong, revert <code>documentDBVersion</code> to <code>0.110.0</code> — the schema is still at <code>0.110.0</code>, so rollback is safe.</p>
+<p><strong>On the next upgrade</strong> (e.g., <code>0.112.0</code>), repeat the pattern:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.112.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to next version</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to previous binary version</span>
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Info</p>
+<p>This pattern keeps a permanent rollback window. The schema is always one version behind the binary, so you never commit a schema change until the <em>next</em> binary has proven stable with it.</p>
+</div>
+</div>
+<div class="tabbed-block">
+<p>Update both the binary and schema in one step:</p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>With <code>schemaVersion: "auto"</code>, the schema migration is irreversible once applied. You cannot roll back to the previous version — only restore from backup.</p>
+</div>
+</div>
+</div>
+</div>
+<h3 id="monitoring-the-upgrade">Monitoring the Upgrade<a class="headerlink" href="#monitoring-the-upgrade" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Watch the rolling restart</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Check DocumentDB cluster status</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="c1"># Check the current schema version</span>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+</code></pre></div>
+<h3 id="rollback-and-recovery">Rollback and Recovery<a class="headerlink" href="#rollback-and-recovery" title="Permanent link">&para;</a></h3>
+<p>Two rules govern rollback:</p>
+<ol>
+<li><strong>Schema cannot be rolled back.</strong> <code>ALTER EXTENSION UPDATE</code> modifies database catalog tables permanently. There is no <code>ALTER EXTENSION DOWNGRADE</code>.</li>
+<li><strong><code>documentDBVersion</code> cannot be set below <code>status.schemaVersion</code>.</strong> The operator blocks this because running an older binary against a newer schema is untested and may cause data corruption.</li>
+</ol>
+<p>Whether you can roll back depends on whether the schema has been updated:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Roll back binary only (documentDBVersion ≥ schemaVersion)</label><label for="__tabbed_2_2">Roll back both binary and schema (restore from backup)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>If <code>status.schemaVersion</code> still shows the <strong>previous</strong> version, the schema migration has not run yet. You can safely roll back by reverting <code>spec.documentDBVersion</code> to any version that is ≥ <code>status.schemaVersion</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Verify the schema version is unchanged</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+</code></pre></div>
+<p>If the schema version is unchanged, revert <code>spec.documentDBVersion</code> in your manifest and reapply:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<p>If <code>status.schemaVersion</code> shows the <strong>new</strong> version, the schema migration has already been applied and <strong>cannot be reversed</strong>. To recover: Use the backup you created in the <a href="#pre-upgrade-checklist">Pre-Upgrade Checklist</a> to restore the DocumentDB cluster to its pre-upgrade state. See <a href="../backup-and-restore/">Backup and Restore</a> for instructions.</p>
+<p>If <code>status.schemaVersion</code> shows the <strong>new</strong> version, the schema migration has already been applied. At this point:</p>
+<ul>
+<li>You <strong>cannot</strong> revert <code>schemaVersion</code> — the database schema change is permanent.</li>
+<li>You <strong>cannot</strong> set <code>documentDBVersion</code> below <code>status.schemaVersion</code> — the operator rejects it.</li>
+</ul>
+<p>To recover: restore from the backup you created in the <a href="#pre-upgrade-checklist">Pre-Upgrade Checklist</a>. See <a href="../backup-and-restore/">Backup and Restore</a> for instructions.</p>
 </div>
 </div>
 </div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>This is why backing up before a component upgrade is critical. Once the schema is updated, there is no rollback — only restore.</p>
+<p>This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting <code>schemaVersion</code>.</p>
 </div>
-<h3 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h3>
+<hr />
+<h2 id="multi-region-upgrades">Multi-Region Upgrades<a class="headerlink" href="#multi-region-upgrades" title="Permanent link">&para;</a></h2>
+<p>When running DocumentDB across multiple regions or clusters, use the two-phase upgrade pattern across all regions:</p>
 <ol>
-<li>You update the <code>spec.documentDBVersion</code> field.</li>
-<li>The operator detects the version change and updates both the database image and the gateway sidecar image.</li>
-<li>The underlying cluster manager performs a <strong>rolling restart</strong>: replicas are restarted first one at a time, then the <strong>primary is restarted in place</strong>. Expect a brief period of downtime while the primary pod restarts.</li>
-<li>After the primary pod is healthy, the operator runs <code>ALTER EXTENSION documentdb UPDATE</code> to update the database schema.</li>
-<li>The operator tracks the schema version in <code>status.schemaVersion</code>.</li>
+<li><strong>Back up every region.</strong> Create a backup in each region before starting.</li>
+<li><strong>Upgrade the binary in all regions.</strong> Update <code>spec.documentDBVersion</code> in every cluster. Validate that all regions are healthy and replication is working correctly with the new binary.</li>
+<li><strong>Finalize the schema in all regions.</strong> Once every region is running the new binary successfully, set <code>spec.schemaVersion</code> across all clusters.</li>
 </ol>
-<h3 id="advanced-independent-image-overrides">Advanced: Independent Image Overrides<a class="headerlink" href="#advanced-independent-image-overrides" title="Permanent link">&para;</a></h3>
+<p>This keeps a rollback-safe window — if any region fails the binary upgrade, you can revert <code>documentDBVersion</code> everywhere before any schema change is committed.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Multi-region upgrade orchestration is performed manually — the operator manages individual clusters and does not coordinate across regions automatically.</p>
+</div>
+<hr />
+<h2 id="advanced-independent-image-overrides">Advanced: Independent Image Overrides<a class="headerlink" href="#advanced-independent-image-overrides" title="Permanent link">&para;</a></h2>
 <p>In most cases, use <code>spec.documentDBVersion</code> to upgrade both components together. For advanced scenarios, you can override individual images:</p>
-<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1">Extension Image Override</label><label for="__tabbed_2_2">Gateway Image Override</label></div>
+<div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Extension Image Override</label><label for="__tabbed_3_2">Gateway Image Override</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">documentDBImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">documentDBImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the database extension image while keeping the gateway at the version set by <code>documentDBVersion</code>.</p>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">gatewayImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">gatewayImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the gateway sidecar image while keeping the extension at the version set by <code>documentDBVersion</code>.</p>
 </div>
