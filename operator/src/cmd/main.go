@@ -31,6 +31,7 @@ import (
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/internal/controller"
 	"github.com/documentdb/documentdb-operator/internal/telemetry"
+	webhookhandler "github.com/documentdb/documentdb-operator/internal/webhook"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
@@ -284,6 +285,12 @@ func main() {
 
 	// +kubebuilder:scaffold:builder
 
+	// Register the DocumentDB validating webhook
+	if err = (&webhookhandler.DocumentDBValidator{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "DocumentDB")
+		os.Exit(1)
+	}
+
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")
 		if err := mgr.Add(metricsCertWatcher); err != nil {
@@ -306,6 +313,14 @@ func main() {
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+	// Gate readiness on webhook server startup so the Service has no ready
+	// endpoints until the TLS cert is loaded. This prevents the API server
+	// from routing admission requests to an operator that cannot serve them
+	// (matching CNPG's readiness-probe pattern for failurePolicy: Fail).
+	if err := mgr.AddReadyzCheck("webhook", webhookServer.StartedChecker()); err != nil {
+		setupLog.Error(err, "unable to set up webhook ready check")
 		os.Exit(1)
 	}
 

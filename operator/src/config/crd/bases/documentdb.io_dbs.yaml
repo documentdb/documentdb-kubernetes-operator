@@ -1264,6 +1264,25 @@ spec:
                 required:
                 - storage
                 type: object
+              schemaVersion:
+                description: |-
+                  SchemaVersion controls the desired schema version for the DocumentDB extension.
+
+                  This field decouples the extension binary (image) update from the schema update
+                  (ALTER EXTENSION documentdb UPDATE), providing a rollback-safe upgrade window.
+
+                  Values:
+                    - "" (empty, default): Two-phase mode. Image upgrades happen automatically,
+                      but ALTER EXTENSION UPDATE does NOT run. Users must explicitly set this
+                      field to finalize the schema upgrade. This is the safest option for production
+                      as it allows rollback by reverting the image before committing the schema change.
+                    - "auto": Schema automatically updates to match the binary version whenever
+                      the binary is upgraded. This is the simplest mode but provides no rollback
+                      safety window. Recommended for development and testing environments.
+                    - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
+                      Must be <= the binary version.
+                pattern: ^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$
+                type: string
               sidecarInjectorPluginName:
                 description: SidecarInjectorPluginName is the name of the sidecar
                   injector plugin to use.

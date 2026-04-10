@@ -103,6 +103,31 @@ type DocumentDBSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
 	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 
+	// SchemaVersion controls the desired schema version for the DocumentDB extension.
+	//
+	// The operator never changes your database schema unless you ask:
+	//   - Set documentDBVersion → updates the binary (safe to roll back)
+	//   - Set schemaVersion → updates the database schema (irreversible)
+	//   - Set schemaVersion: "auto" → schema auto-updates with binary
+	//
+	// Once the schema has been updated, the operator blocks image rollback below the
+	// installed schema version to prevent running an untested binary/schema combination.
+	//
+	// Values:
+	//   - "" (empty, default): Two-phase mode. Image upgrades happen automatically,
+	//     but ALTER EXTENSION UPDATE does NOT run. Users must explicitly set this
+	//     field to finalize the schema upgrade. This is the safest option for production
+	//     as it allows rollback by reverting the image before committing the schema change.
+	//   - "auto": Schema automatically updates to match the binary version whenever
+	//     the binary is upgraded. This is the simplest mode but provides no rollback
+	//     safety window.
+	//   - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
+	//     Must be <= the binary version.
+	//
+	// +kubebuilder:validation:Pattern=`^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$`
+	// +optional
+	SchemaVersion string `json:"schemaVersion,omitempty"`
+
 	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
 	// +optional
 	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`

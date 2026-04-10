@@ -1125,3 +1125,28 @@ func TestExtensionVersionToSemver(t *testing.T) {
 		})
 	}
 }
+
+func TestSemverToExtensionVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "standard semver", input: "0.110.0", expected: "0.110-0"},
+		{name: "non-zero patch", input: "0.110.1", expected: "0.110-1"},
+		{name: "major version", input: "1.0.0", expected: "1.0-0"},
+		{name: "all non-zero", input: "2.15.3", expected: "2.15-3"},
+		{name: "large numbers", input: "100.999.50", expected: "100.999-50"},
+		{name: "already extension format (no dot)", input: "110", expected: "110"},
+		{name: "empty string", input: "", expected: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SemverToExtensionVersion(tt.input)
+			if result != tt.expected {
+				t.Errorf("SemverToExtensionVersion(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}

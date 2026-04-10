@@ -79,6 +79,7 @@ jobs:
 
     env:
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag || '' }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
       DOCUMENTDB_COMBINED_IMAGE: ghcr.io/microsoft/documentdb/documentdb-local:16
       RELEASED_CHART_VERSION: ${{ inputs.released_chart_version || 'latest' }}
@@ -102,9 +103,11 @@ jobs:
 
         # New images come from this workflow run (self-built) or from the provided candidate tag.
         # Database images use a separate version track from operator images.
+        # CI-built images are now tagged with the extension version (e.g., 0.109.0-test-RUNID-arch)
+        # by test-build-and-package.yml, so no re-tagging is needed.
         if [[ "${{ github.event_name }}" == "pull_request" || -z "${{ inputs.image_tag }}" ]]; then
-          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
-          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.architecture }}"
+          NEW_DOCDB="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.architecture }}"
+          NEW_GW="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.architecture }}"
         else
           # External images: read documentDbVersion from values.yaml (separate version track from operator).
           DOCDB_TAG=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
@@ -210,6 +213,7 @@ jobs:
         db-password: ${{ env.DB_PASSWORD }}
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
+        documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
         documentdb-image: ${{ env.DOCUMENTDB_INITIAL_IMAGE }}
         gateway-image: ${{ env.GATEWAY_OLD_IMAGE }}
@@ -297,6 +301,15 @@ jobs:
         
         echo "Built chart version:"
         cat ./documentdb-chart/Chart.yaml | grep -E "^(version|appVersion):"
+        
+        # --- Apply CRDs before Helm Upgrade ---
+        # Helm does not upgrade CRDs on `helm upgrade` (only on `helm install`).
+        # We must apply them separately so new fields (e.g. spec.schemaVersion) are
+        # recognised by the API server and passed to the validating webhook.
+        echo ""
+        echo "--- Applying CRDs from new chart ---"
+        kubectl apply --server-side --force-conflicts -f ./documentdb-chart/crds/
+        echo "CRDs applied."
         
         # --- Perform Helm Upgrade ---
         echo ""
@@ -623,13 +636,18 @@ jobs:
         fi
         echo "✓ Gateway image upgraded to $NEW_GATEWAY"
         
-        # Verify DocumentDB schema version updated
+        # Verify DocumentDB schema version unchanged (two-phase default: schema stays at old version)
         VERSION_AFTER=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
         echo "DocumentDB schema version after upgrade: $VERSION_AFTER"
         if [[ -z "$VERSION_AFTER" ]]; then
           echo "❌ status.schemaVersion is empty after upgrade"
           exit 1
         fi
+        if [[ "$VERSION_AFTER" != "$VERSION_BEFORE" ]]; then
+          echo "❌ Schema version changed from $VERSION_BEFORE to $VERSION_AFTER — expected unchanged (two-phase default)"
+          exit 1
+        fi
+        echo "✓ Schema version unchanged after binary upgrade: $VERSION_AFTER (two-phase default validated)"
         
         # Verify status fields
         echo ""
@@ -979,7 +997,279 @@ jobs:
         fi
         rm -f /tmp/pf_output.log
 
-    - name: Collect comprehensive logs on failure
+    # ============================================================
+    # Steps 5-8: Two-phase schema upgrade and webhook validation
+    # ============================================================
+
+    - name: "Step 5: Re-upgrade binary (setup for schema tests)"
+      run: |
+        echo "=== Step 5: Re-upgrade Binary ==="
+        echo "Re-upgrading extension and gateway images to new version for schema tests..."
+        
+        NEW_EXTENSION="${{ env.DOCUMENTDB_IMAGE }}"
+        NEW_GATEWAY="${{ env.GATEWAY_IMAGE }}"
+        
+        # Patch both images back to new version
+        echo "Patching images to new versions..."
+        echo "  Extension: → $NEW_EXTENSION"
+        echo "  Gateway:   → $NEW_GATEWAY"
+        kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
+          -p "{\"spec\":{\"documentDBImage\":\"$NEW_EXTENSION\",\"gatewayImage\":\"$NEW_GATEWAY\"}}"
+        
+        echo "Waiting for cluster to be healthy with new images..."
+        timeout 600 bash -c '
+        while true; do
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          CLUSTER_STATUS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.phase}" 2>/dev/null)
+          echo "DocumentDB status: $DB_STATUS, CNPG phase: $CLUSTER_STATUS"
+          if [[ "$DB_STATUS" == "Cluster in healthy state" && "$CLUSTER_STATUS" == "Cluster in healthy state" ]]; then
+            HEALTHY_PODS=$(kubectl get cluster "$1" -n "$2" -o jsonpath="{.status.instancesStatus.healthy}" 2>/dev/null | jq length 2>/dev/null || echo "0")
+            if [[ "$HEALTHY_PODS" -ge "1" ]]; then
+              POD_IMAGES=$(kubectl get pods -n "$2" -l cnpg.io/cluster="$1" -o jsonpath="{.items[*].spec.volumes[*].image.reference}" 2>/dev/null)
+              if echo "$POD_IMAGES" | grep -q "$3"; then
+                echo "✓ Cluster healthy with $HEALTHY_PODS pods running new images"
+                break
+              else
+                echo "Pods not yet running new extension image, waiting..."
+              fi
+            fi
+          fi
+          sleep 10
+        done
+        ' -- "$DB_NAME" "$DB_NS" "$NEW_EXTENSION"
+        
+        # Verify schema version is still at baseline
+        VERSION_CURRENT=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
+        echo "Schema version after re-upgrade: $VERSION_CURRENT"
+        echo "SCHEMA_BASELINE=$VERSION_CURRENT" >> $GITHUB_ENV
+        
+        echo ""
+        echo "✅ Step 5 passed: Binary re-upgraded for schema tests"
+        echo "  Extension: $NEW_EXTENSION"
+        echo "  Gateway:   $NEW_GATEWAY"
+        echo "  Schema:    $VERSION_CURRENT (baseline)"
+
+    - name: Setup port forwarding for re-upgrade verification
+      uses: ./.github/actions/setup-port-forwarding
+      with:
+        namespace: ${{ env.DB_NS }}
+        cluster-name: ${{ env.DB_NAME }}
+        port: ${{ env.DB_PORT }}
+        architecture: ${{ matrix.architecture }}
+        test-type: 'comprehensive'
+
+    - name: Verify data persistence after re-upgrade
+      run: |
+        echo "=== Data Persistence: Verifying after re-upgrade ==="
+        mongosh 127.0.0.1:$DB_PORT \
+          -u $DB_USERNAME \
+          -p $DB_PASSWORD \
+          --authenticationMechanism SCRAM-SHA-256 \
+          --tls \
+          --tlsAllowInvalidCertificates \
+          --eval '
+            db = db.getSiblingDB("upgrade_test_db");
+            var count = db.test_collection.countDocuments();
+            assert(count === 2, "Expected 2 documents but found " + count + " after re-upgrade");
+            print("✓ All " + count + " documents persisted through re-upgrade");
+          '
+        echo "✓ Data persistence verified after re-upgrade"
+
+    - name: Cleanup port forwarding after re-upgrade verification
+      if: always()
+      run: |
+        if [ -f /tmp/pf_pid ]; then
+          PF_PID=$(cat /tmp/pf_pid)
+          kill $PF_PID 2>/dev/null || true
+          rm -f /tmp/pf_pid
+        fi
+        rm -f /tmp/pf_output.log
+
+    - name: "Step 6: Schema Finalization (two-phase commit)"
+      run: |
+        echo "=== Step 6: Schema Finalization ==="
+        echo "Setting spec.schemaVersion to finalize the schema migration..."
+        
+        NEW_EXTENSION="${{ env.DOCUMENTDB_IMAGE }}"
+        SCHEMA_BASELINE="${{ env.SCHEMA_BASELINE }}"
+        
+        # Determine the new schema version from the new extension image tag
+        # Strip any architecture suffix (e.g., "0.112.0-amd64" → "0.112.0")
+        RAW_TAG=$(echo "$NEW_EXTENSION" | sed 's/.*://')
+        NEW_SCHEMA_VERSION=$(echo "$RAW_TAG" | grep -oP '^\d+\.\d+\.\d+')
+        if [[ -z "$NEW_SCHEMA_VERSION" ]]; then
+          echo "✗ Could not extract semver from image tag: $RAW_TAG"
+          exit 1
+        fi
+        echo "Baseline schema version: $SCHEMA_BASELINE"
+        echo "Target schema version:   $NEW_SCHEMA_VERSION"
+        
+        # Ensure we're actually testing a version upgrade, not a no-op
+        if [[ "$SCHEMA_BASELINE" == "$NEW_SCHEMA_VERSION" ]]; then
+          echo "❌ Baseline and target schema versions are identical ($SCHEMA_BASELINE)."
+          echo "   The upgrade test requires different versions to validate the two-phase commit."
+          exit 1
+        fi
+        
+        # Set spec.schemaVersion to trigger ALTER EXTENSION UPDATE
+        kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
+          -p "{\"spec\":{\"schemaVersion\":\"$NEW_SCHEMA_VERSION\"}}"
+        
+        echo "Waiting for schema version to update..."
+        timeout 300 bash -c '
+        while true; do
+          STATUS_SCHEMA=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.schemaVersion}" 2>/dev/null)
+          DB_STATUS=$(kubectl get documentdb "$1" -n "$2" -o jsonpath="{.status.status}" 2>/dev/null)
+          echo "status.schemaVersion: $STATUS_SCHEMA, status: $DB_STATUS"
+          if [[ "$STATUS_SCHEMA" == "$3" && "$DB_STATUS" == "Cluster in healthy state" ]]; then
+            echo "✓ Schema version updated to $STATUS_SCHEMA"
+            break
+          fi
+          sleep 10
+        done
+        ' -- "$DB_NAME" "$DB_NS" "$NEW_SCHEMA_VERSION"
+        
+        # Verify schema version changed
+        FINAL_SCHEMA=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
+        if [[ "$FINAL_SCHEMA" == "$NEW_SCHEMA_VERSION" ]]; then
+          echo "✓ Schema finalized: $SCHEMA_BASELINE → $FINAL_SCHEMA"
+        else
+          echo "❌ Schema version should be $NEW_SCHEMA_VERSION but is $FINAL_SCHEMA"
+          exit 1
+        fi
+        
+        echo "NEW_SCHEMA_VERSION=$NEW_SCHEMA_VERSION" >> $GITHUB_ENV
+        echo ""
+        echo "✅ Step 6 passed: Schema finalized to $NEW_SCHEMA_VERSION"
+
+    - name: Setup port forwarding for schema finalization verification
+      uses: ./.github/actions/setup-port-forwarding
+      with:
+        namespace: ${{ env.DB_NS }}
+        cluster-name: ${{ env.DB_NAME }}
+        port: ${{ env.DB_PORT }}
+        architecture: ${{ matrix.architecture }}
+        test-type: 'comprehensive'
+
+    - name: Verify data persistence after schema finalization
+      run: |
+        echo "=== Data Persistence: Verifying after schema finalization ==="
+        mongosh 127.0.0.1:$DB_PORT \
+          -u $DB_USERNAME \
+          -p $DB_PASSWORD \
+          --authenticationMechanism SCRAM-SHA-256 \
+          --tls \
+          --tlsAllowInvalidCertificates \
+          --eval '
+            db = db.getSiblingDB("upgrade_test_db");
+            var count = db.test_collection.countDocuments();
+            assert(count === 2, "Expected 2 documents but found " + count + " after schema finalization");
+            print("✓ All " + count + " documents persisted through schema finalization");
+          '
+        echo "✓ Data persistence verified after schema finalization"
+
+    - name: Cleanup port forwarding after schema finalization verification
+      if: always()
+      run: |
+        if [ -f /tmp/pf_pid ]; then
+          PF_PID=$(cat /tmp/pf_pid)
+          kill $PF_PID 2>/dev/null || true
+          rm -f /tmp/pf_pid
+        fi
+        rm -f /tmp/pf_output.log
+
+    - name: "Step 7: Webhook — Reject Rollback Below Schema"
+      run: |
+        echo "=== Step 7: Webhook — Reject Rollback Below Schema ==="
+        echo "Attempting to roll back documentDBImage below status.schemaVersion..."
+        
+        CURRENT_SCHEMA="${{ env.NEW_SCHEMA_VERSION }}"
+        # Use a synthetic image reference with a version guaranteed to be below
+        # the finalized schema. The webhook extracts the semver from the tag and
+        # rejects the patch before any pod changes, so the image needn't exist.
+        ROLLBACK_IMAGE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:0.1.0-rollback-test"
+        
+        echo "Current schema version:  $CURRENT_SCHEMA"
+        echo "Attempting rollback to:  $ROLLBACK_IMAGE (synthetic lower version)"
+        
+        # This SHOULD fail — the webhook must reject rollback below schema version.
+        # Patch both documentDBImage and schemaVersion to exercise both validation paths.
+        PATCH_OUTPUT=$(kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
+          -p "{\"spec\":{\"documentDBImage\":\"$ROLLBACK_IMAGE\",\"schemaVersion\":\"$CURRENT_SCHEMA\"}}" 2>&1) && {
+          echo "❌ Webhook did NOT reject the rollback — patch succeeded unexpectedly"
+          echo "Output: $PATCH_OUTPUT"
+          exit 1
+        }
+        
+        echo "Patch rejected (expected). Output:"
+        echo "$PATCH_OUTPUT"
+        
+        # Verify the error message mentions rollback blocking
+        if echo "$PATCH_OUTPUT" | grep -qi "rollback blocked\|older than installed schema"; then
+          echo "✓ Webhook correctly rejected rollback with expected error message"
+        else
+          echo "⚠️ Patch was rejected but error message doesn't match expected pattern"
+          echo "  (Still passing — the important thing is the rejection)"
+        fi
+        
+        # Verify cluster state is unchanged
+        CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        NEW_EXTENSION="${{ env.DOCUMENTDB_IMAGE }}"
+        if [[ "$CURRENT_IMAGE" == "$NEW_EXTENSION" ]]; then
+          echo "✓ Cluster state unchanged — documentDBImage still at $CURRENT_IMAGE"
+        else
+          echo "❌ documentDBImage changed unexpectedly to $CURRENT_IMAGE"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Step 7 passed: Webhook correctly blocked rollback below schema version"
+
+    - name: "Step 8: Webhook — Reject Schema Exceeds Binary"
+      run: |
+        echo "=== Step 8: Webhook — Reject Schema Exceeds Binary ==="
+        echo "Attempting to set schemaVersion higher than binary version..."
+        
+        # Use an artificially high version that exceeds any binary
+        INVALID_SCHEMA="99.999.0"
+        CURRENT_IMAGE=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.spec.documentDBImage}')
+        echo "Attempting schemaVersion: $INVALID_SCHEMA"
+        echo "Current documentDBImage:  $CURRENT_IMAGE"
+        
+        # This SHOULD fail — the webhook must reject schema > binary.
+        # Patch both schemaVersion and documentDBImage to exercise both validation paths.
+        PATCH_OUTPUT=$(kubectl patch documentdb $DB_NAME -n $DB_NS --type='merge' \
+          -p "{\"spec\":{\"schemaVersion\":\"$INVALID_SCHEMA\",\"documentDBImage\":\"$CURRENT_IMAGE\"}}" 2>&1) && {
+          echo "❌ Webhook did NOT reject the invalid schema version — patch succeeded unexpectedly"
+          echo "Output: $PATCH_OUTPUT"
+          exit 1
+        }
+        
+        echo "Patch rejected (expected). Output:"
+        echo "$PATCH_OUTPUT"
+        
+        # Verify the error message mentions schema exceeding binary
+        if echo "$PATCH_OUTPUT" | grep -qi "exceeds.*binary"; then
+          echo "✓ Webhook correctly rejected schema version with expected error message"
+        else
+          echo "⚠️ Patch was rejected but error message doesn't match expected pattern"
+          echo "  (Still passing — the important thing is the rejection)"
+        fi
+        
+        # Verify schema version is unchanged
+        CURRENT_SCHEMA=$(kubectl get documentdb $DB_NAME -n $DB_NS -o jsonpath='{.status.schemaVersion}')
+        EXPECTED_SCHEMA="${{ env.NEW_SCHEMA_VERSION }}"
+        if [[ "$CURRENT_SCHEMA" == "$EXPECTED_SCHEMA" ]]; then
+          echo "✓ Schema version unchanged: $CURRENT_SCHEMA"
+        else
+          echo "❌ Schema version changed unexpectedly to $CURRENT_SCHEMA"
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Step 8 passed: Webhook correctly blocked schema version exceeding binary"
+
+    - name: Collect logs on failure
       if: failure()
       uses: ./.github/actions/collect-logs
       with:
@@ -1008,6 +1298,10 @@ jobs:
         echo "- Step 2: Upgrade both extension and gateway images" >> $GITHUB_STEP_SUMMARY
         echo "- Step 3: Rollback extension image" >> $GITHUB_STEP_SUMMARY
         echo "- Step 4: Rollback gateway image" >> $GITHUB_STEP_SUMMARY
+        echo "- Step 5: Re-upgrade binary (setup for schema tests)" >> $GITHUB_STEP_SUMMARY
+        echo "- Step 6: Schema finalization (two-phase commit)" >> $GITHUB_STEP_SUMMARY
+        echo "- Step 7: Webhook — reject rollback below schema" >> $GITHUB_STEP_SUMMARY
+        echo "- Step 8: Webhook — reject schema exceeds binary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
         if [[ "${{ job.status }}" == "success" ]]; then

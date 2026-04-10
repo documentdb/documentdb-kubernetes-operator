@@ -95,6 +95,7 @@ jobs:
     env:
       # Use built image tag on PR or when no external tag provided
       IMAGE_TAG: ${{ (github.event_name == 'pull_request' || inputs.image_tag == '' || inputs.image_tag == null) && needs.build.outputs.image_tag || inputs.image_tag }}
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag || '' }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
     
     steps:
@@ -146,6 +147,7 @@ jobs:
         db-password: ${{ env.DB_PASSWORD }}
         db-port: ${{ env.DB_PORT }}
         image-tag: ${{ env.IMAGE_TAG }}
+        documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
         chart-version: ${{ env.CHART_VERSION }}
         use-external-images: ${{ github.event_name != 'pull_request' && inputs.image_tag != '' && inputs.image_tag != null }}
         github-token: ${{ secrets.GITHUB_TOKEN }}

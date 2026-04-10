@@ -510,6 +510,16 @@ func ExtensionVersionToSemver(v string) string {
 	return v
 }
 
+// SemverToExtensionVersion converts a semver string (e.g., "0.110.0") to the
+// PostgreSQL extension version format (e.g., "0.110-0") used by pg_available_extensions.
+// This is the inverse of ExtensionVersionToSemver.
+func SemverToExtensionVersion(v string) string {
+	if idx := strings.LastIndex(v, "."); idx >= 0 {
+		return v[:idx] + "-" + v[idx+1:]
+	}
+	return v
+}
+
 // CompareExtensionVersions compares two DocumentDB extension version strings.
 // Format: "Major.Minor-Patch" (e.g., "0.110-0").
 // Returns: -1 if v1 < v2, 0 if equal, +1 if v1 > v2.

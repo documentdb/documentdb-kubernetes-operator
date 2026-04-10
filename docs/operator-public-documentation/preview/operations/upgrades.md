@@ -1,6 +1,6 @@
 ---
 title: Upgrades
-description: Upgrade the DocumentDB operator Helm chart and CRDs, update DocumentDB extension and gateway images per cluster, and roll back to a previous version.
+description: Upgrade the DocumentDB operator and DocumentDB clusters, including version and schema management.
 tags:
   - operations
   - upgrades
@@ -13,19 +13,21 @@ tags:
 
 Upgrades keep your DocumentDB deployment current with the latest features, security patches, and bug fixes.
 
-There are two types of upgrades in a DocumentDB deployment:
+A DocumentDB deployment has two independently upgradable components:
 
-| Upgrade Type | What Changes | How to Trigger |
-|-------------|-------------|----------------|
-| **DocumentDB operator** | The Kubernetes operator + bundled CloudNative-PG | Helm chart upgrade |
-| **DocumentDB components** | Extension + gateway (same version) | Update `spec.documentDBVersion` |
+| Component | What Changes | How to Upgrade |
+|-----------|-------------|----------------|
+| **DocumentDB Operator** | Operator binary + bundled CloudNative-PG | `helm upgrade` |
+| **DocumentDB Clusters** | Extension binary + gateway sidecar + database schema | Update `spec.documentDBVersion` and optionally `spec.schemaVersion` |
+
+---
+
+## Upgrading the Operator
+
+The operator is deployed via Helm. Upgrading it does **not** restart your DocumentDB cluster pods or change any cluster components.
 
 !!! info
-    The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version — this cannot be skipped separately.
-
-## DocumentDB Operator Upgrade
-
-The DocumentDB operator is deployed via Helm. Upgrade it by updating the Helm release.
+    The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
 
 ### Step 1: Update the Helm Repository
 
@@ -47,8 +49,8 @@ helm search repo documentdb/documentdb-operator --versions
 Helm only installs CRDs on initial `helm install` — it does **not** update them on `helm upgrade`. If the new operator version introduces CRD schema changes, you must apply them manually first:
 
 ```bash
-# Set this to the release tag you are upgrading to (e.g., v0.2.0)
-TARGET_VERSION=v0.2.0
+# Set this to the release tag you are upgrading to (e.g., 0.2.0)
+TARGET_VERSION=0.2.0
 
 kubectl apply --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
@@ -61,7 +63,7 @@ Server-side apply (`--server-side --force-conflicts`) is required because the Do
 !!! warning
     Always use CRDs from the **same version** as the Helm chart you are installing. Using CRDs from `main` or a different release may introduce schema mismatches.
 
-### Step 4: Upgrade the DocumentDB Operator
+### Step 4: Upgrade the Operator
 
 ```bash
 helm upgrade documentdb-operator documentdb/documentdb-operator \
@@ -88,7 +90,7 @@ kubectl get deployment -n documentdb-operator
 kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=50
 ```
 
-### Rollback
+### Operator Rollback
 
 If the new operator version causes issues, roll back to the previous Helm release:
 
@@ -101,43 +103,153 @@ helm rollback documentdb-operator -n documentdb-operator
 ```
 
 !!! note
-    `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the release notes explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
+    `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the [release notes](https://github.com/documentdb/documentdb-kubernetes-operator/releases) explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
 
-### DocumentDB Operator Upgrade Notes
+---
 
-- The DocumentDB operator upgrade does **not** restart your DocumentDB cluster pods.
-- After upgrading the operator, update individual DocumentDB clusters to the latest component version. See [Component Upgrades](#component-upgrades) below.
+## Upgrading DocumentDB Clusters
 
-## Component Upgrades
+!!! warning "Migration note for existing clusters"
+    If you are upgrading from operator version 0.2.0 or earlier, the new operator introduces a validating webhook and the `spec.schemaVersion` field. After upgrading the operator, your existing clusters will continue to work without changes — `schemaVersion` defaults to unset (binary-only upgrades). No action is needed unless you want to enable automatic schema upgrades via `schemaVersion: "auto"`.
 
-Updating `spec.documentDBVersion` upgrades **both** the DocumentDB extension and the gateway together, since they share the same version.
+Upgrading a DocumentDB cluster has two dimensions: the **binary** (container images) and the **schema** (database catalog). You control each independently:
+
+| Field | What It Does | Reversible? |
+|-------|-------------|-------------|
+| `spec.documentDBVersion` | Updates the **binary** — the extension image and gateway sidecar are replaced via rolling restart. | ✅ Yes — revert the field to roll back. |
+| `spec.schemaVersion` | Runs `ALTER EXTENSION UPDATE` to migrate the **database schema** to match the binary. | ❌ No — schema changes are permanent. |
+
+Think of it as: **`documentDBVersion` installs the software, `schemaVersion` applies the database migration.**
+
+!!! info "Why two fields?"
+    The binary (container image) can be swapped freely — if something goes wrong, revert `documentDBVersion` and the pods roll back to the previous image. But `ALTER EXTENSION UPDATE` modifies database catalog tables and cannot be undone. Separating these two steps gives you a safe rollback window between deploying new code and committing the schema change.
+
+### Schema Version Modes
+
+| `spec.schemaVersion` | Behavior | Recommended For |
+|----------------------|----------|-----------------|
+| *(not set)* — default | Only the binary upgrades. The schema stays at its current version until you explicitly set `schemaVersion`. | **Production** — gives you a rollback-safe window before committing the schema change. |
+| `"auto"` | Schema updates automatically whenever the binary version changes. | **Development and testing** — simple, one-step upgrades. |
+| Explicit version (e.g., `"0.112.0"`) | Schema updates to exactly that version. | **Controlled rollouts** — you choose when and what version to finalize. |
 
 ### Pre-Upgrade Checklist
 
-1. **Check the CHANGELOG** — review release notes for breaking changes.
-2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy.
+1. **Check the [DocumentDB release notes](https://github.com/documentdb/documentdb/releases)** — review for breaking changes or new features.
+2. **Verify DocumentDB cluster health** — ensure all instances are running and healthy:
+
+    ```bash
+    kubectl get documentdb my-cluster -n default
+    kubectl get pods -n default -l documentdb.io/cluster=my-cluster
+    ```
 3. **Back up the DocumentDB cluster** — create an on-demand [backup](backup-and-restore.md) before upgrading.
 
-### Step 1: Update the DocumentDB Version
+### Upgrade Walkthrough
 
-!!! danger
-    **Downgrades are not supported.** If you set `documentDBVersion` to a version lower than the currently installed schema version, the operator will still update the container images but will **skip the schema migration** (`ALTER EXTENSION UPDATE`) and emit a warning event. This leaves the DocumentDB cluster running an older binary against a newer schema, which may cause unexpected behavior. Always move forward to a newer version or restore from backup.
+Choose the approach that matches your use case:
 
-```yaml title="documentdb.yaml"
-apiVersion: documentdb.io/preview
-kind: DocumentDB
-metadata:
-  name: my-cluster
-  namespace: default
-spec:
-  documentDBVersion: "<new-version>"
-```
+=== "Production (two-phase upgrade)"
 
-```bash
-kubectl apply -f documentdb.yaml
-```
+    **Step 1: Update the binary version.** The schema stays unchanged — this is safe to roll back.
 
-### Step 2: Monitor the Upgrade
+    ```yaml title="documentdb.yaml"
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      documentDBVersion: "<new-version>"
+      # schemaVersion is not set — schema stays at current version
+    ```
+
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
+
+    **Step 2: Validate.** Confirm the cluster is healthy and the new binary works as expected.
+
+    ```bash
+    # Watch the rolling restart
+    kubectl get pods -n default -w
+
+    # Check cluster status
+    kubectl get documentdb my-cluster -n default
+
+    # Verify the schema version has NOT changed
+    kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
+    ```
+
+    **Step 3: Finalize the schema.** Once you're confident the new binary is stable, commit the schema migration:
+
+    ```bash
+    kubectl patch documentdb my-cluster -n default \
+      --type merge -p '{"spec":{"schemaVersion":"<new-version>"}}'
+    ```
+
+    !!! tip
+        On subsequent upgrades, just update `documentDBVersion` again. The schema stays pinned at the previous `schemaVersion` value until you update it.
+
+=== "Production (rolling safety gap)"
+
+    Keep the binary always one version ahead of the schema. This ensures you can roll back at any time because the running binary has already been validated with the current schema.
+
+    **Example:** Your cluster is at binary `0.110.0` with schema `0.110.0`. A new version `0.111.0` is available.
+
+    **Step 1: Upgrade the binary and finalize the *previous* schema together.**
+
+    ```yaml title="documentdb.yaml"
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      documentDBVersion: "0.111.0"     # upgrade binary to new version
+      schemaVersion: "0.110.0"          # finalize schema to current (previous) version
+    ```
+
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
+
+    Now the binary is `0.111.0` and the schema is `0.110.0`. Each new binary version is backward-compatible with the previous schema version, so this is safe.
+
+    **Step 2: Validate.** Run your tests. If something goes wrong, revert `documentDBVersion` to `0.110.0` — the schema is still at `0.110.0`, so rollback is safe.
+
+    **On the next upgrade** (e.g., `0.112.0`), repeat the pattern:
+
+    ```yaml
+    spec:
+      documentDBVersion: "0.112.0"     # upgrade binary to next version
+      schemaVersion: "0.111.0"          # finalize schema to previous binary version
+    ```
+
+    !!! info
+        This pattern keeps a permanent rollback window. The schema is always one version behind the binary, so you never commit a schema change until the *next* binary has proven stable with it.
+
+=== "Development (auto mode)"
+
+    Update both the binary and schema in one step:
+
+    ```yaml title="documentdb.yaml"
+    apiVersion: documentdb.io/preview
+    kind: DocumentDB
+    metadata:
+      name: my-cluster
+      namespace: default
+    spec:
+      documentDBVersion: "<new-version>"
+      schemaVersion: "auto"
+    ```
+
+    ```bash
+    kubectl apply -f documentdb.yaml
+    ```
+
+    !!! warning
+        With `schemaVersion: "auto"`, the schema migration is irreversible once applied. You cannot roll back to the previous version — only restore from backup.
+
+### Monitoring the Upgrade
 
 ```bash
 # Watch the rolling restart
@@ -146,45 +258,64 @@ kubectl get pods -n default -w
 # Check DocumentDB cluster status
 kubectl get documentdb my-cluster -n default
 
-# Check the schema version after upgrade
+# Check the current schema version
 kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
 ```
 
 ### Rollback and Recovery
 
+Two rules govern rollback:
+
+1. **Schema cannot be rolled back.** `ALTER EXTENSION UPDATE` modifies database catalog tables permanently. There is no `ALTER EXTENSION DOWNGRADE`.
+2. **`documentDBVersion` cannot be set below `status.schemaVersion`.** The operator blocks this because running an older binary against a newer schema is untested and may cause data corruption.
+
 Whether you can roll back depends on whether the schema has been updated:
 
-=== "Schema not yet updated"
+=== "Roll back binary only (documentDBVersion ≥ schemaVersion)"
 
-    If `status.schemaVersion` still shows the **previous** version, the extension schema migration has not run yet. You can roll back by reverting `spec.documentDBVersion` to the previous value:
+    If `status.schemaVersion` still shows the **previous** version, the schema migration has not run yet. You can safely roll back by reverting `spec.documentDBVersion` to any version that is ≥ `status.schemaVersion`:
 
     ```bash
-    # Check the current schema version
+    # Verify the schema version is unchanged
     kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
     ```
 
-    If the schema version is unchanged, revert the `spec.documentDBVersion` field in your manifest and reapply:
+    If the schema version is unchanged, revert `spec.documentDBVersion` in your manifest and reapply:
 
     ```bash
     kubectl apply -f documentdb.yaml
     ```
 
-=== "Schema already updated"
+=== "Roll back both binary and schema (restore from backup)"
 
-    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied and **cannot be reversed**. To recover: Use the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist) to restore the DocumentDB cluster to its pre-upgrade state. See [Backup and Restore](backup-and-restore.md) for instructions.
+    If `status.schemaVersion` shows the **new** version, the schema migration has already been applied. At this point:
+
+    - You **cannot** revert `schemaVersion` — the database schema change is permanent.
+    - You **cannot** set `documentDBVersion` below `status.schemaVersion` — the operator rejects it.
+
+    To recover: restore from the backup you created in the [Pre-Upgrade Checklist](#pre-upgrade-checklist). See [Backup and Restore](backup-and-restore.md) for instructions.
 
 !!! tip
-    This is why backing up before a component upgrade is critical. Once the schema is updated, there is no rollback — only restore.
+    This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting `schemaVersion`.
 
-### How It Works
+---
 
-1. You update the `spec.documentDBVersion` field.
-2. The operator detects the version change and updates both the database image and the gateway sidecar image.
-3. The underlying cluster manager performs a **rolling restart**: replicas are restarted first one at a time, then the **primary is restarted in place**. Expect a brief period of downtime while the primary pod restarts.
-4. After the primary pod is healthy, the operator runs `ALTER EXTENSION documentdb UPDATE` to update the database schema.
-5. The operator tracks the schema version in `status.schemaVersion`.
+## Multi-Region Upgrades
 
-### Advanced: Independent Image Overrides
+When running DocumentDB across multiple regions or clusters, use the two-phase upgrade pattern across all regions:
+
+1. **Back up every region.** Create a backup in each region before starting.
+2. **Upgrade the binary in all regions.** Update `spec.documentDBVersion` in every cluster. Validate that all regions are healthy and replication is working correctly with the new binary.
+3. **Finalize the schema in all regions.** Once every region is running the new binary successfully, set `spec.schemaVersion` across all clusters.
+
+This keeps a rollback-safe window — if any region fails the binary upgrade, you can revert `documentDBVersion` everywhere before any schema change is committed.
+
+!!! note
+    Multi-region upgrade orchestration is performed manually — the operator manages individual clusters and does not coordinate across regions automatically.
+
+---
+
+## Advanced: Independent Image Overrides
 
 In most cases, use `spec.documentDBVersion` to upgrade both components together. For advanced scenarios, you can override individual images:
 

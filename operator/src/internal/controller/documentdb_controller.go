@@ -883,8 +883,9 @@ func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedV
 
 // upgradeDocumentDBIfNeeded handles the complete DocumentDB image upgrade process:
 // 1. Checks if extension image and/or gateway image need updating (builds a single JSON Patch)
+// 1b. Blocks extension image rollback below the installed schema version (irreversible)
 // 2. If images changed, applies the patch atomically (triggers one CNPG rolling restart) and returns
-// 3. After rolling restart completes, runs ALTER EXTENSION documentdb UPDATE if needed
+// 3. After rolling restart completes, checks spec.schemaVersion to decide whether to run ALTER EXTENSION
 // 4. Updates the DocumentDB status with the new extension version
 func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, currentCluster, desiredCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
 	logger := log.FromContext(ctx)
@@ -899,6 +900,9 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 	if err != nil {
 		return fmt.Errorf("failed to build image patch operations: %w", err)
 	}
+
+	// Note: Image rollback below installed schema version is blocked by the validating
+	// webhook at admission time. The controller trusts that persisted specs are valid.
 
 	// Step 2: Apply patch if any images need updating
 	if len(patchOps) > 0 {
@@ -999,7 +1003,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
-	// Step 5b: Rollback detection — check if the new binary is older than the installed schema
+	// Step 5b: Rollback detection — secondary safety net.
+	// The primary rollback block is in Step 1b (prevents image patch when new image < schema).
+	// This handles edge cases where the binary version is already running but older than schema
+	// (e.g., if Step 1b was added after an earlier rollback already took effect).
 	cmp, err := util.CompareExtensionVersions(defaultVersion, installedVersion)
 	if err != nil {
 		logger.Error(err, "Failed to compare extension versions, skipping ALTER EXTENSION as a safety measure",
@@ -1024,33 +1031,128 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
-	// Step 6: Run ALTER EXTENSION to upgrade (cmp > 0: defaultVersion > installedVersion)
+	// Step 6: Determine schema target based on spec.schemaVersion (two-phase upgrade logic)
+	//
+	// Three modes:
+	//   - "" (empty): Two-phase mode — do NOT auto-update schema. User must explicitly
+	//     set spec.schemaVersion to finalize. This provides a rollback-safe window.
+	//   - "auto": Auto-finalize — update schema to match binary version automatically.
+	//   - "<version>": Explicit pin — update schema to exactly this version.
+	schemaTarget, updateSQL := r.determineSchemaTarget(ctx, documentdb, defaultVersion, installedVersion)
+	if schemaTarget == "" {
+		// Two-phase mode or validation failure — do not run ALTER EXTENSION
+		return nil
+	}
+
+	// Step 7: Run ALTER EXTENSION to upgrade
 	logger.Info("Upgrading DocumentDB extension",
 		"fromVersion", installedVersion,
-		"toVersion", defaultVersion)
+		"toVersion", schemaTarget)
 
-	updateSQL := "ALTER EXTENSION documentdb UPDATE"
 	if _, err := r.SQLExecutor(ctx, currentCluster, updateSQL); err != nil {
 		return fmt.Errorf("failed to run ALTER EXTENSION documentdb UPDATE: %w", err)
 	}
 
 	logger.Info("Successfully upgraded DocumentDB extension",
 		"fromVersion", installedVersion,
-		"toVersion", defaultVersion)
+		"toVersion", schemaTarget)
 
-	// Step 7: Update DocumentDB schema version in status after upgrade
+	// Step 8: Update DocumentDB schema version in status after upgrade
 	// Re-fetch to get latest resourceVersion before status update
 	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
 		return fmt.Errorf("failed to refetch DocumentDB after schema upgrade: %w", err)
 	}
 	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
-	documentdb.Status.SchemaVersion = util.ExtensionVersionToSemver(defaultVersion)
+	documentdb.Status.SchemaVersion = util.ExtensionVersionToSemver(schemaTarget)
 	if err := r.Status().Update(ctx, documentdb); err != nil {
 		logger.Error(err, "Failed to update DocumentDB status after schema upgrade")
 		return fmt.Errorf("failed to update DocumentDB status after schema upgrade: %w", err)
 	}
 
 	return nil
+}
+
+// determineSchemaTarget decides the target schema version based on spec.schemaVersion.
+// Returns the target version (in pg_available_extensions format) and the SQL to execute.
+// Returns ("", "") if no schema update should run (two-phase mode or validation failure).
+func (r *DocumentDBReconciler) determineSchemaTarget(
+	ctx context.Context,
+	documentdb *dbpreview.DocumentDB,
+	binaryVersion string,
+	installedVersion string,
+) (string, string) {
+	logger := log.FromContext(ctx)
+	specSchemaVersion := documentdb.Spec.SchemaVersion
+
+	switch {
+	case specSchemaVersion == "":
+		// Two-phase mode: schema stays at current version until user explicitly sets schemaVersion.
+		// Use V(1) to avoid log spam — this fires every reconcile while upgrade is pending.
+		logger.V(1).Info("Schema update available but not requested (two-phase mode). "+
+			"Set spec.schemaVersion to finalize the upgrade.",
+			"binaryVersion", binaryVersion,
+			"installedVersion", installedVersion)
+		// Only emit the event when the binary is actually ahead of the installed schema
+		// (avoids firing on new clusters where status.schemaVersion is empty).
+		// Kubernetes deduplicates events with the same reason+message, but skipping
+		// entirely is cleaner.
+		if r.Recorder != nil && binaryVersion != installedVersion {
+			msg := fmt.Sprintf(
+				"Schema update available: binary version is %s, schema is at %s. "+
+					"Set spec.schemaVersion to %q or \"auto\" to finalize the upgrade.",
+				util.ExtensionVersionToSemver(binaryVersion),
+				util.ExtensionVersionToSemver(installedVersion),
+				util.ExtensionVersionToSemver(binaryVersion))
+			r.Recorder.Event(documentdb, corev1.EventTypeNormal, "SchemaUpdateAvailable", msg)
+		}
+		return "", ""
+
+	case specSchemaVersion == "auto":
+		// Auto-finalize: update schema to match binary version
+		return binaryVersion, "ALTER EXTENSION documentdb UPDATE"
+
+	default:
+		// Explicit version: update to that specific version.
+		// Note: schemaVersion <= binary version is enforced by the validating webhook at
+		// admission time. This is a defense-in-depth guard.
+		targetPgVersion := util.SemverToExtensionVersion(specSchemaVersion)
+
+		// Guard: target must not exceed binary version
+		targetCmp, err := util.CompareExtensionVersions(targetPgVersion, binaryVersion)
+		if err != nil {
+			logger.Error(err, "Failed to compare target schema version with binary version",
+				"targetVersion", specSchemaVersion,
+				"binaryVersion", binaryVersion)
+			return "", ""
+		}
+		if targetCmp > 0 {
+			logger.Info("Skipping schema update: schemaVersion exceeds binary version (should have been rejected by webhook)",
+				"schemaVersion", specSchemaVersion,
+				"binaryVersion", util.ExtensionVersionToSemver(binaryVersion))
+			return "", ""
+		}
+
+		// Check: target must be > installed version (otherwise no-op)
+		installedCmp, err := util.CompareExtensionVersions(targetPgVersion, installedVersion)
+		if err != nil {
+			logger.Error(err, "Failed to compare target schema version with installed version",
+				"targetVersion", specSchemaVersion,
+				"installedVersion", installedVersion)
+			return "", ""
+		}
+		if installedCmp <= 0 {
+			logger.V(1).Info("Schema already at or beyond requested version",
+				"requestedVersion", specSchemaVersion,
+				"installedVersion", installedVersion)
+			return "", ""
+		}
+
+		// Safety: targetPgVersion is derived from spec.schemaVersion via SemverToExtensionVersion,
+		// which produces a "Major.Minor-Patch" string (e.g., "0.112-0"). The input is validated
+		// by the CRD schema regex pattern and the validating webhook's version parsing, so it
+		// contains only digits, dots, and hyphens — no SQL injection risk.
+		return targetPgVersion, fmt.Sprintf("ALTER EXTENSION documentdb UPDATE TO '%s'", targetPgVersion)
+	}
 }
 
 // buildImagePatchOps compares the current and desired CNPG cluster specs and returns

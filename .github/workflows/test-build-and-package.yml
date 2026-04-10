@@ -15,8 +15,11 @@ on:
         type: string
     outputs:
       image_tag:
-        description: 'Built image tag'
+        description: 'Built image tag (operator/sidecar)'
         value: ${{ jobs.consolidate-images.outputs.image_tag }}
+      ext_image_tag:
+        description: 'Built image tag for extension images (documentdb/gateway)'
+        value: ${{ jobs.consolidate-images.outputs.ext_image_tag }}
       chart_version:
         description: 'Built chart version'
         value: ${{ jobs.create-helm-chart.outputs.chart_version }}
@@ -31,6 +34,36 @@ env:
   CHART_VERSION: ${{ inputs.version }}-test-${{ github.run_id }}
 
 jobs:
+  # Read the extension version from the built deb package (source of truth).
+  # Runs after build-packages so the actual compiled version is used, not values.yaml.
+  read-extension-version:
+    name: Read Extension Version
+    needs: [build-packages]
+    runs-on: ubuntu-latest
+    outputs:
+      ext_image_tag: ${{ steps.read.outputs.ext_image_tag }}
+    steps:
+    - name: Download packages (amd64)
+      uses: actions/download-artifact@v4
+      with:
+        name: build-packages-amd64
+        path: packages/
+    - name: Extract version from deb filename
+      id: read
+      run: |
+        DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+        echo "Found deb: $DEB_FILE"
+        # deb filename format: deb13-postgresql-18-documentdb_0.111-0_amd64.deb
+        # Extract version: strip prefix up to 'documentdb_', then take chars before '_<arch>'
+        EXT_VER=$(echo "$DEB_FILE" | sed -n 's/.*documentdb_\([0-9]*\.[0-9]*\)-[0-9]*_.*/\1.0/p')
+        if [[ -z "$EXT_VER" ]]; then
+          echo "::error::Could not extract version from deb filename: $DEB_FILE"
+          exit 1
+        fi
+        EXT_TAG="${EXT_VER}-test-${{ github.run_id }}"
+        echo "Extension version: $EXT_VER → image tag: $EXT_TAG"
+        echo "ext_image_tag=$EXT_TAG" >> "$GITHUB_OUTPUT"
+
   build-operator:
     name: Build Operator Images
     timeout-minutes: 30
@@ -176,7 +209,9 @@ jobs:
   build-documentdb:
     name: Build DocumentDB Images
     timeout-minutes: 30
-    needs: [build-packages]
+    needs: [build-packages, read-extension-version]
+    env:
+      EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -216,7 +251,7 @@ jobs:
           --platform linux/${{ matrix.arch }} \
           --build-arg PG_MAJOR=18 \
           --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
-          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
+          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} \
           --load \
           -f .github/dockerfiles/Dockerfile_extension .
         
@@ -225,7 +260,7 @@ jobs:
     - name: Save documentdb Docker image as artifact
       run: |
         echo "Saving documentdb ${{ matrix.arch }} Docker image as tar file..."
-        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-${{ matrix.arch }} > documentdb-${{ matrix.arch }}-image.tar
+        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} > documentdb-${{ matrix.arch }}-image.tar
         echo "✓ DocumentDB ${{ matrix.arch }} Docker image saved to tar file"
 
     - name: Upload documentdb Docker image artifact
@@ -238,7 +273,9 @@ jobs:
   build-gateway:
     name: Build Gateway Images
     timeout-minutes: 30
-    needs: [build-packages]
+    needs: [build-packages, read-extension-version]
+    env:
+      EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -293,7 +330,7 @@ jobs:
         docker buildx build \
           --platform linux/${{ matrix.arch }} \
           --build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB \
-          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.arch }} \
+          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} \
           --load \
           -f .github/dockerfiles/Dockerfile_gateway_deb gateway-context
         
@@ -302,7 +339,7 @@ jobs:
     - name: Save gateway Docker image as artifact
       run: |
         echo "Saving gateway ${{ matrix.arch }} Docker image as tar file..."
-        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-${{ matrix.arch }} > gateway-${{ matrix.arch }}-image.tar
+        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} > gateway-${{ matrix.arch }}-image.tar
         echo "✓ Gateway ${{ matrix.arch }} Docker image saved to tar file"
 
     - name: Upload gateway Docker image artifact
@@ -316,9 +353,12 @@ jobs:
     name: Consolidate Platform Images
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [build-operator, build-sidecar, build-packages, build-documentdb, build-gateway]
+    needs: [build-operator, build-sidecar, build-packages, build-documentdb, build-gateway, read-extension-version]
+    env:
+      EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
     outputs:
       image_tag: ${{ env.IMAGE_TAG }}
+      ext_image_tag: ${{ needs.read-extension-version.outputs.ext_image_tag }}
     steps:
     - name: Download all image artifacts
       uses: actions/download-artifact@v4
@@ -432,10 +472,10 @@ jobs:
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-arm64 \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-amd64 \
           ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ env.IMAGE_TAG }}-arm64 \
-          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-amd64 \
-          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.IMAGE_TAG }}-arm64 \
-          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-amd64 \
-          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.IMAGE_TAG }}-arm64 \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-arm64 \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-amd64 \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-arm64 \
           > platform-specific-images.tar
         
         echo "✓ Platform-specific images saved as artifacts"

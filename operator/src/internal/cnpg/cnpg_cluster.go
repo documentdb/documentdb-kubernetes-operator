@@ -65,8 +65,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		},
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
-				Instances: documentdb.Spec.InstancesPerNode,
-				ImageName: documentdb.Spec.PostgresImage,
+				Instances:           documentdb.Spec.InstancesPerNode,
+				ImageName:           documentdb.Spec.PostgresImage,
+				PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethodSwitchover,
 				StorageConfiguration: cnpgv1.StorageConfiguration{
 					StorageClass: storageClassPointer, // Use configured storage class or default
 					Size:         documentdb.Spec.Resource.Storage.PvcSize,

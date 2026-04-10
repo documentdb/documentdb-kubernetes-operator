@@ -414,3 +414,5 @@ Chart.lock
 
 # MkDocs build output
 site/
+operator/src/coverage
+operator/src/webhook_coverage
