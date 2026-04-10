@@ -53,6 +53,8 @@ spec:
         - name: APPINSIGHTS_INSTRUMENTATIONKEY
           value: {{ .Values.telemetry.instrumentationKey | quote }}
         {{- end }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "localhost:4317"
         {{- end }}
         {{- if .Values.telemetry.enabled }}
         {{- if .Values.telemetry.existingSecret }}
@@ -61,3 +63,30 @@ spec:
             name: {{ .Values.telemetry.existingSecret }}
         {{- end }}
         {{- end }}
+      # OTel Collector sidecar — receives OTLP from operator and exports to App Insights
+      {{- if .Values.telemetry.enabled }}
+      - name: otel-collector
+        image: "{{ .Values.telemetry.collector.image | default "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.127.0" }}"
+        args: ["--config=/etc/otel/config.yaml"]
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        volumeMounts:
+        - name: otel-collector-config
+          mountPath: /etc/otel
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+      volumes:
+      - name: otel-collector-config
+        configMap:
+          name: documentdb-otel-collector-config
+      {{- end }}

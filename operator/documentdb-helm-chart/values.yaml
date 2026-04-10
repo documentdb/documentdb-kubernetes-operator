@@ -8,7 +8,7 @@ replicaCount: 1
 # When empty, the operator falls back to its compiled-in defaults (see constants.go).
 documentDbVersion: "0.109.0"
 
-# Telemetry configuration for Application Insights
+# Telemetry configuration for Application Insights via OpenTelemetry
 telemetry:
   # Enable or disable telemetry collection
   enabled: true
@@ -19,6 +19,10 @@ telemetry:
   # Name of existing secret containing telemetry credentials
   # Secret should have keys: APPINSIGHTS_INSTRUMENTATIONKEY or APPLICATIONINSIGHTS_CONNECTION_STRING
   existingSecret: ""
+  # OTel Collector sidecar configuration
+  collector:
+    # Container image for the OTel Collector (uses contrib distribution for Azure Monitor exporter)
+    image: "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.127.0"
 # Gateway image pull policy for the gateway sidecar container.
 # Valid values: Always, IfNotPresent, Never. Defaults to IfNotPresent if not set.
 gatewayImagePullPolicy: ""

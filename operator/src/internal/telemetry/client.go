@@ -4,13 +4,24 @@
 package telemetry
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/microsoft/ApplicationInsights-Go/appinsights"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/log/global"
+	otellog "go.opentelemetry.io/otel/log"
+	otelmetricapi "go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const (
@@ -20,14 +31,23 @@ const (
 	EnvAppInsightsConnectionString = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 	// EnvTelemetryEnabled is the environment variable to enable/disable telemetry.
 	EnvTelemetryEnabled = "DOCUMENTDB_TELEMETRY_ENABLED"
+	// EnvOTLPEndpoint is the environment variable for the OTel Collector endpoint.
+	// Defaults to localhost:4317 (sidecar collector).
+	EnvOTLPEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT"
 )
 
-// TelemetryClient handles sending telemetry to Application Insights using the official SDK.
+// TelemetryClient handles sending telemetry via OpenTelemetry SDK to an OTel Collector sidecar.
+// The collector is responsible for exporting to App Insights via the Azure Monitor exporter.
 type TelemetryClient struct {
-	client          appinsights.TelemetryClient
 	enabled         bool
 	operatorContext *OperatorContext
 	logger          logr.Logger
+
+	// OTel SDK components
+	loggerProvider  *log.LoggerProvider
+	meterProvider   *metric.MeterProvider
+	otelLogger      otellog.Logger
+	commonAttrs     []attribute.KeyValue
 }
 
 // ClientOption configures the TelemetryClient.
@@ -40,7 +60,8 @@ func WithLogger(logger logr.Logger) ClientOption {
 	}
 }
 
-// NewTelemetryClient creates a new TelemetryClient using the official Application Insights SDK.
+// NewTelemetryClient creates a new TelemetryClient using the OpenTelemetry SDK.
+// Telemetry is exported via OTLP to a local OTel Collector sidecar.
 func NewTelemetryClient(ctx *OperatorContext, opts ...ClientOption) *TelemetryClient {
 	tc := &TelemetryClient{
 		operatorContext: ctx,
@@ -61,14 +82,12 @@ func NewTelemetryClient(ctx *OperatorContext, opts ...ClientOption) *TelemetryCl
 		return tc
 	}
 
-	// Get instrumentation key from environment
+	// Check for instrumentation key/connection string — if neither is set, disable
 	instrumentationKey := os.Getenv(EnvAppInsightsKey)
 	if instrumentationKey == "" {
-		// Try connection string
 		connStr := os.Getenv(EnvAppInsightsConnectionString)
 		instrumentationKey = parseInstrumentationKeyFromConnectionString(connStr)
 	}
-
 	if instrumentationKey == "" {
 		tc.enabled = false
 		if tc.logger.GetSink() != nil {
@@ -77,70 +96,122 @@ func NewTelemetryClient(ctx *OperatorContext, opts ...ClientOption) *TelemetryCl
 		return tc
 	}
 
-	// Create telemetry configuration
-	telemetryConfig := appinsights.NewTelemetryConfiguration(instrumentationKey)
-
-	// Configure batching - flush every hour or when batch reaches 500 items
-	telemetryConfig.MaxBatchSize = 500
-	telemetryConfig.MaxBatchInterval = 1 * time.Hour
-
-	// Check for custom endpoint from connection string
-	connStr := os.Getenv(EnvAppInsightsConnectionString)
-	if endpoint := parseIngestionEndpointFromConnectionString(connStr); endpoint != "" {
-		telemetryConfig.EndpointUrl = strings.TrimSuffix(endpoint, "/") + "/v2/track"
+	// Build common attributes for all telemetry
+	tc.commonAttrs = []attribute.KeyValue{
+		semconv.ServiceName("documentdb-operator"),
+		semconv.ServiceVersion(ctx.OperatorVersion),
+		attribute.String("kubernetes_distribution", string(ctx.KubernetesDistribution)),
+		attribute.String("kubernetes_version", ctx.KubernetesVersion),
+		attribute.String("operator_version", ctx.OperatorVersion),
 	}
-
-	// Create the client
-	tc.client = appinsights.NewTelemetryClientFromConfig(telemetryConfig)
-
-	// Set common context tags
-	tc.client.Context().Tags.Cloud().SetRole("documentdb-operator")
-	tc.client.Context().Tags.Cloud().SetRoleInstance(ctx.OperatorNamespaceHash)
-	tc.client.Context().Tags.Application().SetVer(ctx.OperatorVersion)
-
-	// Set common properties that will be added to all telemetry
-	tc.client.Context().CommonProperties["kubernetes_distribution"] = string(ctx.KubernetesDistribution)
-	tc.client.Context().CommonProperties["kubernetes_version"] = ctx.KubernetesVersion
-	tc.client.Context().CommonProperties["operator_version"] = ctx.OperatorVersion
 	if ctx.KubernetesClusterID != "" {
-		tc.client.Context().CommonProperties["kubernetes_cluster_id"] = ctx.KubernetesClusterID
+		tc.commonAttrs = append(tc.commonAttrs, attribute.String("kubernetes_cluster_id", ctx.KubernetesClusterID))
 	}
 	if ctx.Region != "" {
-		tc.client.Context().CommonProperties["region"] = ctx.Region
+		tc.commonAttrs = append(tc.commonAttrs, attribute.String("region", ctx.Region))
+	}
+	if ctx.OperatorNamespaceHash != "" {
+		tc.commonAttrs = append(tc.commonAttrs, attribute.String("operator_namespace_hash", ctx.OperatorNamespaceHash))
 	}
 
-	// Enable diagnostics logging if logger is available
-	if tc.logger.GetSink() != nil {
-		appinsights.NewDiagnosticsMessageListener(func(msg string) error {
-			tc.logger.V(1).Info("Application Insights diagnostic", "message", msg)
-			return nil
-		})
+	// Determine OTLP endpoint (default: localhost sidecar)
+	otlpEndpoint := os.Getenv(EnvOTLPEndpoint)
+	if otlpEndpoint == "" {
+		otlpEndpoint = "localhost:4317"
 	}
+
+	// Build OTel resource
+	bgCtx := context.Background()
+	res, err := resource.New(bgCtx,
+		resource.WithAttributes(tc.commonAttrs...),
+	)
+	if err != nil {
+		if tc.logger.GetSink() != nil {
+			tc.logger.Error(err, "Failed to create OTel resource")
+		}
+		tc.enabled = false
+		return tc
+	}
+
+	// Set up OTLP log exporter → OTel Collector sidecar
+	logExporter, err := otlploggrpc.New(bgCtx,
+		otlploggrpc.WithEndpoint(otlpEndpoint),
+		otlploggrpc.WithInsecure(), // Sidecar communication is local, no TLS needed
+	)
+	if err != nil {
+		if tc.logger.GetSink() != nil {
+			tc.logger.Error(err, "Failed to create OTLP log exporter")
+		}
+		tc.enabled = false
+		return tc
+	}
+
+	tc.loggerProvider = log.NewLoggerProvider(
+		log.WithResource(res),
+		log.WithProcessor(log.NewBatchProcessor(logExporter,
+			log.WithExportInterval(30*time.Second),
+			log.WithExportMaxBatchSize(100),
+		)),
+	)
+	global.SetLoggerProvider(tc.loggerProvider)
+	tc.otelLogger = tc.loggerProvider.Logger("documentdb-operator-telemetry")
+
+	// Set up OTLP metric exporter → OTel Collector sidecar
+	metricExporter, err := otlpmetricgrpc.New(bgCtx,
+		otlpmetricgrpc.WithEndpoint(otlpEndpoint),
+		otlpmetricgrpc.WithInsecure(),
+	)
+	if err != nil {
+		if tc.logger.GetSink() != nil {
+			tc.logger.Error(err, "Failed to create OTLP metric exporter")
+		}
+		tc.enabled = false
+		return tc
+	}
+
+	tc.meterProvider = metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(metric.NewPeriodicReader(metricExporter,
+			metric.WithInterval(60*time.Second),
+		)),
+	)
+	otel.SetMeterProvider(tc.meterProvider)
 
 	return tc
 }
 
-// Start begins the telemetry client (no-op for SDK-based client as it handles this internally).
+// Start begins the telemetry client (OTel SDK handles background processing).
 func (c *TelemetryClient) Start() {
-	// The official SDK handles background processing internally
+	// OTel SDK handles background processing via batch processors
 }
 
-// Stop gracefully stops the telemetry client and flushes remaining events.
+// Stop gracefully stops the telemetry client and flushes remaining data.
 func (c *TelemetryClient) Stop() {
-	if !c.enabled || c.client == nil {
+	if !c.enabled {
 		return
 	}
 
-	// Close the channel with a timeout for retries
-	select {
-	case <-c.client.Channel().Close(10 * time.Second):
-		if c.logger.GetSink() != nil {
-			c.logger.Info("Telemetry channel closed successfully")
+	bgCtx := context.Background()
+	shutdownCtx, cancel := context.WithTimeout(bgCtx, 10*time.Second)
+	defer cancel()
+
+	if c.loggerProvider != nil {
+		if err := c.loggerProvider.Shutdown(shutdownCtx); err != nil {
+			if c.logger.GetSink() != nil {
+				c.logger.Error(err, "Failed to shutdown OTel logger provider")
+			}
 		}
-	case <-time.After(30 * time.Second):
-		if c.logger.GetSink() != nil {
-			c.logger.Info("Telemetry channel close timed out")
+	}
+	if c.meterProvider != nil {
+		if err := c.meterProvider.Shutdown(shutdownCtx); err != nil {
+			if c.logger.GetSink() != nil {
+				c.logger.Error(err, "Failed to shutdown OTel meter provider")
+			}
 		}
+	}
+
+	if c.logger.GetSink() != nil {
+		c.logger.Info("OTel telemetry providers shut down")
 	}
 }
 
@@ -149,55 +220,82 @@ func (c *TelemetryClient) IsEnabled() bool {
 	return c.enabled
 }
 
-// TrackEvent sends a custom event to Application Insights.
+// TrackEvent sends a custom event as an OTel log record.
+// Events are emitted as structured log records with the event name and properties.
 func (c *TelemetryClient) TrackEvent(eventName string, properties map[string]interface{}) {
-	if !c.enabled || c.client == nil {
+	if !c.enabled || c.otelLogger == nil {
 		return
 	}
 
-	event := appinsights.NewEventTelemetry(eventName)
+	record := otellog.Record{}
+	record.SetTimestamp(time.Now())
+	record.SetSeverity(otellog.SeverityInfo)
+	record.SetBody(otellog.StringValue(eventName))
 
-	// Add properties
-	for k, v := range properties {
-		event.Properties[k] = fmt.Sprintf("%v", v)
+	// Add event name as attribute
+	attrs := []otellog.KeyValue{
+		otellog.String("event.name", eventName),
 	}
 
-	c.client.Track(event)
+	// Add properties as attributes
+	for k, v := range properties {
+		attrs = append(attrs, otellog.String(k, fmt.Sprintf("%v", v)))
+	}
+
+	record.AddAttributes(attrs...)
+	c.otelLogger.Emit(context.Background(), record)
 }
 
-// TrackMetric sends a metric to Application Insights.
+// TrackMetric sends a metric via the OTel Metrics SDK.
+// Metrics are recorded as gauge observations.
 func (c *TelemetryClient) TrackMetric(metricName string, value float64, properties map[string]interface{}) {
-	if !c.enabled || c.client == nil {
+	if !c.enabled || c.meterProvider == nil {
 		return
 	}
 
-	metric := appinsights.NewMetricTelemetry(metricName, value)
+	meter := c.meterProvider.Meter("documentdb-operator-telemetry")
 
-	// Add properties
+	// Build attributes from properties
+	attrs := make([]attribute.KeyValue, 0, len(properties))
 	for k, v := range properties {
-		metric.Properties[k] = fmt.Sprintf("%v", v)
+		attrs = append(attrs, attribute.String(k, fmt.Sprintf("%v", v)))
 	}
 
-	c.client.Track(metric)
+	// Use a gauge for point-in-time metrics
+	gauge, err := meter.Float64Gauge(metricName)
+	if err != nil {
+		if c.logger.GetSink() != nil {
+			c.logger.V(1).Info("Failed to create gauge", "metric", metricName, "error", err)
+		}
+		return
+	}
+	gauge.Record(context.Background(), value, otelmetricapi.WithAttributes(attrs...))
 }
 
-// TrackException sends an exception/error to Application Insights.
+// TrackException sends an exception/error as an OTel log record.
 func (c *TelemetryClient) TrackException(err error, properties map[string]interface{}) {
-	if !c.enabled || c.client == nil {
+	if !c.enabled || c.otelLogger == nil {
 		return
 	}
 
-	// Sanitize error message to remove potential PII
 	sanitizedMessage := sanitizeErrorMessage(err.Error())
 
-	exception := appinsights.NewExceptionTelemetry(sanitizedMessage)
+	record := otellog.Record{}
+	record.SetTimestamp(time.Now())
+	record.SetSeverity(otellog.SeverityError)
+	record.SetBody(otellog.StringValue(sanitizedMessage))
 
-	// Add properties
-	for k, v := range properties {
-		exception.Properties[k] = fmt.Sprintf("%v", v)
+	attrs := []otellog.KeyValue{
+		otellog.String("event.name", "Exception"),
+		otellog.String("exception.message", sanitizedMessage),
 	}
 
-	c.client.Track(exception)
+	for k, v := range properties {
+		attrs = append(attrs, otellog.String(k, fmt.Sprintf("%v", v)))
+	}
+
+	record.AddAttributes(attrs...)
+	c.otelLogger.Emit(context.Background(), record)
 }
 
 // parseInstrumentationKeyFromConnectionString extracts the instrumentation key from a connection string.
@@ -206,9 +304,7 @@ func parseInstrumentationKeyFromConnectionString(connStr string) string {
 		return ""
 	}
 
-	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=xxx;...
 	for _, part := range strings.Split(connStr, ";") {
-		// Trim whitespace to handle cases like "; InstrumentationKey=..." or copy-paste errors
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "InstrumentationKey=") {
 			return strings.TrimPrefix(part, "InstrumentationKey=")
@@ -224,9 +320,7 @@ func parseIngestionEndpointFromConnectionString(connStr string) string {
 		return ""
 	}
 
-	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=xxx;...
 	for _, part := range strings.Split(connStr, ";") {
-		// Trim whitespace to handle cases like "; IngestionEndpoint=..." or copy-paste errors
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "IngestionEndpoint=") {
 			return strings.TrimPrefix(part, "IngestionEndpoint=")
@@ -238,9 +332,6 @@ func parseIngestionEndpointFromConnectionString(connStr string) string {
 
 // sanitizeErrorMessage removes potential PII from error messages.
 func sanitizeErrorMessage(msg string) string {
-	// Basic sanitization - in production, this should be more comprehensive
-	// Remove potential file paths, IP addresses, etc.
-	// For now, truncate to reasonable length
 	const maxLength = 500
 	if len(msg) > maxLength {
 		msg = msg[:maxLength] + "..."
