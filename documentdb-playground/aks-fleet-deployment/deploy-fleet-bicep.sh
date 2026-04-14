@@ -176,7 +176,6 @@ while read -r MEMBER_CLUSTER; do
   kubectl config use-context $MEMBER_CLUSTER
 
   kubectl apply -f config/crd/*
-  kubectl create namespace fleet-system --dry-run=client -o yaml | kubectl apply -f -
 
   echo "Installing mcs-controller-manager..."
   helm install mcs-controller-manager ./charts/mcs-controller-manager/ \
@@ -188,6 +187,7 @@ while read -r MEMBER_CLUSTER; do
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
     --set config.memberClusterName=$MEMBER_CLUSTER \
     --set enableV1Beta1APIs=true \
+    --namespace fleet-system \
     --create-namespace \
     --set logVerbosity=8
 
@@ -201,6 +201,7 @@ while read -r MEMBER_CLUSTER; do
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
     --set config.memberClusterName=$MEMBER_CLUSTER \
     --set enableV1Beta1APIs=true \
+    --namespace fleet-system \
     --create-namespace \
     --set logVerbosity=8
 
