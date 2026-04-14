@@ -9,7 +9,7 @@ set -euo pipefail
 #   DOCUMENTDB_PASSWORD: Database password (will be generated if not provided)
 #   ENABLE_AZURE_DNS: Enable Azure DNS creation (default: true)
 #   AZURE_DNS_ZONE_NAME: Azure DNS zone name (default: same as resource group)
-#   AZURE_DNS_PARENT_ZONE_RESOURCE_ID: Azure DNS parent zone resource ID (default: multi-cloud.pgmongo-dev.cosmos.windows-int.net)
+#   AZURE_DNS_PARENT_ZONE_RESOURCE_ID: Azure DNS parent zone resource ID 
 #
 # Examples:
 #   ./deploy-multi-region.sh

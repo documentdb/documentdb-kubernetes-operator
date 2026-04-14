@@ -11,7 +11,7 @@ multi-region database deployment capabilities.
 - **Member Clusters**: Dynamically discovered and deployed across available regions (westus3, uksouth, eastus2)
 - **Fleet Management**: KubeFleet open-source project for multi-cluster orchestration
 - **Network**: Full mesh VNet peering between all clusters
-- **VM Size**: Standard_DS2_v2 (configurable)
+- **VM Size**: Standard_D2_v2 (configurable)
 - **Node Count**: 2 nodes per cluster 
 - **Kubernetes Version**: Uses region default GA version (configurable)
 - **DocumentDB**: Multi-region deployment with primary/replica architecture

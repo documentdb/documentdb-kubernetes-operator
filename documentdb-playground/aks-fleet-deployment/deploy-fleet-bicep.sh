@@ -11,7 +11,7 @@ HUB_REGION="${HUB_REGION:-westus3}"
 SCRIPT_DIR="$(dirname "$0")"
 
 # Optional: explicitly override the VM size used by the template param vmSize.
-# If left empty, the template's default (currently Standard_DS2_v2) will be used.
+# If left empty, the template's default (currently Standard_D2_v2) will be used.
 KUBE_VM_SIZE="${KUBE_VM_SIZE:-}"
 # Optional: override the default member regions defined in main.bicep (comma-separated list)
 MEMBER_REGIONS="${MEMBER_REGIONS:-}"
@@ -131,7 +131,7 @@ echo "Pods ($HUB_CLUSTER):"
 kubectl get pods -n cert-manager -o wide || true
 
 export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
-export TAG="v0.2"
+export TAG="v0.3.0"
 # Install the helm chart for running Fleet agents on the hub cluster.
 helm upgrade --install hub-agent ./charts/hub-agent/ \
         --set image.pullPolicy=Always \
@@ -143,14 +143,17 @@ helm upgrade --install hub-agent ./charts/hub-agent/ \
         --set clusterUnhealthyThreshold="5m0s" \
         --set logFileMaxSize=100000 \
         --set MaxConcurrentClusterPlacement=200 \
+        --set enableWorkload=true \
+        --namespace fleet-system-hub \
         --set namespace=fleet-system-hub \
-        --set enableWorkload=true #\
+        --create-namespace #\
         #--set useCertManager=true \
         #--set enableWebhook=true
 
 
 # Run the script.
 chmod +x ./hack/membership/joinMC.sh
+sed -i 's/--set namespace=fleet-system/--namespace=fleet-system --create-namespace/' hack/membership/joinMC.sh
 ./hack/membership/joinMC.sh  $TAG $HUB_CLUSTER $MEMBER_CLUSTER_NAMES
 popd
 
@@ -158,7 +161,7 @@ fleetNetworkingDir=$(mktemp -d)
 git clone https://github.com/Azure/fleet-networking.git $fleetNetworkingDir
 pushd $fleetNetworkingDir
 # Set up HUB_CLUSTER as the hub
-NETWORKING_TAG="v0.3.28"
+NETWORKING_TAG="v0.3.30"
 
 # Install the helm chart for running Fleet agents on the hub cluster.
 kubectl config use-context $HUB_CLUSTER
@@ -173,6 +176,7 @@ while read -r MEMBER_CLUSTER; do
   kubectl config use-context $MEMBER_CLUSTER
 
   kubectl apply -f config/crd/*
+  kubectl create namespace fleet-system --dry-run=client -o yaml | kubectl apply -f -
 
   echo "Installing mcs-controller-manager..."
   helm install mcs-controller-manager ./charts/mcs-controller-manager/ \
@@ -184,6 +188,7 @@ while read -r MEMBER_CLUSTER; do
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
     --set config.memberClusterName=$MEMBER_CLUSTER \
     --set enableV1Beta1APIs=true \
+    --create-namespace \
     --set logVerbosity=8
 
   echo "Installing member-net-controller-manager..."
@@ -196,6 +201,7 @@ while read -r MEMBER_CLUSTER; do
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
     --set config.memberClusterName=$MEMBER_CLUSTER \
     --set enableV1Beta1APIs=true \
+    --create-namespace \
     --set logVerbosity=8
 
 done <<< "$MEMBER_CLUSTER_NAMES"
