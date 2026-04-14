@@ -3109,4 +3109,98 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to parse Kubernetes major version"))
 		})
 	})
+
+	Describe("reconcileOtelConfigMap", func() {
+		It("creates an OTel ConfigMap when monitoring is enabled", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Monitoring: &dbpreview.MonitoringSpec{
+						Enabled: true,
+						Exporter: &dbpreview.ExporterSpec{
+							OTLP: &dbpreview.OTLPExporterSpec{
+								Endpoint: "otel-collector:4317",
+								Insecure: true,
+							},
+						},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
+
+			err := reconciler.reconcileOtelConfigMap(ctx, documentdb, documentDBNamespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify ConfigMap was created
+			cm := &corev1.ConfigMap{}
+			err = fakeClient.Get(ctx, types.NamespacedName{
+				Name:      documentDBName + "-otel-config",
+				Namespace: documentDBNamespace,
+			}, cm)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "documentdb-operator"))
+			Expect(cm.Labels).To(HaveKeyWithValue("app.kubernetes.io/component", "otel-collector"))
+			Expect(cm.Data).To(HaveKey("base.yaml"))
+			Expect(cm.Data["base.yaml"]).To(ContainSubstring("otel-collector:4317"))
+			Expect(cm.Data["base.yaml"]).To(ContainSubstring(documentDBName))
+		})
+
+		It("updates an existing OTel ConfigMap when monitoring spec changes", func() {
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Monitoring: &dbpreview.MonitoringSpec{
+						Enabled: true,
+					},
+				},
+			}
+
+			existingCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName + "-otel-config",
+					Namespace: documentDBNamespace,
+				},
+				Data: map[string]string{
+					"base.yaml": "old-content",
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(existingCM).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+			}
+
+			err := reconciler.reconcileOtelConfigMap(ctx, documentdb, documentDBNamespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify ConfigMap was updated
+			cm := &corev1.ConfigMap{}
+			err = fakeClient.Get(ctx, types.NamespacedName{
+				Name:      documentDBName + "-otel-config",
+				Namespace: documentDBNamespace,
+			}, cm)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cm.Data["base.yaml"]).NotTo(Equal("old-content"))
+			Expect(cm.Data["base.yaml"]).To(ContainSubstring("documentdb.cluster"))
+		})
+	})
 })

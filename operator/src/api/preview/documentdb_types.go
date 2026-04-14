@@ -131,6 +131,10 @@ type DocumentDBSpec struct {
 	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
 	// +optional
 	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`
+
+	// Monitoring configures observability via an OTel Collector sidecar.
+	// +optional
+	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 }
 
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
@@ -296,6 +300,34 @@ type IssuerRef struct {
 	Kind string `json:"kind,omitempty"`
 	// Group defaults to cert-manager.io
 	Group string `json:"group,omitempty"`
+}
+
+// MonitoringSpec configures observability via an OTel Collector sidecar.
+type MonitoringSpec struct {
+	// Enabled turns on the OTel Collector sidecar for metrics collection.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Exporter configures where metrics are sent.
+	// +optional
+	Exporter *ExporterSpec `json:"exporter,omitempty"`
+}
+
+// ExporterSpec configures metric export destinations.
+type ExporterSpec struct {
+	// OTLP configures the OpenTelemetry Protocol exporter.
+	// +optional
+	OTLP *OTLPExporterSpec `json:"otlp,omitempty"`
+}
+
+// OTLPExporterSpec configures the OTLP exporter.
+type OTLPExporterSpec struct {
+	// Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector.monitoring:4317").
+	Endpoint string `json:"endpoint"`
+
+	// Insecure disables TLS for the OTLP connection. Defaults to true for POC.
+	// +kubebuilder:default=true
+	// +optional
+	Insecure bool `json:"insecure,omitempty"`
 }
 
 // DocumentDBStatus defines the observed state of DocumentDB.

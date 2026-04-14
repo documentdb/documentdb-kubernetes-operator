@@ -97,4 +97,9 @@ COPY --from=builder /usr/share/postgresql/${PG_MAJOR}/contrib/ /share/contrib/
 # System library dependencies not present in the CNPG base image
 COPY --from=builder /system/ /system/
 
+# OTel Collector config files (used by sidecar via ImageVolume mount)
+# These are schema-tied and ship with the extension image.
+COPY telemetry/otel/engine_metrics.yaml /etc/otel/engine_metrics.yaml
+COPY telemetry/otel/host_metrics.yaml /etc/otel/host_metrics.yaml
+
 USER 65532:65532

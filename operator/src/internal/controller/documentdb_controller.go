@@ -36,6 +36,7 @@ import (
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
+	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -170,6 +171,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, err
 	} else if result.Requeue || result.RequeueAfter > 0 {
 		return result, nil
+	}
+
+	// Reconcile OTel Collector ConfigMap when monitoring is enabled
+	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
+			logger.Error(err, "Failed to reconcile OTel ConfigMap")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
 	}
 
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
@@ -1034,6 +1043,37 @@ func (r *DocumentDBReconciler) updateImageStatus(ctx context.Context, documentdb
 	documentdb.Status.GatewayImage = currentGwImage
 	if err := r.Status().Update(ctx, documentdb); err != nil {
 		return fmt.Errorf("failed to update DocumentDB image status: %w", err)
+	}
+	return nil
+}
+
+// reconcileOtelConfigMap ensures the OTel Collector base config ConfigMap exists and is up-to-date.
+func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
+	logger := log.FromContext(ctx)
+	cmName := otelcfg.ConfigMapName(documentdb.Name)
+
+	cm := &corev1.ConfigMap{}
+	cm.Name = cmName
+	cm.Namespace = namespace
+
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
+		if cm.Labels == nil {
+			cm.Labels = map[string]string{}
+		}
+		cm.Labels["app.kubernetes.io/managed-by"] = "documentdb-operator"
+		cm.Labels["app.kubernetes.io/component"] = "otel-collector"
+
+		baseYAML := otelcfg.GenerateBaseYAML(documentdb.Name, namespace, documentdb.Spec.Monitoring)
+		cm.Data = map[string]string{
+			"base.yaml": baseYAML,
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to reconcile OTel ConfigMap %s: %w", cmName, err)
+	}
+	if result != controllerutil.OperationResultNone {
+		logger.Info("OTel ConfigMap reconciled", "name", cmName, "operation", result)
 	}
 	return nil
 }

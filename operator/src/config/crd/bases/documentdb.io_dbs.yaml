@@ -1208,6 +1208,34 @@ spec:
               logLevel:
                 description: Overrides default log level for the DocumentDB cluster.
                 type: string
+              monitoring:
+                description: Monitoring configures observability via an OTel Collector
+                  sidecar.
+                properties:
+                  enabled:
+                    description: Enabled turns on the OTel Collector sidecar for metrics
+                      collection.
+                    type: boolean
+                  exporter:
+                    description: Exporter configures where metrics are sent.
+                    properties:
+                      otlp:
+                        description: OTLP configures the OpenTelemetry Protocol exporter.
+                        properties:
+                          endpoint:
+                            description: Endpoint is the OTLP gRPC endpoint (e.g.,
+                              "otel-collector.monitoring:4317").
+                            type: string
+                          insecure:
+                            default: true
+                            description: Insecure disables TLS for the OTLP connection.
+                              Defaults to true for POC.
+                            type: boolean
+                        required:
+                        - endpoint
+                        type: object
+                    type: object
+                type: object
               nodeCount:
                 description: NodeCount is the number of nodes in the DocumentDB cluster.
                   Must be 1.

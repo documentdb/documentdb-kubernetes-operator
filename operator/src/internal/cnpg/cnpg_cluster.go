@@ -85,6 +85,12 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
 					}
+					// Pass monitoring parameters to plugin for OTel sidecar injection.
+					if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+						params["monitoringEnabled"] = "true"
+						params["otelCollectorImage"] = cmp.Or(os.Getenv("OTEL_COLLECTOR_IMAGE"), "otel/opentelemetry-collector-contrib:0.96.0")
+						params["otelConfigMapName"] = documentdb.Name + "-otel-config"
+					}
 					return []cnpgv1.PluginConfiguration{{
 						Name:       sidecarPluginName,
 						Enabled:    pointer.Bool(true),

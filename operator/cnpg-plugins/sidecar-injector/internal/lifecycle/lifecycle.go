@@ -238,6 +238,69 @@ func (impl Implementation) reconcileMetadata(
 		return nil, err
 	}
 
+	// Inject OTel Collector sidecar when monitoring is enabled
+	if configuration.MonitoringEnabled && configuration.OtelCollectorImage != "" {
+		log.Printf("Injecting OTel Collector sidecar with image: %s", configuration.OtelCollectorImage)
+
+		// Add ConfigMap volume for operator-generated base.yaml
+		if configuration.OtelConfigMapName != "" {
+			mutatedPod.Spec.Volumes = append(mutatedPod.Spec.Volumes, corev1.Volume{
+				Name: "otel-base-config",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: configuration.OtelConfigMapName,
+						},
+					},
+				},
+			})
+		}
+
+		otelSidecar := &corev1.Container{
+			Name:  "otel-collector",
+			Image: configuration.OtelCollectorImage,
+			Args: []string{
+				"--config=file:/shared/etc/otel/engine_metrics.yaml",
+				"--config=file:/shared/etc/otel/host_metrics.yaml",
+				"--config=file:/base/base.yaml",
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name: "POD_NAME",
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
+							FieldPath: "metadata.name",
+						},
+					},
+				},
+				{
+					Name:  "PG_CONN_STRING",
+					Value: "host=localhost port=5432 user=streaming_replica dbname=postgres sslmode=disable",
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					// Mount the extension ImageVolume to access OTel config files
+					// The CNPG ImageVolume "documentdb" is already a pod-level volume
+					Name:      "documentdb",
+					MountPath: "/shared",
+					ReadOnly:  true,
+				},
+				{
+					Name:      "otel-base-config",
+					MountPath: "/base",
+					ReadOnly:  true,
+				},
+			},
+		}
+
+		err = object.InjectPluginSidecar(mutatedPod, otelSidecar, false)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("OTel Collector sidecar injected successfully")
+	}
+
 	for key, value := range configuration.Labels {
 		mutatedPod.Labels[key] = value
 	}

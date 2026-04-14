@@ -19,6 +19,9 @@ const (
 	gatewayImageParameter               = "gatewayImage"
 	gatewayImagePullPolicyParameter     = "gatewayImagePullPolicy"
 	documentDbCredentialSecretParameter = "documentDbCredentialSecret"
+	monitoringEnabledParameter          = "monitoringEnabled"
+	otelCollectorImageParameter         = "otelCollectorImage"
+	otelConfigMapNameParameter          = "otelConfigMapName"
 )
 
 // Configuration represents the plugin configuration parameters
@@ -28,6 +31,9 @@ type Configuration struct {
 	GatewayImage               string
 	GatewayImagePullPolicy     corev1.PullPolicy
 	DocumentDbCredentialSecret string
+	MonitoringEnabled          bool
+	OtelCollectorImage         string
+	OtelConfigMapName          string
 }
 
 // FromParameters builds a plugin configuration from the configuration parameters
@@ -67,6 +73,9 @@ func FromParameters(
 		GatewayImage:               gatewayImage,
 		GatewayImagePullPolicy:     pullPolicy,
 		DocumentDbCredentialSecret: credentialSecret,
+		MonitoringEnabled:          helper.Parameters[monitoringEnabledParameter] == "true",
+		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
+		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
 	}
 
 	configuration.applyDefaults()
