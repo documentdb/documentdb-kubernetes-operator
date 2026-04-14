@@ -5,7 +5,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -317,25 +317,29 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 	return nil
 }
 
-func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+// syncReplicationChanges builds replication-specific CNPG Cluster patch operations (primary change,
+// replica list change).
+// It performs side effects (HTTP token reads, service creation, goroutines) but returns the
+// patch ops for the caller to include in the consolidated SyncCnpgCluster patch.
+func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
 	if current.Spec.ReplicaCluster == nil || desired.Spec.ReplicaCluster == nil {
 		// FOR NOW assume that we aren't going to turn on or off physical replication
-		return nil, -1
+		return nil, nil, -1
 	}
 
 	if current.Spec.ReplicaCluster.Self != desired.Spec.ReplicaCluster.Self {
-		return fmt.Errorf("self cannot be changed"), time.Second * 60
+		return nil, fmt.Errorf("self cannot be changed"), time.Second * 60
 	}
 
 	// Create JSON patch operations for all replica cluster updates
-	var patchOps []util.JSONPatch
+	var patchOps []cnpg.JSONPatch
 
 	// Update if the primary has changed
 	primaryChanged := current.Spec.ReplicaCluster.Primary != desired.Spec.ReplicaCluster.Primary
 	if primaryChanged {
 		err, refreshTime := r.getPrimaryChangePatchOps(ctx, &patchOps, current, desired, documentdb, replicationContext)
 		if refreshTime > 0 || err != nil {
-			return err, refreshTime
+			return nil, err, refreshTime
 		}
 	}
 
@@ -345,36 +349,25 @@ func (r *DocumentDBReconciler) TryUpdateCluster(ctx context.Context, current, de
 		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
 	}
 
-	if len(patchOps) > 0 {
-		patch, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal patch operations: %w", err), time.Second * 10
-		}
-		err = r.Client.Patch(ctx, current, client.RawPatch(types.JSONPatchType, patch))
-		if err != nil {
-			return err, time.Second * 10
-		}
-	}
-
-	return nil, -1
+	return patchOps, nil, -1
 }
 
-func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]util.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]cnpg.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
 
 	// Remove old bootstrap method if present
 	if current.Spec.Bootstrap != nil {
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:   util.JSON_PATCH_OP_REMOVE,
-			Path: util.JSON_PATCH_PATH_BOOTSTRAP,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:   cnpg.PatchOpRemove,
+			Path: cnpg.PatchPathBootstrap,
 		})
 	}
 
 	if current.Spec.ReplicaCluster.Primary == current.Spec.ReplicaCluster.Self {
 		// Primary => replica
 		// demote
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathReplicaCluster,
 			Value: desired.Spec.ReplicaCluster,
 		})
 
@@ -383,19 +376,19 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 			// Only add remove operation if synchronous field exists, otherwise there's an error
 			// TODO this wouldn't be true if our "wait for token" logic wasn't reliant on a failure
 			if current.Spec.PostgresConfiguration.Synchronous != nil {
-				*patchOps = append(*patchOps, util.JSONPatch{
-					Op:   util.JSON_PATCH_OP_REMOVE,
-					Path: util.JSON_PATCH_PATH_POSTGRES_CONFIG_SYNC,
+				*patchOps = append(*patchOps, cnpg.JSONPatch{
+					Op:   cnpg.PatchOpRemove,
+					Path: cnpg.PatchPathPostgresConfigSyn,
 				})
 			}
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_INSTANCES,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathInstances,
 				Value: desired.Spec.Instances,
 			})
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_PLUGINS,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathPlugins,
 				Value: desired.Spec.Plugins,
 			})
 		}
@@ -426,41 +419,41 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 			replicaClusterConfig.PromotionToken = token
 		}
 
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathReplicaCluster,
 			Value: replicaClusterConfig,
 		})
 
 		if documentdb.Spec.ClusterReplication.HighAvailability {
 			// need to add second instance and wal replica
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_POSTGRES_CONFIG,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathPostgresConfig,
 				Value: desired.Spec.PostgresConfiguration,
 			})
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_INSTANCES,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathInstances,
 				Value: desired.Spec.Instances,
 			})
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_PLUGINS,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathPlugins,
 				Value: desired.Spec.Plugins,
 			})
-			*patchOps = append(*patchOps, util.JSONPatch{
-				Op:    util.JSON_PATCH_OP_REPLACE,
-				Path:  util.JSON_PATCH_PATH_REPLICATION_SLOTS,
+			*patchOps = append(*patchOps, cnpg.JSONPatch{
+				Op:    cnpg.PatchOpReplace,
+				Path:  cnpg.PatchPathReplicationSlots,
 				Value: desired.Spec.ReplicationSlots,
 			})
 		}
 		log.Log.Info("Applying patch for Replica => Primary transition", "cluster", current.Name, "hasToken", replicaClusterConfig.PromotionToken != "")
 	} else {
 		// Replica => replica
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  util.JSON_PATCH_PATH_REPLICA_CLUSTER,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathReplicaCluster,
 			Value: desired.Spec.ReplicaCluster,
 		})
 
@@ -494,23 +487,23 @@ func externalClusterNamesChanged(currentClusters, desiredClusters []cnpgv1.Exter
 	return len(nameSet) != 0
 }
 
-func getReplicasChangePatchOps(patchOps *[]util.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
-	*patchOps = append(*patchOps, util.JSONPatch{
-		Op:    util.JSON_PATCH_OP_REPLACE,
-		Path:  util.JSON_PATCH_PATH_EXTERNAL_CLUSTERS,
+func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
+	*patchOps = append(*patchOps, cnpg.JSONPatch{
+		Op:    cnpg.PatchOpReplace,
+		Path:  cnpg.PatchPathExternalClusters,
 		Value: desired.Spec.ExternalClusters,
 	})
 	if replicationContext.IsAzureFleetNetworking() {
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  util.JSON_PATCH_PATH_MANAGED_SERVICES,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathManagedServices,
 			Value: desired.Spec.Managed.Services.Additional,
 		})
 	}
 	if replicationContext.IsPrimary() {
-		*patchOps = append(*patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  util.JSON_PATCH_PATH_SYNCHRONOUS,
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathSynchronous,
 			Value: desired.Spec.PostgresConfiguration.Synchronous,
 		})
 	}

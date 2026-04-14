@@ -28,12 +28,6 @@ import (
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
-type JSONPatch struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
-
 // GetDocumentDBServiceDefinition returns the LoadBalancer Service definition for a given DocumentDB instance
 func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicationContext *ReplicationContext, namespace string, serviceType corev1.ServiceType) *corev1.Service {
 	// If no local HA, these two should be empty

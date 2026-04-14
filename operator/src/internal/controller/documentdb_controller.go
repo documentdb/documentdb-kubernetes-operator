@@ -6,7 +6,6 @@ package controller
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -186,57 +185,20 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
-	// Check if anything has changed in the generated cnpg spec
-	err, requeueTime := r.TryUpdateCluster(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
+	// Build replication patch ops (performs side effects: HTTP token reads, service creation).
+	// syncReplicationChanges handles non-replicating cases internally via nil checks.
+	replicationOps, err, requeueTime := r.syncReplicationChanges(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
 	if err != nil {
-		logger.Error(err, "Failed to update CNPG Cluster")
+		logger.Error(err, "Failed to build replication patch ops")
 	}
 	if requeueTime > 0 {
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
-	// Sync TLS secret parameter into CNPG Cluster plugin if ready
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err == nil {
-		if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
-			logger.Info("Syncing TLS secret into CNPG Cluster plugin parameters", "secret", documentdb.Status.TLS.SecretName)
-			updated := false
-			for i := range currentCnpgCluster.Spec.Plugins {
-				p := &currentCnpgCluster.Spec.Plugins[i]
-				if p.Name == desiredCnpgCluster.Spec.Plugins[0].Name { // target our sidecar plugin
-					if p.Enabled == nil || !*p.Enabled {
-						trueVal := true
-						p.Enabled = &trueVal
-						updated = true
-						logger.Info("Enabled sidecar plugin")
-					}
-					if p.Parameters == nil {
-						p.Parameters = map[string]string{}
-					}
-					currentVal := p.Parameters["gatewayTLSSecret"]
-					if currentVal != documentdb.Status.TLS.SecretName {
-						p.Parameters["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
-						updated = true
-						logger.Info("Updated gatewayTLSSecret parameter", "old", currentVal, "new", documentdb.Status.TLS.SecretName)
-					}
-				}
-			}
-			if updated {
-				if currentCnpgCluster.Annotations == nil {
-					currentCnpgCluster.Annotations = map[string]string{}
-				}
-				// CNPG does not auto-restart pods for plugin parameter changes.
-				// The gatewayTLSSecret is mounted as a volume by the sidecar injector,
-				// so pods must be restarted to pick up the new secret name.
-				// CNPG specifically handles kubectl.kubernetes.io/restartedAt for pod restarts.
-				currentCnpgCluster.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339Nano)
-				if err := r.Client.Update(ctx, currentCnpgCluster); err == nil {
-					logger.Info("Patched CNPG Cluster with TLS settings; requeueing for pod update")
-					return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-				} else {
-					logger.Error(err, "Failed to update CNPG Cluster with TLS settings")
-				}
-			}
-		}
+	// Sync all CNPG Cluster changes in one atomic patch (images + plugins + replication)
+	if err := cnpg.SyncCnpgCluster(ctx, r.Client, currentCnpgCluster, desiredCnpgCluster, replicationOps); err != nil {
+		logger.Error(err, "Failed to sync CNPG Cluster spec")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
 	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {
@@ -327,9 +289,9 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// Check if documentdb images need to be upgraded (extension + gateway image update, ALTER EXTENSION)
-	if err := r.upgradeDocumentDBIfNeeded(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb); err != nil {
-		logger.Error(err, "Failed to upgrade DocumentDB images")
+	// Check if documentdb extension needs ALTER EXTENSION UPDATE
+	if err := r.handleExtensionUpgrade(ctx, currentCnpgCluster, documentdb); err != nil {
+		logger.Error(err, "Failed to handle DocumentDB extension upgrade")
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
@@ -833,13 +795,12 @@ func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedV
 	return defaultVersion, installedVersion, true
 }
 
-// upgradeDocumentDBIfNeeded handles the complete DocumentDB image upgrade process:
-// 1. Checks if extension image and/or gateway image need updating (builds a single JSON Patch)
-// 1b. Blocks extension image rollback below the installed schema version (irreversible)
-// 2. If images changed, applies the patch atomically (triggers one CNPG rolling restart) and returns
-// 3. After rolling restart completes, checks spec.schemaVersion to decide whether to run ALTER EXTENSION
-// 4. Updates the DocumentDB status with the new extension version
-func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, currentCluster, desiredCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
+// handleExtensionUpgrade handles the ALTER EXTENSION lifecycle after images have been synced
+// by SyncCnpgCluster. It:
+// 1. Updates DocumentDB status with the current images from the CNPG cluster
+// 2. Checks if ALTER EXTENSION UPDATE is needed and runs it (with two-phase upgrade support)
+// 3. Updates the DocumentDB schema version status
+func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, currentCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
 	logger := log.FromContext(ctx)
 
 	// Refetch documentdb to avoid potential race conditions with status updates
@@ -847,76 +808,19 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return fmt.Errorf("failed to refetch DocumentDB resource: %w", err)
 	}
 
-	// Step 1: Build patch ops for extension and/or gateway image changes
-	patchOps, extensionUpdated, gatewayUpdated, err := buildImagePatchOps(currentCluster, desiredCluster)
-	if err != nil {
-		return fmt.Errorf("failed to build image patch operations: %w", err)
-	}
-
-	// Note: Image rollback below installed schema version is blocked by the validating
-	// webhook at admission time. The controller trusts that persisted specs are valid.
-
-	// Step 2: Apply patch if any images need updating
-	if len(patchOps) > 0 {
-		patchBytes, err := json.Marshal(patchOps)
-		if err != nil {
-			return fmt.Errorf("failed to marshal image patch: %w", err)
-		}
-
-		if err := r.Client.Patch(ctx, currentCluster, client.RawPatch(types.JSONPatchType, patchBytes)); err != nil {
-			return fmt.Errorf("failed to patch CNPG cluster with new images: %w", err)
-		}
-
-		logger.Info("Updated DocumentDB images in CNPG cluster, waiting for rolling restart",
-			"extensionUpdated", extensionUpdated,
-			"gatewayUpdated", gatewayUpdated,
-			"clusterName", currentCluster.Name)
-
-		// Gateway-only changes: CNPG does not auto-restart for plugin parameter changes
-		// (extension changes trigger restart via ImageVolume PodSpec divergence).
-		// Add a restart annotation to force rolling restart for gateway-only updates.
-		// Note: CNPG specifically handles kubectl.kubernetes.io/restartedAt for pod restarts.
-		if gatewayUpdated && !extensionUpdated {
-			// Use Merge Patch for the annotation to avoid conflicts and handle missing annotations field
-			restartAnnotation := map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"annotations": map[string]string{
-						"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339Nano),
-					},
-				},
-			}
-			annotationPatchBytes, err := json.Marshal(restartAnnotation)
-			if err != nil {
-				return fmt.Errorf("failed to marshal restart annotation patch: %w", err)
-			}
-			if err := r.Client.Patch(ctx, currentCluster, client.RawPatch(types.MergePatchType, annotationPatchBytes)); err != nil {
-				return fmt.Errorf("failed to add restart annotation for gateway update: %w", err)
-			}
-			logger.Info("Added restart annotation for gateway-only update", "clusterName", currentCluster.Name)
-		}
-
-		// Update image status fields to reflect what was just applied
-		if err := r.updateImageStatus(ctx, documentdb, desiredCluster); err != nil {
-			logger.Error(err, "Failed to update image status after patching CNPG cluster")
-		}
-
-		// CNPG will trigger a rolling restart. Wait for pods to become healthy
-		// before running ALTER EXTENSION.
-		return nil
-	}
-
-	// Step 2b: Images already match — update status fields if stale
+	// Update image status fields to reflect what's currently applied
 	if err := r.updateImageStatus(ctx, documentdb, currentCluster); err != nil {
 		logger.Error(err, "Failed to update image status")
 	}
 
-	// Step 3: Check if primary pod is healthy before running ALTER EXTENSION
+	// CNPG will trigger a rolling restart when images change. Wait for pods to become healthy
+	// before running ALTER EXTENSION.
 	if !slices.Contains(currentCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCluster.Status.CurrentPrimary) {
 		logger.Info("Current primary pod is not healthy; skipping DocumentDB extension upgrade")
 		return nil
 	}
 
-	// Step 4: Check if ALTER EXTENSION UPDATE is needed
+	// Check if ALTER EXTENSION UPDATE is needed
 	checkVersionSQL := "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'documentdb'"
 	output, err := r.SQLExecutor(ctx, currentCluster, checkVersionSQL)
 	if err != nil {
@@ -934,7 +838,7 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
-	// Step 5: Update DocumentDB schema version in status (even if no upgrade needed)
+	// Update DocumentDB schema version in status (even if no upgrade needed)
 	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
 	installedSemver := util.ExtensionVersionToSemver(installedVersion)
 	if documentdb.Status.SchemaVersion != installedSemver {
@@ -955,10 +859,9 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
-	// Step 5b: Rollback detection — secondary safety net.
-	// The primary rollback block is in Step 1b (prevents image patch when new image < schema).
-	// This handles edge cases where the binary version is already running but older than schema
-	// (e.g., if Step 1b was added after an earlier rollback already took effect).
+	// Rollback detection — check if the new binary is older than the installed schema.
+	// Note: Image rollback below installed schema version is also blocked by the validating
+	// webhook at admission time. This is a defense-in-depth guard.
 	cmp, err := util.CompareExtensionVersions(defaultVersion, installedVersion)
 	if err != nil {
 		logger.Error(err, "Failed to compare extension versions, skipping ALTER EXTENSION as a safety measure",
@@ -968,7 +871,6 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 	}
 
 	if cmp < 0 {
-		// Rollback detected: the binary (defaultVersion) is older than the installed schema (installedVersion).
 		// ALTER EXTENSION UPDATE would attempt an unsupported downgrade. Skip it and warn the user.
 		msg := fmt.Sprintf(
 			"Extension rollback detected: binary offers version %s but schema is at %s. "+
@@ -983,20 +885,14 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		return nil
 	}
 
-	// Step 6: Determine schema target based on spec.schemaVersion (two-phase upgrade logic)
-	//
-	// Three modes:
-	//   - "" (empty): Two-phase mode — do NOT auto-update schema. User must explicitly
-	//     set spec.schemaVersion to finalize. This provides a rollback-safe window.
-	//   - "auto": Auto-finalize — update schema to match binary version automatically.
-	//   - "<version>": Explicit pin — update schema to exactly this version.
+	// Determine schema target based on spec.schemaVersion (two-phase upgrade logic)
 	schemaTarget, updateSQL := r.determineSchemaTarget(ctx, documentdb, defaultVersion, installedVersion)
 	if schemaTarget == "" {
 		// Two-phase mode or validation failure — do not run ALTER EXTENSION
 		return nil
 	}
 
-	// Step 7: Run ALTER EXTENSION to upgrade
+	// Run ALTER EXTENSION to upgrade
 	logger.Info("Upgrading DocumentDB extension",
 		"fromVersion", installedVersion,
 		"toVersion", schemaTarget)
@@ -1009,12 +905,10 @@ func (r *DocumentDBReconciler) upgradeDocumentDBIfNeeded(ctx context.Context, cu
 		"fromVersion", installedVersion,
 		"toVersion", schemaTarget)
 
-	// Step 8: Update DocumentDB schema version in status after upgrade
-	// Re-fetch to get latest resourceVersion before status update
+	// Update DocumentDB schema version in status after upgrade
 	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
 		return fmt.Errorf("failed to refetch DocumentDB after schema upgrade: %w", err)
 	}
-	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
 	documentdb.Status.SchemaVersion = util.ExtensionVersionToSemver(schemaTarget)
 	if err := r.Status().Update(ctx, documentdb); err != nil {
 		logger.Error(err, "Failed to update DocumentDB status after schema upgrade")
@@ -1065,11 +959,11 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 
 	default:
 		// Explicit version: update to that specific version.
-		// Note: schemaVersion <= binary version is enforced by the validating webhook at
-		// admission time. This is a defense-in-depth guard.
 		targetPgVersion := util.SemverToExtensionVersion(specSchemaVersion)
 
-		// Guard: target must not exceed binary version
+		// Guard: target must not exceed binary version.
+		// Note: schemaVersion <= binary version is enforced by the validating webhook at
+		// admission time. This is a defense-in-depth guard.
 		targetCmp, err := util.CompareExtensionVersions(targetPgVersion, binaryVersion)
 		if err != nil {
 			logger.Error(err, "Failed to compare target schema version with binary version",
@@ -1107,83 +1001,6 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 	}
 }
 
-// buildImagePatchOps compares the current and desired CNPG cluster specs and returns
-// JSON Patch operations for any image differences (extension image settings and/or gateway image).
-// This is a pure function with no API calls. Returns:
-//   - patchOps: JSON Patch operations to align image-related fields
-//   - extensionUpdated: true if extension image settings differ
-//   - gatewayUpdated: true if gateway image differs
-//   - err: non-nil if the documentdb extension is not found in the current cluster
-func buildImagePatchOps(currentCluster, desiredCluster *cnpgv1.Cluster) ([]util.JSONPatch, bool, bool, error) {
-	var patchOps []util.JSONPatch
-	extensionUpdated := false
-	gatewayUpdated := false
-
-	// --- Extension image comparison ---
-	currentExtIndex := -1
-	var currentExtImage string
-	for i, ext := range currentCluster.Spec.PostgresConfiguration.Extensions {
-		if ext.Name == "documentdb" {
-			currentExtIndex = i
-			currentExtImage = ext.ImageVolumeSource.Reference
-			break
-		}
-	}
-
-	var desiredExtImage string
-	for _, ext := range desiredCluster.Spec.PostgresConfiguration.Extensions {
-		if ext.Name == "documentdb" {
-			desiredExtImage = ext.ImageVolumeSource.Reference
-			break
-		}
-	}
-
-	if currentExtImage != desiredExtImage {
-		if currentExtIndex == -1 {
-			return nil, false, false, fmt.Errorf("documentdb extension not found in current CNPG cluster spec")
-		}
-		patchOps = append(patchOps, util.JSONPatch{
-			Op:    util.JSON_PATCH_OP_REPLACE,
-			Path:  fmt.Sprintf(util.JSON_PATCH_PATH_EXTENSION_IMAGE_FMT, currentExtIndex),
-			Value: desiredExtImage,
-		})
-		extensionUpdated = true
-	}
-
-	// --- Gateway image comparison ---
-	// Find the target plugin name from the desired cluster
-	if len(desiredCluster.Spec.Plugins) > 0 {
-		desiredPluginName := desiredCluster.Spec.Plugins[0].Name
-		desiredGatewayImage := ""
-		if desiredCluster.Spec.Plugins[0].Parameters != nil {
-			desiredGatewayImage = desiredCluster.Spec.Plugins[0].Parameters["gatewayImage"]
-		}
-
-		// Only check gateway if there's actually a desired gateway image
-		if desiredGatewayImage != "" {
-			for i, plugin := range currentCluster.Spec.Plugins {
-				if plugin.Name == desiredPluginName {
-					currentGatewayImage := ""
-					if plugin.Parameters != nil {
-						currentGatewayImage = plugin.Parameters["gatewayImage"]
-					}
-
-					if currentGatewayImage != desiredGatewayImage {
-						patchOps = append(patchOps, util.JSONPatch{
-							Op:    util.JSON_PATCH_OP_REPLACE,
-							Path:  fmt.Sprintf(util.JSON_PATCH_PATH_PLUGIN_GATEWAY_IMAGE_FMT, i),
-							Value: desiredGatewayImage,
-						})
-						gatewayUpdated = true
-					}
-					break
-				}
-			}
-		}
-	}
-
-	return patchOps, extensionUpdated, gatewayUpdated, nil
-}
 
 // updateImageStatus reads the current extension and gateway images from the CNPG cluster
 // and persists them into the DocumentDB status fields. This is a no-op if both fields
