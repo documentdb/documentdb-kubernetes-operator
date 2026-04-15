@@ -1229,6 +1229,19 @@ spec:
                         required:
                         - endpoint
                         type: object
+                      prometheus:
+                        description: Prometheus configures a Prometheus scrape endpoint
+                          on the OTel Collector sidecar.
+                        properties:
+                          port:
+                            default: 8888
+                            description: Port for the Prometheus scrape endpoint.
+                              Defaults to 8888.
+                            format: int32
+                            maximum: 65535
+                            minimum: 1024
+                            type: integer
+                        type: object
                     type: object
                 type: object
               nodeCount:

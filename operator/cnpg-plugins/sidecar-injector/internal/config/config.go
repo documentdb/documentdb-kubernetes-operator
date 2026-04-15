@@ -6,6 +6,7 @@ package config
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/common"
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/validation"
@@ -22,6 +23,7 @@ const (
 	monitoringEnabledParameter          = "monitoringEnabled"
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
+	prometheusPortParameter             = "prometheusPort"
 )
 
 // Configuration represents the plugin configuration parameters
@@ -34,6 +36,7 @@ type Configuration struct {
 	MonitoringEnabled          bool
 	OtelCollectorImage         string
 	OtelConfigMapName          string
+	PrometheusPort             int32
 }
 
 // FromParameters builds a plugin configuration from the configuration parameters
@@ -67,6 +70,19 @@ func FromParameters(
 	credentialSecret := helper.Parameters[documentDbCredentialSecretParameter]
 	pullPolicy := parsePullPolicy(helper.Parameters[gatewayImagePullPolicyParameter])
 
+	var prometheusPort int32
+	if portStr := helper.Parameters[prometheusPortParameter]; portStr != "" {
+		p, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil || p < 1024 || p > 65535 {
+			validationErrors = append(
+				validationErrors,
+				validation.BuildErrorForParameter(helper, prometheusPortParameter, "must be an integer between 1024 and 65535"),
+			)
+		} else {
+			prometheusPort = int32(p)
+		}
+	}
+
 	configuration := &Configuration{
 		Labels:                     labels,
 		Annotations:                annotations,
@@ -76,6 +92,7 @@ func FromParameters(
 		MonitoringEnabled:          helper.Parameters[monitoringEnabledParameter] == "true",
 		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
 		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
+		PrometheusPort:             prometheusPort,
 	}
 
 	configuration.applyDefaults()

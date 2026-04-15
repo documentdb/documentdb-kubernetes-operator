@@ -317,12 +317,26 @@ type ExporterSpec struct {
 	// OTLP configures the OpenTelemetry Protocol exporter.
 	// +optional
 	OTLP *OTLPExporterSpec `json:"otlp,omitempty"`
+
+	// Prometheus configures a Prometheus scrape endpoint on the OTel Collector sidecar.
+	// +optional
+	Prometheus *PrometheusExporterSpec `json:"prometheus,omitempty"`
 }
 
 // OTLPExporterSpec configures the OTLP exporter.
 type OTLPExporterSpec struct {
 	// Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector.monitoring:4317").
 	Endpoint string `json:"endpoint"`
+}
+
+// PrometheusExporterSpec configures the Prometheus scrape endpoint exporter.
+type PrometheusExporterSpec struct {
+	// Port for the Prometheus scrape endpoint. Defaults to 8888.
+	// +kubebuilder:validation:Minimum=1024
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8888
+	// +optional
+	Port int32 `json:"port,omitempty"`
 }
 
 // DocumentDBStatus defines the observed state of DocumentDB.

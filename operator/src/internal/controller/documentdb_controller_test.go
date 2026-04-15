@@ -2844,6 +2844,9 @@ var _ = Describe("DocumentDB Controller", func() {
 							PvcSize: "1Gi",
 						},
 					},
+					Monitoring: &dbpreview.MonitoringSpec{
+						Enabled: true,
+					},
 				},
 			}
 

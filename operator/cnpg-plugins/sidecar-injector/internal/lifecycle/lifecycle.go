@@ -7,6 +7,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/common"
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/object"
 	"github.com/cloudnative-pg/cnpg-i/pkg/lifecycle"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 
 	"github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
@@ -279,6 +281,34 @@ func (impl Implementation) reconcileMetadata(
 					ReadOnly:  true,
 				},
 			},
+		}
+
+		// Expose Prometheus metrics port when configured
+		if configuration.PrometheusPort > 0 {
+			otelSidecar.Ports = append(otelSidecar.Ports, corev1.ContainerPort{
+				Name:          "prom-metrics",
+				ContainerPort: configuration.PrometheusPort,
+				Protocol:      corev1.ProtocolTCP,
+			})
+			// Add Prometheus scrape annotations for auto-discovery
+			if mutatedPod.Annotations == nil {
+				mutatedPod.Annotations = map[string]string{}
+			}
+			mutatedPod.Annotations["prometheus.io/scrape"] = "true"
+			mutatedPod.Annotations["prometheus.io/port"] = fmt.Sprintf("%d", configuration.PrometheusPort)
+			mutatedPod.Annotations["prometheus.io/path"] = "/metrics"
+
+			// Add readiness probe for Prometheus endpoint
+			otelSidecar.ReadinessProbe = &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/metrics",
+						Port: intstr.FromInt32(configuration.PrometheusPort),
+					},
+				},
+				InitialDelaySeconds: 5,
+				PeriodSeconds:       10,
+			}
 		}
 
 		err = object.InjectPluginSidecar(mutatedPod, otelSidecar, false)

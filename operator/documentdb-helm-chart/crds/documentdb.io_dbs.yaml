@@ -1208,6 +1208,42 @@ spec:
               logLevel:
                 description: Overrides default log level for the DocumentDB cluster.
                 type: string
+              monitoring:
+                description: Monitoring configures observability via an OTel Collector
+                  sidecar.
+                properties:
+                  enabled:
+                    description: Enabled turns on the OTel Collector sidecar for metrics
+                      collection.
+                    type: boolean
+                  exporter:
+                    description: Exporter configures where metrics are sent.
+                    properties:
+                      otlp:
+                        description: OTLP configures the OpenTelemetry Protocol exporter.
+                        properties:
+                          endpoint:
+                            description: Endpoint is the OTLP gRPC endpoint (e.g.,
+                              "otel-collector.monitoring:4317").
+                            type: string
+                        required:
+                        - endpoint
+                        type: object
+                      prometheus:
+                        description: Prometheus configures a Prometheus scrape endpoint
+                          on the OTel Collector sidecar.
+                        properties:
+                          port:
+                            default: 8888
+                            description: Port for the Prometheus scrape endpoint.
+                              Defaults to 8888.
+                            format: int32
+                            maximum: 65535
+                            minimum: 1024
+                            type: integer
+                        type: object
+                    type: object
+                type: object
               nodeCount:
                 description: NodeCount is the number of nodes in the DocumentDB cluster.
                   Must be 1.

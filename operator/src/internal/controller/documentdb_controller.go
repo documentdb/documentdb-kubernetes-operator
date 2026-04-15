@@ -1063,7 +1063,10 @@ func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, docum
 		cm.Labels["app.kubernetes.io/managed-by"] = "documentdb-operator"
 		cm.Labels["app.kubernetes.io/component"] = "otel-collector"
 
-		baseYAML := otelcfg.GenerateBaseYAML(documentdb.Name, namespace, documentdb.Spec.Monitoring)
+		baseYAML, err := otelcfg.GenerateBaseYAML(documentdb.Name, namespace, documentdb.Spec.Monitoring)
+		if err != nil {
+			return fmt.Errorf("failed to generate OTel config: %w", err)
+		}
 		cm.Data = map[string]string{
 			"base.yaml": baseYAML,
 		}

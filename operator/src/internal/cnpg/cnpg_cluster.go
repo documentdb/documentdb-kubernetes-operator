@@ -5,6 +5,7 @@ package cnpg
 
 import (
 	"cmp"
+	"fmt"
 	"os"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/utils/pointer"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -90,6 +92,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						params["monitoringEnabled"] = "true"
 						params["otelCollectorImage"] = cmp.Or(os.Getenv("OTEL_COLLECTOR_IMAGE"), "otel/opentelemetry-collector-contrib:0.96.0")
 						params["otelConfigMapName"] = documentdb.Name + "-otel-config"
+						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {
+							params["prometheusPort"] = fmt.Sprintf("%d", promPort)
+						}
 					}
 					return []cnpgv1.PluginConfiguration{{
 						Name:       sidecarPluginName,
