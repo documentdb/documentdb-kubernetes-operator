@@ -47,11 +47,8 @@ var _ = Describe("GenerateBaseYAML", func() {
 		Expect(result).To(ContainSubstring("pipelines:"))
 		Expect(result).To(ContainSubstring("metrics:"))
 		Expect(result).To(ContainSubstring("- debug"))
-		// Receivers
-		Expect(result).To(ContainSubstring("- hostmetrics"))
-		Expect(result).To(ContainSubstring("- sqlquery/connections"))
-		Expect(result).To(ContainSubstring("- sqlquery/replication"))
-		Expect(result).To(ContainSubstring("- sqlquery/index_stats"))
+		// Receiver — only OTLP for now
+		Expect(result).To(ContainSubstring("- otlp"))
 		// Processors
 		Expect(result).To(ContainSubstring("batch:"))
 		Expect(result).To(ContainSubstring("send_batch_size: 1024"))

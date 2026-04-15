@@ -16,8 +16,8 @@ func ConfigMapName(clusterName string) string {
 }
 
 // GenerateBaseYAML generates the OTel Collector base.yaml content from a MonitoringSpec.
-// This config defines exporters, processors, and the service pipeline.
-// Receivers are defined in engine_metrics.yaml and host_metrics.yaml (shipped in the extension image).
+// This is a minimal config with an OTLP receiver, resource processor, and exporters.
+// Additional receivers (engine metrics, host metrics) will be added in follow-up PRs.
 func GenerateBaseYAML(clusterName, namespace string, spec *dbpreview.MonitoringSpec) string {
 	var b strings.Builder
 
@@ -64,10 +64,6 @@ func GenerateBaseYAML(clusterName, namespace string, spec *dbpreview.MonitoringS
 	b.WriteString("    metrics:\n")
 	b.WriteString("      receivers:\n")
 	b.WriteString("        - otlp\n")
-	b.WriteString("        - hostmetrics\n")
-	b.WriteString("        - sqlquery/connections\n")
-	b.WriteString("        - sqlquery/replication\n")
-	b.WriteString("        - sqlquery/index_stats\n")
 	b.WriteString("      processors:\n")
 	b.WriteString("        - resource\n")
 	b.WriteString("        - batch\n")

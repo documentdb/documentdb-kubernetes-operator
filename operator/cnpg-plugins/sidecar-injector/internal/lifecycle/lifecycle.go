@@ -260,8 +260,6 @@ func (impl Implementation) reconcileMetadata(
 			Name:  "otel-collector",
 			Image: configuration.OtelCollectorImage,
 			Args: []string{
-				"--config=file:/shared/etc/otel/engine_metrics.yaml",
-				"--config=file:/shared/etc/otel/host_metrics.yaml",
 				"--config=file:/base/base.yaml",
 			},
 			Env: []corev1.EnvVar{
@@ -273,19 +271,8 @@ func (impl Implementation) reconcileMetadata(
 						},
 					},
 				},
-				{
-					Name:  "PG_CONN_STRING",
-					Value: "host=localhost port=5432 user=streaming_replica dbname=postgres sslmode=disable",
-				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
-				{
-					// Mount the extension ImageVolume to access OTel config files
-					// The CNPG ImageVolume "documentdb" is already a pod-level volume
-					Name:      "documentdb",
-					MountPath: "/shared",
-					ReadOnly:  true,
-				},
 				{
 					Name:      "otel-base-config",
 					MountPath: "/base",
