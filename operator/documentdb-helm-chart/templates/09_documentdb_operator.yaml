@@ -58,6 +58,10 @@ spec:
         env:
         - name: GATEWAY_PORT
           value: "10260"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion }}"
@@ -70,12 +74,59 @@ spec:
         - name: DOCUMENTDB_IMAGE_PULL_POLICY
           value: "{{ .Values.documentDbImagePullPolicy }}"
         {{- end }}
+        # Telemetry configuration
+        {{- if not .Values.telemetry.enabled }}
+        - name: DOCUMENTDB_TELEMETRY_ENABLED
+          value: "false"
+        {{- else }}
+        {{- if .Values.telemetry.connectionString }}
+        - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+          value: {{ .Values.telemetry.connectionString | quote }}
+        {{- else if .Values.telemetry.instrumentationKey }}
+        - name: APPINSIGHTS_INSTRUMENTATIONKEY
+          value: {{ .Values.telemetry.instrumentationKey | quote }}
+        {{- end }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "localhost:4317"
+        {{- end }}
+        {{- if .Values.telemetry.enabled }}
+        {{- if .Values.telemetry.existingSecret }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.telemetry.existingSecret }}
+        {{- end }}
+        {{- end }}
+      # OTel Collector sidecar — receives OTLP from operator and exports to App Insights
+      {{- if .Values.telemetry.enabled }}
+      - name: otel-collector
+        image: "{{ .Values.telemetry.collector.image | default "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.127.0" }}"
+        args: ["--config=/etc/otel/config.yaml"]
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        volumeMounts:
+        - name: otel-collector-config
+          mountPath: /etc/otel
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+      {{- end }}
       volumes:
+      {{- if .Values.telemetry.enabled }}
+      - name: otel-collector-config
+        configMap:
+          name: documentdb-otel-collector-config
+      {{- end }}
       - name: webhook-cert
         secret:
           secretName: documentdb-webhook-tls
           defaultMode: 420
-          # Allow the pod to start before cert-manager creates the Secret.
-          # The webhook server (and readiness probe) will stay unhealthy until
-          # the cert files appear, keeping the pod out of the Service endpoints.
           optional: true

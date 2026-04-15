@@ -19,14 +19,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 // BackupReconciler reconciles a Backup object
 type BackupReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme       *runtime.Scheme
+	Recorder     record.EventRecorder
+	Telemetry    telemetry.BackupTelemetry // interface, never nil
 }
 
 // Reconcile handles the reconciliation loop for Backup resources.
@@ -47,6 +49,9 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Delete the Backup resource if it has expired
 	if backup.Status.IsExpired() {
 		r.Recorder.Event(backup, "Normal", "BackupExpired", "Backup has expired and will be deleted")
+		// Track backup expiration and deletion telemetry before deleting
+		r.Telemetry.BackupExpired(ctx, backup, r.Client)
+		r.Telemetry.BackupDeleted(ctx, backup, "expired")
 		if err := r.Delete(ctx, backup); err != nil {
 			r.Recorder.Event(backup, "Warning", "BackupDeleteFailed", "Failed to delete expired Backup: "+err.Error())
 			return ctrl.Result{}, err
@@ -191,6 +196,16 @@ func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbprevi
 	}
 
 	r.Recorder.Event(backup, "Normal", "BackupInitialized", "Successfully initialized backup")
+
+	// Track backup creation telemetry
+	// Determine backup type from labels - scheduled backups have the "scheduledbackup" label
+	backupType := "on-demand"
+	if backup.Labels != nil {
+		if v, ok := backup.Labels["scheduledbackup"]; ok && v != "" {
+			backupType = "scheduled"
+		}
+	}
+	r.Telemetry.BackupCreated(ctx, backup, cluster, backupType)
 
 	// Requeue to check status
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil

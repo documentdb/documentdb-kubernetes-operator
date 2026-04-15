@@ -3,6 +3,9 @@
 ## Overview
 This document specifies all telemetry data points to be collected by Application Insights for the DocumentDB Kubernetes Operator. These metrics provide operational insights, usage patterns, and error tracking for operator deployments.
 
+### Cluster ID Generation
+Cluster IDs (`cluster_id`) are generated using a deterministic SHA-256 hash of `namespace + cluster_name`. This ensures consistent IDs across operator restarts without requiring persistence. See [telemetry-guid-strategy.md](telemetry-guid-strategy.md) for details.
+
 ---
 
 ## 1. Operator Lifecycle Metrics
@@ -21,7 +24,7 @@ This document specifies all telemetry data points to be collected by Application
 - **Metric**: `operator.health.status`
 - **Value**: `1` (healthy) or `0` (unhealthy)
 - **Frequency**: Every 60 seconds
-- **Dimensions**: `pod_name`, `namespace`
+- **Dimensions**: `pod_name`, `namespace_hash`
 
 ---
 

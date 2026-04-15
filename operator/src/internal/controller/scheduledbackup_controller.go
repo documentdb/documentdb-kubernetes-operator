@@ -18,13 +18,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 )
 
 // ScheduledBackupReconciler reconciles a ScheduledBackup object
 type ScheduledBackupReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme       *runtime.Scheme
+	Recorder     record.EventRecorder
+	Telemetry    telemetry.ScheduledBackupTelemetry // interface, never nil
 }
 
 // Reconcile handles the reconciliation loop for ScheduledBackup resources.
@@ -80,6 +82,12 @@ func (r *ScheduledBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			logger.Error(err, "Failed to create backup", "backupName", backup.Name)
 			r.Recorder.Event(scheduledBackup, "Warning", "BackupCreation", "Failed to create backup: "+err.Error())
 			return ctrl.Result{}, err
+		}
+
+		// Track scheduled backup execution telemetry
+		cluster := &dbpreview.DocumentDB{}
+		if err := r.Get(ctx, client.ObjectKey{Name: scheduledBackup.Spec.Cluster.Name, Namespace: scheduledBackup.Namespace}, cluster); err == nil {
+			r.Telemetry.ScheduledBackupCreated(ctx, scheduledBackup, cluster)
 		}
 
 		scheduledBackup.Status.LastScheduledTime = &metav1.Time{Time: now}

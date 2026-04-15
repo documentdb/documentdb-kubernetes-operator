@@ -121,6 +121,12 @@ jobs:
           echo "Chart.yaml after update:"
           cat operator/documentdb-helm-chart/Chart.yaml
 
+      - name: Inject telemetry connection string
+        if: ${{ secrets.APPINSIGHTS_CONNECTION_STRING != '' }}
+        run: |
+          echo "Injecting Application Insights connection string for telemetry"
+          sed -i 's|connectionString: ""|connectionString: "${{ secrets.APPINSIGHTS_CONNECTION_STRING }}"|g' operator/documentdb-helm-chart/values.yaml
+
       - name: Verify values.yaml has explicit documentDbVersion
         run: |
           DOCDB_VERSION=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')

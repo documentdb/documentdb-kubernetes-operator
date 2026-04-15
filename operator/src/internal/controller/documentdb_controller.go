@@ -37,6 +37,7 @@ import (
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -55,9 +56,10 @@ const (
 // DocumentDBReconciler reconciles a DocumentDB object
 type DocumentDBReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Config    *rest.Config
-	Clientset kubernetes.Interface
+	Scheme       *runtime.Scheme
+	Config       *rest.Config
+	Clientset    kubernetes.Interface
+	Telemetry    telemetry.DocumentDBTelemetry // interface, never nil
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
 	// SQLExecutor executes SQL commands against a CNPG cluster's primary pod.
@@ -74,7 +76,7 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
-func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
 
@@ -82,23 +84,27 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Fetch the DocumentDB instance
 	documentdb := &dbpreview.DocumentDB{}
-	err := r.Get(ctx, req.NamespacedName, documentdb)
-	if err != nil {
+	if err := r.Get(ctx, req.NamespacedName, documentdb); err != nil {
 		if errors.IsNotFound(err) {
 			// DocumentDB resource not found, handle cleanup
 			logger.Info("DocumentDB resource not found. Cleaning up associated resources.")
-			if err := r.cleanupResources(ctx, req); err != nil {
-				return ctrl.Result{}, err
+			if cleanupErr := r.cleanupResources(ctx, req); cleanupErr != nil {
+				retErr = cleanupErr
+				return result, retErr
 			}
-			return ctrl.Result{}, nil
+			return result, nil
 		}
 		logger.Error(err, "Failed to get DocumentDB resource")
-		return ctrl.Result{}, err
+		retErr = err
+		return result, retErr
 	}
 
 	// Handle finalizer lifecycle (add on create, remove on delete)
-	if done, result, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
-		return result, err
+	if done, res, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
+		if err != nil {
+			retErr = err
+		}
+		return res, retErr
 	}
 
 	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
@@ -175,11 +181,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
 		if errors.IsNotFound(err) {
+			clusterCreateStart := time.Now()
 			if err := r.Client.Create(ctx, desiredCnpgCluster); err != nil {
 				logger.Error(err, "Failed to create CNPG Cluster")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
 			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
+			// Track cluster creation telemetry
+			r.Telemetry.ClusterCreated(ctx, documentdb, time.Since(clusterCreateStart).Seconds())
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 		logger.Error(err, "Failed to get CNPG Cluster")
@@ -187,11 +196,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if anything has changed in the generated cnpg spec
+	updateStart := time.Now()
 	err, requeueTime := r.TryUpdateCluster(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
 	if err != nil {
 		logger.Error(err, "Failed to update CNPG Cluster")
 	}
 	if requeueTime > 0 {
+		// Track cluster update if something changed
+		r.Telemetry.ClusterUpdated(ctx, documentdb, "configuration", time.Since(updateStart).Seconds())
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
@@ -384,6 +396,9 @@ func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentd
 				logger.Error(err, "Failed to emit PV retention warning, continuing with deletion")
 			}
 		}
+
+		// Track cluster deletion telemetry
+		r.Telemetry.ClusterDeleted(ctx, documentdb, r.Client)
 
 		// Remove finalizer to allow deletion to proceed
 		controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
@@ -700,6 +715,39 @@ func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *c
 	}
 
 	return stdout.String(), nil
+}
+
+// sanitizeError returns a coarse, non-PII classification of the error.
+// Per telemetry spec, we do not include raw error text to avoid leaking PII or sensitive data.
+func sanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Map well-known Kubernetes/API error types to generic, non-PII messages.
+	switch {
+	case errors.IsNotFound(err):
+		return "resource not found"
+	case errors.IsAlreadyExists(err):
+		return "resource already exists"
+	case errors.IsForbidden(err):
+		return "forbidden"
+	case errors.IsUnauthorized(err):
+		return "unauthorized"
+	case errors.IsConflict(err):
+		return "conflict"
+	case errors.IsTimeout(err):
+		return "timeout"
+	case errors.IsInvalid(err):
+		return "invalid resource"
+	case errors.IsServerTimeout(err):
+		return "server timeout"
+	case errors.IsServiceUnavailable(err):
+		return "service unavailable"
+	default:
+		// Do not include the raw error text to avoid leaking PII or sensitive data.
+		return "unknown error"
+	}
 }
 
 // reconcilePVRecovery handles recovery from a retained PersistentVolume.

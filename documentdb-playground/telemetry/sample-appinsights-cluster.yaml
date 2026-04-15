@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: telemetry-test
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: telemetry-test
+type: Opaque
+stringData:
+  username: docdb
+  password: TelemetryTest123!
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: telemetry-test-cluster
+  namespace: telemetry-test
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  resource:
+    storage:
+      pvcSize: 10Gi
+  exposeViaService:
+    serviceType: ClusterIP

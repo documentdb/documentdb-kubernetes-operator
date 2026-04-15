@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/telemetry"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -641,6 +642,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -706,6 +708,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -773,6 +776,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -862,6 +866,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -914,6 +919,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -982,6 +988,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -1066,6 +1073,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1162,6 +1170,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1230,6 +1239,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -1297,6 +1307,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -1354,6 +1365,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -1411,6 +1423,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1466,6 +1479,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1520,6 +1534,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1574,6 +1589,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1634,6 +1650,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCallCount := 0
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1709,6 +1726,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1783,6 +1801,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			callCount := 0
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1845,6 +1864,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCallCount := 0
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -1920,6 +1940,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2011,6 +2032,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2082,6 +2104,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2137,6 +2160,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2200,6 +2224,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2271,6 +2296,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2336,6 +2362,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2410,6 +2437,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2483,6 +2511,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2560,6 +2589,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2629,6 +2659,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2692,6 +2723,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -2752,6 +2784,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -2807,6 +2840,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -2851,6 +2885,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -2903,6 +2938,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client: fakeClient,
 				Scheme: scheme,
 			}
@@ -3048,6 +3084,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3092,6 +3129,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3127,6 +3165,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3150,6 +3189,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3186,6 +3226,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3211,6 +3252,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3236,6 +3278,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: nil, // No recorder
@@ -3277,6 +3320,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3317,6 +3361,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3369,6 +3414,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Create a new recorder to verify no events are emitted during this test
 			localRecorder := record.NewFakeRecorder(10)
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: localRecorder,
@@ -3401,6 +3447,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3435,6 +3482,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3483,6 +3531,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3535,6 +3584,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3590,6 +3640,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3658,6 +3709,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3720,6 +3772,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3771,6 +3824,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3827,6 +3881,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -3845,6 +3900,7 @@ var _ = Describe("DocumentDB Controller", func() {
 	Describe("SetupWithManager", func() {
 		It("should initialize SQLExecutor before manager registration", func() {
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Clientset: kubefake.NewSimpleClientset(),
 			}
 
@@ -3857,7 +3913,8 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("should return error when Clientset is nil and no custom SQLExecutor is set", func() {
-			reconciler := &DocumentDBReconciler{}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},}
 			err := reconciler.SetupWithManager(nil)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Clientset must be configured"))
@@ -3869,6 +3926,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				SQLExecutor: customExecutor,
 				Clientset:   kubefake.NewSimpleClientset(),
 			}
@@ -3889,6 +3947,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "34"}
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Clientset: clientset,
 			}
 
@@ -3977,6 +4036,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:      fakeClient,
 				Scheme:      scheme,
 				Recorder:    recorder,
@@ -4063,6 +4123,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Build()
 
 			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
@@ -4093,7 +4154,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
@@ -4103,7 +4165,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "34"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			err := reconciler.validateK8sVersion()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not supported"))
@@ -4116,7 +4179,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "36"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
@@ -4126,7 +4190,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "2", Minor: "0"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
@@ -4136,7 +4201,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "35+"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			Expect(reconciler.validateK8sVersion()).To(Succeed())
 		})
 
@@ -4148,7 +4214,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				return true, nil, fmt.Errorf("connection refused")
 			})
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			err := reconciler.validateK8sVersion()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to detect"))
@@ -4160,7 +4227,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "1", Minor: "abc"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			err := reconciler.validateK8sVersion()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to parse"))
@@ -4172,7 +4240,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(ok).To(BeTrue())
 			fakeDisc.FakedServerVersion = &version.Info{Major: "abc", Minor: "35"}
 
-			reconciler := &DocumentDBReconciler{Clientset: clientset}
+			reconciler := &DocumentDBReconciler{
+				Telemetry: telemetry.NoopDocumentDBTelemetry{},Clientset: clientset}
 			err := reconciler.validateK8sVersion()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to parse Kubernetes major version"))
