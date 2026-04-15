@@ -49,11 +49,10 @@ func GenerateBaseYAML(clusterName, namespace string, spec *dbpreview.MonitoringS
 	exporterNames := []string{"debug"}
 
 	if spec.Exporter != nil && spec.Exporter.OTLP != nil && spec.Exporter.OTLP.Endpoint != "" {
-		insecure := spec.Exporter.OTLP.Insecure
 		b.WriteString("  otlp:\n")
 		b.WriteString(fmt.Sprintf("    endpoint: %q\n", spec.Exporter.OTLP.Endpoint))
 		b.WriteString("    tls:\n")
-		b.WriteString(fmt.Sprintf("      insecure: %t\n", insecure))
+		b.WriteString("      insecure: true\n")
 		exporterNames = append(exporterNames, "otlp")
 	}
 

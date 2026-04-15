@@ -1226,11 +1226,6 @@ spec:
                             description: Endpoint is the OTLP gRPC endpoint (e.g.,
                               "otel-collector.monitoring:4317").
                             type: string
-                          insecure:
-                            default: true
-                            description: Insecure disables TLS for the OTLP connection.
-                              Defaults to true for POC.
-                            type: boolean
                         required:
                         - endpoint
                         type: object

@@ -3123,7 +3123,6 @@ var _ = Describe("DocumentDB Controller", func() {
 						Exporter: &dbpreview.ExporterSpec{
 							OTLP: &dbpreview.OTLPExporterSpec{
 								Endpoint: "otel-collector:4317",
-								Insecure: true,
 							},
 						},
 					},

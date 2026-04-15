@@ -67,7 +67,6 @@ var _ = Describe("GenerateBaseYAML", func() {
 			Exporter: &dbpreview.ExporterSpec{
 				OTLP: &dbpreview.OTLPExporterSpec{
 					Endpoint: "otel-collector.monitoring:4317",
-					Insecure: true,
 				},
 			},
 		}
@@ -82,21 +81,6 @@ var _ = Describe("GenerateBaseYAML", func() {
 		// Pipeline should include both exporters
 		Expect(result).To(ContainSubstring("- debug"))
 		Expect(result).To(ContainSubstring("- otlp"))
-	})
-
-	It("sets insecure to false when configured", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP: &dbpreview.OTLPExporterSpec{
-					Endpoint: "secure-endpoint:4317",
-					Insecure: false,
-				},
-			},
-		}
-		result := GenerateBaseYAML("cluster", "ns", spec)
-
-		Expect(result).To(ContainSubstring("insecure: false"))
 	})
 
 	It("skips OTLP exporter when endpoint is empty", func() {

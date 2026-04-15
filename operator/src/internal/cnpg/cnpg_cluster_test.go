@@ -548,7 +548,6 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 					Exporter: &dbpreview.ExporterSpec{
 						OTLP: &dbpreview.OTLPExporterSpec{
 							Endpoint: "otel-collector.monitoring:4317",
-							Insecure: true,
 						},
 					},
 				},

@@ -323,11 +323,6 @@ type ExporterSpec struct {
 type OTLPExporterSpec struct {
 	// Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector.monitoring:4317").
 	Endpoint string `json:"endpoint"`
-
-	// Insecure disables TLS for the OTLP connection. Defaults to true for POC.
-	// +kubebuilder:default=true
-	// +optional
-	Insecure bool `json:"insecure,omitempty"`
 }
 
 // DocumentDBStatus defines the observed state of DocumentDB.
