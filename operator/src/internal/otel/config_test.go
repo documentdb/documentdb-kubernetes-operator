@@ -44,7 +44,7 @@ var _ = Describe("base_config.yaml embed", func() {
 
 var _ = Describe("GenerateConfigMapData", func() {
 	Context("when monitoring is disabled", func() {
-		It("returns static.yaml with idle nop config", func() {
+		It("returns static.yaml with idle config using OTLP receiver on unused port", func() {
 			spec := &dbpreview.MonitoringSpec{Enabled: false}
 			data, err := GenerateConfigMapData("cluster", "ns", spec)
 			Expect(err).NotTo(HaveOccurred())
@@ -52,10 +52,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 			Expect(data).To(HaveKey("dynamic.yaml"))
 
 			cfg := parseCfg(data["static.yaml"])
-			Expect(cfg.Receivers).To(HaveKey("nop"))
+			Expect(cfg.Receivers).To(HaveKey("otlp"))
 			Expect(cfg.Receivers).NotTo(HaveKey("sqlquery"))
-			Expect(cfg.Exporters).To(HaveKey("nop"))
-			Expect(cfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("nop"))
+			Expect(cfg.Exporters).To(HaveKey("debug"))
+			Expect(cfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("otlp"))
 
 			Expect(data["static.yaml"]).To(ContainSubstring("Monitoring disabled"))
 		})
@@ -75,7 +75,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 			promCfg, ok := cfg.Exporters["prometheus"].(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:9090"))
-			Expect(cfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("nop", "prometheus"))
+			Expect(cfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("debug", "prometheus"))
 		})
 	})
 

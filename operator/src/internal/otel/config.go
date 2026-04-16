@@ -140,14 +140,23 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 func generateIdleConfigMapData(spec *dbpreview.MonitoringSpec) (map[string]string, error) {
 	cfg := collectorConfig{
 		Receivers: map[string]any{
-			"nop": nil,
+			// Use OTLP receiver on an unused port as a no-op data source.
+			"otlp": map[string]any{
+				"protocols": map[string]any{
+					"grpc": map[string]any{
+						"endpoint": "localhost:14317",
+					},
+				},
+			},
 		},
 		Exporters: map[string]any{
-			"nop": nil,
+			"debug": map[string]any{
+				"verbosity": "basic",
+			},
 		},
 	}
 
-	exporterNames := []string{"nop"}
+	exporterNames := []string{"debug"}
 
 	// Keep Prometheus endpoint alive so readiness probes pass
 	if spec.Exporter != nil && spec.Exporter.Prometheus != nil {
@@ -164,7 +173,7 @@ func generateIdleConfigMapData(spec *dbpreview.MonitoringSpec) (map[string]strin
 	cfg.Service = serviceConfig{
 		Pipelines: map[string]pipelineConfig{
 			"metrics": {
-				Receivers: []string{"nop"},
+				Receivers: []string{"otlp"},
 				Exporters: exporterNames,
 			},
 		},
