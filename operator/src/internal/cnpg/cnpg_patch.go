@@ -35,6 +35,13 @@ const (
 	// JSON Patch path format string for plugin parameters (require fmt.Sprintf with index and key)
 	PatchPathPluginParamFmt = "/spec/plugins/%d/parameters/%s"
 
+	// JSON Patch paths — mutable spec fields
+	PatchPathImageName    = "/spec/imageName"
+	PatchPathStorageSize  = "/spec/storage/size"
+	PatchPathLogLevel     = "/spec/logLevel"
+	PatchPathAffinity     = "/spec/affinity"
+	PatchPathMaxStopDelay = "/spec/stopDelay"
+
 	// JSON Patch path for restart annotation.
 	// The '/' in the annotation key is escaped as '~1' per RFC 6901 (JSON Pointer).
 	PatchPathRestartAnnotation = "/metadata/annotations/kubectl.kubernetes.io~1restartedAt"

@@ -6,10 +6,12 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -156,7 +158,8 @@ func (v *DocumentDBValidator) validateChanges(newDB, oldDB *dbpreview.DocumentDB
 	type validationFunc func(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateImageRollback,
-		// Add new update-only validations here.
+		v.validateImmutableFields,
+		v.validateStorageResize,
 	}
 	for _, fn := range validations {
 		allErrs = append(allErrs, fn(newDB, oldDB)...)
@@ -208,6 +211,79 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 		)}
 	}
 	return nil
+}
+
+// validateImmutableFields rejects updates to fields that cannot be changed after creation.
+func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+	var allErrs field.ErrorList
+
+	// Credential secret is baked into running pods and plugin parameters at creation time.
+	if newDB.Spec.DocumentDbCredentialSecret != oldDB.Spec.DocumentDbCredentialSecret {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "documentDbCredentialSecret"),
+			"credential secret cannot be changed after cluster creation",
+		))
+	}
+
+	// Storage class cannot be changed — PVs cannot be migrated between storage classes.
+	if newDB.Spec.Resource.Storage.StorageClass != oldDB.Spec.Resource.Storage.StorageClass {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "resource", "storage", "storageClass"),
+			"storage class cannot be changed after cluster creation",
+		))
+	}
+
+	// Plugin name is structural — it identifies which CNPG sidecar plugin to use.
+	if newDB.Spec.SidecarInjectorPluginName != oldDB.Spec.SidecarInjectorPluginName {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "sidecarInjectorPluginName"),
+			"sidecar injector plugin name cannot be changed after cluster creation",
+		))
+	}
+
+	// Bootstrap configuration is only used during initial cluster creation.
+	if !isBootstrapEqual(newDB.Spec.Bootstrap, oldDB.Spec.Bootstrap) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "bootstrap"),
+			"bootstrap configuration cannot be changed after cluster creation",
+		))
+	}
+
+	return allErrs
+}
+
+// validateStorageResize ensures PVC size can only grow, never shrink.
+func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+	oldSize := oldDB.Spec.Resource.Storage.PvcSize
+	newSize := newDB.Spec.Resource.Storage.PvcSize
+	if oldSize == "" || newSize == "" || oldSize == newSize {
+		return nil
+	}
+
+	oldQty, errOld := resource.ParseQuantity(oldSize)
+	newQty, errNew := resource.ParseQuantity(newSize)
+	if errOld != nil || errNew != nil {
+		return nil // Let Kubernetes API server handle invalid quantities
+	}
+
+	if newQty.Cmp(oldQty) < 0 {
+		return field.ErrorList{field.Forbidden(
+			field.NewPath("spec", "resource", "storage", "pvcSize"),
+			fmt.Sprintf("storage size can only be increased; attempted shrink from %s to %s", oldSize, newSize),
+		)}
+	}
+	return nil
+}
+
+// isBootstrapEqual compares two BootstrapConfiguration pointers for equality.
+func isBootstrapEqual(a, b *dbpreview.BootstrapConfiguration) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // ---------------------------------------------------------------------------

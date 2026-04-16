@@ -333,6 +333,141 @@ var _ = Describe("SyncCnpgCluster", func() {
 	})
 })
 
+var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
+	const namespace = "test-ns"
+
+	It("propagates instancesPerNode changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.Instances = 3
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Instances).To(Equal(3))
+		// CNPG handles instance changes natively — no restart annotation needed
+	})
+
+	It("propagates pvcSize changes (grow)", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.StorageConfiguration.Size = "20Gi"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.StorageConfiguration.Size).To(Equal("20Gi"))
+	})
+
+	It("propagates postgresImage changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie"
+		desired := current.DeepCopy()
+		desired.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"))
+		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("propagates logLevel changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.LogLevel = "debug"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.LogLevel).To(Equal("debug"))
+		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("propagates affinity changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.Affinity = cnpgv1.AffinityConfiguration{
+			EnablePodAntiAffinity: pointer.Bool(true),
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(*updated.Spec.Affinity.EnablePodAntiAffinity).To(BeTrue())
+		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("propagates stopDelay changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.MaxStopDelay = 60
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.MaxStopDelay).To(Equal(int32(60)))
+		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("handles multiple mutable field changes atomically", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie"
+		desired := current.DeepCopy()
+		desired.Spec.Instances = 2
+		desired.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+		desired.Spec.LogLevel = "debug"
+		desired.Spec.StorageConfiguration.Size = "50Gi"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Instances).To(Equal(2))
+		Expect(updated.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"))
+		Expect(updated.Spec.LogLevel).To(Equal("debug"))
+		Expect(updated.Spec.StorageConfiguration.Size).To(Equal("50Gi"))
+	})
+
+	It("does not add restart annotation for instances-only or storage-only changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.Instances = 3
+		desired.Spec.StorageConfiguration.Size = "20Gi"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Instances).To(Equal(3))
+		Expect(updated.Spec.StorageConfiguration.Size).To(Equal("20Gi"))
+		// No restart annotation — CNPG handles instances and storage natively
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+})
+
 var _ = Describe("Helper functions", func() {
 	It("findExtensionImage returns -1 for cluster without extensions", func() {
 		cluster := &cnpgv1.Cluster{

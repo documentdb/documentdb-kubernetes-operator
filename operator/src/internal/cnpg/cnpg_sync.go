@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -124,6 +125,69 @@ func SyncCnpgCluster(
 		}
 	}
 
+	// --- Mutable spec fields ---
+	specChanged := false
+
+	// Instances (e.g., instancesPerNode scaling)
+	if current.Spec.Instances != desired.Spec.Instances {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathInstances,
+			Value: desired.Spec.Instances,
+		})
+		// CNPG handles instance count changes natively (no restart needed)
+	}
+
+	// PostgreSQL image (e.g., minor version upgrade)
+	if current.Spec.ImageName != desired.Spec.ImageName {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathImageName,
+			Value: desired.Spec.ImageName,
+		})
+		specChanged = true
+	}
+
+	// Storage size (grow-only; webhook rejects shrink attempts)
+	if current.Spec.StorageConfiguration.Size != desired.Spec.StorageConfiguration.Size {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathStorageSize,
+			Value: desired.Spec.StorageConfiguration.Size,
+		})
+		// CNPG handles PVC resize natively (no restart needed)
+	}
+
+	// Log level
+	if current.Spec.LogLevel != desired.Spec.LogLevel {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathLogLevel,
+			Value: desired.Spec.LogLevel,
+		})
+		specChanged = true
+	}
+
+	// Affinity
+	if !reflect.DeepEqual(current.Spec.Affinity, desired.Spec.Affinity) {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathAffinity,
+			Value: desired.Spec.Affinity,
+		})
+		specChanged = true
+	}
+
+	// Stop delay (maxStopDelay)
+	if current.Spec.MaxStopDelay != desired.Spec.MaxStopDelay {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathMaxStopDelay,
+			Value: desired.Spec.MaxStopDelay,
+		})
+		specChanged = true
+	}
+
 	// Extra operations (e.g., replication changes)
 	patchOps = append(patchOps, extraOps...)
 
@@ -131,7 +195,7 @@ func SyncCnpgCluster(
 	// but NOT for plugin parameter or gateway-only changes. Include a restart annotation
 	// in the same atomic patch to avoid partial-apply state where the spec is updated but
 	// the restart annotation is never applied if a subsequent reconcile no-ops the spec diff.
-	needsRestart := !extensionUpdated && (gatewayUpdated || pluginParamsChanged)
+	needsRestart := !extensionUpdated && (gatewayUpdated || pluginParamsChanged || specChanged)
 	if needsRestart {
 		// Ensure the annotations map exists before adding a key into it.
 		// JSON Patch "add" requires the parent path to exist.

@@ -6,6 +6,7 @@ package webhook
 import (
 	"context"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -336,5 +337,137 @@ var _ = Describe("extractSemver helper", func() {
 
 	It("returns empty for non-numeric patch", func() {
 		Expect(extractSemver("0.112.abc")).To(BeEmpty())
+	})
+})
+
+var _ = Describe("validateImmutableFields", func() {
+	v := &DocumentDBValidator{}
+
+	It("rejects credential secret change", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.DocumentDbCredentialSecret = "original-secret"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.DocumentDbCredentialSecret = "new-secret"
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.documentDbCredentialSecret"))
+	})
+
+	It("rejects storage class change", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.StorageClass = "standard"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.StorageClass = "premium"
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.storageClass"))
+	})
+
+	It("rejects sidecar plugin name change", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.SidecarInjectorPluginName = "original-plugin"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.SidecarInjectorPluginName = "new-plugin"
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.sidecarInjectorPluginName"))
+	})
+
+	It("rejects bootstrap config change", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "different-backup"},
+			},
+		}
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.bootstrap"))
+	})
+
+	It("allows bootstrap nil-to-nil (both unset)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		newDB := newTestDocumentDB("", "", "")
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows unchanged immutable fields", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.DocumentDbCredentialSecret = "my-secret"
+		oldDB.Spec.Resource.Storage.StorageClass = "standard"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.DocumentDbCredentialSecret = "my-secret"
+		newDB.Spec.Resource.Storage.StorageClass = "standard"
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("reports multiple immutable field violations at once", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.DocumentDbCredentialSecret = "old-secret"
+		oldDB.Spec.Resource.Storage.StorageClass = "standard"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.DocumentDbCredentialSecret = "new-secret"
+		newDB.Spec.Resource.Storage.StorageClass = "premium"
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(2))
+	})
+})
+
+var _ = Describe("validateStorageResize", func() {
+	v := &DocumentDBValidator{}
+
+	It("allows storage size increase", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "10Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "20Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects storage size decrease", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "20Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "10Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("shrink"))
+	})
+
+	It("allows same size (no-op)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		newDB := newTestDocumentDB("", "", "")
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("skips validation when old size is empty", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = ""
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "10Gi"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(BeEmpty())
 	})
 })
