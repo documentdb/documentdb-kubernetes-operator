@@ -173,11 +173,17 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, nil
 	}
 
-	// Reconcile OTel Collector ConfigMap when monitoring is enabled
-	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+	// Reconcile OTel Collector ConfigMap when monitoring spec is defined.
+	// The Enabled flag controls ConfigMap content (active vs idle), allowing
+	// monitoring to be toggled without pod restart.
+	if documentdb.Spec.Monitoring != nil {
 		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
 			logger.Error(err, "Failed to reconcile OTel ConfigMap")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+	} else {
+		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
+			logger.Error(err, "Failed to clean up OTel ConfigMap")
 		}
 	}
 
@@ -1057,19 +1063,16 @@ func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, docum
 	cm.Namespace = namespace
 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
-		if cm.Labels == nil {
-			cm.Labels = map[string]string{}
+		// Set owner reference so the ConfigMap is garbage-collected with the DocumentDB CR.
+		if err := controllerutil.SetControllerReference(documentdb, cm, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set owner reference: %w", err)
 		}
-		cm.Labels["app.kubernetes.io/managed-by"] = "documentdb-operator"
-		cm.Labels["app.kubernetes.io/component"] = "otel-collector"
 
-		baseYAML, err := otelcfg.GenerateBaseYAML(documentdb.Name, namespace, documentdb.Spec.Monitoring)
+		configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, namespace, documentdb.Spec.Monitoring)
 		if err != nil {
 			return fmt.Errorf("failed to generate OTel config: %w", err)
 		}
-		cm.Data = map[string]string{
-			"base.yaml": baseYAML,
-		}
+		cm.Data = configData
 		return nil
 	})
 	if err != nil {
@@ -1078,5 +1081,25 @@ func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, docum
 	if result != controllerutil.OperationResultNone {
 		logger.Info("OTel ConfigMap reconciled", "name", cmName, "operation", result)
 	}
+	return nil
+}
+
+// deleteOtelConfigMap removes the OTel ConfigMap when monitoring is no longer configured.
+func (r *DocumentDBReconciler) deleteOtelConfigMap(ctx context.Context, clusterName, namespace string) error {
+	logger := log.FromContext(ctx)
+	cmName := otelcfg.ConfigMapName(clusterName)
+
+	cm := &corev1.ConfigMap{}
+	cm.Name = cmName
+	cm.Namespace = namespace
+
+	err := r.Client.Delete(ctx, cm)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to delete OTel ConfigMap %s: %w", cmName, err)
+	}
+	logger.Info("OTel ConfigMap deleted", "name", cmName)
 	return nil
 }

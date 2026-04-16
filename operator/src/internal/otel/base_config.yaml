@@ -1,0 +1,19 @@
+# Static OTel Collector configuration.
+# Dynamic parts (resource attributes, exporters, pipeline wiring) are merged by the operator.
+# Add new SQL metric queries here — no Go code changes needed.
+receivers:
+  sqlquery:
+    driver: postgres
+    datasource: "host=localhost port=5432 user=${env:PGUSER} password=${env:PGPASSWORD} dbname=postgres sslmode=disable"
+    collection_interval: "30s"
+    queries:
+      - sql: "SELECT 1 as healthy"
+        metrics:
+          - metric_name: documentdb.health
+            value_column: healthy
+            data_type: gauge
+
+processors:
+  batch:
+    send_batch_size: 1024
+    timeout: "5s"

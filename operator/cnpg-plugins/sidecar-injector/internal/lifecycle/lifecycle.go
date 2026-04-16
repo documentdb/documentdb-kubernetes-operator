@@ -240,14 +240,16 @@ func (impl Implementation) reconcileMetadata(
 		return nil, err
 	}
 
-	// Inject OTel Collector sidecar when monitoring is enabled
-	if configuration.MonitoringEnabled && configuration.OtelCollectorImage != "" {
+	// Inject OTel Collector sidecar when monitoring config is available.
+	// The sidecar is always present when the monitoring spec exists;
+	// the ConfigMap content controls whether it actively collects or idles.
+	if configuration.OtelCollectorImage != "" && configuration.OtelConfigMapName != "" {
 		log.Printf("Injecting OTel Collector sidecar with image: %s", configuration.OtelCollectorImage)
 
-		// Add ConfigMap volume for operator-generated base.yaml
+		// Add ConfigMap volume for operator-generated config files (static.yaml + dynamic.yaml)
 		if configuration.OtelConfigMapName != "" {
 			mutatedPod.Spec.Volumes = append(mutatedPod.Spec.Volumes, corev1.Volume{
-				Name: "otel-base-config",
+				Name: "otel-config",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -262,7 +264,8 @@ func (impl Implementation) reconcileMetadata(
 			Name:  "otel-collector",
 			Image: configuration.OtelCollectorImage,
 			Args: []string{
-				"--config=file:/base/base.yaml",
+				"--config=file:/config/static.yaml",
+				"--config=file:/config/dynamic.yaml",
 			},
 			Env: []corev1.EnvVar{
 				{
@@ -273,11 +276,33 @@ func (impl Implementation) reconcileMetadata(
 						},
 					},
 				},
+				{
+					Name: "PGUSER",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: cluster.Name + "-app",
+							},
+							Key: "username",
+						},
+					},
+				},
+				{
+					Name: "PGPASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: cluster.Name + "-app",
+							},
+							Key: "password",
+						},
+					},
+				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
-					Name:      "otel-base-config",
-					MountPath: "/base",
+					Name:      "otel-config",
+					MountPath: "/config",
 					ReadOnly:  true,
 				},
 			},

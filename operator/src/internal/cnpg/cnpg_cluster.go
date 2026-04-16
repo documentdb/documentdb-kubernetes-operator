@@ -88,8 +88,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
 					}
 					// Pass monitoring parameters to plugin for OTel sidecar injection.
-					if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
-						params["monitoringEnabled"] = "true"
+					// Sidecar is always injected when monitoring spec exists;
+					// the Enabled flag controls ConfigMap content (active vs idle).
+					if documentdb.Spec.Monitoring != nil {
 						params["otelCollectorImage"] = cmp.Or(os.Getenv("OTEL_COLLECTOR_IMAGE"), "otel/opentelemetry-collector-contrib:0.96.0")
 						params["otelConfigMapName"] = documentdb.Name + "-otel-config"
 						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {

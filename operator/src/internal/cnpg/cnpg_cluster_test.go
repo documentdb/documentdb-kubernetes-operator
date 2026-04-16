@@ -557,7 +557,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
 		Expect(cluster.Spec.Plugins).To(HaveLen(1))
 		pluginParams := cluster.Spec.Plugins[0].Parameters
-		Expect(pluginParams).To(HaveKeyWithValue("monitoringEnabled", "true"))
+		Expect(pluginParams).NotTo(HaveKey("monitoringEnabled"))
 		Expect(pluginParams).To(HaveKey("otelCollectorImage"))
 		Expect(pluginParams).To(HaveKeyWithValue("otelConfigMapName", "test-cluster-otel-config"))
 		Expect(pluginParams).NotTo(HaveKey("prometheusPort"))
@@ -591,7 +591,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 
 		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
 		pluginParams := cluster.Spec.Plugins[0].Parameters
-		Expect(pluginParams).To(HaveKeyWithValue("monitoringEnabled", "true"))
+		Expect(pluginParams).NotTo(HaveKey("monitoringEnabled"))
 		Expect(pluginParams).To(HaveKeyWithValue("prometheusPort", "9090"))
 	})
 
