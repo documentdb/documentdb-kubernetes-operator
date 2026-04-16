@@ -277,6 +277,10 @@ func (impl Implementation) reconcileMetadata(
 				"--config=file:/config/static.yaml",
 				"--config=file:/config/dynamic.yaml",
 			},
+			// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
+			// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
+			// keys for the application database user. The OTel Collector's sqlquery receiver
+			// uses these credentials to connect to PostgreSQL and collect health metrics.
 			Env: []corev1.EnvVar{
 				{
 					Name: "POD_NAME",
