@@ -91,7 +91,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					// Sidecar is only injected when monitoring is enabled.
 					// Config hash triggers rolling restart on config changes.
 					if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
-						params["otelCollectorImage"] = cmp.Or(os.Getenv("OTEL_COLLECTOR_IMAGE"), "otel/opentelemetry-collector-contrib:0.149.0")
+						params["otelCollectorImage"] = util.DEFAULT_OTEL_COLLECTOR_IMAGE
 						params["otelConfigMapName"] = otelcfg.ConfigMapName(documentdb.Name)
 						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {
 							params["prometheusPort"] = fmt.Sprintf("%d", promPort)
