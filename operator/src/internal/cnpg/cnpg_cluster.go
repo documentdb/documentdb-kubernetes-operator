@@ -101,6 +101,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						// config (e.g., operator upgrade adds new metrics).
 						if configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, req.Namespace, documentdb.Spec.Monitoring); err == nil {
 							params["otelConfigHash"] = otelcfg.HashConfigMapData(configData)
+						} else {
+							log.Error(err, "Failed to generate OTel config hash; config changes may not trigger rolling restart")
 						}
 					}
 					return []cnpgv1.PluginConfiguration{{
