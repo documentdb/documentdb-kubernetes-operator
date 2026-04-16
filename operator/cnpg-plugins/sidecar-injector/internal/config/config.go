@@ -73,12 +73,7 @@ func FromParameters(
 	var prometheusPort int32
 	if portStr := helper.Parameters[prometheusPortParameter]; portStr != "" {
 		p, err := strconv.ParseInt(portStr, 10, 32)
-		if err != nil || p < 1024 || p > 65535 {
-			validationErrors = append(
-				validationErrors,
-				validation.BuildErrorForParameter(helper, prometheusPortParameter, "must be an integer between 1024 and 65535"),
-			)
-		} else {
+		if err == nil {
 			prometheusPort = int32(p)
 		}
 	}
