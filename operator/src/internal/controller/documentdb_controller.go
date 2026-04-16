@@ -173,10 +173,11 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, nil
 	}
 
-	// Reconcile OTel Collector ConfigMap when monitoring spec is defined.
-	// The Enabled flag controls ConfigMap content (active vs idle), allowing
-	// monitoring to be toggled without pod restart.
-	if documentdb.Spec.Monitoring != nil {
+	// Reconcile OTel Collector ConfigMap when monitoring is enabled.
+	// When monitoring is disabled or removed, delete the ConfigMap.
+	// The sidecar itself is added/removed via CNPG plugin parameters,
+	// which triggers a rolling restart managed by CNPG.
+	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
 		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
 			logger.Error(err, "Failed to reconcile OTel ConfigMap")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil

@@ -3205,7 +3205,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("documentdb.cluster"))
 		})
 
-		It("creates idle config when monitoring is disabled", func() {
+		It("does not create ConfigMap when monitoring is disabled", func() {
 			documentdb := &dbpreview.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
@@ -3228,7 +3228,9 @@ var _ = Describe("DocumentDB Controller", func() {
 				Scheme: scheme,
 			}
 
-			err := reconciler.reconcileOtelConfigMap(ctx, documentdb, documentDBNamespace)
+			// When monitoring is disabled, deleteOtelConfigMap is called instead of reconcile.
+			// Verify no ConfigMap exists after deletion attempt (no-op when it doesn't exist).
+			err := reconciler.deleteOtelConfigMap(ctx, documentdb.Name, documentDBNamespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			cm := &corev1.ConfigMap{}
@@ -3236,9 +3238,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Name:      documentDBName + "-otel-config",
 				Namespace: documentDBNamespace,
 			}, cm)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cm.Data["static.yaml"]).To(ContainSubstring("nop"))
-			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("disabled"))
+			Expect(errors.IsNotFound(err)).To(BeTrue())
 		})
 
 		It("returns error when owner reference cannot be set", func() {

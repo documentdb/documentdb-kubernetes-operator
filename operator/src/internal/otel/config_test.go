@@ -43,180 +43,168 @@ var _ = Describe("base_config.yaml embed", func() {
 })
 
 var _ = Describe("GenerateConfigMapData", func() {
-	Context("when monitoring is disabled", func() {
-		It("returns static.yaml with idle nop config", func() {
-			spec := &dbpreview.MonitoringSpec{Enabled: false}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(data).To(HaveKey("static.yaml"))
-			Expect(data).To(HaveKey("dynamic.yaml"))
+	It("returns static.yaml from embedded base_config.yaml", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-			cfg := parseCfg(data["static.yaml"])
-			Expect(cfg.Receivers).To(HaveKey("nop"))
-			Expect(cfg.Receivers).NotTo(HaveKey("sqlquery"))
-			Expect(cfg.Exporters).To(HaveKey("nop"))
-			Expect(cfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("nop"))
-
-			Expect(data["static.yaml"]).To(ContainSubstring("Monitoring disabled"))
-		})
-
-		It("keeps Prometheus endpoint alive in idle config when configured", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: false,
-				Exporter: &dbpreview.ExporterSpec{
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
-
-			cfg := parseCfg(data["static.yaml"])
-			Expect(cfg.Exporters).To(HaveKey("prometheus"))
-			promCfg, ok := cfg.Exporters["prometheus"].(map[string]any)
-			Expect(ok).To(BeTrue())
-			Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:9090"))
-			Expect(cfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("nop", "prometheus"))
-		})
+		// static.yaml should contain the embedded base config
+		staticCfg := parseCfg(data["static.yaml"])
+		Expect(staticCfg.Receivers).To(HaveKey("sqlquery"))
+		Expect(staticCfg.Processors).To(HaveKey("batch"))
 	})
 
-	Context("when monitoring is enabled", func() {
-		It("returns static.yaml from embedded base_config.yaml", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+	It("generates dynamic.yaml with resource processor and exporters", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("test-cluster", "test-ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+
+		// Dynamic resource processor
+		Expect(dynCfg.Processors).To(HaveKey("resource"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("documentdb.cluster"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("test-cluster"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("k8s.namespace.name"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("test-ns"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("${POD_NAME}"))
+
+		// Prometheus exporter
+		Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
+
+		// Pipeline wiring references receivers from static config
+		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(ConsistOf("resource", "batch"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ConsistOf("prometheus"))
+	})
+
+	It("includes OTLP exporter in dynamic.yaml when configured", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				OTLP: &dbpreview.OTLPExporterSpec{
+					Endpoint: "otel-collector.monitoring:4317",
 				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-			// static.yaml should contain the embedded base config
-			staticCfg := parseCfg(data["static.yaml"])
-			Expect(staticCfg.Receivers).To(HaveKey("sqlquery"))
-			Expect(staticCfg.Processors).To(HaveKey("batch"))
-		})
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).To(HaveKey("otlp"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElement("otlp"))
+	})
 
-		It("generates dynamic.yaml with resource processor and exporters", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-				},
-			}
-			data, err := GenerateConfigMapData("test-cluster", "test-ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+	It("skips OTLP exporter when endpoint is empty", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: ""},
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-			dynCfg := parseCfg(data["dynamic.yaml"])
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).NotTo(HaveKey("otlp"))
+	})
 
-			// Dynamic resource processor
-			Expect(dynCfg.Processors).To(HaveKey("resource"))
-			Expect(data["dynamic.yaml"]).To(ContainSubstring("documentdb.cluster"))
-			Expect(data["dynamic.yaml"]).To(ContainSubstring("test-cluster"))
-			Expect(data["dynamic.yaml"]).To(ContainSubstring("k8s.namespace.name"))
-			Expect(data["dynamic.yaml"]).To(ContainSubstring("test-ns"))
-			Expect(data["dynamic.yaml"]).To(ContainSubstring("${POD_NAME}"))
+	It("includes Prometheus exporter with default port", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-			// Prometheus exporter
-			Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
+		promCfg, ok := dynCfg.Exporters["prometheus"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:8888"))
+	})
 
-			// Pipeline wiring references receivers from static config
-			Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery"))
-			Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(ConsistOf("resource", "batch"))
-			Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ConsistOf("prometheus"))
-		})
+	It("includes Prometheus exporter with custom port", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-		It("includes OTLP exporter in dynamic.yaml when configured", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					OTLP: &dbpreview.OTLPExporterSpec{
-						Endpoint: "otel-collector.monitoring:4317",
-					},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		promCfg, ok := dynCfg.Exporters["prometheus"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:9090"))
+	})
 
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			Expect(dynCfg.Exporters).To(HaveKey("otlp"))
-			Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElement("otlp"))
-		})
+	It("includes both OTLP and Prometheus exporters", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: "otel-collector:4317"},
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-		It("skips OTLP exporter when endpoint is empty", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: ""},
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).To(HaveKey("otlp"))
+		Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
+		Expect(dynCfg.Exporters).NotTo(HaveKey("debug"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("otlp", "prometheus"))
+	})
 
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			Expect(dynCfg.Exporters).NotTo(HaveKey("otlp"))
-		})
+	It("generates no pipeline when no exporters configured", func() {
+		spec := &dbpreview.MonitoringSpec{Enabled: true, Exporter: nil}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
 
-		It("includes Prometheus exporter with default port", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					Prometheus: &dbpreview.PrometheusExporterSpec{},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Service.Pipelines).To(BeEmpty())
+		Expect(dynCfg.Exporters).To(BeEmpty())
+	})
+})
 
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
-			promCfg, ok := dynCfg.Exporters["prometheus"].(map[string]any)
-			Expect(ok).To(BeTrue())
-			Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:8888"))
-		})
+var _ = Describe("HashConfigMapData", func() {
+	It("returns a deterministic hash", func() {
+		data := map[string]string{
+			"static.yaml":  "receivers:\n  sqlquery: {}\n",
+			"dynamic.yaml": "exporters:\n  prometheus: {}\n",
+		}
+		hash1 := HashConfigMapData(data)
+		hash2 := HashConfigMapData(data)
+		Expect(hash1).To(Equal(hash2))
+		Expect(hash1).To(HaveLen(16))
+	})
 
-		It("includes Prometheus exporter with custom port", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
+	It("produces different hashes for different data", func() {
+		data1 := map[string]string{"static.yaml": "v1", "dynamic.yaml": "v1"}
+		data2 := map[string]string{"static.yaml": "v2", "dynamic.yaml": "v1"}
+		Expect(HashConfigMapData(data1)).NotTo(Equal(HashConfigMapData(data2)))
+	})
 
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			promCfg, ok := dynCfg.Exporters["prometheus"].(map[string]any)
-			Expect(ok).To(BeTrue())
-			Expect(promCfg["endpoint"]).To(Equal("0.0.0.0:9090"))
-		})
-
-		It("includes both OTLP and Prometheus exporters", func() {
-			spec := &dbpreview.MonitoringSpec{
-				Enabled: true,
-				Exporter: &dbpreview.ExporterSpec{
-					OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: "otel-collector:4317"},
-					Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-				},
-			}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
-
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			Expect(dynCfg.Exporters).To(HaveKey("otlp"))
-			Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
-			Expect(dynCfg.Exporters).NotTo(HaveKey("debug"))
-			Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("otlp", "prometheus"))
-		})
-
-		It("generates no pipeline when no exporters configured", func() {
-			spec := &dbpreview.MonitoringSpec{Enabled: true, Exporter: nil}
-			data, err := GenerateConfigMapData("cluster", "ns", spec)
-			Expect(err).NotTo(HaveOccurred())
-
-			dynCfg := parseCfg(data["dynamic.yaml"])
-			Expect(dynCfg.Service.Pipelines).To(BeEmpty())
-			Expect(dynCfg.Exporters).To(BeEmpty())
-		})
+	It("is key-order independent", func() {
+		data := map[string]string{"b": "2", "a": "1"}
+		hash1 := HashConfigMapData(data)
+		hash2 := HashConfigMapData(data)
+		Expect(hash1).To(Equal(hash2))
 	})
 })
 
