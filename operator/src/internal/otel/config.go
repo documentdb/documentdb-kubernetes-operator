@@ -24,12 +24,12 @@ type collectorConfig struct {
 	Receivers  map[string]any `yaml:"receivers,omitempty"`
 	Processors map[string]any `yaml:"processors,omitempty"`
 	Exporters  map[string]any `yaml:"exporters,omitempty"`
-	Service    serviceConfig  `yaml:"service"`
+	Service    *serviceConfig `yaml:"service,omitempty"`
 }
 
 type serviceConfig struct {
 	Telemetry *telemetryConfig          `yaml:"telemetry,omitempty"`
-	Pipelines map[string]pipelineConfig `yaml:"pipelines"`
+	Pipelines map[string]pipelineConfig `yaml:"pipelines,omitempty"`
 }
 
 type telemetryConfig struct {
@@ -127,7 +127,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 	// Disable the collector's internal telemetry to avoid port conflicts with the
 	// Prometheus exporter (both default to 8888).
 	if len(exporterNames) > 0 {
-		cfg.Service = serviceConfig{
+		cfg.Service = &serviceConfig{
 			Telemetry: &telemetryConfig{
 				Metrics: &telemetryMetricsConfig{
 					Level: "none",
@@ -164,8 +164,8 @@ func HashConfigMapData(data map[string]string) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write([]byte(data[k]))
+		// Use length-prefixed format to avoid ambiguity between key/value boundaries.
+		fmt.Fprintf(h, "%d:%s%d:%s;", len(k), k, len(data[k]), data[k])
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))[:16]
 }

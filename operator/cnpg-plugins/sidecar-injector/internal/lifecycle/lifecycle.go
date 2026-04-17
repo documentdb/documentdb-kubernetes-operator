@@ -131,13 +131,8 @@ func (impl Implementation) reconcileMetadata(
 
 	mutatedPod := pod.DeepCopy()
 
-	// Initialize environment variables
-	envVars := []corev1.EnvVar{
-		{
-			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-			Value: "http://localhost:4317",
-		},
-	}
+	// Initialize environment variables for the gateway container
+	envVars := []corev1.EnvVar{}
 
 	// Add USERNAME and PASSWORD environment variables from secret defined in configuration
 	credentialSecretName := configuration.DocumentDbCredentialSecret
@@ -352,6 +347,20 @@ func (impl Implementation) reconcileMetadata(
 		if err != nil {
 			return nil, err
 		}
+
+		// Set OTEL_EXPORTER_OTLP_ENDPOINT on the gateway container so it can
+		// forward its own traces to the co-located OTel Collector sidecar.
+		// Only set when the sidecar is present to avoid connection errors.
+		for i := range mutatedPod.Spec.Containers {
+			if mutatedPod.Spec.Containers[i].Name == "documentdb-gateway" {
+				mutatedPod.Spec.Containers[i].Env = append(mutatedPod.Spec.Containers[i].Env, corev1.EnvVar{
+					Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
+					Value: "http://localhost:4317",
+				})
+				break
+			}
+		}
+
 		log.Printf("OTel Collector sidecar injected successfully")
 	}
 

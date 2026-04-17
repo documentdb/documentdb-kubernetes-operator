@@ -177,7 +177,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
-		Expect(dynCfg.Service.Pipelines).To(BeEmpty())
+		Expect(dynCfg.Service).To(BeNil())
 		Expect(dynCfg.Exporters).To(BeEmpty())
 	})
 })

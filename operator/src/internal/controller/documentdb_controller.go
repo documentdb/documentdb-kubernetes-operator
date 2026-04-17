@@ -186,6 +186,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	} else {
 		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
 			logger.Error(err, "Failed to clean up OTel ConfigMap")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 		}
 	}
 
