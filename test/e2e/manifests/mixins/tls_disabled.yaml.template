@@ -1,0 +1,9 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  tls:
+    gateway:
+      mode: Disabled

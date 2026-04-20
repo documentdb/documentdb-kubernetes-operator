@@ -1,0 +1,14 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  tls:
+    gateway:
+      mode: CertManager
+      certManager:
+        issuerRef:
+          name: ${ISSUER_NAME}
+          kind: ${ISSUER_KIND}
+          group: cert-manager.io

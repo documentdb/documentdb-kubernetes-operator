@@ -25,11 +25,6 @@ on:
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
-      run_tests:
-        description: 'Run tests before releasing'
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -38,36 +33,16 @@ permissions:
   id-token: write
 
 jobs:
-  # Optional test jobs - run both E2E and integration tests in parallel if enabled
-  test-e2e:
-    name: E2E Test Images Before Release
-    if: ${{ inputs.run_tests == true }}
-    uses: ./.github/workflows/test-E2E.yml
-    with:
-      image_tag: ${{ inputs.candidate_version }}
-    secrets: inherit
-
-  test-integration:
-    name: Integration Test Images Before Release
-    if: ${{ inputs.run_tests == true }}
-    uses: ./.github/workflows/test-integration.yml
-    with:
-      image_tag: ${{ inputs.candidate_version }}
-    secrets: inherit
-
-  test-backup-and-restore:
-    name: Test Backup and Restore
-    if: ${{ inputs.run_tests == true }}
-    uses: ./.github/workflows/test-backup-and-restore.yml
-    with:
-      image_tag: ${{ inputs.candidate_version }}
-    secrets: inherit
-
+  # NOTE: Pre-release E2E/integration/backup gates were removed when the
+  # legacy test-E2E.yml / test-integration.yml / test-backup-and-restore.yml
+  # workflows were consolidated into the unified test-e2e.yml workflow
+  # (see docs/designs/e2e-test-suite.md). That workflow is triggered
+  # on pull_request to main and guards merges to the source branch.
+  # This release workflow now assumes the candidate artifact has
+  # already passed PR-level CI.
   copy-and-push-manifest:
     name: Release Images
     runs-on: ubuntu-latest
-    needs: [test-e2e, test-integration, test-backup-and-restore]
-    if: ${{ always() && (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped') && (needs.test-integration.result == 'success' || needs.test-integration.result == 'skipped') && (needs.test-backup-and-restore.result == 'success' || needs.test-backup-and-restore.result == 'skipped') }}
     strategy:
       matrix:
         image: [operator, sidecar, documentdb, gateway]

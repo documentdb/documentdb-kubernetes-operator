@@ -110,31 +110,28 @@ jobs:
           sed -i "s|documentDbVersion: \"${OLD_VERSION}\"|documentDbVersion: \"${NEW_VERSION}\"|" \
             operator/documentdb-helm-chart/values.yaml
 
-          # 4. Update test workflow fallback images
-          sed -i "s|documentdb:${OLD_VERSION}|documentdb:${NEW_VERSION}|g" \
-            .github/workflows/test-backup-and-restore.yml
-          sed -i "s|gateway:${OLD_VERSION}|gateway:${NEW_VERSION}|g" \
-            .github/workflows/test-backup-and-restore.yml
+          # 4. (Removed) Test workflow fallback images — the legacy
+          # test-backup-and-restore.yml and test-upgrade-and-rollback.yml
+          # workflows have been consolidated into test-e2e.yml. Database
+          # image versions for e2e are resolved from the operator's
+          # built-in defaults (constants.go) rather than per-workflow
+          # fallback tags, so no sed is required here.
 
-          # 5. Update the released database baseline used by upgrade tests
-          sed -i "s|RELEASED_DATABASE_VERSION: ${OLD_VERSION}|RELEASED_DATABASE_VERSION: ${NEW_VERSION}|" \
-            .github/workflows/test-upgrade-and-rollback.yml
-
-          # 6. Update sidecar plugin config test (hardcoded expected gateway image)
+          # 5. Update sidecar plugin config test (hardcoded expected gateway image)
           sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
             operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
 
-          # 7. Update build workflow defaults
+          # 6. Update build workflow defaults
           sed -i "s|DEFAULT_DOCUMENTDB_VERSION: '${OLD_VERSION}'|DEFAULT_DOCUMENTDB_VERSION: '${NEW_VERSION}'|" \
             .github/workflows/build_documentdb_images.yml
           sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
             .github/workflows/build_documentdb_images.yml
 
-          # 8. Update release workflow default version
+          # 7. Update release workflow default version
           sed -i "s|default: '${OLD_VERSION}'|default: '${NEW_VERSION}'|g" \
             .github/workflows/release_documentdb_images.yml
 
-          # 9. Update gateway Dockerfile default source image ARG
+          # 8. Update gateway Dockerfile default source image ARG
           sed -i "s|pg17-${OLD_VERSION}|pg17-${NEW_VERSION}|" \
             .github/dockerfiles/Dockerfile_gateway_public_image
 
@@ -159,7 +156,6 @@ jobs:
             - Updated `DEFAULT_DOCUMENTDB_IMAGE` and `DEFAULT_GATEWAY_IMAGE` in `constants.go`
             - Updated sidecar plugin default gateway image in `config.go` and `config_test.go`
             - Updated `documentDbVersion` in Helm chart `values.yaml`
-            - Updated fallback images in `test-backup-and-restore.yml`
             - Updated build/release workflow defaults in `build_documentdb_images.yml` and `release_documentdb_images.yml`
             - Updated gateway Dockerfile default source image in `Dockerfile_gateway_public_image`
 
