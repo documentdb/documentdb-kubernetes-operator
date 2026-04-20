@@ -25,7 +25,7 @@ end-to-end, reusing CNPG's `tests/utils/` Go packages wherever possible. Tests a
 by CRD operation in per-area Go packages; the data plane is validated via
 `go.mongodb.org/mongo-driver/v2`. The suite fully replaces the four workflows.
 
-### Why Go (v5 — reversed from v4)
+### Why Go over Python
 
 Spike result (see `Spike Findings` below): ~20 CNPG util packages are directly reusable
 because DocumentDB wraps the same `apiv1.Cluster` / `apiv1.Backup` CRs CNPG defines.
@@ -33,7 +33,7 @@ Reusing them deletes a large fraction of the infrastructure we were about to reb
 (MinIO deploy, namespace management, envsubst, stern log streaming, CNPG Cluster
 introspection, backup CR helpers, timeouts map).
 
-### Design principles (unchanged from v4)
+### Design principles
 
 1. **Amortize heavy lifting.** Cluster creation (~60–120 s per 1-instance cluster) is the
    single biggest cost. Classify every spec as *read-only* or *mutating*. Read-only specs
@@ -360,7 +360,7 @@ JUnit + logs. `workflow_dispatch` inputs: `label`, `depth`, `keep_clusters`.
 - Lets us iterate on test deps without triggering operator builds.
 - Matches how CNPG itself is organized (`tests/e2e/`).
 
-## Spike findings (informed v5 decision)
+## Spike findings
 
 **Repo investigated:** `github.com/cloudnative-pg/cloudnative-pg` @ main, `tests/utils/`.
 **License:** Apache-2.0 (compatible with our MIT; no NOTICE file).
@@ -451,7 +451,7 @@ Key enabling fact: DocumentDB's operator **wraps CNPG's `apiv1.Cluster` and
 
 ## Comparison: Our Plan vs CloudNative-PG E2E Suite
 
-| Aspect | CNPG | Our plan (v5) | Decision |
+| Aspect | CNPG | Our plan | Decision |
 |---|---|---|---|
 | Language | Go (Ginkgo+Gomega) | Go (Ginkgo+Gomega) | **Aligned.** |
 | Test selection | 28 labels + TEST_DEPTH | Our labels + **imported** `tests/levels` | Aligned; we re-export CNPG's levels. |
@@ -495,28 +495,3 @@ Key enabling fact: DocumentDB's operator **wraps CNPG's `apiv1.Cluster` and
 - **Rubber-duck review**: after Phase 0 (probe) + Phase 1 (scaffold + helpers +
   suite_test) + one populated area (e.g. `tests/data/`), review shape before building
   the rest.
-
-## v5 changes vs v4 (what flipped)
-
-- **Language flipped Python → Go.** Spike confirmed ~20 CNPG `tests/utils/` packages are
-  directly reusable (DocumentDB wraps the same `apiv1.Cluster`/`apiv1.Backup` CRs).
-- **Framework**: pytest + pytest-xdist → Ginkgo v2 + Gomega (already in the operator
-  repo's envtest).
-- **Data-plane lib**: pymongo → `go.mongodb.org/mongo-driver/v2`.
-- **Manifests**: Jinja2 → CNPG's `envsubst` (simpler, shared mental model).
-- **Location**: `test/pytest-e2e/` → `test/e2e/` (Go idiom).
-- **Depth/levels**: custom marker → import CNPG's `levels` package directly.
-- **MinIO**: write fixture → import `minio.Deploy` verbatim.
-- **Operator health gate**: write from scratch → adapted from CNPG's `operator/` package.
-- **Stern log tailing**: deferred in v4 → included via imported `sternmultitailer`.
-- **Todo count**: 27 → 28 (added `cnpg-utils-probe` as Phase 0 gate).
-
-**Unchanged from v4:**
-
-- Fixture tiers (`SharedROCluster`, `SharedScaleCluster`, `FreshDocumentDB`, lazy `Minio`).
-- Per-area package structure with per-area suite files.
-- Small, single-purpose spec files (7 for data, 6 for performance, 3 for upgrade, etc.).
-- Label taxonomy (functional + cross-cutting + needs-*).
-- Marker-grouped CI jobs with per-job `--procs` override.
-- Read-only contract for shared clusters.
-- Branch: `developer/e2e-suite` (renamed from `developer/pytest-e2e-suite`).
