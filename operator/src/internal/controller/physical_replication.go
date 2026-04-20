@@ -139,13 +139,14 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		externalCluster := cnpgv1.ExternalCluster{
 			Name: clusterName,
 			ConnectionParameters: map[string]string{
-				"host":   serviceName,
-				"port":   "5432",
-				"dbname": "postgres",
-				"user":   "streaming_replica",
+				"host":    serviceName,
+				"port":    "5432",
+				"dbname":  "postgres",
+				"user":    "streaming_replica",
 			},
 		}
 		if replicationContext.ReplicationTLSSecret != "" {
+			externalCluster.ConnectionParameters["sslmode"] = "require"
 			externalCluster.SSLCert = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: replicationContext.ReplicationTLSSecret,
@@ -160,12 +161,14 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			}
 			cnpgCluster.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
 				ReplicationTLSSecret: replicationContext.ReplicationTLSSecret,
-				ClientCASecret:       replicationContext.ClientCASecret,
+			}
+			if replicationContext.ClientCASecret != "" {
+				cnpgCluster.Spec.Certificates.ClientCASecret = replicationContext.ClientCASecret
 			}
 		} else {
 			// If we don't have a cert, we just need to trust
 			cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
-				"host all postgres localhost trust",
+				"host all all localhost trust",
 				"host replication streaming_replica all trust",
 			}
 		}
@@ -517,6 +520,11 @@ func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, desired *cnpgv1.Clust
 		Op:    cnpg.PatchOpReplace,
 		Path:  cnpg.PatchPathExternalClusters,
 		Value: desired.Spec.ExternalClusters,
+	})
+	*patchOps = append(*patchOps, cnpg.JSONPatch{
+		Op:    cnpg.PatchOpReplace,
+		Path:  cnpg.PatchPathCertificates,
+		Value: desired.Spec.Certificates,
 	})
 	if replicationContext.IsAzureFleetNetworking() {
 		*patchOps = append(*patchOps, cnpg.JSONPatch{

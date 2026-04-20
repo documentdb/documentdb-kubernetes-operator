@@ -24,6 +24,7 @@ const (
 	PatchPathPlugins           = "/spec/plugins"
 	PatchPathReplicationSlots  = "/spec/replicationSlots"
 	PatchPathExternalClusters  = "/spec/externalClusters"
+	PatchPathCertificates      = "/spec/certificates"
 	PatchPathManagedServices   = "/spec/managed/services/additional"
 	PatchPathSynchronous       = "/spec/postgresql/synchronous"
 	PatchPathBootstrap         = "/spec/bootstrap"
