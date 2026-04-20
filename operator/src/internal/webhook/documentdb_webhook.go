@@ -214,35 +214,17 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 }
 
 // validateImmutableFields rejects updates to fields that cannot be changed after creation.
+// Note: credentialSecret, storageClass, and sidecarInjectorPluginName are enforced via
+// CEL transition rules on the CRD schema (see documentdb_types.go).
 func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Credential secret is baked into running pods and plugin parameters at creation time.
-	if newDB.Spec.DocumentDbCredentialSecret != oldDB.Spec.DocumentDbCredentialSecret {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec", "documentDbCredentialSecret"),
-			"credential secret cannot be changed after cluster creation",
-		))
-	}
-
-	// Storage class cannot be changed — PVs cannot be migrated between storage classes.
-	if newDB.Spec.Resource.Storage.StorageClass != oldDB.Spec.Resource.Storage.StorageClass {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec", "resource", "storage", "storageClass"),
-			"storage class cannot be changed after cluster creation",
-		))
-	}
-
-	// Plugin name is structural — it identifies which CNPG sidecar plugin to use.
-	if newDB.Spec.SidecarInjectorPluginName != oldDB.Spec.SidecarInjectorPluginName {
-		allErrs = append(allErrs, field.Forbidden(
-			field.NewPath("spec", "sidecarInjectorPluginName"),
-			"sidecar injector plugin name cannot be changed after cluster creation",
-		))
-	}
-
-	// Bootstrap configuration is only used during initial cluster creation.
-	if !isBootstrapEqual(newDB.Spec.Bootstrap, oldDB.Spec.Bootstrap) {
+	// Bootstrap configuration is only used during initial cluster creation and is
+	// ignored afterward. Setting it to nil (cleanup) is allowed, but changing to a
+	// different value is rejected since it cannot re-bootstrap a running cluster.
+	// This is kept in the webhook (not CEL) because it's an optional pointer field
+	// where CEL transition rules don't reliably catch all mutation patterns.
+	if newDB.Spec.Bootstrap != nil && !isBootstrapEqual(newDB.Spec.Bootstrap, oldDB.Spec.Bootstrap) {
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec", "bootstrap"),
 			"bootstrap configuration cannot be changed after cluster creation",

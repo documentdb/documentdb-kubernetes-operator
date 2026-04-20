@@ -54,12 +54,14 @@ type DocumentDBSpec struct {
 	// DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
 	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
 	// a default secret name `documentdb-credentials` is used.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="credential secret cannot be changed after cluster creation"
 	DocumentDbCredentialSecret string `json:"documentDbCredentialSecret,omitempty"`
 
 	// ClusterReplication configures cross-cluster replication for DocumentDB.
 	ClusterReplication *ClusterReplication `json:"clusterReplication,omitempty"`
 
 	// SidecarInjectorPluginName is the name of the sidecar injector plugin to use.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sidecar injector plugin name cannot be changed after cluster creation"
 	SidecarInjectorPluginName string `json:"sidecarInjectorPluginName,omitempty"`
 
 	// WalReplicaPluginName is the name of the wal replica plugin to use.
@@ -189,6 +191,7 @@ type StorageConfiguration struct {
 
 	// StorageClass specifies the storage class for DocumentDB persistent volumes.
 	// If not specified, the cluster's default storage class will be used.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage class cannot be changed after cluster creation"
 	StorageClass string `json:"storageClass,omitempty"`
 
 	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when

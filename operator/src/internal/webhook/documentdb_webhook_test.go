@@ -343,38 +343,10 @@ var _ = Describe("extractSemver helper", func() {
 var _ = Describe("validateImmutableFields", func() {
 	v := &DocumentDBValidator{}
 
-	It("rejects credential secret change", func() {
-		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.DocumentDbCredentialSecret = "original-secret"
-		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.DocumentDbCredentialSecret = "new-secret"
-
-		errs := v.validateImmutableFields(newDB, oldDB)
-		Expect(errs).To(HaveLen(1))
-		Expect(errs[0].Field).To(Equal("spec.documentDbCredentialSecret"))
-	})
-
-	It("rejects storage class change", func() {
-		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.Resource.Storage.StorageClass = "standard"
-		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.Resource.Storage.StorageClass = "premium"
-
-		errs := v.validateImmutableFields(newDB, oldDB)
-		Expect(errs).To(HaveLen(1))
-		Expect(errs[0].Field).To(Equal("spec.resource.storage.storageClass"))
-	})
-
-	It("rejects sidecar plugin name change", func() {
-		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.SidecarInjectorPluginName = "original-plugin"
-		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.SidecarInjectorPluginName = "new-plugin"
-
-		errs := v.validateImmutableFields(newDB, oldDB)
-		Expect(errs).To(HaveLen(1))
-		Expect(errs[0].Field).To(Equal("spec.sidecarInjectorPluginName"))
-	})
+	// Note: credentialSecret, storageClass, and sidecarInjectorPluginName immutability
+	// is now enforced via CEL transition rules on the CRD schema (see documentdb_types.go).
+	// Only bootstrap is validated in the webhook because it's an optional pointer field
+	// where CEL transition rules don't reliably catch all mutation patterns.
 
 	It("rejects bootstrap config change", func() {
 		oldDB := newTestDocumentDB("", "", "")
@@ -403,28 +375,51 @@ var _ = Describe("validateImmutableFields", func() {
 		Expect(errs).To(BeEmpty())
 	})
 
-	It("allows unchanged immutable fields", func() {
+	It("allows unchanged bootstrap configuration", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.DocumentDbCredentialSecret = "my-secret"
-		oldDB.Spec.Resource.Storage.StorageClass = "standard"
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
 		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.DocumentDbCredentialSecret = "my-secret"
-		newDB.Spec.Resource.Storage.StorageClass = "standard"
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
 
 		errs := v.validateImmutableFields(newDB, oldDB)
 		Expect(errs).To(BeEmpty())
 	})
 
-	It("reports multiple immutable field violations at once", func() {
+	It("allows bootstrap removal (set to nil is cleanup)", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.DocumentDbCredentialSecret = "old-secret"
-		oldDB.Spec.Resource.Storage.StorageClass = "standard"
+		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
 		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.DocumentDbCredentialSecret = "new-secret"
-		newDB.Spec.Resource.Storage.StorageClass = "premium"
+		newDB.Spec.Bootstrap = nil
 
 		errs := v.validateImmutableFields(newDB, oldDB)
-		Expect(errs).To(HaveLen(2))
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects bootstrap addition on running cluster (nil to set)", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Bootstrap = nil
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
+			},
+		}
+
+		errs := v.validateImmutableFields(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.bootstrap"))
 	})
 })
 
