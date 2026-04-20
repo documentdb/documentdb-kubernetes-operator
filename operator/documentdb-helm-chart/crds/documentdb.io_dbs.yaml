@@ -1091,6 +1091,13 @@ spec:
                 description: ClusterReplication configures cross-cluster replication
                   for DocumentDB.
                 properties:
+                  clientCASecret:
+                    description: |-
+                      ClientCASecret is the name of a Kubernetes Secret containing the CA certificate
+                      used to verify the streaming_replica client certificate. The secret must contain
+                      a "ca.crt" key. When specified, the secret is propagated to all clusters
+                      participating in replication.
+                    type: string
                   clusterList:
                     description: ClusterList is the list of clusters participating
                       in replication.
@@ -1130,6 +1137,13 @@ spec:
                     type: boolean
                   primary:
                     description: Primary is the name of the primary cluster for replication.
+                    type: string
+                  replicationTLSSecret:
+                    description: |-
+                      ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates
+                      for the streaming_replica user used in physical replication. The secret must contain
+                      "tls.crt" and "tls.key" keys. When specified, the secret is propagated to all
+                      clusters participating in replication.
                     type: string
                 required:
                 - clusterList
@@ -1268,8 +1282,13 @@ spec:
                 description: |-
                   SchemaVersion controls the desired schema version for the DocumentDB extension.
 
-                  This field decouples the extension binary (image) update from the schema update
-                  (ALTER EXTENSION documentdb UPDATE), providing a rollback-safe upgrade window.
+                  The operator never changes your database schema unless you ask:
+                    - Set documentDBVersion → updates the binary (safe to roll back)
+                    - Set schemaVersion → updates the database schema (irreversible)
+                    - Set schemaVersion: "auto" → schema auto-updates with binary
+
+                  Once the schema has been updated, the operator blocks image rollback below the
+                  installed schema version to prevent running an untested binary/schema combination.
 
                   Values:
                     - "" (empty, default): Two-phase mode. Image upgrades happen automatically,
@@ -1278,7 +1297,7 @@ spec:
                       as it allows rollback by reverting the image before committing the schema change.
                     - "auto": Schema automatically updates to match the binary version whenever
                       the binary is upgraded. This is the simplest mode but provides no rollback
-                      safety window. Recommended for development and testing environments.
+                      safety window.
                     - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
                       Must be <= the binary version.
                 pattern: ^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$

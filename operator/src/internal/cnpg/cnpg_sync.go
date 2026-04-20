@@ -107,8 +107,8 @@ func SyncCnpgCluster(
 		// JSON Patch "add" requires the parent path to exist.
 		if current.Annotations == nil {
 			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpAdd,
-				Path:  "/metadata/annotations",
+				Op:   PatchOpAdd,
+				Path: "/metadata/annotations",
 				Value: map[string]string{
 					"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339Nano),
 				},

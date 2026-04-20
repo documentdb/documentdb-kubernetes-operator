@@ -219,6 +219,18 @@ type ClusterReplication struct {
 	ClusterList []MemberCluster `json:"clusterList"`
 	// Whether or not to have replicas on the primary cluster.
 	HighAvailability bool `json:"highAvailability,omitempty"`
+	// ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates
+	// for the streaming_replica user used in physical replication. The secret must contain
+	// "tls.crt" and "tls.key" keys. When specified, the secret is propagated to all
+	// clusters participating in replication.
+	// +optional
+	ReplicationTLSSecret string `json:"replicationTLSSecret,omitempty"`
+	// ClientCASecret is the name of a Kubernetes Secret containing the CA certificate
+	// used to verify the streaming_replica client certificate. The secret must contain
+	// a "ca.crt" key. When specified, the secret is propagated to all clusters
+	// participating in replication.
+	// +optional
+	ClientCASecret string `json:"clientCASecret,omitempty"`
 }
 
 type MemberCluster struct {
