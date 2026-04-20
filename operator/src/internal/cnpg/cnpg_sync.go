@@ -126,7 +126,9 @@ func SyncCnpgCluster(
 	}
 
 	// --- Mutable spec fields ---
-	specChanged := false
+	// CNPG natively detects changes to these fields and triggers rolling restarts
+	// when needed (via PodSpec drift detection or image comparison), so we only
+	// need to patch the CNPG Cluster spec — no manual restart annotation required.
 
 	// Instances (e.g., instancesPerNode scaling)
 	if current.Spec.Instances != desired.Spec.Instances {
@@ -135,17 +137,16 @@ func SyncCnpgCluster(
 			Path:  PatchPathInstances,
 			Value: desired.Spec.Instances,
 		})
-		// CNPG handles instance count changes natively (no restart needed)
 	}
 
 	// PostgreSQL image (e.g., minor version upgrade)
+	// CNPG detects image mismatch via checkPodImageIsOutdated and triggers rolling update.
 	if current.Spec.ImageName != desired.Spec.ImageName {
 		patchOps = append(patchOps, JSONPatch{
 			Op:    PatchOpReplace,
 			Path:  PatchPathImageName,
 			Value: desired.Spec.ImageName,
 		})
-		specChanged = true
 	}
 
 	// Storage size (grow-only; webhook rejects shrink attempts)
@@ -155,37 +156,37 @@ func SyncCnpgCluster(
 			Path:  PatchPathStorageSize,
 			Value: desired.Spec.StorageConfiguration.Size,
 		})
-		// CNPG handles PVC resize natively (no restart needed)
 	}
 
 	// Log level
+	// CNPG renders logLevel into the bootstrap container command (--log-level=...),
+	// so changes cause PodSpec drift detected by checkPodSpecIsOutdated.
 	if current.Spec.LogLevel != desired.Spec.LogLevel {
 		patchOps = append(patchOps, JSONPatch{
 			Op:    PatchOpReplace,
 			Path:  PatchPathLogLevel,
 			Value: desired.Spec.LogLevel,
 		})
-		specChanged = true
 	}
 
 	// Affinity
+	// CNPG includes affinity in the generated PodSpec and detects drift via ComparePodSpecs.
 	if !reflect.DeepEqual(current.Spec.Affinity, desired.Spec.Affinity) {
 		patchOps = append(patchOps, JSONPatch{
 			Op:    PatchOpReplace,
 			Path:  PatchPathAffinity,
 			Value: desired.Spec.Affinity,
 		})
-		specChanged = true
 	}
 
 	// Stop delay (maxStopDelay)
+	// CNPG maps this to terminationGracePeriodSeconds in PodSpec, drift triggers rollout.
 	if current.Spec.MaxStopDelay != desired.Spec.MaxStopDelay {
 		patchOps = append(patchOps, JSONPatch{
 			Op:    PatchOpReplace,
 			Path:  PatchPathMaxStopDelay,
 			Value: desired.Spec.MaxStopDelay,
 		})
-		specChanged = true
 	}
 
 	// Extra operations (e.g., replication changes)
@@ -195,7 +196,7 @@ func SyncCnpgCluster(
 	// but NOT for plugin parameter or gateway-only changes. Include a restart annotation
 	// in the same atomic patch to avoid partial-apply state where the spec is updated but
 	// the restart annotation is never applied if a subsequent reconcile no-ops the spec diff.
-	needsRestart := !extensionUpdated && (gatewayUpdated || pluginParamsChanged || specChanged)
+	needsRestart := !extensionUpdated && (gatewayUpdated || pluginParamsChanged)
 	if needsRestart {
 		// Ensure the annotations map exists before adding a key into it.
 		// JSON Patch "add" requires the parent path to exist.

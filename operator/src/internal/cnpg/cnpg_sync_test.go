@@ -378,7 +378,8 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		updated := &cnpgv1.Cluster{}
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"))
-		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+		// CNPG detects image mismatch natively — no operator restart annotation needed
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
 	It("propagates logLevel changes", func() {
@@ -393,7 +394,8 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		updated := &cnpgv1.Cluster{}
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.LogLevel).To(Equal("debug"))
-		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+		// CNPG detects logLevel drift via PodSpec comparison — no operator restart annotation needed
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
 	It("propagates affinity changes", func() {
@@ -410,7 +412,8 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		updated := &cnpgv1.Cluster{}
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
 		Expect(*updated.Spec.Affinity.EnablePodAntiAffinity).To(BeTrue())
-		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+		// CNPG detects affinity drift via PodSpec comparison — no operator restart annotation needed
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
 	It("propagates stopDelay changes", func() {
@@ -425,7 +428,8 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		updated := &cnpgv1.Cluster{}
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.MaxStopDelay).To(Equal(int32(60)))
-		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
+		// CNPG detects maxStopDelay drift via PodSpec comparison — no operator restart annotation needed
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
 	It("handles multiple mutable field changes atomically", func() {
@@ -449,11 +453,15 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		Expect(updated.Spec.StorageConfiguration.Size).To(Equal("50Gi"))
 	})
 
-	It("does not add restart annotation for instances-only or storage-only changes", func() {
+	It("does not add restart annotation for any mutable spec field (CNPG handles natively)", func() {
 		current := baseCluster("test-cluster", namespace)
+		current.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie"
 		desired := current.DeepCopy()
 		desired.Spec.Instances = 3
 		desired.Spec.StorageConfiguration.Size = "20Gi"
+		desired.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+		desired.Spec.LogLevel = "debug"
+		desired.Spec.MaxStopDelay = 60
 
 		c := buildFakeClient(current).Build()
 		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
@@ -463,7 +471,10 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.Instances).To(Equal(3))
 		Expect(updated.Spec.StorageConfiguration.Size).To(Equal("20Gi"))
-		// No restart annotation — CNPG handles instances and storage natively
+		Expect(updated.Spec.ImageName).To(Equal("ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"))
+		Expect(updated.Spec.LogLevel).To(Equal("debug"))
+		Expect(updated.Spec.MaxStopDelay).To(Equal(int32(60)))
+		// No restart annotation — CNPG handles all mutable spec fields natively
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 })
