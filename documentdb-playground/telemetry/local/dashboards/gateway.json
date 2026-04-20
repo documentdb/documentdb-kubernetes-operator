@@ -1,0 +1,710 @@
+{
+  "uid": "documentdb-gateway",
+  "title": "DocumentDB Gateway",
+  "tags": [
+    "documentdb",
+    "gateway"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(db_client_operations_total, service_instance_id)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(db_client_operations_total, service_instance_id)"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "label": "Instance",
+        "allValue": ".*"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "DocumentDB Internals",
+      "type": "link",
+      "icon": "bolt",
+      "url": "/d/documentdb-internals/documentdb-internals",
+      "tooltip": "Database & Infrastructure metrics"
+    }
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Operations/sec",
+      "id": 1,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 5000
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(db_client_operations_total{service_instance_id=~\"$instance\"}[1m]))",
+          "legendFormat": "ops/sec"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Avg Latency (ms)",
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(db_client_operation_duration_seconds_total{service_instance_id=~\"$instance\",db_operation_phase=\"\"}[1m])) / sum(rate(db_client_operations_total{service_instance_id=~\"$instance\"}[1m])) * 1000",
+          "legendFormat": "avg latency"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error Rate %",
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(db_client_operations_total{service_instance_id=~\"$instance\",error_type!=\"\"}[1m])) / sum(rate(db_client_operations_total{service_instance_id=~\"$instance\"}[1m])) * 100",
+          "legendFormat": "error rate"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Traffic & Performance",
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Ops/sec by Operation",
+          "id": 14,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "spanNulls": false
+              }
+            }
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (db_operation_name) (rate(db_client_operations_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "{{db_operation_name}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Latency by Operation",
+          "id": 15,
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "spanNulls": false
+              }
+            }
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (db_operation_name) (rate(db_client_operation_duration_seconds_total{service_instance_id=~\"$instance\",db_operation_phase=\"\"}[1m])) / sum by (db_operation_name) (rate(db_client_operations_total{service_instance_id=~\"$instance\"}[1m])) * 1000",
+              "legendFormat": "{{db_operation_name}}"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Documents/sec",
+          "id": 8,
+          "gridPos": {
+            "x": 0,
+            "y": 8,
+            "w": 8,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "docs/s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "spanNulls": false
+              }
+            }
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(db_client_documents_returned_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "returned"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(rate(db_client_documents_inserted_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "inserted"
+            },
+            {
+              "refId": "C",
+              "expr": "sum(rate(db_client_documents_updated_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "updated"
+            },
+            {
+              "refId": "D",
+              "expr": "sum(rate(db_client_documents_deleted_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "deleted"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Documents/sec by Collection",
+          "id": 9,
+          "gridPos": {
+            "x": 8,
+            "y": 8,
+            "w": 8,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "docs/s",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 30,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum by (db_collection_name) (rate(db_client_documents_returned_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "{{db_collection_name}} returned",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (db_collection_name) (rate(db_client_documents_inserted_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "{{db_collection_name}} inserted",
+              "refId": "B"
+            },
+            {
+              "expr": "sum by (db_collection_name) (rate(db_client_documents_updated_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "{{db_collection_name}} updated",
+              "refId": "C"
+            },
+            {
+              "expr": "sum by (db_collection_name) (rate(db_client_documents_deleted_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "{{db_collection_name}} deleted",
+              "refId": "D"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Request & Response Size",
+          "id": 16,
+          "gridPos": {
+            "x": 16,
+            "y": 8,
+            "w": 8,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "spanNulls": false
+              }
+            }
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(db_client_request_size_bytes_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "request"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(rate(db_client_response_size_bytes_total{service_instance_id=~\"$instance\"}[1m]))",
+              "legendFormat": "response"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Errors by Type",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (error_type) (rate(db_client_operations_total{service_instance_id=~\"$instance\", error_type!=\"\"}[5m]))",
+              "legendFormat": "{{error_type}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 30,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 16,
+            "w": 24,
+            "h": 8
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      }
+    },
+    {
+      "type": "row",
+      "title": "Resource Usage",
+      "collapsed": true,
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Gateway CPU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"documentdb-preview-ns\", container=\"documentdb-gateway\"}[1m])",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              },
+              "min": 0
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 8
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Gateway Memory",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "container_memory_working_set_bytes{namespace=\"documentdb-preview-ns\", container=\"documentdb-gateway\"}",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 0,
+            "w": 8,
+            "h": 8
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Pod Network I/O",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (pod) (rate(container_network_receive_bytes_total{namespace=\"documentdb-preview-ns\"}[1m]))",
+              "legendFormat": "{{pod}} rx",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{namespace=\"documentdb-preview-ns\"}[1m]))",
+              "legendFormat": "{{pod}} tx",
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 0,
+            "w": 8,
+            "h": 8
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      }
+    }
+  ],
+  "refresh": "10s"
+}

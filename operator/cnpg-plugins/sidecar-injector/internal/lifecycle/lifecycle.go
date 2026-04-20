@@ -348,15 +348,32 @@ func (impl Implementation) reconcileMetadata(
 			return nil, err
 		}
 
-		// Set OTEL_EXPORTER_OTLP_ENDPOINT on the gateway container so it can
-		// forward its own traces to the co-located OTel Collector sidecar.
-		// Only set when the sidecar is present to avoid connection errors.
+		// Set OTel-related env vars on the gateway container so it can push its
+		// own metrics/traces to the co-located OTel Collector sidecar and so that
+		// every signal carries a per-pod service.instance.id resource attribute.
+		// Only set when the sidecar is present to avoid connection errors and
+		// resource-attribute drift.
 		for i := range mutatedPod.Spec.Containers {
 			if mutatedPod.Spec.Containers[i].Name == "documentdb-gateway" {
-				mutatedPod.Spec.Containers[i].Env = append(mutatedPod.Spec.Containers[i].Env, corev1.EnvVar{
-					Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-					Value: "http://localhost:4317",
-				})
+				mutatedPod.Spec.Containers[i].Env = append(mutatedPod.Spec.Containers[i].Env,
+					corev1.EnvVar{
+						Name: "POD_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
+					corev1.EnvVar{
+						Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
+						Value: "http://localhost:4317",
+					},
+					corev1.EnvVar{
+						// Per-pod attribution for OTLP-exported telemetry.
+						Name:  "OTEL_RESOURCE_ATTRIBUTES",
+						Value: "service.instance.id=$(POD_NAME)",
+					},
+				)
 				break
 			}
 		}
