@@ -108,7 +108,6 @@ type DocumentDBSpec struct {
 	// SchemaVersion controls the desired schema version for the DocumentDB extension.
 	//
 	// The operator never changes your database schema unless you ask:
-	//   - Set documentDBVersion → updates the binary (safe to roll back)
 	//   - Set schemaVersion → updates the database schema (irreversible)
 	//   - Set schemaVersion: "auto" → schema auto-updates with binary
 	//
