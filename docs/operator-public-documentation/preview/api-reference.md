@@ -117,6 +117,8 @@ _Appears in:_
 | `primary` _string_ | Primary is the name of the primary cluster for replication. |  |  |
 | `clusterList` _[MemberCluster](#membercluster) array_ | ClusterList is the list of clusters participating in replication. |  |  |
 | `highAvailability` _boolean_ | Whether or not to have replicas on the primary cluster. |  |  |
+| `replicationTLSSecret` _string_ | ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates<br />for the streaming_replica user used in physical replication. The secret must contain<br />"tls.crt" and "tls.key" keys. When specified, the operator references this secret in<br />clusters participating in replication.<br />NOTE: It needs to be the same for all clusters |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `clientCASecret` _string_ | ClientCASecret is the name of a Kubernetes Secret containing the CA certificate<br />used to verify the streaming_replica client certificate. The secret must contain<br />a "ca.crt" key. When specified, the operator references this secret in<br />clusters participating in replication.<br />NOTE: It needs to be the same for all clusters |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### DocumentDB

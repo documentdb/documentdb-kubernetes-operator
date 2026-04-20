@@ -156,7 +156,7 @@ an equal or greater volume of available storage compared to the primary.
 Enable TLS for all connections:
 
 - **Client-to-gateway:** Encrypt application connections (see [TLS configuration](../configuration/tls.md))
-- **Replication traffic:** PostgreSQL SSL for inter-cluster replication
+- **Replication traffic:** Cross-Kubernetes-cluster streaming replication is authenticated with mutual TLS using the `streaming_replica` PostgreSQL role. Configure `spec.clusterReplication.replicationTLSSecret` and optionally `spec.clusterReplication.clientCASecret` to wire up the client certificate and CA. See [Securing replication with TLS](setup.md#securing-replication-with-tls) for the complete setup.
 - **Service mesh:** mTLS for cross-cluster service communication
 
 ### Authentication and authorization

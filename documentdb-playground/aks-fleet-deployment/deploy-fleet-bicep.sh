@@ -173,11 +173,16 @@ helm install hub-net-controller-manager ./charts/hub-net-controller-manager/ \
   --set image.tag=$NETWORKING_TAG 
 
 HUB_CLUSTER_ADDRESS=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.server}")
+HUB_CA=$(kubectl config view --raw -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.certificate-authority-data}")
 
 while read -r MEMBER_CLUSTER; do
   kubectl config use-context $MEMBER_CLUSTER
 
   kubectl apply -f config/crd/*
+
+  # ADD HUB CA to member cluster (temp fix while joinMC.sh is out of date)
+  kubectl -n fleet-system set env deploy/member-agent \
+    HUB_CERTIFICATE_AUTHORITY="$HUB_CA" -c member-agent
 
   echo "Installing mcs-controller-manager..."
   helm install mcs-controller-manager ./charts/mcs-controller-manager/ \
