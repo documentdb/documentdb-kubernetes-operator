@@ -1,0 +1,274 @@
+# Unified DocumentDB E2E test workflow.
+#
+# Replaces the legacy test-E2E.yml / test-integration.yml /
+# test-backup-and-restore.yml / test-upgrade-and-rollback.yml quartet.
+# See docs/designs/e2e-test-suite.md ("CI Workflow" section) for the
+# design rationale.
+#
+# Each matrix job runs a single Ginkgo label-filtered slice of the suite
+# under test/e2e/. The composite action .github/actions/setup-test-environment
+# provisions a Kind cluster, installs cert-manager + the operator, and
+# deploys any scenario-specific prerequisites.
+
+name: TEST - E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'test/e2e/**'
+      - 'operator/src/**'
+      - 'operator/documentdb-helm-chart/**'
+      - '.github/workflows/test-e2e.yml'
+      - '.github/actions/**'
+  workflow_dispatch:
+    inputs:
+      label:
+        description: 'Ginkgo --label-filter override (empty = use per-job default)'
+        required: false
+        type: string
+        default: ''
+      depth:
+        description: 'Test depth tier (maps to TEST_DEPTH / E2E_DEPTH)'
+        required: false
+        type: choice
+        options:
+          - Low
+          - Medium
+          - High
+        default: Medium
+      keep_clusters:
+        description: 'Keep Kind clusters running after tests (for debugging)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+env:
+  # Namespaces / identity used by the composite setup action. Held here
+  # so every job inherits them without duplication.
+  CERT_MANAGER_NS: cert-manager
+  OPERATOR_NS: documentdb-operator
+  DB_NS: documentdb-e2e
+  DB_NAME: documentdb-e2e
+  DB_USERNAME: k8s_secret_user
+  DB_PASSWORD: K8sSecret100
+  DB_PORT: 10260
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build operator + gateway images and the helm chart once per workflow run.
+  # Each E2E job below downloads the resulting artifacts into ./artifacts so
+  # setup-test-environment can load them into its Kind cluster.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Images and Charts
+    uses: ./.github/workflows/test-build-and-package.yml
+    with:
+      version: '0.2.0'
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # E2E matrix.
+  #
+  # Rows = (label-group, architecture). The label-group carries the
+  # Ginkgo --label-filter, Ginkgo --procs setting, and a human-readable
+  # scenario name used for artifact naming and kind cluster isolation.
+  #
+  # arm64 rows target `ubuntu-22.04-arm` — the same GitHub-hosted runner
+  # the legacy workflows use. If that SKU becomes unavailable in the
+  # future, the arm64 rows can be removed or gated on a feature flag;
+  # do not silently drop them.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E ${{ matrix.group }} (${{ matrix.architecture }})
+    needs: build
+    if: |
+      always()
+      && needs.build.result == 'success'
+      && (
+        matrix.group != 'performance'
+        || github.event_name == 'workflow_dispatch'
+        || contains(github.event.pull_request.labels.*.name, 'run-perf')
+      )
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
+        group:
+          - smoke
+          - lifecycle
+          - scale
+          - data
+          - performance
+          - backup
+          - tls
+          - feature
+          - upgrade
+        include:
+          # Per-group defaults. `default_filter` is used when the
+          # workflow_dispatch `label` input is empty.
+          #
+          # NOTE: the design doc's "feature || exposure || status" filter
+          # uses the code-level label name `feature-gates` (see
+          # test/e2e/labels.go FeatureLabel). The design-doc name
+          # `feature` is a shorthand; we honour code as source of truth.
+          - group: smoke
+            default_filter: 'smoke'
+            procs: 'auto'
+          - group: lifecycle
+            default_filter: 'lifecycle'
+            procs: 'auto'
+          - group: scale
+            default_filter: 'scale'
+            procs: '2'
+          - group: data
+            default_filter: 'data'
+            procs: 'auto'
+          - group: performance
+            default_filter: 'performance'
+            procs: '1'
+          - group: backup
+            default_filter: 'backup'
+            procs: '2'
+          - group: tls
+            default_filter: 'tls'
+            procs: 'auto'
+          - group: feature
+            default_filter: 'feature-gates || exposure || status'
+            procs: 'auto'
+          - group: upgrade
+            default_filter: 'upgrade'
+            procs: '1'
+          # Per-architecture runner mapping.
+          - architecture: amd64
+            runner: ubuntu-22.04
+          - architecture: arm64
+            runner: ubuntu-22.04-arm
+    env:
+      E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_DEPTH: ${{ inputs.depth || 'Medium' }}
+      TEST_DEPTH: ${{ inputs.depth || 'Medium' }}
+      GINKGO_LABEL_FILTER: ${{ inputs.label != '' && inputs.label || matrix.default_filter }}
+      E2E_KEEP_CLUSTERS: ${{ inputs.keep_clusters && '1' || '0' }}
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+      CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
+      # Upgrade job knobs. Defaults point at the public OCI chart;
+      # repository admins may override via `vars`/`secrets` for private
+      # scenarios. If any of the *_IMAGE values are left unset the
+      # upgrade specs Skip at runtime (see test/e2e/tests/upgrade/).
+      E2E_UPGRADE: ${{ matrix.group == 'upgrade' && '1' || '' }}
+      E2E_UPGRADE_PREVIOUS_CHART: ${{ vars.E2E_UPGRADE_PREVIOUS_CHART || 'oci://ghcr.io/documentdb/charts/documentdb-operator' }}
+      E2E_UPGRADE_PREVIOUS_VERSION: ${{ vars.E2E_UPGRADE_PREVIOUS_VERSION || '' }}
+      E2E_UPGRADE_CURRENT_CHART: ${{ vars.E2E_UPGRADE_CURRENT_CHART || '' }}
+      E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE: ${{ vars.E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE || '' }}
+      E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE: ${{ vars.E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE || '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: test/e2e/go.mod
+          cache-dependency-path: test/e2e/go.sum
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'build-*'
+          path: ./artifacts
+
+      - name: Log test configuration
+        run: |
+          {
+            echo "## E2E — ${{ matrix.group }} (${{ matrix.architecture }})"
+            echo ""
+            echo "- **Label filter**: \`${GINKGO_LABEL_FILTER}\`"
+            echo "- **Procs**: \`${{ matrix.procs }}\`"
+            echo "- **Depth**: \`${E2E_DEPTH}\`"
+            echo "- **Run ID**: \`${E2E_RUN_ID}\`"
+            echo "- **Image tag**: \`${IMAGE_TAG}\`"
+            echo "- **Chart version**: \`${CHART_VERSION}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup test environment
+        uses: ./.github/actions/setup-test-environment
+        with:
+          test-type: 'e2e'
+          architecture: ${{ matrix.architecture }}
+          runner: ${{ matrix.runner }}
+          test-scenario-name: ${{ matrix.group }}
+          node-count: '1'
+          instances-per-node: '1'
+          cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}
+          operator-namespace: ${{ env.OPERATOR_NS }}
+          db-namespace: ${{ env.DB_NS }}
+          db-cluster-name: ${{ env.DB_NAME }}
+          db-username: ${{ env.DB_USERNAME }}
+          db-password: ${{ env.DB_PASSWORD }}
+          db-port: ${{ env.DB_PORT }}
+          image-tag: ${{ env.IMAGE_TAG }}
+          chart-version: ${{ env.CHART_VERSION }}
+          use-external-images: 'false'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository-owner: ${{ github.repository_owner }}
+
+      - name: Install Ginkgo CLI
+        working-directory: test/e2e
+        run: |
+          go install github.com/onsi/ginkgo/v2/ginkgo
+          ginkgo version
+
+      - name: Run E2E specs
+        working-directory: test/e2e
+        run: |
+          mkdir -p artifacts
+          set -o pipefail
+          ginkgo run \
+            -r \
+            --label-filter="${GINKGO_LABEL_FILTER}" \
+            --procs=${{ matrix.procs }} \
+            --timeout=75m \
+            --keep-going \
+            --junit-report=junit.xml \
+            --output-dir=artifacts \
+            ./tests/... 2>&1 | tee artifacts/ginkgo.log
+
+      - name: Collect cluster diagnostics
+        if: failure()
+        uses: ./.github/actions/collect-logs
+        with:
+          architecture: ${{ matrix.architecture }}
+          operator-namespace: ${{ env.OPERATOR_NS }}
+          db-namespace: ${{ env.DB_NS }}
+          db-name: ${{ env.DB_NAME }}
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-junit-${{ matrix.group }}-${{ matrix.architecture }}-${{ github.run_attempt }}
+          path: test/e2e/artifacts/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload E2E logs and diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs-${{ matrix.group }}-${{ matrix.architecture }}-${{ github.run_attempt }}
+          path: |
+            test/e2e/artifacts/
+            /tmp/cluster-logs/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -8,6 +8,18 @@
 ### Breaking Changes
 - **Validating webhook added**: A new `ValidatingWebhookConfiguration` enforces that `spec.schemaVersion` never exceeds the binary version and blocks `spec.documentDBVersion` rollbacks below the committed schema version. This requires [cert-manager](https://cert-manager.io/) to be installed in the cluster (it is already a prerequisite for the sidecar injector). Existing clusters upgrading to this release will have the webhook activated automatically via `helm upgrade`.
 
+### Testing infrastructure
+- **Unified E2E test suite ([#346](https://github.com/documentdb/documentdb-kubernetes-operator/pull/346))**: The four legacy end-to-end workflows (`test-integration.yml`, `test-E2E.yml`, `test-backup-and-restore.yml`, `test-upgrade-and-rollback.yml`) and their bash / JavaScript (mongosh) / Python (pymongo) glue have been replaced by a single Go / Ginkgo v2 / Gomega suite under `test/e2e/`. Specs are organised by CRD operation (lifecycle, scale, data, performance, backup, tls, feature gates, exposure, status, upgrade), reuse CloudNative-PG's `tests/utils` packages as a library, and speak the Mongo wire protocol via `go.mongodb.org/mongo-driver/v2`.
+
+### Breaking changes for contributors
+- **Local E2E invocation changed.** Tests are now run via `ginkgo` against an already-provisioned cluster, not via `npm test` / bash scripts. Typical invocation:
+  ```bash
+  cd test/e2e
+  ginkgo -r --label-filter=smoke ./tests/...
+  ```
+  Label selection replaces per-workflow entry points; depth is controlled by `TEST_DEPTH` (0=Highest … 4=Lowest). See [`test/e2e/README.md`](test/e2e/README.md) for prereqs, the full env-var table (including `E2E_RUN_ID` and the `E2E_UPGRADE_*` upgrade-suite variables), and troubleshooting.
+- **Design rationale** for the migration — scope, fixture tiers, parallelism model, CNPG reuse strategy — is documented in [`docs/designs/e2e-test-suite.md`](docs/designs/e2e-test-suite.md).
+
 ## [0.2.0] - 2026-03-25
 
 ### Major Features
