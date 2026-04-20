@@ -135,9 +135,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						return params
 					}(),
 					PgHBA: []string{
-						"host all all 0.0.0.0/0 trust",
-						"host all all ::0/0 trust",
-						"host replication all all trust",
+						"host all all localhost trust",
+						"hostssl replication streaming_replica all cert",
 					},
 				},
 				Bootstrap: getBootstrapConfiguration(documentdb, isPrimaryRegion, log),

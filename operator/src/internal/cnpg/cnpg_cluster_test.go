@@ -213,7 +213,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].LdLibraryPath).To(Equal([]string{"lib", "system"}))
 		Expect(result.Spec.PostgresConfiguration.AdditionalLibraries).To(ConsistOf("pg_cron", "pg_documentdb_core", "pg_documentdb"))
 		Expect(result.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("cron.database_name", "postgres"))
-		Expect(result.Spec.PostgresConfiguration.PgHBA).To(HaveLen(3))
+		Expect(result.Spec.PostgresConfiguration.PgHBA).To(HaveLen(2))
 		Expect(result.Spec.PostgresUID).To(Equal(int64(0)))
 		Expect(result.Spec.PostgresGID).To(Equal(int64(0)))
 	})

@@ -546,3 +546,184 @@ var _ = Describe("Physical Replication", func() {
 		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
 	})
 })
+
+var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", func() {
+	// Helper to build a minimal cnpgCluster suitable for AddClusterReplicationToClusterSpec.
+	buildCnpgCluster := func(name, namespace string) *cnpgv1.Cluster {
+		return &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: cnpgv1.ClusterSpec{
+				InheritedMetadata: &cnpgv1.EmbeddedObjectMetadata{
+					Labels: map[string]string{},
+				},
+			},
+		}
+	}
+
+	// Helper to build a ReplicationContext in primary state (zero value state == NoReplication which
+	// satisfies IsPrimary()) with two remote cluster members, using the None networking strategy so
+	// no service import/export objects are required.
+	buildPrimaryReplicationContext := func(name string, tlsSecret, caSecret string) *util.ReplicationContext {
+		return &util.ReplicationContext{
+			CNPGClusterName:              name + "-local",
+			OtherCNPGClusterNames:        []string{name + "-remote-a", name + "-remote-b"},
+			PrimaryCNPGClusterName:       name + "-local",
+			CrossCloudNetworkingStrategy: util.None,
+			ReplicationTLSSecret:         tlsSecret,
+			ClientCASecret:               caSecret,
+		}
+	}
+
+	It("does not set Certificates and falls back to trust-based pg_hba when ReplicationTLSSecret is empty", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-cert-none", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      "cluster-a",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		cnpgCluster := buildCnpgCluster("docdb-cert-none", namespace)
+		replicationContext := buildPrimaryReplicationContext("docdb-cert-none", "", "")
+
+		reconciler := buildDocumentDBReconciler()
+		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
+
+		Expect(cnpgCluster.Spec.Certificates).To(BeNil())
+		// Self + two remote external clusters
+		Expect(cnpgCluster.Spec.ExternalClusters).To(HaveLen(3))
+		for _, ec := range cnpgCluster.Spec.ExternalClusters {
+			if ec.Name == replicationContext.CNPGClusterName {
+				// Self cluster still uses the superuser for self-loopback.
+				Expect(ec.ConnectionParameters["user"]).To(Equal("postgres"))
+				continue
+			}
+			// External (remote) clusters use the dedicated replication user but no TLS material.
+			Expect(ec.ConnectionParameters["user"]).To(Equal("streaming_replica"))
+			Expect(ec.ConnectionParameters).ToNot(HaveKey("sslmode"))
+			Expect(ec.SSLCert).To(BeNil())
+			Expect(ec.SSLKey).To(BeNil())
+		}
+		// Fallback pg_hba configuration is applied when no TLS secret is provided.
+		Expect(cnpgCluster.Spec.PostgresConfiguration.PgHBA).To(Equal([]string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}))
+	})
+
+	It("propagates ClientCASecret onto the Certificates spec when set alongside ReplicationTLSSecret", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-cert-ca", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      "cluster-a",
+			ReplicationTLSSecret:         "replication-tls",
+			ClientCASecret:               "client-ca",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		cnpgCluster := buildCnpgCluster("docdb-cert-ca", namespace)
+		replicationContext := buildPrimaryReplicationContext("docdb-cert-ca", "replication-tls", "client-ca")
+
+		reconciler := buildDocumentDBReconciler()
+		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
+
+		Expect(cnpgCluster.Spec.Certificates).ToNot(BeNil())
+		Expect(cnpgCluster.Spec.Certificates.ReplicationTLSSecret).To(Equal("replication-tls"))
+		Expect(cnpgCluster.Spec.Certificates.ClientCASecret).To(Equal("client-ca"))
+	})
+
+	It("ignores ClientCASecret when ReplicationTLSSecret is empty", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-cert-ca-only", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      "cluster-a",
+			ClientCASecret:               "client-ca",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		cnpgCluster := buildCnpgCluster("docdb-cert-ca-only", namespace)
+		// A ClientCASecret without a ReplicationTLSSecret should not enable TLS.
+		replicationContext := buildPrimaryReplicationContext("docdb-cert-ca-only", "", "client-ca")
+
+		reconciler := buildDocumentDBReconciler()
+		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
+
+		Expect(cnpgCluster.Spec.Certificates).To(BeNil())
+		for _, ec := range cnpgCluster.Spec.ExternalClusters {
+			Expect(ec.ConnectionParameters).ToNot(HaveKey("sslmode"))
+			Expect(ec.SSLCert).To(BeNil())
+			Expect(ec.SSLKey).To(BeNil())
+		}
+	})
+})
+
+var _ = Describe("getReplicasChangePatchOps - cert management fields", func() {
+	It("emits a replace patch for spec.certificates alongside externalClusters", func() {
+		desired := &cnpgv1.Cluster{
+			Spec: cnpgv1.ClusterSpec{
+				ExternalClusters: []cnpgv1.ExternalCluster{{Name: "cluster-a"}},
+				Certificates: &cnpgv1.CertificatesConfiguration{
+					ReplicationTLSSecret: "replication-tls",
+					ClientCASecret:       "client-ca",
+				},
+			},
+		}
+		replicationContext := &util.ReplicationContext{
+			CrossCloudNetworkingStrategy: util.None,
+		}
+
+		var patchOps []cnpg.JSONPatch
+		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
+
+		hasCerts := false
+		for _, op := range patchOps {
+			if op.Path == cnpg.PatchPathCertificates {
+				Expect(op.Op).To(Equal(cnpg.PatchOpReplace))
+				Expect(op.Value).To(Equal(desired.Spec.Certificates))
+				hasCerts = true
+			}
+		}
+		Expect(hasCerts).To(BeTrue())
+	})
+
+	It("emits a replace patch for spec.certificates with a nil value when TLS is disabled", func() {
+		desired := &cnpgv1.Cluster{
+			Spec: cnpgv1.ClusterSpec{
+				ExternalClusters: []cnpgv1.ExternalCluster{{Name: "cluster-a"}},
+			},
+		}
+		replicationContext := &util.ReplicationContext{
+			CrossCloudNetworkingStrategy: util.None,
+		}
+
+		var patchOps []cnpg.JSONPatch
+		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
+
+		hasCerts := false
+		for _, op := range patchOps {
+			if op.Path == cnpg.PatchPathCertificates {
+				Expect(op.Op).To(Equal(cnpg.PatchOpReplace))
+				Expect(op.Value).To(BeNil())
+				hasCerts = true
+			}
+		}
+		Expect(hasCerts).To(BeTrue())
+	})
+})
