@@ -1098,6 +1098,8 @@ spec:
                       a "ca.crt" key. When specified, the operator references this secret in
                       clusters participating in replication.
                       NOTE: It needs to be the same for all clusters
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   clusterList:
                     description: ClusterList is the list of clusters participating
@@ -1146,6 +1148,8 @@ spec:
                       "tls.crt" and "tls.key" keys. When specified, the operator references this secret in
                       clusters participating in replication.
                       NOTE: It needs to be the same for all clusters
+                    maxLength: 253
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                 required:
                 - clusterList

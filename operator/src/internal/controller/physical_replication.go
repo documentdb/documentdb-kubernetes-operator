@@ -139,12 +139,14 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		externalCluster := cnpgv1.ExternalCluster{
 			Name: clusterName,
 			ConnectionParameters: map[string]string{
-				"host":    serviceName,
-				"port":    "5432",
-				"dbname":  "postgres",
-				"user":    "streaming_replica",
+				"host":   serviceName,
+				"port":   "5432",
+				"dbname": "postgres",
+				"user":   "streaming_replica",
 			},
 		}
+
+		// Add certificates to external connections
 		if replicationContext.ReplicationTLSSecret != "" {
 			externalCluster.ConnectionParameters["sslmode"] = "require"
 			externalCluster.SSLCert = &corev1.SecretKeySelector{
@@ -159,20 +161,24 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 				},
 				Key: "tls.key",
 			}
-			cnpgCluster.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
-				ReplicationTLSSecret: replicationContext.ReplicationTLSSecret,
-			}
-			if replicationContext.ClientCASecret != "" {
-				cnpgCluster.Spec.Certificates.ClientCASecret = replicationContext.ClientCASecret
-			}
-		} else {
-			// If we don't have a cert, we just need to trust
-			cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
-				"host all all localhost trust",
-				"host replication streaming_replica all trust",
-			}
 		}
 		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, externalCluster)
+	}
+
+	// Add certificate configuration for incoming connections
+	if replicationContext.ReplicationTLSSecret != "" {
+		cnpgCluster.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ReplicationTLSSecret: replicationContext.ReplicationTLSSecret,
+		}
+		if replicationContext.ClientCASecret != "" {
+			cnpgCluster.Spec.Certificates.ClientCASecret = replicationContext.ClientCASecret
+		}
+	} else {
+		// If we don't have a cert AND we're multi-regional, we just need to trust (for now)
+		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}
 	}
 
 	return nil
