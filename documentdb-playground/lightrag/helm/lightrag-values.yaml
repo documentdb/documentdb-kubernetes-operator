@@ -50,8 +50,8 @@ env:
   LIGHTRAG_GRAPH_STORAGE: MongoGraphStorage
   LIGHTRAG_DOC_STATUS_STORAGE: MongoDocStatusStorage
   # DocumentDB connection — update these values for your cluster
-  MONGO_URI: "mongodb://admin:MySecurePassword123@documentdb-service-my-cluster.documentdb-demo.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
-  MONGO_DATABASE: "LightRAG"
+  MONGO_URI: "mongodb://docdbadmin:SecurePassword123!@documentdb-service-lightrag-test.documentdb-test.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+  MONGO_DATABASE: "lightrag"
 
 envFrom:
   configmaps: []

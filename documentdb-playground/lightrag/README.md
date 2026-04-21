@@ -159,6 +159,7 @@ LightRAG's MongoDB storage assumes MongoDB Atlas features. This playground inclu
 | `$listSearchIndexes` | ✅ | ❌ | Graceful fallback to regex |
 | `createIndex` with collation | ✅ | ❌ | Skip collation indexes |
 | `createIndex` (secondary) | ✅ | Hangs | Skip via init-container patch |
+| `find_one({'_id': id})` | ✅ | ⚠️ v0.109-0 bug | Upgrade to v0.110-0+ |
 | Basic CRUD operations | ✅ | ✅ | Works natively |
 | Aggregation pipelines | ✅ | ✅ | `$group`, `$match`, `$sort` work |
 
@@ -189,7 +190,7 @@ The patches are applied automatically — no manual configuration is needed.
 
 ## Verified Operations
 
-The following LightRAG operations have been tested with DocumentDB:
+The following LightRAG operations have been tested with DocumentDB v0.112.0+:
 
 - ✅ Document ingestion and chunking
 - ✅ Entity and relationship extraction (via LLM)
@@ -198,6 +199,301 @@ The following LightRAG operations have been tested with DocumentDB:
 - ✅ Naive, local, global, and hybrid RAG queries
 - ✅ Document status tracking
 - ✅ WebUI for graph visualization
+
+> **Note:** DocumentDB v0.109-0 had a bug where `_id` lookups failed after writes. Use v0.110-0 or later.
+
+## Testing Guide
+
+Use this guide to verify LightRAG + DocumentDB integration is working correctly.
+
+### Prerequisites
+
+Ensure you have:
+- DocumentDB operator installed
+- LightRAG and Ollama pods running (`kubectl get pods -n lightrag`)
+- Port-forward active: `kubectl port-forward svc/lightrag 9621:9621 -n lightrag &`
+- Python with pymongo installed for verification tests
+
+### Deploy DocumentDB with Custom Images (Required)
+
+The official DocumentDB v0.109-0 images have a bug that breaks LightRAG. You must deploy with custom images from the `hossain-rayhan` fork that include the fix:
+
+```bash
+# Create namespace and credentials
+kubectl create namespace documentdb-test
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-test
+type: Opaque
+stringData:
+  username: docdbadmin
+  password: SecurePassword123!
+EOF
+
+# Create image pull secret for the custom images
+kubectl create secret docker-registry ghcr-pull-secret \
+    -n documentdb-test \
+    --docker-server=ghcr.io \
+    --docker-username=<your-github-username> \
+    --docker-password=<your-github-token>
+
+# Patch default service account to use the pull secret
+kubectl patch serviceaccount default -n documentdb-test \
+    -p '{"imagePullSecrets": [{"name": "ghcr-pull-secret"}]}'
+
+# Deploy DocumentDB with custom images
+kubectl apply -f - <<EOF
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: lightrag-test
+  namespace: documentdb-test
+spec:
+  environment: aks
+  nodeCount: 1
+  instancesPerNode: 1
+  # Custom images with _id lookup fix (v0.112.0+)
+  documentDBImage: ghcr.io/hossain-rayhan/documentdb-kubernetes-operator/documentdb:0.112.0
+  gatewayImage: ghcr.io/hossain-rayhan/documentdb-kubernetes-operator/gateway:0.112.0
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 10Gi
+  exposeViaService:
+    serviceType: LoadBalancer
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+EOF
+
+# Wait for DocumentDB to be healthy
+kubectl wait --for=jsonpath='{.status.phase}'="Cluster in healthy state" \
+    documentdb/lightrag-test -n documentdb-test --timeout=300s
+```
+
+Verify the custom images are being used:
+```bash
+kubectl get pod -n documentdb-test -l documentdb.io/name=lightrag-test \
+    -o jsonpath='{.items[0].spec.volumes[?(@.name=="documentdb")].image.reference}{"\n"}'
+# Expected: ghcr.io/hossain-rayhan/documentdb-kubernetes-operator/documentdb:0.112.0
+```
+
+### Test 1: Verify `_id` Lookup Fix
+
+This test confirms the DocumentDB `_id` lookup bug (fixed in v0.110-0+) is resolved:
+
+```bash
+python3 -c "
+from pymongo import MongoClient
+
+# Update with your DocumentDB connection details
+client = MongoClient('mongodb://<user>:<password>@<host>:10260/?authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&directConnection=true')
+db = client['test_id_lookup']
+col = db['test']
+col.drop()
+
+# Insert and immediately read back by _id
+result = col.insert_one({'name': 'test', 'value': 42})
+print(f'Inserted _id: {result.inserted_id}')
+
+# This was failing with 'pruned relation' error in v0.109-0
+found = col.find_one({'_id': result.inserted_id})
+if found:
+    print(f'SUCCESS: _id lookup works! Found: {found}')
+else:
+    print('FAILED: _id lookup returned None')
+
+col.drop()
+client.close()
+"
+```
+
+**Expected output:**
+```
+Inserted _id: <ObjectId>
+SUCCESS: _id lookup works! Found: {'_id': ObjectId('...'), 'name': 'test', 'value': 42}
+```
+
+### Test 2: Document Ingestion
+
+Test that documents can be ingested without "pruned relation" errors:
+
+```bash
+# Insert a short document (faster processing)
+curl -s -X POST http://localhost:9621/documents/text \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Microsoft Azure is a cloud computing platform. It competes with AWS and Google Cloud."}' | jq .
+```
+
+**Expected output:**
+```json
+{
+  "status": "success",
+  "message": "Text successfully received. Processing will continue in background.",
+  "track_id": "insert_..."
+}
+```
+
+Check processing status in logs (wait 2-3 minutes for LLM to complete):
+```bash
+kubectl logs -n lightrag -l app.kubernetes.io/name=lightrag --tail=20 | grep -E "(Completed|Processing|Extracting)"
+```
+
+**Expected:** `INFO: Completed processing file X/X: unknown_source`
+
+### Test 3: RAG Queries
+
+Test different query modes:
+
+```bash
+# Naive mode (direct retrieval)
+curl -s -X POST http://localhost:9621/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is AWS?", "mode": "naive"}' | jq .
+
+# Local mode (uses knowledge graph)
+curl -s -X POST http://localhost:9621/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What companies compete with AWS?", "mode": "local"}' | jq .
+
+# Hybrid mode (combines local + global)
+curl -s -X POST http://localhost:9621/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is cloud computing?", "mode": "hybrid"}' | jq .
+```
+
+**Expected:** Each query should return a `response` with relevant information.
+
+### Test 4: Verify Data in DocumentDB
+
+Verify entities, relations, and documents are stored in DocumentDB:
+
+```bash
+python3 -c "
+from pymongo import MongoClient
+
+# Update with your DocumentDB connection details
+c = MongoClient('mongodb://<user>:<password>@<host>:10260/?authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&directConnection=true')
+db = c['lightrag']
+
+print('=== COLLECTIONS ===')
+for col in sorted(db.list_collection_names()):
+    count = db[col].count_documents({})
+    print(f'  {col}: {count} docs')
+
+print('\n=== ENTITIES ===')
+for e in db['entity_chunks'].find():
+    print(f'  - {e.get(\"_id\", \"?\")}')
+
+print('\n=== RELATIONS ===')
+for r in db['relation_chunks'].find():
+    print(f'  - {r.get(\"_id\", \"?\")}')
+
+print('\n=== DOC STATUS ===')
+for d in db['doc_status'].find({}, {'_id': 1, 'status': 1}):
+    status = d.get('status', '?')
+    doc_id = str(d.get('_id', '?'))[:40]
+    print(f'  - {doc_id}... : {status}')
+
+c.close()
+"
+```
+
+**Expected output:**
+```
+=== COLLECTIONS ===
+  chunk_entity_relation: X docs
+  doc_status: X docs
+  entity_chunks: X docs
+  full_docs: X docs
+  ...
+
+=== ENTITIES ===
+  - AWS
+  - Microsoft Azure
+  - Google Cloud
+  ...
+
+=== RELATIONS ===
+  - AWS<SEP>Amazon
+  ...
+
+=== DOC STATUS ===
+  - doc-xxx... : processed
+  ...
+```
+
+### Test 5: WebUI Verification
+
+1. Open http://localhost:9621 in your browser
+2. **Documents tab**: Should show ingested documents with status (Completed/Failed)
+3. **Knowledge Graph tab**: Should display entity nodes (AWS, Azure, etc.) with connecting edges
+4. **Query tab**: Enter "What is AWS?" and select a mode — should return contextual answer
+
+### Test Summary Checklist
+
+| Test | Command/Action | Expected Result |
+|------|---------------|-----------------|
+| `_id` lookup | Python pymongo test | "SUCCESS: _id lookup works!" |
+| Document ingestion | POST /documents/text | `"status": "success"` |
+| No pruned errors | Check logs | No "pruned relation" errors |
+| Entity extraction | Check logs | "Completed processing file" |
+| RAG query | POST /query | Returns relevant `response` |
+| Data persistence | Python collection count | Collections have documents |
+| WebUI Documents | Browser | Shows document list with status |
+| WebUI Graph | Browser | Shows entity nodes and edges |
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| "pruned relation" error | DocumentDB < v0.110-0 | Upgrade to v0.110-0+ |
+| Document status: Failed | LLM timeout | Try shorter documents; check Ollama resources |
+| Empty query response | Document still processing | Wait 2-3 min; check logs for completion |
+| Graph shows no edges | LLM output format errors | Normal for some docs; relation extraction is LLM-dependent |
+
+## Known Issues
+
+### "Pruned Relation" Error on `_id` Lookups (Fixed in v0.110-0)
+
+**Status:** Fixed in DocumentDB v0.110-0 ([PR #459](https://github.com/documentdb/documentdb/pull/459))
+
+**Affected versions:** DocumentDB extension ≤ v0.109-0
+
+There is a bug in DocumentDB where queries using the `_id` index fail after any write operation:
+
+```
+trying to open a pruned relation, full error: {
+  'ok': 0.0, 
+  'code': 1, 
+  'codeName': 'SqlState(EXX000)', 
+  'errmsg': 'trying to open a pruned relation'
+}
+```
+
+**Root Cause:** In PostgreSQL 18, the custom planner's fast-path read plan did not correctly set `unprunableRelIds`, causing the `_id` index relation to be incorrectly marked as prunable. The fix ([commit e2c5520](https://github.com/documentdb/documentdb/commit/e2c552023f455b3abfa261439e7809f80afeeeec)) properly sets non-prunable RT indexes for PG 18.
+
+**What fails vs. what works:**
+
+| Operation | Result |
+|-----------|--------|
+| `insert_one({...})` | ✅ Works |
+| `find_one({})` (empty filter) | ✅ Works |
+| `find_one({'name': value})` | ✅ Works |
+| `count_documents({})` | ✅ Works |
+| `find_one({'_id': id})` after any write | ❌ **FAILS** |
+
+**Timeline:**
+| Event | Date |
+|-------|------|
+| Bug fix merged to main | Feb 25, 2026 |
+| v0.109-0 released (does NOT include fix) | Mar 9, 2026 |
+| v0.112.0 (verified fix) | Apr 21, 2026 |
+
+**Resolution:** Upgrade to DocumentDB extension v0.110-0 or later. Tested and verified working with v0.112.0.
+
+**Impact:** This prevents LightRAG document ingestion from working because the ingestion workflow reads back document status immediately after writing it using `find_one({'_id': inserted_id})`.
 
 ## Troubleshooting
 
