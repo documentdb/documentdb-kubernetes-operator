@@ -255,12 +255,9 @@ rate(workqueue_queue_duration_seconds_sum{name="documentdb-controller"}[5m])
 
 ## CNPG / PostgreSQL Metrics
 
-!!! warning "Postgres-internal metrics are deferred"
-    The OpenTelemetry Collector sidecar shipped today exposes only a placeholder `documentdb.postgres.up` SQL query. The richer `postgresql_*` metrics listed below (replication lag, backends, db size, WAL age, operations, etc.) **are not yet emitted**. They will be added in a follow-up by extending the SQL queries in `operator/src/internal/otel/base_config.yaml`.
+The `cnpg_*` metrics below come from CloudNative-PG's built-in Prometheus endpoint, which the DocumentDB operator does **not** enable by default. They are only available if you manually configure CNPG monitoring on the underlying Cluster resource.
 
-    The `cnpg_*` metrics below come from CloudNative-PG's built-in Prometheus endpoint, which the DocumentDB operator does **not** enable by default. They are only available if you manually configure CNPG monitoring on the underlying Cluster resource.
-
-For the full CNPG metrics list, see the [CloudNative-PG monitoring docs](https://cloudnative-pg.io/documentation/current/monitoring/). The tables below are kept as a forward-looking reference for what the dashboards will surface once the SQL queries land.
+For the full CNPG metrics list, see the [CloudNative-PG monitoring docs](https://cloudnative-pg.io/documentation/current/monitoring/).
 
 ### Replication
 

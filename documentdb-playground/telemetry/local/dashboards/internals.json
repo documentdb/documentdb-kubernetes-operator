@@ -1,6 +1,6 @@
 {
   "title": "DocumentDB Internals - Container & Node Resources",
-  "description": "Container CPU / memory / network and node-level resources from cAdvisor and kubelet. Postgres-specific panels are deferred to a follow-up PR — see README.",
+  "description": "Container CPU / memory / network and node-level resources from cAdvisor and kubelet.",
   "uid": "documentdb-internals",
   "schemaVersion": 39,
   "version": 1,

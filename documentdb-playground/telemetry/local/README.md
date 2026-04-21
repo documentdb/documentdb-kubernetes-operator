@@ -2,8 +2,6 @@
 
 A metrics-focused observability stack for DocumentDB running on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel Collector sidecar enabled and pre-configured Grafana dashboards for **gateway** and **container/node** metrics out of the box.
 
-> **Scope:** This playground covers gateway metrics and VM/container metrics. Postgres-specific metrics (replication lag, backends, WAL age, etc.) are **deferred to a follow-up PR** — they require additional SQL queries in the operator's embedded `base_config.yaml`.
-
 ## Prerequisites
 
 - **Docker** (running)
@@ -171,8 +169,6 @@ Two dashboards are auto-provisioned in the **DocumentDB** folder:
 |-----------|-------------|
 | **Gateway** | Request rates, average latency, error rates, document throughput, request/response sizes, gateway container CPU/memory and pod network I/O |
 | **Internals** | Container CPU / memory (working set, RSS) / filesystem usage, pod network rx/tx, node-level memory available, sidecar pod count |
-
-Postgres-internal panels (replication lag, backends, commits/rollbacks, index stats, WAL age) are intentionally absent — they will return in a follow-up PR that extends `operator/src/internal/otel/base_config.yaml` with the corresponding SQL queries.
 
 Dashboards auto-refresh every 30 seconds. Edits made in the Grafana UI persist until the pod restarts.
 

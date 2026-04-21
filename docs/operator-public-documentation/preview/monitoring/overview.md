@@ -77,10 +77,6 @@ The collector ships with a minimal pipeline:
 
 The pipeline is deep-merged from an embedded static config (`base_config.yaml`) and a dynamic config rendered by the operator. Changes to either trigger a content-hash update on the ConfigMap; the sidecar-injector compares hashes and rolls pods only when the config actually changes.
 
-### Postgres metrics — deferred
-
-The current pipeline includes only a placeholder `documentdb.postgres.up` SQL query. Comprehensive Postgres metrics (replication lag, backends, commits/rollbacks, WAL age, db size, index stats, etc.) will be added in a follow-up by extending the SQL queries in `operator/src/internal/otel/base_config.yaml`. Until then, dashboards in this repository focus on **gateway metrics** and **container/node metrics**.
-
 ## Prometheus Integration
 
 ### Scraping the in-pod sidecar
@@ -106,7 +102,7 @@ The operator sets these annotations on every DocumentDB pod when monitoring is e
       regex: (.+)
 ```
 
-For Prometheus Operator users, a `PodMonitor` selecting the same labels achieves the equivalent effect. A reference example will be added in a follow-up.
+For Prometheus Operator users, a `PodMonitor` selecting the same labels achieves the equivalent effect.
 
 ### Container & node metrics
 
@@ -167,7 +163,7 @@ Filter by `namespace`, `pod`, and `container` labels (e.g. `container="documentd
 
 ### PostgreSQL metrics
 
-**Deferred** — see [Postgres metrics — deferred](#postgres-metrics--deferred). The CNPG instance manager exposes a separate `/metrics` endpoint that some users may scrape directly; that is independent of the OTel sidecar pipeline.
+The CNPG instance manager exposes a separate `/metrics` endpoint that some users may scrape directly; that is independent of the OTel sidecar pipeline.
 
 ### Controller-runtime metrics
 
