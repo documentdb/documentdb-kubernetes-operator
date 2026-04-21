@@ -378,8 +378,8 @@ func (impl Implementation) reconcileMetadata(
 }
 
 // gatewayContainerName is the name of the documentdb gateway container that
-// the OTel Collector sidecar pushes its metrics to. Kept as a package-level
-// constant so tests can reference it.
+// pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
+// Kept as a package-level constant so tests can reference it.
 const gatewayContainerName = "documentdb-gateway"
 
 // gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
@@ -390,37 +390,37 @@ const gatewayContainerName = "documentdb-gateway"
 // Kubernetes resolves $(POD_NAME) interpolation in the order env vars
 // appear in the container's Env list.
 func gatewayOTelEnvVars() []corev1.EnvVar {
-return []corev1.EnvVar{
-{
-Name: "POD_NAME",
-ValueFrom: &corev1.EnvVarSource{
-FieldRef: &corev1.ObjectFieldSelector{
-FieldPath: "metadata.name",
-},
-},
-},
-{
-Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-Value: "http://localhost:4317",
-},
-{
-// Required to enable the gateway's OTLP metrics exporter; the
-// pgmongo gateway gates OTel init off by default and checks this
-// env var (or a JSON TelemetryOptions block) at startup.
-Name:  "OTEL_METRICS_ENABLED",
-Value: "true",
-},
-{
-// Per-pod attribution for OTLP-exported telemetry. NOTE: dedup
-// below is name-only, so a pre-existing OTEL_RESOURCE_ATTRIBUTES
-// value (set by the user or a future operator change) wins —
-// service.instance.id will not be merged in. Dashboards already
-// pivot on the `pod` label set by the collector's resource
-// processor, so this is acceptable today.
-Name:  "OTEL_RESOURCE_ATTRIBUTES",
-Value: "service.instance.id=$(POD_NAME)",
-},
-}
+	return []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
+			Value: "http://127.0.0.1:4317",
+		},
+		{
+			// Required to enable the gateway's OTLP metrics exporter; the
+			// pgmongo gateway gates OTel init off by default and checks this
+			// env var (or a JSON TelemetryOptions block) at startup.
+			Name:  "OTEL_METRICS_ENABLED",
+			Value: "true",
+		},
+		{
+			// Per-pod attribution for OTLP-exported telemetry. NOTE: dedup
+			// below is name-only, so a pre-existing OTEL_RESOURCE_ATTRIBUTES
+			// value (set by the user or a future operator change) wins —
+			// service.instance.id will not be merged in. Dashboards already
+			// pivot on the `pod` label set by the collector's resource
+			// processor, so this is acceptable today.
+			Name:  "OTEL_RESOURCE_ATTRIBUTES",
+			Value: "service.instance.id=$(POD_NAME)",
+		},
+	}
 }
 
 // injectGatewayOTelEnv mutates `pod` to append OTel env vars to the gateway
@@ -433,20 +433,20 @@ Value: "service.instance.id=$(POD_NAME)",
 // "Pod is invalid: spec: Forbidden: pod updates may not change fields other
 // than ...".
 func injectGatewayOTelEnv(pod *corev1.Pod) {
-envs := gatewayOTelEnvVars()
-for i := range pod.Spec.Containers {
-if pod.Spec.Containers[i].Name != gatewayContainerName {
-continue
-}
-existing := make(map[string]bool, len(pod.Spec.Containers[i].Env))
-for _, e := range pod.Spec.Containers[i].Env {
-existing[e.Name] = true
-}
-for _, e := range envs {
-if !existing[e.Name] {
-pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, e)
-}
-}
-return
-}
+	envs := gatewayOTelEnvVars()
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name != gatewayContainerName {
+			continue
+		}
+		existing := make(map[string]bool, len(pod.Spec.Containers[i].Env))
+		for _, e := range pod.Spec.Containers[i].Env {
+			existing[e.Name] = true
+		}
+		for _, e := range envs {
+			if !existing[e.Name] {
+				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, e)
+			}
+		}
+		return
+	}
 }
