@@ -82,8 +82,10 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			// actually answers on the wire. Without this step,
 			// "Ready=true" alone can mask a broken gateway sidecar
 			// (e.g. wrong image, misconfigured credentials secret).
-			// NewFromDocumentDB handles port-forward + credentials;
-			// a successful Ping is the canonical "hello" probe.
+			// NewFromDocumentDB pings internally before returning,
+			// so the explicit Ping below is belt-and-braces at the
+			// test boundary — keeping it here makes the failure
+			// narrative clear without readers chasing helper code.
 			h, err := mongohelper.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, name)
 			Expect(err).ToNot(HaveOccurred(), "connect mongo to freshly-deployed DocumentDB")
 			DeferCleanup(func(ctx SpecContext) { _ = h.Close(ctx) })

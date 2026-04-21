@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"time"
@@ -144,21 +145,19 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			// cert in memory, this ping would fail with a bad
 			// certificate error.
 			By("forcing cert-manager to reissue the gateway Secret")
-			origCrt := make([]byte, 0)
-			{
-				sec := &corev1.Secret{}
-				Expect(env.Client.Get(ctx, types.NamespacedName{
-					Namespace: cluster.NamespaceName, Name: tlsSecretName,
-				}, sec)).To(Succeed(), "read TLS secret before deletion")
-				origCrt = append(origCrt, sec.Data[corev1.TLSCertKey]...)
-				Expect(env.Client.Delete(ctx, sec)).To(Succeed(),
-					"delete TLS secret to trigger cert-manager renewal")
-			}
+			origSec := &corev1.Secret{}
+			Expect(env.Client.Get(ctx, types.NamespacedName{
+				Namespace: cluster.NamespaceName, Name: tlsSecretName,
+			}, origSec)).To(Succeed(), "read TLS secret before deletion")
+			origCrt := bytes.Clone(origSec.Data[corev1.TLSCertKey])
+			Expect(env.Client.Delete(ctx, origSec)).To(Succeed(),
+				"delete TLS secret to trigger cert-manager renewal")
 
 			// Wait for cert-manager to recreate the secret with a
-			// different tls.crt. Using the existing MongoConnect
-			// timeout budget is enough here; if cert-manager takes
-			// longer the test will fail loudly rather than flake.
+			// different tls.crt. Using the DocumentDBReady budget
+			// here because cert-manager reissue latency is dominated
+			// by issuer controller scheduling, not mongo connect.
+			By("waiting for cert-manager to reissue the TLS Secret with a new tls.crt")
 			Eventually(func(g Gomega) {
 				sec := &corev1.Secret{}
 				g.Expect(env.Client.Get(ctx, types.NamespacedName{
@@ -173,15 +172,21 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 
 			// Reconnect with the NEW CA and ping; Eventually gives
 			// the gateway a window to notice the remounted cert.
+			// Each Eventually attempt gets its own bounded context so
+			// the per-attempt budget does not collapse across retries
+			// — otherwise the first iteration's NewClient could burn
+			// the whole MongoConnect window, leaving no time for the
+			// gateway to actually pick up the reissued material.
+			By("reconnecting via the renewed CA and pinging through the gateway")
 			newCA := readCAFromSecret(ctx, cluster.NamespaceName, tlsSecretName)
 			newPool := x509.NewCertPool()
 			Expect(newPool.AppendCertsFromPEM(newCA)).
 				To(BeTrue(), "parse renewed CA PEM")
 
-			renewCtx, cancelRenew := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
-			defer cancelRenew()
 			Eventually(func(g Gomega) {
-				client2, err := mongohelper.NewClient(renewCtx, mongohelper.ClientOptions{
+				attemptCtx, cancelAttempt := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
+				defer cancelAttempt()
+				client2, err := mongohelper.NewClient(attemptCtx, mongohelper.ClientOptions{
 					Host:       host,
 					Port:       port,
 					User:       tlsCredentialUser,
@@ -191,11 +196,11 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 					ServerName: sni,
 				})
 				g.Expect(err).NotTo(HaveOccurred(), "reconnect with renewed CA")
-				defer func() { _ = client2.Disconnect(renewCtx) }()
-				g.Expect(mongohelper.Ping(renewCtx, client2)).To(Succeed(),
+				defer func() { _ = client2.Disconnect(attemptCtx) }()
+				g.Expect(mongohelper.Ping(attemptCtx, client2)).To(Succeed(),
 					"ping via renewed cert should succeed")
-			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
-				Should(Succeed(), "gateway did not start serving the renewed cert")
+			}, timeouts.For(timeouts.DocumentDBReady), timeouts.PollInterval(timeouts.MongoConnect)).
+				Should(Succeed(), "gateway did not start serving the renewed cert (or reconnect kept failing)")
 		})
 	},
 )
