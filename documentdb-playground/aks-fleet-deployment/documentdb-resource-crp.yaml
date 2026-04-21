@@ -18,6 +18,39 @@ stringData:
 
 ---
 
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-cross-region-issuer
+  namespace: documentdb-preview-ns
+spec:
+  selfSigned: {}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cross-region-client-cert
+  namespace: documentdb-preview-ns
+  labels:
+    cnpg.io/reload: ""
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cross-region-client-cert
+  namespace: documentdb-preview-ns
+spec:
+  secretName: cross-region-client-cert
+  usages:
+    - client auth
+  commonName: streaming_replica
+  issuerRef:
+    name: selfsigned-cross-region-issuer
+    kind: Issuer
+    group: cert-manager.io
+
+---
+
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
@@ -32,6 +65,8 @@ spec:
   environment: aks
   clusterReplication:
     highAvailability: true
+    replicationTLSSecret: cross-region-client-cert
+    clientCASecret: cross-region-client-cert
     crossCloudNetworkingStrategy: AzureFleet
     primary: {{PRIMARY_CLUSTER}}
     clusterList:
@@ -75,6 +110,10 @@ spec:
       version: v1
       kind: Secret
       name: documentdb-credentials
+    - group: ""
+      version: v1
+      kind: Secret
+      name: cross-region-client-cert
   policy:
     placementType: PickAll
     affinity:

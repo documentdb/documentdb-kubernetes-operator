@@ -136,15 +136,49 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		},
 	}
 	for clusterName, serviceName := range replicationContext.GenerateExternalClusterServices(documentdb.Name, documentdb.Namespace, replicationContext.IsAzureFleetNetworking()) {
-		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, cnpgv1.ExternalCluster{
+		externalCluster := cnpgv1.ExternalCluster{
 			Name: clusterName,
 			ConnectionParameters: map[string]string{
 				"host":   serviceName,
 				"port":   "5432",
 				"dbname": "postgres",
-				"user":   "postgres",
+				"user":   "streaming_replica",
 			},
-		})
+		}
+
+		// Add certificates to external connections
+		if replicationContext.ReplicationTLSSecret != "" {
+			externalCluster.ConnectionParameters["sslmode"] = "require"
+			externalCluster.SSLCert = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: replicationContext.ReplicationTLSSecret,
+				},
+				Key: "tls.crt",
+			}
+			externalCluster.SSLKey = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: replicationContext.ReplicationTLSSecret,
+				},
+				Key: "tls.key",
+			}
+		}
+		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, externalCluster)
+	}
+
+	// Add certificate configuration for incoming connections
+	if replicationContext.ReplicationTLSSecret != "" {
+		cnpgCluster.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ReplicationTLSSecret: replicationContext.ReplicationTLSSecret,
+		}
+		if replicationContext.ClientCASecret != "" {
+			cnpgCluster.Spec.Certificates.ClientCASecret = replicationContext.ClientCASecret
+		}
+	} else {
+		// If we don't have a cert AND we're multi-regional, we just need to trust (for now)
+		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}
 	}
 
 	return nil
@@ -492,6 +526,11 @@ func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, desired *cnpgv1.Clust
 		Op:    cnpg.PatchOpReplace,
 		Path:  cnpg.PatchPathExternalClusters,
 		Value: desired.Spec.ExternalClusters,
+	})
+	*patchOps = append(*patchOps, cnpg.JSONPatch{
+		Op:    cnpg.PatchOpReplace,
+		Path:  cnpg.PatchPathCertificates,
+		Value: desired.Spec.Certificates,
 	})
 	if replicationContext.IsAzureFleetNetworking() {
 		*patchOps = append(*patchOps, cnpg.JSONPatch{
