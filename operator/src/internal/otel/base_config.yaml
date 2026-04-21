@@ -3,6 +3,8 @@
 # and merged by the OTel Collector at startup via multiple --config flags.
 # Add new SQL metric queries here — no Go code changes needed.
 receivers:
+  # SQL-driven Postgres health metrics. Add new SQL metric queries here —
+  # no Go code changes needed.
   sqlquery:
     driver: postgres
     datasource: "host=localhost port=5432 user=${env:PGUSER} password=${env:PGPASSWORD} dbname=postgres sslmode=disable"
@@ -13,6 +15,16 @@ receivers:
           - metric_name: documentdb.postgres.up
             value_column: up
             data_type: gauge
+
+  # OTLP receiver for telemetry pushed by co-located pod containers
+  # (e.g. the documentdb-gateway pushes metrics to localhost:4317).
+  # gRPC only — the gateway uses gRPC; HTTP can be added if a future client requires it.
+  # Bound to 127.0.0.1: the gateway and collector share the pod network namespace,
+  # so loopback is sufficient and avoids exposing the listener pod-wide.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
 
 processors:
   batch:
