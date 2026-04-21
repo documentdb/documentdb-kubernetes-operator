@@ -54,6 +54,8 @@ type DocumentDBSpec struct {
 	// DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
 	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
 	// a default secret name `documentdb-credentials` is used.
+	//
+	// NOTE: Immutable today; will be relaxed to support credential rotation (see #331).
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="credential secret cannot be changed after cluster creation"
 	DocumentDbCredentialSecret string `json:"documentDbCredentialSecret,omitempty"`
 
@@ -121,7 +123,7 @@ type DocumentDBSpec struct {
 	//     as it allows rollback by reverting the image before committing the schema change.
 	//   - "auto": Schema automatically updates to match the binary version whenever
 	//     the binary is upgraded. This is the simplest mode but provides no rollback
-	//     safety window.
+	//     safety window. Only recommended for single-region clusters.
 	//   - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
 	//     Must be <= the binary version.
 	//
@@ -186,6 +188,7 @@ type Resource struct {
 
 type StorageConfiguration struct {
 	// PvcSize is the size of the persistent volume claim for DocumentDB storage (e.g., "10Gi").
+	// +kubebuilder:validation:MinLength=1
 	PvcSize string `json:"pvcSize"`
 
 	// StorageClass specifies the storage class for DocumentDB persistent volumes.

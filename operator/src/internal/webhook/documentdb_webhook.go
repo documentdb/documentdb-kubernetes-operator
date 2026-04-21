@@ -238,19 +238,38 @@ func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.Do
 func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
 	oldSize := oldDB.Spec.Resource.Storage.PvcSize
 	newSize := newDB.Spec.Resource.Storage.PvcSize
-	if oldSize == "" || newSize == "" || oldSize == newSize {
+	if oldSize == newSize {
 		return nil
 	}
 
+	pvcSizePath := field.NewPath("spec", "resource", "storage", "pvcSize")
+	var allErrs field.ErrorList
+
 	oldQty, errOld := resource.ParseQuantity(oldSize)
+	if errOld != nil {
+		allErrs = append(allErrs, field.Invalid(
+			pvcSizePath,
+			oldSize,
+			fmt.Sprintf("existing pvcSize is not a valid resource quantity: %v", errOld),
+		))
+	}
+
 	newQty, errNew := resource.ParseQuantity(newSize)
-	if errOld != nil || errNew != nil {
-		return nil // Let Kubernetes API server handle invalid quantities
+	if errNew != nil {
+		allErrs = append(allErrs, field.Invalid(
+			pvcSizePath,
+			newSize,
+			fmt.Sprintf("pvcSize must be a valid resource quantity: %v", errNew),
+		))
+	}
+
+	if len(allErrs) > 0 {
+		return allErrs
 	}
 
 	if newQty.Cmp(oldQty) < 0 {
 		return field.ErrorList{field.Forbidden(
-			field.NewPath("spec", "resource", "storage", "pvcSize"),
+			pvcSizePath,
 			fmt.Sprintf("storage size can only be increased; attempted shrink from %s to %s", oldSize, newSize),
 		)}
 	}

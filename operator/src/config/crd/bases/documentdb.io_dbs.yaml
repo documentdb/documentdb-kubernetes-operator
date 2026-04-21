@@ -1152,6 +1152,8 @@ spec:
                   DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
                   for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
                   a default secret name `documentdb-credentials` is used.
+
+                  NOTE: Immutable today; will be relaxed to support credential rotation (see #331).
                 type: string
                 x-kubernetes-validations:
                 - message: credential secret cannot be changed after cluster creation
@@ -1291,6 +1293,7 @@ spec:
                       pvcSize:
                         description: PvcSize is the size of the persistent volume
                           claim for DocumentDB storage (e.g., "10Gi").
+                        minLength: 1
                         type: string
                       storageClass:
                         description: |-
@@ -1324,7 +1327,7 @@ spec:
                       as it allows rollback by reverting the image before committing the schema change.
                     - "auto": Schema automatically updates to match the binary version whenever
                       the binary is upgraded. This is the simplest mode but provides no rollback
-                      safety window.
+                      safety window. Only recommended for single-region clusters.
                     - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
                       Must be <= the binary version.
                 pattern: ^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$

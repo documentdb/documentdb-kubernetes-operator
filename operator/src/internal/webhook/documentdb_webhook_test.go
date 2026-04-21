@@ -456,13 +456,27 @@ var _ = Describe("validateStorageResize", func() {
 		Expect(errs).To(BeEmpty())
 	})
 
-	It("skips validation when old size is empty", func() {
+	It("rejects invalid old pvcSize", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.Resource.Storage.PvcSize = ""
+		oldDB.Spec.Resource.Storage.PvcSize = "not-a-quantity"
 		newDB := newTestDocumentDB("", "", "")
 		newDB.Spec.Resource.Storage.PvcSize = "10Gi"
 
 		errs := v.validateStorageResize(newDB, oldDB)
-		Expect(errs).To(BeEmpty())
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("existing pvcSize is not a valid resource quantity"))
+	})
+
+	It("rejects invalid new pvcSize", func() {
+		oldDB := newTestDocumentDB("", "", "")
+		oldDB.Spec.Resource.Storage.PvcSize = "10Gi"
+		newDB := newTestDocumentDB("", "", "")
+		newDB.Spec.Resource.Storage.PvcSize = "abc"
+
+		errs := v.validateStorageResize(newDB, oldDB)
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Field).To(Equal("spec.resource.storage.pvcSize"))
+		Expect(errs[0].Detail).To(ContainSubstring("pvcSize must be a valid resource quantity"))
 	})
 })
