@@ -83,14 +83,15 @@
     },
     {
       "type": "timeseries",
-      "title": "Container filesystem usage (bytes)",
+      "title": "Container filesystem write throughput",
+      "description": "Per-pod write bytes/sec to container filesystem. cAdvisor in recent kubelet builds no longer exports container_fs_usage_bytes; rate of container_fs_writes_bytes_total is the closest available signal.",
       "id": 5,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
-          "expr": "sum by (pod) (container_fs_usage_bytes{namespace=\"$namespace\", pod=~\"$pod\"})",
+          "expr": "sum by (pod) (rate(container_fs_writes_bytes_total{namespace=\"$namespace\", pod=~\"$pod\"}[5m]))",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }

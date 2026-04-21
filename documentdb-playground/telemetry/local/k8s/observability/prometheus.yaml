@@ -110,6 +110,8 @@ data:
 
       # CNPG operator-managed instance metrics (replication slot, backup, etc.)
       # exposed by the CNPG instance manager on each Postgres pod, port 9187.
+      # NOTE: The OTel collector sidecar exposes its own /metrics on port 9188
+      # (see cluster.yaml) precisely to avoid colliding with this port.
       - job_name: cnpg
         kubernetes_sd_configs:
           - role: pod
@@ -119,10 +121,10 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
             regex: documentdb-preview
             action: keep
-          # Skip pods that already match the otel-sidecar scrape (which uses
-          # the same 9187 port via annotation discovery). The instance-manager
-          # exposes its own /metrics on port 9187 too, but on a different
-          # container — relabel by container port name to disambiguate.
+          # The CNPG instance-manager container and the OTel collector sidecar
+          # both expose Prometheus /metrics on the same pod (different ports
+          # — 9187 vs 9188). Filter to the instance-manager port by name so
+          # we don't accidentally double-scrape the sidecar via this job.
           - source_labels: [__meta_kubernetes_pod_container_port_name]
             regex: metrics
             action: keep

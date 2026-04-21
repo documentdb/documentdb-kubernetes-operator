@@ -12,6 +12,14 @@ A metrics-focused observability stack for DocumentDB running on a local Kind clu
 - **Helm 3** — [install](https://helm.sh/docs/intro/install/)
 - **jq** — for JSON processing in deploy scripts
 
+> **⚠️ Gateway image requirement.** Out of the box, this playground pins
+> `udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest` in
+> `k8s/documentdb/cluster.yaml`. The default upstream gateway image does **not**
+> yet emit OTLP `db_client_*` metrics — that instrumentation lives in the
+> pgmongo project and has not been published in an upstream release. Once an
+> upstream release ships with OTel support, swap the pin back to the default.
+> See [Gateway image](#gateway-image) for build instructions.
+
 ## Quick Start
 
 ```bash
@@ -51,18 +59,44 @@ The operator chart is installed **from this branch** (`operator/documentdb-helm-
 
 There is **no central OTel Collector Deployment** and **no per-node DaemonSet** — every signal lives in the per-pod sidecar (gateway metrics) or comes straight from kubelet/cAdvisor (container/node metrics).
 
-### Using a custom gateway image
+### Gateway image
 
-To test a locally built gateway (e.g. with unreleased OTel changes):
+The playground pins a community-built gateway image
+(`udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest`) that includes the
+OTLP metrics exporter required by the dashboards. Two reasons that pin exists:
+
+1. The upstream `documentdb-gateway` image (built from this repo's `main`) does
+   not yet enable OTLP metrics — it gates initialization behind
+   `OTEL_METRICS_ENABLED=true` (set by the operator's sidecar-injector) **and**
+   the OTel exporter library being linked in (only true for builds based on a
+   recent pgmongo `oss/main`).
+2. Once an upstream release lands with OTel metrics, edit
+   `k8s/documentdb/cluster.yaml` and either remove the `gatewayImage:` line
+   (to fall back to the operator default) or point it at the new tag.
+
+#### Building your own from pgmongo
 
 ```bash
-# Push your image to the local Kind registry
-docker tag my-gateway:latest localhost:5001/documentdb-gateway:latest
-docker push localhost:5001/documentdb-gateway:latest
+# 1. Build the deb + emulator-shape image from pgmongo
+cd ~/repos/pgmongo/oss
+./packaging/build_packages.sh --os deb13 --pg 17 --output-dir downloaded-artifacts
+docker build \
+  -f packaging/gateway/docker/Dockerfile_documentdb_local \
+  --build-arg DEB_PACKAGE_REL_PATH=downloaded-artifacts/<deb-name>.deb \
+  --build-arg POSTGRES_VERSION=17 \
+  --build-arg BASE_IMAGE=debian:trixie-slim \
+  -t my-gateway:emulator .
 
-# Uncomment gatewayImage in cluster.yaml, then deploy
-sed -i 's|# gatewayImage:|gatewayImage:|' k8s/documentdb/cluster.yaml
-./scripts/deploy.sh
+# 2. Re-wrap as the slim K8s shape using this repo's Dockerfile
+cd ~/repos/documentdb-kubernetes-operator
+docker build \
+  -f .github/dockerfiles/Dockerfile_gateway_public_image \
+  --build-arg SOURCE_IMAGE=my-gateway:emulator \
+  -t localhost:5001/documentdb-gateway:dev .
+docker push localhost:5001/documentdb-gateway:dev
+
+# 3. Point cluster.yaml at it
+#    gatewayImage: "localhost:5001/documentdb-gateway:dev"
 ```
 
 ## Architecture
@@ -80,7 +114,7 @@ graph TB
             subgraph pod1["Pod: preview-1 (primary)"]
                 pg1["postgres :5432"]
                 gw1["documentdb-gateway :10260<br/>OTLP push → :4317"]
-                otel1["otel-collector sidecar<br/>OTLP :4317 in / Prom :9187 out"]
+                otel1["otel-collector sidecar<br/>OTLP :4317 in / Prom :9188 out"]
                 gw1 -. OTLP .-> otel1
             end
             subgraph pod2["Pod: preview-2 (replica)"]
@@ -102,9 +136,9 @@ graph TB
         traffic_rw --> gw1
         traffic_ro --> gw2
         traffic_ro --> gw3
-        prometheus -- "scrape :9187 (annotation)" --> otel1
-        prometheus -- "scrape :9187 (annotation)" --> otel2
-        prometheus -- "scrape :9187 (annotation)" --> otel3
+        prometheus -- "scrape :9188 (annotation)" --> otel1
+        prometheus -- "scrape :9188 (annotation)" --> otel2
+        prometheus -- "scrape :9188 (annotation)" --> otel3
         prometheus -- "/metrics/cadvisor" --> kubelet["kubelet (each node)"]
     end
 

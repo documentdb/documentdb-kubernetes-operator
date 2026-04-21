@@ -19,10 +19,12 @@ receivers:
   # OTLP receiver for telemetry pushed by co-located pod containers
   # (e.g. the documentdb-gateway pushes metrics to localhost:4317).
   # gRPC only — the gateway uses gRPC; HTTP can be added if a future client requires it.
+  # Bound to 127.0.0.1: the gateway and collector share the pod network namespace,
+  # so loopback is sufficient and avoids exposing the listener pod-wide.
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: 127.0.0.1:4317
 
 processors:
   batch:

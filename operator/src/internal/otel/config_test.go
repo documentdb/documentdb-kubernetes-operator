@@ -52,7 +52,7 @@ var _ = Describe("base_config.yaml embed", func() {
 		Expect(ok).To(BeTrue(), "otlp.protocols must be a map")
 		grpc, ok := protocols["grpc"].(map[string]any)
 		Expect(ok).To(BeTrue(), "otlp.protocols.grpc must be a map")
-		Expect(grpc["endpoint"]).To(Equal("0.0.0.0:4317"))
+		Expect(grpc["endpoint"]).To(Equal("127.0.0.1:4317"))
 	})
 })
 

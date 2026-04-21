@@ -80,11 +80,21 @@ if [ -n "$PROM_POD" ]; then
     warn "OTel sidecar scrape targets not UP yet (sidecar may still be starting)"
   fi
 
-  # Gateway metric (pushed via OTLP into the sidecar, exported as Prometheus)
-  if echo "$(query db_client_operations_total)" | grep -q '"result":\[{'; then
+  # Gateway metric (pushed via OTLP into the sidecar, exported as Prometheus).
+  # Wait up to ~2 min for the first export interval + traffic to start.
+  echo "Waiting up to 120s for gateway OTLP metrics to appear..."
+  gateway_metric_found=0
+  for _ in $(seq 1 24); do
+    if echo "$(query db_client_operations_total)" | grep -q '"result":\[{'; then
+      gateway_metric_found=1
+      break
+    fi
+    sleep 5
+  done
+  if [ "$gateway_metric_found" -eq 1 ]; then
     green "Gateway metric db_client_operations_total present"
   else
-    warn "No gateway metrics yet (traffic generator may still be starting)"
+    red "Gateway OTLP metrics absent after 120s — likely the configured gatewayImage lacks OTel instrumentation. See README §Gateway image."
   fi
 
   # cAdvisor / kubelet container metric (replaces former kubeletstats coverage)
