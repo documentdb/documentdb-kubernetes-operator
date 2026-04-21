@@ -1153,7 +1153,7 @@ spec:
                   for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
                   a default secret name `documentdb-credentials` is used.
 
-                  NOTE: Immutable today; will be relaxed to support credential rotation (see #331).
+                  NOTE: Immutable today; will be relaxed in a future release to support credential rotation.
                 type: string
                 x-kubernetes-validations:
                 - message: credential secret cannot be changed after cluster creation

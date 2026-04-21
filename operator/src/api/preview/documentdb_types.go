@@ -55,7 +55,7 @@ type DocumentDBSpec struct {
 	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
 	// a default secret name `documentdb-credentials` is used.
 	//
-	// NOTE: Immutable today; will be relaxed to support credential rotation (see #331).
+	// NOTE: Immutable today; will be relaxed in a future release to support credential rotation.
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="credential secret cannot be changed after cluster creation"
 	DocumentDbCredentialSecret string `json:"documentDbCredentialSecret,omitempty"`
 
