@@ -184,7 +184,7 @@ jobs:
     - name: Build gateway deb
       # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
       # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
-      run: ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+      run: ./packaging/gateway/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
 
     - name: Upload packages
       uses: actions/upload-artifact@v4
