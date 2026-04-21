@@ -14,6 +14,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -75,5 +76,18 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			}
 			Expect(found).To(BeTrue(),
 				"expected owner reference with UID=%s on CNPG Cluster %s", current.UID, key)
+
+			// Data-plane smoke: opening a mongo-driver connection
+			// against the freshly-deployed CR proves the gateway
+			// actually answers on the wire. Without this step,
+			// "Ready=true" alone can mask a broken gateway sidecar
+			// (e.g. wrong image, misconfigured credentials secret).
+			// NewFromDocumentDB handles port-forward + credentials;
+			// a successful Ping is the canonical "hello" probe.
+			h, err := mongohelper.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, name)
+			Expect(err).ToNot(HaveOccurred(), "connect mongo to freshly-deployed DocumentDB")
+			DeferCleanup(func(ctx SpecContext) { _ = h.Close(ctx) })
+			Expect(mongohelper.Ping(ctx, h.Client())).To(Succeed(),
+				"ping freshly-deployed DocumentDB gateway")
 		})
 	})

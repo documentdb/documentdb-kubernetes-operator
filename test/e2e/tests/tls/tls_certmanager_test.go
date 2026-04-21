@@ -132,6 +132,70 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 				return mongohelper.Ping(connectCtx, client)
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "ping via cert-manager-issued cert should succeed with CA verification")
+
+			// --- Renewal check ---
+			// Force cert-manager to re-issue the Certificate by
+			// deleting the generated Secret; cert-manager recreates
+			// it with a fresh tls.crt. With the self-signed Issuer
+			// used here, a new leaf + new CA are produced on every
+			// issuance, so the old CA pool will NOT validate the
+			// new leaf — proving the gateway actually picked up the
+			// reissued material. If the gateway pinned the initial
+			// cert in memory, this ping would fail with a bad
+			// certificate error.
+			By("forcing cert-manager to reissue the gateway Secret")
+			origCrt := make([]byte, 0)
+			{
+				sec := &corev1.Secret{}
+				Expect(env.Client.Get(ctx, types.NamespacedName{
+					Namespace: cluster.NamespaceName, Name: tlsSecretName,
+				}, sec)).To(Succeed(), "read TLS secret before deletion")
+				origCrt = append(origCrt, sec.Data[corev1.TLSCertKey]...)
+				Expect(env.Client.Delete(ctx, sec)).To(Succeed(),
+					"delete TLS secret to trigger cert-manager renewal")
+			}
+
+			// Wait for cert-manager to recreate the secret with a
+			// different tls.crt. Using the existing MongoConnect
+			// timeout budget is enough here; if cert-manager takes
+			// longer the test will fail loudly rather than flake.
+			Eventually(func(g Gomega) {
+				sec := &corev1.Secret{}
+				g.Expect(env.Client.Get(ctx, types.NamespacedName{
+					Namespace: cluster.NamespaceName, Name: tlsSecretName,
+				}, sec)).To(Succeed())
+				g.Expect(sec.Data[corev1.TLSCertKey]).NotTo(BeEmpty(),
+					"reissued secret must carry tls.crt")
+				g.Expect(sec.Data[corev1.TLSCertKey]).NotTo(Equal(origCrt),
+					"tls.crt must differ after reissue")
+			}, timeouts.For(timeouts.DocumentDBReady), timeouts.PollInterval(timeouts.DocumentDBReady)).
+				Should(Succeed(), "cert-manager did not reissue TLS secret")
+
+			// Reconnect with the NEW CA and ping; Eventually gives
+			// the gateway a window to notice the remounted cert.
+			newCA := readCAFromSecret(ctx, cluster.NamespaceName, tlsSecretName)
+			newPool := x509.NewCertPool()
+			Expect(newPool.AppendCertsFromPEM(newCA)).
+				To(BeTrue(), "parse renewed CA PEM")
+
+			renewCtx, cancelRenew := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
+			defer cancelRenew()
+			Eventually(func(g Gomega) {
+				client2, err := mongohelper.NewClient(renewCtx, mongohelper.ClientOptions{
+					Host:       host,
+					Port:       port,
+					User:       tlsCredentialUser,
+					Password:   tlsCredentialPassword,
+					TLS:        true,
+					RootCAs:    newPool,
+					ServerName: sni,
+				})
+				g.Expect(err).NotTo(HaveOccurred(), "reconnect with renewed CA")
+				defer func() { _ = client2.Disconnect(renewCtx) }()
+				g.Expect(mongohelper.Ping(renewCtx, client2)).To(Succeed(),
+					"ping via renewed cert should succeed")
+			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
+				Should(Succeed(), "gateway did not start serving the renewed cert")
 		})
 	},
 )
