@@ -1,0 +1,51 @@
+# ⚠️  DEMO/PLAYGROUND ONLY — credentials below are for local development.
+# Do NOT use these passwords in production.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: demo_user
+  password: DemoPassword100
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  documentDbCredentialSecret: documentdb-credentials
+  # The default gateway image (built from this repo's main) does NOT yet emit
+  # OTLP `db_client_*` metrics — that instrumentation lives in pgmongo and is
+  # not yet in a public release. We pin a community-built image here so the
+  # playground works out-of-box; replace with your own once an upstream release
+  # ships with OTel metrics support. See README §Gateway image for build steps.
+  gatewayImage: "udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest"
+  exposeViaService:
+    serviceType: ClusterIP
+  resource:
+    storage:
+      pvcSize: 5Gi
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  # Enable the OTel Collector sidecar (one per pod). The sidecar:
+  #   - receives OTLP metrics from the documentdb-gateway on localhost:4317
+  #   - exposes Prometheus /metrics on the configured port
+  # Prometheus discovers the sidecar via pod annotations injected by the operator.
+  #
+  # Port note: containers in the same pod share a network namespace, so this
+  # port must NOT collide with anything CNPG already binds. CNPG's instance
+  # manager uses 9187 for its own /metrics endpoint, so we use 9188 here.
+  monitoring:
+    enabled: true
+    exporter:
+      prometheus:
+        port: 9188

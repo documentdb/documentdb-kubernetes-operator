@@ -1,0 +1,237 @@
+# ============================================================
+# Prometheus - Metrics Store
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "nodes", "nodes/metrics", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: observability
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.3.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=1d
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    # Alerting rules
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    scrape_configs:
+      # OTel Collector sidecars injected into each DocumentDB pod by the
+      # operator (spec.monitoring.enabled=true). The sidecar-injector adds
+      # prometheus.io/scrape, prometheus.io/port, prometheus.io/path
+      # annotations on each pod, which we honour here.
+      - job_name: documentdb-otel-sidecar
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['documentdb-preview-ns']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+            target_label: cnpg_cluster
+
+      # CNPG operator-managed instance metrics (replication slot, backup, etc.)
+      # exposed by the CNPG instance manager on each Postgres pod, port 9187.
+      # NOTE: The OTel collector sidecar exposes its own /metrics on port 9188
+      # (see cluster.yaml) precisely to avoid colliding with this port.
+      - job_name: cnpg
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['documentdb-preview-ns']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+            regex: documentdb-preview
+            action: keep
+          # The CNPG instance-manager container and the OTel collector sidecar
+          # both expose Prometheus /metrics on the same pod (different ports
+          # — 9187 vs 9188). Filter to the instance-manager port by name so
+          # we don't accidentally double-scrape the sidecar via this job.
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_container_port_number]
+            target_label: __address__
+            separator: ":"
+
+      # Node-level container metrics via kubelet's built-in cAdvisor endpoint.
+      # Replaces the previous OTel kubeletstats DaemonSet — Prometheus can scrape
+      # kubelet directly with no extra collector deployment.
+      - job_name: kubelet-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+      # Kubelet's own /metrics endpoint (process-level metrics for each kubelet).
+      - job_name: kubelet
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics
+
+      # Uncomment to scrape DocumentDB operator controller-runtime metrics.
+      # Requires the operator to be started with --metrics-bind-address=:8443.
+      # - job_name: documentdb-operator
+      #   scheme: https
+      #   tls_config:
+      #     insecure_skip_verify: true
+      #   kubernetes_sd_configs:
+      #     - role: pod
+      #       namespaces:
+      #         names: ['documentdb-operator']
+      #   relabel_configs:
+      #     - source_labels: [__meta_kubernetes_pod_label_app]
+      #       regex: documentdb
+      #       action: keep
+      #     - source_labels: [__meta_kubernetes_pod_ip]
+      #       target_label: __address__
+      #       replacement: $1:8443
+
+  alerts.yml: |
+    groups:
+      - name: documentdb
+        rules:
+          - alert: GatewayHighErrorRate
+            expr: |
+              (
+                sum(rate(db_client_operations_total{error_type!=""}[5m]))
+                / sum(rate(db_client_operations_total[5m]))
+              ) * 100 > 5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Gateway error rate above 5%"
+              description: "{{ $value | printf \"%.1f\" }}% of gateway operations are failing."
+
+          - alert: GatewayDown
+            expr: absent(db_client_operations_total) == 1
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "No gateway metrics — gateway may be down"
+              description: "The db_client_operations_total metric has been absent for 2 minutes."
+
+          - alert: ContainerHighMemory
+            expr: |
+              (container_memory_working_set_bytes{namespace="documentdb-preview-ns",container!="",container!="POD"}
+              / on(namespace,pod,container) kube_pod_container_resource_limits_memory_bytes
+              or container_memory_working_set_bytes{namespace="documentdb-preview-ns",container!="",container!="POD"}
+              ) > 0
+            for: 0m
+            labels:
+              severity: info
+            annotations:
+              summary: "Container memory observed"
+              description: "Memory metric present for {{ $labels.pod }}/{{ $labels.container }}."
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: observability
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
