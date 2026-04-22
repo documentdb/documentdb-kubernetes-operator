@@ -85,6 +85,33 @@ export GITHUB_TOKEN="your-token"
 - `--skip-operator` - Skip operator installation (default)
 - `--install-operator` - Install operator (requires GitHub authentication)
 - `--deploy-instance` - Deploy operator + instance (requires GitHub authentication)
+- `--node-type TYPE` - EC2 instance type (default: `m7g.large`, Graviton/ARM)
+- `--eks-version VER` - Kubernetes/EKS version (default: `1.35`)
+- `--spot` - Use Spot-backed managed nodes (dev/test only — see warning below)
+- `--tags TAGS` - Cost allocation tags as comma-separated `key=value` pairs (default: `project=documentdb-playground,environment=dev,managed-by=eksctl`)
+
+#### Spot Instance Warning
+
+When using `--spot`, AWS can terminate instances at any time with only 2 minutes notice.
+This **will interrupt your database** and require recovery. Only use Spot for dev/test
+workloads where brief downtime is acceptable. Spot is disabled by default.
+
+#### Custom Tags
+
+Tags are passed to AWS for cost allocation tracking in Cost Explorer:
+
+```bash
+# Default tags
+./scripts/create-cluster.sh
+# Tags: project=documentdb-playground,environment=dev,managed-by=eksctl
+
+# Custom tags via flag
+./scripts/create-cluster.sh --tags "project=myproj,team=platform,costcenter=1234"
+
+# Or via environment variable
+export CLUSTER_TAGS="project=myproj,team=platform"
+./scripts/create-cluster.sh
+```
 
 ### delete-cluster.sh
 ```bash
@@ -119,13 +146,13 @@ export GITHUB_TOKEN="your-token"
 ## What Gets Created
 
 **create-cluster.sh builds:**
-- EKS cluster with 2 managed nodes (m5.large)
+- EKS cluster with managed nodes (default: `m7g.large` Graviton/ARM, 3 nodes)
 - EBS CSI driver for storage
 - AWS Load Balancer Controller
 - cert-manager for TLS
 - Optimized storage classes
 
-**Estimated cost:** ~$140-230/month (always run delete-cluster.sh when done!)
+**Estimated cost:** ~$140-230/month (always run delete-cluster.sh when done!) — use `--spot` for ~70% savings on dev/test.
 
 ## Support
 
