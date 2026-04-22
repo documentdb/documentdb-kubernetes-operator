@@ -371,7 +371,25 @@ cleanup_vpc_dependencies() {
     
     # Get the VPC ID for our cluster
     VPC_ID=$(aws ec2 describe-vpcs --region $REGION --filters "Name=tag:Name,Values=eksctl-$CLUSTER_NAME-cluster/VPC" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || echo "")
-    
+
+    # Clean up VPC endpoints created for cost optimization (e.g. S3 Gateway endpoint).
+    # Must run before CloudFormation deletion so the VPC can be torn down cleanly.
+    if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] && [ "$VPC_ID" != "null" ]; then
+        log "Cleaning up VPC endpoints..."
+        VPC_ENDPOINTS=$(aws ec2 describe-vpc-endpoints --region "$REGION" \
+            --filters "Name=vpc-id,Values=$VPC_ID" \
+            --query 'VpcEndpoints[].VpcEndpointId' --output text 2>/dev/null || echo "")
+        if [ -n "$VPC_ENDPOINTS" ] && [ "$VPC_ENDPOINTS" != "None" ]; then
+            for endpoint_id in $VPC_ENDPOINTS; do
+                log "  Deleting VPC endpoint: $endpoint_id"
+                aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$endpoint_id" --region "$REGION" 2>/dev/null || warn "Failed to delete VPC endpoint $endpoint_id"
+            done
+            success "VPC endpoints cleaned up"
+        else
+            log "No VPC endpoints found to clean up."
+        fi
+    fi
+
     if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ] || [ "$VPC_ID" = "null" ]; then
         log "No VPC found for cluster $CLUSTER_NAME, checking for any remaining k8s security groups..."
         # Fallback: look for any k8s-related security groups

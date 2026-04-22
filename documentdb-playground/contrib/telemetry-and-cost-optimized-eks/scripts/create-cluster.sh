@@ -277,6 +277,36 @@ create_cluster() {
     fi
 }
 
+# Create VPC endpoints for cost optimization (S3 Gateway endpoint is free)
+create_vpc_endpoints() {
+    log "Creating VPC endpoints for cost optimization..."
+
+    VPC_ID=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" \
+        --query 'cluster.resourcesVpcConfig.vpcId' --output text)
+
+    if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+        warn "Could not determine VPC ID. Skipping VPC endpoint creation."
+        return 0
+    fi
+
+    ROUTE_TABLE_IDS=$(aws ec2 describe-route-tables --region "$REGION" \
+        --filters "Name=vpc-id,Values=$VPC_ID" \
+        --query 'RouteTables[].RouteTableId' --output text)
+
+    # S3 Gateway Endpoint (free - reduces NAT Gateway data transfer costs)
+    if aws ec2 describe-vpc-endpoints --region "$REGION" \
+        --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=com.amazonaws.$REGION.s3" \
+        --query 'VpcEndpoints[0].VpcEndpointId' --output text 2>/dev/null | grep -q "vpce-"; then
+        warn "S3 VPC endpoint already exists. Skipping creation."
+    else
+        aws ec2 create-vpc-endpoint \
+            --vpc-id "$VPC_ID" \
+            --service-name "com.amazonaws.$REGION.s3" \
+            --route-table-ids $ROUTE_TABLE_IDS \
+            --region "$REGION" 2>/dev/null && success "S3 Gateway VPC endpoint created (free)" || warn "Could not create S3 VPC endpoint"
+    fi
+}
+
 # Install EBS CSI Driver
 install_ebs_csi() {
     log "Installing EBS CSI Driver..."
@@ -643,6 +673,7 @@ print_summary() {
     echo ""
     echo "✅ Components installed:"
     echo "  - EKS cluster with managed nodes ($NODE_TYPE)"
+    echo "  - S3 Gateway VPC endpoint (cost optimization)"
     echo "  - EBS CSI driver"
     echo "  - AWS Load Balancer Controller"
     echo "  - cert-manager"
@@ -688,6 +719,7 @@ main() {
     # Execute setup steps
     check_prerequisites
     create_cluster
+    create_vpc_endpoints
     install_ebs_csi
     install_load_balancer_controller
     install_cert_manager
