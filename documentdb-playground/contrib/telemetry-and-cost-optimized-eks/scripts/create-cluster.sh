@@ -817,6 +817,43 @@ EOF
     log "📝 AWS LoadBalancer annotations are automatically applied by the operator based on environment: eks"
 }
 
+# Run DocumentDB post-deploy diagnostics (adapted from DocumentDB troubleshooting best practices).
+# Uses kubectl logs intentionally since CloudWatch may not have flushed recent lines yet.
+diagnose_documentdb() {
+    if [ "$DEPLOY_INSTANCE" != "true" ]; then
+        return 0
+    fi
+
+    log "Running DocumentDB diagnostics..."
+
+    # 1. Verify pods are running (k8s equivalent of 'docker ps' / 'systemctl status')
+    log "Checking DocumentDB pods..."
+    kubectl get pods -n documentdb-instance-ns -o wide || true
+
+    # 2. Recent operator logs (k8s equivalent of 'docker logs' / 'journalctl')
+    log "Recent operator logs (tail 20):"
+    kubectl logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator --tail=20 2>/dev/null || warn "Operator logs unavailable"
+
+    # 3. Recent instance pod logs
+    log "Recent DocumentDB instance logs (tail 20):"
+    kubectl logs -n documentdb-instance-ns sample-documentdb-1 --tail=20 2>/dev/null || warn "Instance pod not found or not ready"
+
+    # 4. Verify service endpoint
+    log "Checking DocumentDB service..."
+    kubectl get svc -n documentdb-instance-ns documentdb-service-sample-documentdb 2>/dev/null || warn "Service not found"
+
+    # 5. Ping test via in-cluster mongosh (validate endpoint independently of app code)
+    log "Testing DocumentDB connectivity via in-cluster mongosh..."
+    if kubectl run mongosh-diag-$RANDOM --rm -i --restart=Never --quiet \
+        --image=mongo:7 -n documentdb-instance-ns -- \
+        mongosh "mongodb://docdbadmin:SecurePassword123!@documentdb-service-sample-documentdb:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true" \
+        --quiet --eval "db.runCommand({ping: 1})" 2>/dev/null | grep -q "ok.*1"; then
+        success "DocumentDB ping succeeded"
+    else
+        warn "DocumentDB ping failed -- see troubleshooting guide in summary"
+    fi
+}
+
 # Print summary
 print_summary() {
     echo ""
@@ -851,9 +888,17 @@ print_summary() {
         echo "  - DocumentDB instance (sample-documentdb)"
     fi
     echo ""
+    echo "📊 CloudWatch Log Groups (retention: ${LOG_RETENTION_DAYS}d):"
+    echo "  - /aws/eks/$CLUSTER_NAME/cluster                       (control plane)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/application     (pod stdout/stderr)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/dataplane       (system pods, kubelet)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/host            (node OS logs)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/performance     (container insights performance)"
+    echo ""
     echo "💡 Next steps:"
     echo "  - Verify cluster: kubectl get nodes"
     echo "  - Check all pods: kubectl get pods --all-namespaces"
+    echo "  - Verify add-on: aws eks describe-addon --cluster-name $CLUSTER_NAME --region $REGION --addon-name amazon-cloudwatch-observability"
     if [ "$INSTALL_OPERATOR" == "true" ]; then
         echo "  - Check operator: kubectl get pods -n documentdb-operator"
     fi
@@ -862,6 +907,39 @@ print_summary() {
         echo "  - Check service status: kubectl get svc -n documentdb-instance-ns"
         echo "  - Wait for LoadBalancer IP: kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns -w"
         echo "  - Once IP is assigned, connect: mongodb://docdbadmin:SecurePassword123!@<EXTERNAL-IP>:10260/"
+        echo ""
+        echo "🔎 Troubleshooting (adapted from DocumentDB troubleshooting best practices):"
+        echo ""
+        echo "  1. Verify instance is running (k8s equivalent of 'docker ps' / 'systemctl status'):"
+        echo "     kubectl get pods -n documentdb-instance-ns"
+        echo ""
+        echo "  2. Check logs (PRIMARY path via CloudWatch; observability add-on ships pod logs here):"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION --since 1h --follow"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION \\"
+        echo "         --filter-pattern '{ \$.kubernetes.namespace_name = \"documentdb-operator\" }' --since 1h"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION \\"
+        echo "         --filter-pattern '{ \$.kubernetes.pod_name = \"sample-documentdb-1\" }' --since 1h"
+        echo "     aws logs tail /aws/eks/$CLUSTER_NAME/cluster --region $REGION --since 1h    # control plane"
+        echo ""
+        echo "  3. Check logs (FALLBACK via kubectl -- real-time streaming or if CloudWatch broken):"
+        echo "     kubectl logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator -f"
+        echo "     kubectl logs -n documentdb-instance-ns sample-documentdb-1 -f"
+        echo ""
+        echo "  4. Verify CloudWatch Observability add-on health (if CloudWatch logs are missing):"
+        echo "     aws eks describe-addon --cluster-name $CLUSTER_NAME --region $REGION --addon-name amazon-cloudwatch-observability"
+        echo "     kubectl get pods -n amazon-cloudwatch"
+        echo ""
+        echo "  5. Verify local client tooling works (k8s equivalent of 'python -c import pymongo'):"
+        echo "     which mongosh && mongosh --version"
+        echo "     which kubectl && kubectl version --client"
+        echo ""
+        echo "  6. Validate the endpoint independently of your application code:"
+        echo "     kubectl port-forward -n documentdb-instance-ns svc/documentdb-service-sample-documentdb 10260:10260 &"
+        echo "     mongosh \"mongodb://docdbadmin:SecurePassword123!@localhost:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true\""
+        echo ""
+        echo "  7. TLS / certificate errors:"
+        echo "     - For self-signed certs (default): keep tlsAllowInvalidCertificates=true in the connection string"
+        echo "     - For trusted certs: export CA and pass tlsCAFile=/path/to/ca.pem instead"
     fi
     echo ""
     echo "⚠️  IMPORTANT: Run './delete-cluster.sh' when done to avoid AWS charges!"
@@ -901,6 +979,9 @@ main() {
     # Optional components
     install_documentdb_operator
     deploy_documentdb_instance
+
+    # Post-deploy diagnostics (no-op if --skip-instance)
+    diagnose_documentdb
 
     # Show summary
     print_summary
