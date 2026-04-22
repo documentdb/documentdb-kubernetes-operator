@@ -1,6 +1,6 @@
 ---
 title: TLS Configuration
-description: Configure TLS certificate management for DocumentDB gateway connections — Disabled, SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
+description: Configure TLS certificate management for DocumentDB gateway connections — SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
 tags:
   - configuration
   - tls
@@ -23,7 +23,7 @@ metadata:
 spec:
   tls:
     gateway:
-      mode: SelfSigned   # Disabled | SelfSigned | CertManager | Provided
+      mode: SelfSigned   # SelfSigned | CertManager | Provided
 ```
 
 For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconfiguration) in the API Reference.
@@ -31,41 +31,6 @@ For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconf
 ## Configuration
 
 Select your TLS mode below. Each tab shows prerequisites, the complete YAML configuration, and connection instructions.
-
-=== "Disabled"
-
-    **Best for:** Development and testing only
-
-    !!! danger "Not recommended for production"
-
-    **Prerequisites:** None
-
-    Disabled mode means the operator does not manage TLS certificates. However, the gateway still encrypts all connections using an internally generated self-signed certificate. Clients must connect with `tls=true&tlsAllowInvalidCertificates=true`.
-
-    ```yaml title="documentdb-tls-disabled.yaml"
-    apiVersion: documentdb.io/preview
-    kind: DocumentDB
-    metadata:
-      name: my-documentdb
-      namespace: default
-    spec:
-      nodeCount: 1
-      instancesPerNode: 1
-      resource:
-        storage:
-          pvcSize: 10Gi
-      exposeViaService:
-        serviceType: ClusterIP
-      tls:
-        gateway:
-          mode: Disabled
-    ```
-
-    **Connect with mongosh:**
-
-    ```bash
-    mongosh "mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
-    ```
 
 === "SelfSigned"
 

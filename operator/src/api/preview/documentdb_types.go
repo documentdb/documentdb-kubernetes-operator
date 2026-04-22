@@ -148,7 +148,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.persistentVolume) && self.persistentVolume.name != ”)",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
@@ -268,7 +268,9 @@ type TLSConfiguration struct {
 // GatewayTLS defines TLS configuration for the gateway sidecar (Phase 1: certificate provisioning only)
 type GatewayTLS struct {
 	// Mode selects the TLS management strategy.
-	// +kubebuilder:validation:Enum=Disabled;SelfSigned;CertManager;Provided
+	// Defaults to SelfSigned if not specified.
+	// +kubebuilder:validation:Enum=SelfSigned;CertManager;Provided
+	// +kubebuilder:default=SelfSigned
 	Mode string `json:"mode,omitempty"`
 
 	// CertManager config when Mode=CertManager.

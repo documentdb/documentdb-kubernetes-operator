@@ -7,6 +7,7 @@
 
 ### Breaking Changes
 - **Validating webhook added**: A new `ValidatingWebhookConfiguration` enforces that `spec.schemaVersion` never exceeds the binary version and blocks `spec.documentDBVersion` rollbacks below the committed schema version. This requires [cert-manager](https://cert-manager.io/) to be installed in the cluster (it is already a prerequisite for the sidecar injector). Existing clusters upgrading to this release will have the webhook activated automatically via `helm upgrade`.
+- **Removed `Disabled` TLS gateway mode**: The `spec.tls.gateway.mode: Disabled` option has been removed to eliminate the security risk of plaintext Mongo wire protocol traffic. Previously, `Disabled` mode served connections in plaintext, contradicting documentation that stated TLS was always active. Empty or unset mode now defaults to `SelfSigned`. Users with `mode: Disabled` should remove this setting or explicitly set `mode: SelfSigned` — the gateway will automatically use a cert-manager generated self-signed certificate. See [issue #356](https://github.com/documentdb/documentdb-kubernetes-operator/issues/356) for details.
 
 ## [0.2.0] - 2026-03-25
 

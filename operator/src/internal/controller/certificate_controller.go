@@ -61,16 +61,11 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 	}
 
 	gatewayCfg := ddb.Spec.TLS.Gateway
-	if gatewayCfg.Mode == "" || gatewayCfg.Mode == "Disabled" {
-		if ddb.Status.TLS != nil && ddb.Status.TLS.Ready {
-			if err := r.updateTLSStatus(ctx, ddb, func(status *dbpreview.TLSStatus) {
-				status.Ready = false
-				status.Message = "Gateway TLS disabled"
-			}); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
+
+	// Empty mode defaults to SelfSigned for security - TLS is always enabled
+	mode := gatewayCfg.Mode
+	if mode == "" {
+		mode = "SelfSigned"
 	}
 
 	if ddb.Status.TLS == nil {
@@ -81,7 +76,7 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 		}
 	}
 
-	switch gatewayCfg.Mode {
+	switch mode {
 	case "SelfSigned":
 		return r.ensureSelfSignedCert(ctx, ddb)
 	case "Provided":

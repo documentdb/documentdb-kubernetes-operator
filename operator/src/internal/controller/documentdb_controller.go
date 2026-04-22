@@ -1019,7 +1019,6 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 	}
 }
 
-
 // updateImageStatus reads the current extension and gateway images from the CNPG cluster
 // and persists them into the DocumentDB status fields. This is a no-op if both fields
 // are already up to date.

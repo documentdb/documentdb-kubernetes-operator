@@ -144,3 +144,56 @@ func TestEnsureSelfSignedCert(t *testing.T) {
 	require.True(t, ddb.Status.TLS.Ready)
 	require.NotEmpty(t, ddb.Status.TLS.SecretName)
 }
+
+// TestEmptyModeDefaultsToSelfSigned verifies that when mode is empty,
+// the controller treats it as SelfSigned to ensure TLS is always enabled.
+// This is a security fix - see https://github.com/documentdb/documentdb-kubernetes-operator/issues/356
+func TestEmptyModeDefaultsToSelfSigned(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-empty-mode", "default")
+	// Empty mode should default to SelfSigned behavior
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: ""}}
+	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	r := buildCertificateReconciler(t, ddb)
+
+	// First call should create issuer and certificate (SelfSigned behavior)
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	// Certificate should exist, proving SelfSigned was used as default
+	cert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-empty-mode-gateway-cert", Namespace: "default"}, cert))
+
+	// Simulate ready condition and verify TLS becomes ready
+	cert.Status.Conditions = append(cert.Status.Conditions, cmapi.CertificateCondition{Type: cmapi.CertificateConditionReady, Status: cmmeta.ConditionTrue, LastTransitionTime: &metav1.Time{Time: time.Now()}})
+	require.NoError(t, r.Client.Update(ctx, cert))
+	res, err = r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Zero(t, res.RequeueAfter)
+	require.True(t, ddb.Status.TLS.Ready, "TLS should be ready with empty mode defaulting to SelfSigned")
+	require.NotEmpty(t, ddb.Status.TLS.SecretName)
+}
+
+// TestDisabledModeNotSupported verifies that "Disabled" is no longer a valid mode.
+// This test documents the breaking change per issue #356.
+func TestDisabledModeNotSupported(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-disabled", "default")
+	// "Disabled" mode should fall through to the default case and do nothing
+	// In production, the webhook validation prevents this invalid value
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "Disabled"}}
+	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	r := buildCertificateReconciler(t, ddb)
+
+	// With "Disabled" mode (which is now invalid), the controller should
+	// fall through the switch default case and return without action
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Zero(t, res.RequeueAfter)
+
+	// No certificate should be created since "Disabled" hits the default case
+	cert := &cmapi.Certificate{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-disabled-gateway-cert", Namespace: "default"}, cert)
+	require.True(t, err != nil, "No certificate should be created for invalid 'Disabled' mode")
+}
