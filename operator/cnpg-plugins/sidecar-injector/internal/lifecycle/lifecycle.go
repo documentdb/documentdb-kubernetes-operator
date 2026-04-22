@@ -386,19 +386,11 @@ const gatewayContainerName = "documentdb-gateway"
 // injector adds to the gateway container so it can push metrics to the
 // co-located OTel Collector sidecar.
 //
-// Order matters: POD_NAME must precede OTEL_RESOURCE_ATTRIBUTES because
-// Kubernetes resolves $(POD_NAME) interpolation in the order env vars
-// appear in the container's Env list.
+// Per-pod attribution (k8s.pod.name) is added by the collector's resource
+// processor on every exported metric, so we don't need to set
+// OTEL_RESOURCE_ATTRIBUTES / service.instance.id here.
 func gatewayOTelEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
 		{
 			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
 			Value: "http://127.0.0.1:4317",
@@ -409,16 +401,6 @@ func gatewayOTelEnvVars() []corev1.EnvVar {
 			// env var (or a JSON TelemetryOptions block) at startup.
 			Name:  "OTEL_METRICS_ENABLED",
 			Value: "true",
-		},
-		{
-			// Per-pod attribution for OTLP-exported telemetry. NOTE: dedup
-			// below is name-only, so a pre-existing OTEL_RESOURCE_ATTRIBUTES
-			// value (set by the user or a future operator change) wins —
-			// service.instance.id will not be merged in. Dashboards already
-			// pivot on the `pod` label set by the collector's resource
-			// processor, so this is acceptable today.
-			Name:  "OTEL_RESOURCE_ATTRIBUTES",
-			Value: "service.instance.id=$(POD_NAME)",
 		},
 	}
 }

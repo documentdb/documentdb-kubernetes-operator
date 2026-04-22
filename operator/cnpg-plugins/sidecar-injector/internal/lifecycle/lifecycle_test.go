@@ -31,30 +31,17 @@ func envNames(env []corev1.EnvVar) []string {
 }
 
 // TestInjectGatewayOTelEnv_AllAppended covers the CREATE case: empty gateway
-// env, all four OTel env vars appended in declaration order. Order matters
-// because OTEL_RESOURCE_ATTRIBUTES references $(POD_NAME).
+// env, both OTel env vars appended in declaration order. Per-pod attribution
+// (k8s.pod.name) is added by the collector's resource processor downstream,
+// so we don't need POD_NAME / OTEL_RESOURCE_ATTRIBUTES on the gateway.
 func TestInjectGatewayOTelEnv_AllAppended(t *testing.T) {
 	pod := gatewayContainer()
 	injectGatewayOTelEnv(pod)
 
 	got := envNames(pod.Spec.Containers[1].Env)
-	want := []string{"POD_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED", "OTEL_RESOURCE_ATTRIBUTES"}
+	want := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("envs got %v, want %v", got, want)
-	}
-
-	// POD_NAME must come before OTEL_RESOURCE_ATTRIBUTES so $(POD_NAME) resolves.
-	podNameIdx, raIdx := -1, -1
-	for i, e := range pod.Spec.Containers[1].Env {
-		switch e.Name {
-		case "POD_NAME":
-			podNameIdx = i
-		case "OTEL_RESOURCE_ATTRIBUTES":
-			raIdx = i
-		}
-	}
-	if podNameIdx < 0 || raIdx < 0 || podNameIdx >= raIdx {
-		t.Errorf("POD_NAME (%d) must come before OTEL_RESOURCE_ATTRIBUTES (%d)", podNameIdx, raIdx)
 	}
 }
 
@@ -83,8 +70,8 @@ func TestInjectGatewayOTelEnv_PreservesExisting(t *testing.T) {
 	injectGatewayOTelEnv(pod)
 
 	env := pod.Spec.Containers[1].Env
-	if len(env) != 4 {
-		t.Errorf("expected 4 env vars, got %d (%v)", len(env), envNames(env))
+	if len(env) != 2 {
+		t.Errorf("expected 2 env vars, got %d (%v)", len(env), envNames(env))
 	}
 	// Pre-existing endpoint must be unchanged.
 	for _, e := range env {
