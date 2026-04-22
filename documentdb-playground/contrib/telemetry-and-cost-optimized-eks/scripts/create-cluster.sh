@@ -144,36 +144,85 @@ error() {
     exit 1
 }
 
+error_no_exit() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ❌ $1${NC}"
+}
+
 # Check prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
-    
+
     # Check AWS CLI
     if ! command -v aws &> /dev/null; then
         error "AWS CLI not found. Please install AWS CLI first."
     fi
-    
+
     # Check eksctl
     if ! command -v eksctl &> /dev/null; then
         error "eksctl not found. Please install eksctl first."
     fi
-    
+
     # Check kubectl
     if ! command -v kubectl &> /dev/null; then
         error "kubectl not found. Please install kubectl first."
     fi
-    
+
     # Check Helm
     if ! command -v helm &> /dev/null; then
         error "Helm not found. Please install Helm first."
     fi
-    
+
     # Check AWS credentials
     if ! aws sts get-caller-identity &> /dev/null; then
         error "AWS credentials not configured. Please run 'aws configure' first."
     fi
-    
+
+    # Optional but recommended: mongosh for endpoint validation. Mirrors the DocumentDB
+    # troubleshooting best practice of verifying local client tooling before blaming the server.
+    if ! command -v mongosh &> /dev/null; then
+        warn "mongosh not found. Install with: brew install mongosh (macOS) or see https://www.mongodb.com/docs/mongodb-shell/install/"
+        warn "Local connection validation (kubectl port-forward + mongosh) won't work until mongosh is installed."
+    fi
+
     success "All prerequisites met"
+}
+
+# Show CloudFormation stack events for eksctl-managed stacks
+show_cloudformation_events() {
+    local status_filter="$1"  # "CREATE_FAILED" or "CREATE_COMPLETE"
+    local stacks
+    stacks=$(aws cloudformation list-stacks --region "$REGION" \
+        --stack-status-filter CREATE_COMPLETE CREATE_FAILED ROLLBACK_COMPLETE ROLLBACK_IN_PROGRESS \
+        --query "StackSummaries[?starts_with(StackName, 'eksctl-${CLUSTER_NAME}')].StackName" \
+        --output text 2>/dev/null)
+
+    if [ -z "$stacks" ]; then
+        warn "No CloudFormation stacks found for cluster $CLUSTER_NAME"
+        return
+    fi
+
+    for stack in $stacks; do
+        log "CloudFormation stack: $stack"
+        if [ "$status_filter" == "CREATE_FAILED" ]; then
+            local failures
+            failures=$(aws cloudformation describe-stack-events --region "$REGION" \
+                --stack-name "$stack" \
+                --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
+                --output table 2>/dev/null)
+            if [ -n "$failures" ] && ! echo "$failures" | grep -q "^$"; then
+                error_no_exit "Failed resources in $stack:"
+                echo "$failures"
+            else
+                success "No failures in $stack"
+            fi
+        else
+            local stack_status
+            stack_status=$(aws cloudformation describe-stacks --region "$REGION" \
+                --stack-name "$stack" \
+                --query "Stacks[0].StackStatus" --output text 2>/dev/null)
+            log "  Status: $stack_status"
+        fi
+    done
 }
 
 # Create EKS cluster
@@ -195,6 +244,7 @@ create_cluster() {
         warn "============================================================"
     fi
 
+    # 2 AZs is the minimum EKS supports, reduced from eksctl default of 3 for cost reasons.
     local EKSCTL_ARGS=(
         --name "$CLUSTER_NAME"
         --region "$REGION"
@@ -214,11 +264,15 @@ create_cluster() {
         EKSCTL_ARGS+=(--node-type "$NODE_TYPE")
     fi
 
-    eksctl create cluster "${EKSCTL_ARGS[@]}"
+    eksctl create cluster "${EKSCTL_ARGS[@]}" --zones "${REGION}a,${REGION}b"
+    local exit_code=$?
 
-    if [ $? -eq 0 ]; then
+    log "Retrieving CloudFormation stack events..."
+    if [ $exit_code -eq 0 ]; then
+        show_cloudformation_events "CREATE_COMPLETE"
         success "EKS cluster created successfully"
     else
+        show_cloudformation_events "CREATE_FAILED"
         error "Failed to create EKS cluster"
     fi
 }
