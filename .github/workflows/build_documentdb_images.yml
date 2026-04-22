@@ -13,6 +13,14 @@ on:
         description: 'Released DocumentDB version to package (for example 0.109.0)'
         required: false
         default: '0.109.0'
+      documentdb_repo:
+        description: 'GitHub repo for DocumentDB extension releases (owner/repo)'
+        required: false
+        default: 'documentdb/documentdb'
+      gateway_source_repo:
+        description: 'GHCR repo for gateway source image (without ghcr.io/ prefix)'
+        required: false
+        default: 'documentdb/documentdb/documentdb-local'
 
   repository_dispatch:
     types: [documentdb-release]
@@ -24,8 +32,8 @@ permissions:
 
 env:
   DEFAULT_DOCUMENTDB_VERSION: '0.109.0'
-  DOCUMENTDB_RELEASE_REPO: documentdb/documentdb
-  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
+  DOCUMENTDB_RELEASE_REPO: ${{ github.event.inputs.documentdb_repo || 'documentdb/documentdb' }}
+  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/${{ github.event.inputs.gateway_source_repo || 'documentdb/documentdb/documentdb-local' }}
 
 jobs:
   # ---------------------------------------------------------------------------
