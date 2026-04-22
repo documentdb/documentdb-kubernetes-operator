@@ -66,6 +66,33 @@ The code review agent will:
 - Emit events for significant state changes
 - Use finalizers for cleanup operations
 
+## Issue Triage & Priority
+
+**Priority is tracked via GitHub Projects, not labels.** Do not create `P0`/`P1`/`P2` labels; the repo intentionally doesn't use them.
+
+- Planning board: [DocumentDB k8s operator planning board](https://github.com/orgs/documentdb/projects/6) (project number `6`, owner `documentdb`)
+- Issue tracking board: [DocumentDB issue tracking](https://github.com/orgs/documentdb/projects/4) (project number `4`)
+- Both boards have a single-select `Priority` field with values `P0`, `P1`, `P2`.
+
+### Setting priority on a new issue
+
+1. Add the issue to the relevant project:
+   ```bash
+   gh project item-add 6 --owner documentdb --url <issue-url>
+   ```
+2. Set the Priority field using `gh project item-edit` with the project + field + option IDs (obtainable via `gh project field-list 6 --owner documentdb --format json` and the GraphQL `options` query). Example:
+   ```bash
+   gh api graphql -f query='
+     mutation($project:ID!,$item:ID!,$field:ID!,$opt:String!){
+       updateProjectV2ItemFieldValue(input:{projectId:$project,itemId:$item,fieldId:$field,value:{singleSelectOptionId:$opt}}){projectV2Item{id}}
+     }' -F project=PVT_kwDODDbYls4BIeDc -F item=<ITEM_ID> -F field=PVTSSF_lADODDbYls4BIeDczg4658Q -F opt=<OPTION_ID>
+   ```
+
+### Assignment
+
+- Reviewers / maintainers are listed in `CODEOWNERS` and `MAINTAINERS.md`. Rayhan Hossain's GitHub handle is `hossain-rayhan`.
+- Use `gh issue edit <n> --repo documentdb/documentdb-kubernetes-operator --add-assignee <handle>` rather than editing through the UI so the change is auditable.
+
 ## Commit Messages
 
 Follow conventional commits format:
