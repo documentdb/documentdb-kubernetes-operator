@@ -311,6 +311,100 @@ enable_control_plane_logging() {
         || warn "Failed to enable control plane logging (continuing)"
 }
 
+# Install Amazon CloudWatch Observability EKS add-on (managed collector for Container Insights)
+install_cloudwatch_observability_addon() {
+    log "Installing Amazon CloudWatch Observability EKS add-on..."
+
+    # Pod identity agent is required to create pod identity associations.
+    local POD_IDENTITY_STATUS
+    POD_IDENTITY_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "eks-pod-identity-agent" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || true)
+    if [ -z "$POD_IDENTITY_STATUS" ] || [ "$POD_IDENTITY_STATUS" = "None" ]; then
+        log "Installing eks-pod-identity-agent add-on (required for CloudWatch agent IAM)..."
+        eksctl create addon \
+            --cluster "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --name eks-pod-identity-agent >/dev/null 2>&1 \
+            || warn "Failed to install eks-pod-identity-agent add-on (continuing)"
+    fi
+
+    # Grant CloudWatch agent permission through pod identity (recommended least-privilege path).
+    local CW_ASSOC_COUNT
+    CW_ASSOC_COUNT=$(aws eks list-pod-identity-associations \
+        --cluster-name "$CLUSTER_NAME" \
+        --region "$REGION" \
+        --query "length(associations[?namespace=='amazon-cloudwatch' && serviceAccount=='cloudwatch-agent'])" \
+        --output text 2>/dev/null || echo "0")
+    if [ "$CW_ASSOC_COUNT" = "0" ]; then
+        log "Creating pod identity association for amazon-cloudwatch/cloudwatch-agent..."
+        eksctl create podidentityassociation \
+            --cluster "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --namespace amazon-cloudwatch \
+            --service-account-name cloudwatch-agent \
+            --create-service-account \
+            --permission-policy-arns arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy >/dev/null 2>&1 \
+            || warn "Failed to create pod identity association for cloudwatch-agent"
+    fi
+
+    local ADDON_NAME="amazon-cloudwatch-observability"
+    local ADDON_STATUS
+    ADDON_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || true)
+
+    if [ -n "$ADDON_STATUS" ] && [ "$ADDON_STATUS" != "None" ]; then
+        log "CloudWatch Observability add-on already exists (status=$ADDON_STATUS); updating to latest compatible version"
+        aws eks update-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name "$ADDON_NAME" \
+            --region "$REGION" \
+            --resolve-conflicts OVERWRITE >/dev/null 2>&1 \
+            || warn "Failed to update add-on (continuing with existing installation)"
+    else
+        aws eks create-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name "$ADDON_NAME" \
+            --region "$REGION" \
+            --resolve-conflicts OVERWRITE >/dev/null 2>&1 \
+            || warn "Failed to create add-on (it may already exist or require IAM setup)"
+    fi
+
+    log "Waiting for CloudWatch Observability add-on to become ACTIVE..."
+    if aws eks wait addon-active \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" 2>/dev/null; then
+        success "CloudWatch Observability add-on is ACTIVE"
+    else
+        warn "Add-on did not become ACTIVE in time; checking current status"
+    fi
+
+    local FINAL_STATUS
+    FINAL_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || echo "UNKNOWN")
+    log "Add-on status: $FINAL_STATUS"
+
+    # The add-on manages collector deployment details internally.
+    # Namespace/components can vary by add-on/EKS version, so this is best-effort visibility.
+    if kubectl get ns amazon-cloudwatch >/dev/null 2>&1; then
+        kubectl get pods -n amazon-cloudwatch || true
+    else
+        warn "amazon-cloudwatch namespace not found yet (collector may still be reconciling)"
+    fi
+}
+
 # Set CloudWatch log group retention for cost control.
 # Log groups may not exist yet (collector creates them lazily on first log);
 # we retry for up to ~3 minutes per group.
@@ -748,6 +842,7 @@ print_summary() {
     echo "  - cert-manager"
     echo "  - DocumentDB storage class"
     echo "  - EKS control plane logging ($CONTROL_PLANE_LOG_TYPES) -> CloudWatch"
+    echo "  - Amazon CloudWatch Observability add-on -> CloudWatch"
     echo "  - CloudWatch log retention: $LOG_RETENTION_DAYS days"
     if [ "$INSTALL_OPERATOR" == "true" ]; then
         echo "  - DocumentDB operator"
@@ -800,6 +895,7 @@ main() {
     create_storage_class
 
     # Logging/observability pipeline
+    install_cloudwatch_observability_addon
     set_log_retention
 
     # Optional components

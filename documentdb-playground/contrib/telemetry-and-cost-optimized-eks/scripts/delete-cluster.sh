@@ -223,9 +223,25 @@ delete_helm_releases() {
     
     # Only delete these if we're deleting the whole cluster
     if [ "$DELETE_CLUSTER" == "true" ]; then
+        # Delete CloudWatch Observability add-on (managed collector for Container Insights)
+        log "Removing CloudWatch Observability add-on..."
+        if aws eks delete-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name amazon-cloudwatch-observability \
+            --region "$REGION" >/dev/null 2>&1; then
+            success "CloudWatch Observability add-on deletion requested"
+            aws eks wait addon-deleted \
+                --cluster-name "$CLUSTER_NAME" \
+                --addon-name amazon-cloudwatch-observability \
+                --region "$REGION" >/dev/null 2>&1 \
+                || warn "Timed out waiting for add-on deletion; cluster deletion will continue"
+        else
+            warn "CloudWatch Observability add-on not found or could not be deleted"
+        fi
+
         # Delete AWS Load Balancer Controller (after LoadBalancer services are gone)
         helm uninstall aws-load-balancer-controller -n kube-system 2>/dev/null || warn "AWS Load Balancer Controller not found"
-        
+
         # Delete cert-manager
         helm uninstall cert-manager -n cert-manager 2>/dev/null || warn "cert-manager not found"
     fi
