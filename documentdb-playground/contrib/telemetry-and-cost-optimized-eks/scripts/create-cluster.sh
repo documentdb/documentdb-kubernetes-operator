@@ -29,6 +29,13 @@ OPERATOR_CHART_VERSION="0.1.0"
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
 DEPLOY_INSTANCE="${DEPLOY_INSTANCE:-false}"
 
+# Logging and observability configuration
+# LOG_RETENTION_DAYS: CloudWatch log group retention (allowed values: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, ...)
+# CONTROL_PLANE_LOG_TYPES: comma-separated EKS control plane log types to enable
+#   (valid: api, audit, authenticator, controllerManager, scheduler). Keep small to control cost.
+LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-3}"
+CONTROL_PLANE_LOG_TYPES="${CONTROL_PLANE_LOG_TYPES:-api,authenticator}"
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -81,6 +88,14 @@ while [[ $# -gt 0 ]]; do
             CLUSTER_TAGS="$2"
             shift 2
             ;;
+        --log-retention)
+            LOG_RETENTION_DAYS="$2"
+            shift 2
+            ;;
+        --control-plane-log-types)
+            CONTROL_PLANE_LOG_TYPES="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -100,6 +115,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --spot                Use Spot-backed managed nodes (DEV/TEST ONLY - can be terminated)"
             echo "  --tags TAGS           Cost allocation tags as key=value pairs (comma-separated)"
             echo "                        (default: project=documentdb-playground,environment=dev,managed-by=eksctl)"
+            echo ""
+            echo "Logging / observability options:"
+            echo "  --log-retention DAYS           CloudWatch retention in days (default: 3)"
+            echo "                                 Valid: 1,3,5,7,14,30,60,90,120,150,180,365,400,545,731,1827,3653"
+            echo "  --control-plane-log-types LST  Comma-separated EKS control-plane log types (default: api,authenticator)"
+            echo "                                 Valid: api,audit,authenticator,controllerManager,scheduler"
             echo ""
             echo "  -h, --help           Show this help message"
             echo ""
@@ -275,6 +296,52 @@ create_cluster() {
         show_cloudformation_events "CREATE_FAILED"
         error "Failed to create EKS cluster"
     fi
+}
+
+# Enable EKS control plane logging to CloudWatch
+# https://docs.aws.amazon.com/prescriptive-guidance/latest/amazon-eks-observability-best-practices/logging-best-practices.html
+enable_control_plane_logging() {
+    log "Enabling EKS control plane logging: $CONTROL_PLANE_LOG_TYPES"
+    eksctl utils update-cluster-logging \
+        --region "$REGION" \
+        --cluster "$CLUSTER_NAME" \
+        --enable-types "$CONTROL_PLANE_LOG_TYPES" \
+        --approve \
+        && success "Control plane logging enabled" \
+        || warn "Failed to enable control plane logging (continuing)"
+}
+
+# Set CloudWatch log group retention for cost control.
+# Log groups may not exist yet (collector creates them lazily on first log);
+# we retry for up to ~3 minutes per group.
+set_log_retention() {
+    log "Setting CloudWatch log retention to $LOG_RETENTION_DAYS days..."
+    local groups=(
+        "/aws/eks/${CLUSTER_NAME}/cluster"
+        "/aws/containerinsights/${CLUSTER_NAME}/application"
+        "/aws/containerinsights/${CLUSTER_NAME}/dataplane"
+        "/aws/containerinsights/${CLUSTER_NAME}/host"
+        "/aws/containerinsights/${CLUSTER_NAME}/performance"
+    )
+    for group in "${groups[@]}"; do
+        local set=false
+        for i in {1..6}; do
+            # Add-on collectors can create groups lazily; proactively create if missing.
+            aws logs create-log-group --log-group-name "$group" --region "$REGION" >/dev/null 2>&1 || true
+            if aws logs put-retention-policy \
+                --log-group-name "$group" \
+                --retention-in-days "$LOG_RETENTION_DAYS" \
+                --region "$REGION" 2>/dev/null; then
+                success "Retention set on $group: ${LOG_RETENTION_DAYS}d"
+                set=true
+                break
+            fi
+            sleep 30
+        done
+        if [ "$set" = false ]; then
+            warn "Log group $group not created yet; will need manual retention: aws logs put-retention-policy --log-group-name $group --retention-in-days $LOG_RETENTION_DAYS --region $REGION"
+        fi
+    done
 }
 
 # Create VPC endpoints for cost optimization (S3 Gateway endpoint is free)
@@ -670,6 +737,8 @@ print_summary() {
     echo "Tags: $CLUSTER_TAGS"
     echo "Operator Installed: $INSTALL_OPERATOR"
     echo "Instance Deployed: $DEPLOY_INSTANCE"
+    echo "Log Retention: $LOG_RETENTION_DAYS days"
+    echo "Control Plane Log Types: $CONTROL_PLANE_LOG_TYPES"
     echo ""
     echo "✅ Components installed:"
     echo "  - EKS cluster with managed nodes ($NODE_TYPE)"
@@ -678,6 +747,8 @@ print_summary() {
     echo "  - AWS Load Balancer Controller"
     echo "  - cert-manager"
     echo "  - DocumentDB storage class"
+    echo "  - EKS control plane logging ($CONTROL_PLANE_LOG_TYPES) -> CloudWatch"
+    echo "  - CloudWatch log retention: $LOG_RETENTION_DAYS days"
     if [ "$INSTALL_OPERATOR" == "true" ]; then
         echo "  - DocumentDB operator"
     fi
@@ -714,21 +785,27 @@ main() {
     log "  Tags: $CLUSTER_TAGS"
     log "  Install Operator: $INSTALL_OPERATOR"
     log "  Deploy Instance: $DEPLOY_INSTANCE"
+    log "  Log Retention (days): $LOG_RETENTION_DAYS"
+    log "  Control Plane Log Types: $CONTROL_PLANE_LOG_TYPES"
     echo ""
     
     # Execute setup steps
     check_prerequisites
     create_cluster
+    enable_control_plane_logging
     create_vpc_endpoints
     install_ebs_csi
     install_load_balancer_controller
     install_cert_manager
     create_storage_class
-    
+
+    # Logging/observability pipeline
+    set_log_retention
+
     # Optional components
     install_documentdb_operator
     deploy_documentdb_instance
-    
+
     # Show summary
     print_summary
 }

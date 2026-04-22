@@ -290,6 +290,29 @@ delete_crds() {
     success "DocumentDB CRDs deleted"
 }
 
+# Delete CloudWatch log groups created for this cluster (control plane + container insights)
+delete_cloudwatch_logs() {
+    if [ "$DELETE_CLUSTER" != "true" ]; then
+        return 0
+    fi
+
+    log "Deleting CloudWatch log groups for cluster $CLUSTER_NAME..."
+    local groups=(
+        "/aws/eks/${CLUSTER_NAME}/cluster"
+        "/aws/containerinsights/${CLUSTER_NAME}/application"
+        "/aws/containerinsights/${CLUSTER_NAME}/dataplane"
+        "/aws/containerinsights/${CLUSTER_NAME}/host"
+        "/aws/containerinsights/${CLUSTER_NAME}/performance"
+    )
+    for group in "${groups[@]}"; do
+        if aws logs delete-log-group --log-group-name "$group" --region "$REGION" 2>/dev/null; then
+            success "Deleted log group: $group"
+        else
+            warn "Log group $group not found (may have already been deleted or never created)"
+        fi
+    done
+}
+
 # Delete AWS resources
 delete_aws_resources() {
     log "Deleting AWS resources..."
@@ -827,6 +850,7 @@ main() {
             cleanup_infrastructure_loadbalancers
             cleanup_vpc_dependencies
             cleanup_failed_cloudformation_stacks
+            delete_cloudwatch_logs
             cleanup_kubectl_context
         fi
         return 0
@@ -856,8 +880,11 @@ main() {
         
         # Step 2e: Finally delete the cluster itself
         delete_cluster
-        
-        # Step 2f: Clean up local kubectl context
+
+        # Step 2f: Delete CloudWatch log groups (after cluster deletion so control plane stops writing)
+        delete_cloudwatch_logs
+
+        # Step 2g: Clean up local kubectl context
         cleanup_kubectl_context
     fi
     
