@@ -175,6 +175,44 @@ func TestEmptyModeDefaultsToSelfSigned(t *testing.T) {
 	require.NotEmpty(t, ddb.Status.TLS.SecretName)
 }
 
+// TestEmptyModeWithNilStatus verifies empty mode defaults to SelfSigned
+// even when Status.TLS is nil (fresh resource).
+func TestEmptyModeWithNilStatus(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-empty-nil", "default")
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: ""}}
+	// Status.TLS is nil - fresh resource
+	ddb.Status.TLS = nil
+	r := buildCertificateReconciler(t, ddb)
+
+	// Should default to SelfSigned and create certificate
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	// Certificate should exist
+	cert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-empty-nil-gateway-cert", Namespace: "default"}, cert))
+}
+
+// TestNilTLSDefaultsToSelfSigned verifies that when the entire spec.tls block
+// is omitted, the controller still provisions a SelfSigned cert so the gateway
+// never serves plaintext (issue #356).
+func TestNilTLSDefaultsToSelfSigned(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-nil-tls", "default")
+	ddb.Spec.TLS = nil
+	ddb.Status.TLS = nil
+	r := buildCertificateReconciler(t, ddb)
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	cert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-nil-tls-gateway-cert", Namespace: "default"}, cert))
+}
+
 // TestDisabledModeNotSupported verifies that "Disabled" is no longer a valid mode.
 // This test documents the breaking change per issue #356.
 func TestDisabledModeNotSupported(t *testing.T) {

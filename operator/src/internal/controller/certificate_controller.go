@@ -56,11 +56,15 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {
-	if ddb.Spec.TLS == nil || ddb.Spec.TLS.Gateway == nil {
-		return ctrl.Result{}, nil
+	// TLS is always enabled. When tls or tls.gateway is unset, default to SelfSigned
+	// so the operator provisions a managed cert (issue #356 - no plaintext path).
+	var gatewayCfg *dbpreview.GatewayTLS
+	if ddb.Spec.TLS != nil {
+		gatewayCfg = ddb.Spec.TLS.Gateway
 	}
-
-	gatewayCfg := ddb.Spec.TLS.Gateway
+	if gatewayCfg == nil {
+		gatewayCfg = &dbpreview.GatewayTLS{Mode: "SelfSigned"}
+	}
 
 	// Empty mode defaults to SelfSigned for security - TLS is always enabled
 	mode := gatewayCfg.Mode
