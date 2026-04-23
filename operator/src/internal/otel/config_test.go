@@ -36,9 +36,23 @@ var _ = Describe("base_config.yaml embed", func() {
 		var cfg collectorConfig
 		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
 		Expect(cfg.Receivers).To(HaveKey("sqlquery"))
+		Expect(cfg.Receivers).To(HaveKey("otlp"))
 		Expect(cfg.Processors).To(HaveKey("batch"))
 		// Static config should NOT have exporters or service (those are dynamic)
 		Expect(cfg.Exporters).To(BeEmpty())
+	})
+
+	It("declares an OTLP gRPC receiver on port 4317", func() {
+		var cfg collectorConfig
+		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+
+		otlp, ok := cfg.Receivers["otlp"].(map[string]any)
+		Expect(ok).To(BeTrue(), "otlp receiver must be a map")
+		protocols, ok := otlp["protocols"].(map[string]any)
+		Expect(ok).To(BeTrue(), "otlp.protocols must be a map")
+		grpc, ok := protocols["grpc"].(map[string]any)
+		Expect(ok).To(BeTrue(), "otlp.protocols.grpc must be a map")
+		Expect(grpc["endpoint"]).To(Equal("127.0.0.1:4317"))
 	})
 })
 
@@ -83,7 +97,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
 
 		// Pipeline wiring references receivers from static config
-		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery", "otlp"))
 		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(ConsistOf("resource", "batch"))
 		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ConsistOf("prometheus"))
 	})

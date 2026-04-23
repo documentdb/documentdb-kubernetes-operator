@@ -1,0 +1,294 @@
+---
+# ⚠️  DEMO/PLAYGROUND ONLY — hardcoded passwords below are for local development.
+# Do NOT use these credentials in production.
+#
+# Service to expose gateway port 10260 on PRIMARY
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-preview-gateway
+  namespace: documentdb-preview-ns
+spec:
+  selector:
+    cnpg.io/cluster: documentdb-preview
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: gateway
+      port: 10260
+      targetPort: 10260
+  type: ClusterIP
+---
+# Service to expose gateway port 10260 on REPLICAS
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-preview-gateway-ro
+  namespace: documentdb-preview-ns
+spec:
+  selector:
+    cnpg.io/cluster: documentdb-preview
+    cnpg.io/instanceRole: replica
+  ports:
+    - name: gateway
+      port: 10260
+      targetPort: 10260
+  type: ClusterIP
+---
+# Traffic generator - writes to primary, reads to replicas
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traffic-generator-script
+  namespace: documentdb-preview-ns
+data:
+  generate-traffic.js: |
+    // Traffic generator for DocumentDB telemetry demo
+    // Writes go to primary (RW), reads go to replicas (RO)
+
+    const DB_NAME = "telemetry_demo";
+    const COLLECTION = "events";
+    const BATCH_SIZE = 5;
+    const ITERATIONS = 2250;
+    const SLEEP_MS = 800;
+
+    // This script runs on the PRIMARY connection
+    db = db.getSiblingDB(DB_NAME);
+
+    print("=== DocumentDB Traffic Generator (Primary - Writes) ===");
+    print(`Target: ${DB_NAME}.${COLLECTION}`);
+    print(`Iterations: ${ITERATIONS}, Batch: ${BATCH_SIZE}, Sleep: ${SLEEP_MS}ms`);
+
+    const categories = ["auth", "api", "database", "network", "system"];
+    const severities = ["info", "warn", "error", "critical"];
+    const sources = ["web-server", "api-gateway", "worker", "scheduler", "monitor"];
+
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function generateEvent() {
+      return {
+        timestamp: new Date(),
+        category: randomChoice(categories),
+        severity: randomChoice(severities),
+        source: randomChoice(sources),
+        message: "Event " + Math.random().toString(36).substring(7),
+        duration_ms: Math.floor(Math.random() * 2000),
+        statusCode: randomChoice([200, 200, 200, 201, 400, 404, 500])
+      };
+    }
+
+    for (let i = 0; i < ITERATIONS; i++) {
+      try {
+        // WRITES: insert documents
+        for (let j = 0; j < BATCH_SIZE; j++) {
+          db[COLLECTION].insertOne(generateEvent());
+        }
+
+        // WRITES: update
+        db[COLLECTION].updateMany(
+          { severity: "info", source: randomChoice(sources) },
+          { $set: { processed: true } }
+        );
+
+        // READ on primary too (some mixed workload)
+        db[COLLECTION].countDocuments({ source: randomChoice(sources) });
+
+        // ERROR GENERATORS (~10% of iterations)
+        if (i % 10 === 0) {
+          try {
+            // Invalid update operator
+            db[COLLECTION].updateOne({ _id: 1 }, { $badOp: { x: 1 } });
+          } catch (e) { /* expected */ }
+
+          try {
+            // Duplicate key on unique index (if exists)
+            db[COLLECTION].insertOne({ _id: "deliberate-dup-" + (i % 3) });
+          } catch (e) { /* expected */ }
+
+          try {
+            // Query non-existent collection with invalid pipeline
+            db.getSiblingDB("telemetry_demo")["no_such_coll"].aggregate([
+              { $merge: { into: { db: "admin", coll: "forbidden" } } }
+            ]).toArray();
+          } catch (e) { /* expected */ }
+
+          try {
+            // Invalid regex
+            db[COLLECTION].find({ message: { $regex: "[invalid" } }).toArray();
+          } catch (e) { /* expected */ }
+        }
+
+        // Periodic cleanup
+        if (i % 100 === 0 && i > 0) {
+          db[COLLECTION].deleteMany({ processed: true });
+          print(`[${i}/${ITERATIONS}] Cleanup done`);
+        }
+
+        if (i % 25 === 0) {
+          print(`[${i}/${ITERATIONS}] OK`);
+        }
+
+        sleep(SLEEP_MS);
+      } catch (e) {
+        print(`[${i}/${ITERATIONS}] Error: ${e.message}`);
+        sleep(2000);
+      }
+    }
+
+    print("=== Primary traffic complete ===");
+
+  generate-reads.js: |
+    // Read-only traffic for replica instances
+    // Runs against the gateway-ro service (load-balanced across replicas)
+
+    const DB_NAME = "telemetry_demo";
+    const COLLECTION = "events";
+    const ITERATIONS = 2250;
+    const SLEEP_MS = 600;
+
+    db = db.getSiblingDB(DB_NAME);
+
+    print("=== DocumentDB Traffic Generator (Replicas - Reads) ===");
+    print(`Target: ${DB_NAME}.${COLLECTION}`);
+    print(`Iterations: ${ITERATIONS}, Sleep: ${SLEEP_MS}ms`);
+
+    const categories = ["auth", "api", "database", "network", "system"];
+    const severities = ["info", "warn", "error", "critical"];
+    const sources = ["web-server", "api-gateway", "worker", "scheduler", "monitor"];
+
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    for (let i = 0; i < ITERATIONS; i++) {
+      try {
+        // Simple find
+        db[COLLECTION].find({ category: randomChoice(categories) }).limit(10).toArray();
+
+        // Find with sort
+        db[COLLECTION].find({ severity: randomChoice(severities) }).sort({ timestamp: -1 }).limit(10).toArray();
+
+        // Count
+        db[COLLECTION].countDocuments({ source: randomChoice(sources) });
+
+        // Aggregate pipeline
+        db[COLLECTION].aggregate([
+          { $match: { category: randomChoice(categories) } },
+          { $group: { _id: "$severity", count: { $sum: 1 }, avg_duration: { $avg: "$duration_ms" } } },
+          { $sort: { count: -1 } }
+        ]).toArray();
+
+        // Distinct
+        db[COLLECTION].distinct("source", { severity: randomChoice(severities) });
+
+        if (i % 25 === 0) {
+          print(`[${i}/${ITERATIONS}] OK`);
+        }
+
+        sleep(SLEEP_MS);
+      } catch (e) {
+        print(`[${i}/${ITERATIONS}] Error: ${e.message}`);
+        sleep(2000);
+      }
+    }
+
+    print("=== Replica traffic complete ===");
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic-generator-rw
+  namespace: documentdb-preview-ns
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: traffic-gen
+          image: mongodb/mongodb-community-server:7.0.30-ubuntu2204
+          env:
+            - name: DOCDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-credentials
+                  key: username
+            - name: DOCDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-credentials
+                  key: password
+          command:
+            - mongosh
+            - "--host"
+            - "documentdb-preview-gateway.documentdb-preview-ns.svc.cluster.local"
+            - "--port"
+            - "10260"
+            - "--tls"
+            - "--tlsAllowInvalidCertificates"
+            - "-u"
+            - "$(DOCDB_USER)"
+            - "-p"
+            - "$(DOCDB_PASSWORD)"
+            - "--file"
+            - "/scripts/generate-traffic.js"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: traffic-generator-script
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic-generator-ro
+  namespace: documentdb-preview-ns
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: traffic-gen
+          image: mongodb/mongodb-community-server:7.0.30-ubuntu2204
+          env:
+            - name: DOCDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-credentials
+                  key: username
+            - name: DOCDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: documentdb-credentials
+                  key: password
+          command:
+            - mongosh
+            - "--host"
+            - "documentdb-preview-gateway-ro.documentdb-preview-ns.svc.cluster.local"
+            - "--port"
+            - "10260"
+            - "--tls"
+            - "--tlsAllowInvalidCertificates"
+            - "-u"
+            - "$(DOCDB_USER)"
+            - "-p"
+            - "$(DOCDB_PASSWORD)"
+            - "--file"
+            - "/scripts/generate-reads.js"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: traffic-generator-script
