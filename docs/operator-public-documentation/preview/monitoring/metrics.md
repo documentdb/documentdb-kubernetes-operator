@@ -110,7 +110,7 @@ rate(container_fs_writes_bytes_total{
 
 ## Gateway Metrics
 
-The DocumentDB Gateway exports application-level metrics via OTLP (OpenTelemetry Protocol) push. The gateway sidecar injector automatically sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_RESOURCE_ATTRIBUTES` (with `service.instance.id` set to the pod name) on each gateway container, so metrics are exported without manual configuration.
+The DocumentDB Gateway exports application-level metrics via OTLP (OpenTelemetry Protocol) push. The gateway sidecar injector automatically sets `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_METRICS_ENABLED=true` on each gateway container, so metrics are exported without manual configuration. Per-pod attribution (`k8s.pod.name`) is added downstream by the collector's resource processor.
 
 Metrics are exported to an OpenTelemetry Collector, which converts them to Prometheus format via the `prometheus` exporter.
 
@@ -124,7 +124,7 @@ Metrics are exported to an OpenTelemetry Collector, which converts them to Prome
 | `db_client_operations_total` | Counter | Total MongoDB operations processed |
 | `db_client_operation_duration_seconds_total` | Counter | Cumulative operation duration (can be broken down by `db_operation_phase`) |
 
-**Common labels:** `db_operation_name` (e.g., `Find`, `Insert`, `Update`, `Aggregate`, `Delete`), `db_namespace`, `db_system_name`, `service_instance_id` (pod name), `error_type` (set on failed operations)
+**Common labels:** `db_operation_name` (e.g., `Find`, `Insert`, `Update`, `Aggregate`, `Delete`), `db_namespace`, `db_system_name`, `pod` (originating pod), `error_type` (set on failed operations)
 
 **Phase labels** (on `db_client_operation_duration_seconds_total`): `db_operation_phase` — values include `pg_query`, `cursor_iteration`, `bson_serialization`, `command_parsing`. Empty phase represents total duration.
 
@@ -172,7 +172,7 @@ sum by (db_operation_phase) (
 | `db_client_request_size_bytes_total` | Counter | Cumulative request payload size |
 | `db_client_response_size_bytes_total` | Counter | Cumulative response payload size |
 
-**Common labels:** `service_instance_id` (pod name)
+**Common labels:** `pod` (originating pod)
 
 #### Example Queries
 

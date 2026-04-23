@@ -44,7 +44,7 @@ graph TB
 Key points:
 
 - **One collector per pod** — no central Deployment, no ExternalName bridge, no per-instance Service is required.
-- **Gateway → sidecar push** — the sidecar-injector sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317` and `OTEL_RESOURCE_ATTRIBUTES=service.instance.id=$(POD_NAME)` on the gateway container so each pod's metrics are tagged with the originating pod name.
+- **Gateway → sidecar push** — the sidecar-injector sets `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317` and `OTEL_METRICS_ENABLED=true` on the gateway container so it pushes its OTLP metrics to the co-located collector. Per-pod attribution (`k8s.pod.name`) is added downstream by the collector's `resource` processor on every metric.
 - **Prometheus discovery via pod annotations** — the injector adds `prometheus.io/scrape=true`, `prometheus.io/port=<port>`, and `prometheus.io/path=/metrics` annotations so a standard pod-annotation scrape config works out of the box.
 - **Container & node metrics come from kubelet/cAdvisor directly** — Prometheus scrapes them natively; no DaemonSet collector is needed.
 
@@ -71,8 +71,8 @@ The collector ships with a minimal pipeline:
 
 | Stage | Components |
 |-------|------------|
-| Receivers | `otlp` (gRPC `0.0.0.0:4317`) and `sqlquery` (a stub `documentdb.postgres.up` query) |
-| Processors | `batch`, `resource` (adds `service.instance.id`, namespace, cluster, pod metadata) |
+| Receivers | `otlp` (gRPC `127.0.0.1:4317`, loopback only — gateway and collector share the pod network namespace) and `sqlquery` (a stub `documentdb.postgres.up` query) |
+| Processors | `batch`, `resource` (adds `documentdb.cluster`, `k8s.namespace.name`, `k8s.pod.name` to every metric) |
 | Exporters | `prometheus` on the configured port (default `8888`; the playground uses `9187`) |
 
 The pipeline is deep-merged from an embedded static config (`base_config.yaml`) and a dynamic config rendered by the operator. Changes to either trigger a content-hash update on the ConfigMap; the sidecar-injector compares hashes and rolls pods only when the config actually changes.
@@ -146,7 +146,7 @@ Enable the endpoint by setting the bind address (e.g. `:8443`) and create a `Ser
 | `db_client_request_size_bytes_total` | Cumulative request payload size |
 | `db_client_response_size_bytes_total` | Cumulative response payload size |
 
-All gateway metrics carry a `service_instance_id` label set to the originating pod name.
+All gateway metrics carry a `pod` label (set by the Prometheus scrape relabel from `__meta_kubernetes_pod_name`) identifying the originating pod.
 
 ### Container & node metrics (cAdvisor)
 

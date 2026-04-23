@@ -223,7 +223,7 @@ This deletes the Kind cluster and any proxy containers. The local Docker registr
 
 - Check that traffic generators are running: `kubectl get jobs -n documentdb-preview-ns --context kind-documentdb-telemetry`. If completed, restart them (see [Restarting Traffic Generators](#restarting-traffic-generators)).
 - Verify the gateway image includes OTel metrics instrumentation. The gateway must be built from a version that includes the OpenTelemetry metrics changes.
-- Verify the sidecar is healthy: `kubectl logs documentdb-preview-1 -c otel-collector -n documentdb-preview-ns`. The sidecar should be listening on `0.0.0.0:4317` (gRPC) and serving `/metrics` on the configured Prometheus port.
+- Verify the sidecar is healthy: `kubectl logs documentdb-preview-1 -c otel-collector -n documentdb-preview-ns`. The sidecar should be listening on `127.0.0.1:4317` (gRPC, loopback only) and serving `/metrics` on the configured Prometheus port.
 
 **OTel sidecar not injected**
 
