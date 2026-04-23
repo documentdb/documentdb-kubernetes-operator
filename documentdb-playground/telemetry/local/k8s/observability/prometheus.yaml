@@ -214,16 +214,16 @@ data:
 
           - alert: ContainerHighMemory
             expr: |
-              (container_memory_working_set_bytes{namespace="documentdb-preview-ns",container!="",container!="POD"}
-              / on(namespace,pod,container) kube_pod_container_resource_limits_memory_bytes
-              or container_memory_working_set_bytes{namespace="documentdb-preview-ns",container!="",container!="POD"}
-              ) > 0
-            for: 0m
+              container_memory_working_set_bytes{
+                namespace="documentdb-preview-ns",
+                container!="",container!="POD"
+              } > 1073741824
+            for: 5m
             labels:
-              severity: info
+              severity: warning
             annotations:
-              summary: "Container memory observed"
-              description: "Memory metric present for {{ $labels.pod }}/{{ $labels.container }}."
+              summary: "Container working-set memory above 1Gi"
+              description: "{{ $labels.pod }}/{{ $labels.container }} working set: {{ $value | humanize1024 }}B."
 ---
 apiVersion: v1
 kind: Service

@@ -28,7 +28,7 @@ graph TB
     subgraph pod["DocumentDB Pod (one per cluster instance)"]
         pg["postgres :5432"]
         gw["documentdb-gateway :10260<br/>OTLP push → localhost:4317"]
-        otel["otel-collector sidecar<br/>otlp :4317 in / prometheus :9187 out"]
+        otel["otel-collector sidecar<br/>otlp :4317 in / prometheus :9188 out"]
         gw -. OTLP gRPC .-> otel
     end
 
@@ -36,7 +36,7 @@ graph TB
     cadv["kubelet / cAdvisor<br/>(per-node)"]
     grafana["Grafana"]
 
-    prom -- "scrape :9187" --> otel
+    prom -- "scrape :9188" --> otel
     prom -- "/metrics/cadvisor" --> cadv
     prom --> grafana
 ```
@@ -60,7 +60,7 @@ spec:
     enabled: true
     exporter:
       prometheus:
-        port: 9187      # the port the sidecar exposes /metrics on
+        port: 9188      # the port the sidecar exposes /metrics on; pick a port distinct from CNPG's instance manager (9187)
 ```
 
 Once applied, the operator generates an `OpenTelemetryConfig` ConfigMap and the sidecar-injector adds the `otel-collector` container to every CNPG instance pod. Pods will be 3/3 (`postgres` + `documentdb-gateway` + `otel-collector`).
@@ -73,7 +73,7 @@ The collector ships with a minimal pipeline:
 |-------|------------|
 | Receivers | `otlp` (gRPC `127.0.0.1:4317`, loopback only — gateway and collector share the pod network namespace) and `sqlquery` (a stub `documentdb.postgres.up` query) |
 | Processors | `batch`, `resource` (adds `documentdb.cluster`, `k8s.namespace.name`, `k8s.pod.name` to every metric) |
-| Exporters | `prometheus` on the configured port (default `8888`; the playground uses `9187`) |
+| Exporters | `prometheus` on the configured port (default `8888`; the playground uses `9188` to avoid collision with CNPG's instance manager on `9187`) |
 
 The pipeline is deep-merged from an embedded static config (`base_config.yaml`) and a dynamic config rendered by the operator. Changes to either trigger a content-hash update on the ConfigMap; the sidecar-injector compares hashes and rolls pods only when the config actually changes.
 
