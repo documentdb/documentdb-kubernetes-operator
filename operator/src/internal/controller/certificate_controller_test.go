@@ -213,25 +213,40 @@ func TestNilTLSDefaultsToSelfSigned(t *testing.T) {
 	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-nil-tls-gateway-cert", Namespace: "default"}, cert))
 }
 
-// TestDisabledModeNotSupported verifies that "Disabled" is no longer a valid mode.
-// This test documents the breaking change per issue #356.
-func TestDisabledModeNotSupported(t *testing.T) {
+// TestNilGatewayDefaultsToSelfSigned verifies that when spec.tls is set but
+// spec.tls.gateway is nil, the controller still provisions a SelfSigned cert.
+func TestNilGatewayDefaultsToSelfSigned(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-nil-gateway", "default")
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: nil}
+	ddb.Status.TLS = nil
+	r := buildCertificateReconciler(t, ddb)
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	cert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-nil-gateway-gateway-cert", Namespace: "default"}, cert))
+}
+
+// TestDisabledModeFailsClosed verifies that legacy "Disabled" mode (which can
+// linger in etcd from pre-#357 releases) fails closed by provisioning a
+// SelfSigned cert, preserving the no-plaintext invariant from issue #356.
+// CRD enum validation rejects "Disabled" on new applies; this guards stored objects.
+func TestDisabledModeFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-disabled", "default")
-	// "Disabled" mode should fall through to the default case and do nothing
-	// In production, the webhook validation prevents this invalid value
 	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "Disabled"}}
 	ddb.Status.TLS = &dbpreview.TLSStatus{}
 	r := buildCertificateReconciler(t, ddb)
 
-	// With "Disabled" mode (which is now invalid), the controller should
-	// fall through the switch default case and return without action
+	// Even for invalid legacy values, the controller should fail closed and
+	// provision certificate material rather than taking no action.
 	res, err := r.reconcileCertificates(ctx, ddb)
 	require.NoError(t, err)
-	require.Zero(t, res.RequeueAfter)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
 
-	// No certificate should be created since "Disabled" hits the default case
 	cert := &cmapi.Certificate{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-disabled-gateway-cert", Namespace: "default"}, cert)
-	require.True(t, err != nil, "No certificate should be created for invalid 'Disabled' mode")
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-disabled-gateway-cert", Namespace: "default"}, cert))
 }

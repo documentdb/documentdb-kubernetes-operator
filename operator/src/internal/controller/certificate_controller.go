@@ -88,7 +88,15 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 	case "CertManager":
 		return r.ensureCertManagerManagedCert(ctx, ddb)
 	default:
-		return ctrl.Result{}, nil
+		// Unknown/legacy mode (e.g. "Disabled" from a pre-#357 resource still in etcd
+		// — apiserver does not re-validate stored objects against the trimmed enum).
+		// Fail-safe to SelfSigned so the gateway never serves plaintext.
+		log.FromContext(ctx).Info(
+			"unsupported TLS gateway mode; defaulting to SelfSigned to preserve no-plaintext invariant",
+			"requestedMode", mode,
+			"hint", "Update spec.tls.gateway.mode to SelfSigned, CertManager, or Provided.",
+		)
+		return r.ensureSelfSignedCert(ctx, ddb)
 	}
 }
 
