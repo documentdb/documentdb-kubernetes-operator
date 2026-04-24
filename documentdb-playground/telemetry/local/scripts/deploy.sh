@@ -61,7 +61,6 @@ kubectl apply -f "$LOCAL_DIR/k8s/observability/" --context "$CONTEXT"
 echo "  Loading Grafana dashboards..."
 kubectl create configmap grafana-dashboards \
   --namespace=observability \
-  --from-file=gateway.json="$LOCAL_DIR/dashboards/gateway.json" \
   --from-file=internals.json="$LOCAL_DIR/dashboards/internals.json" \
   --context "$CONTEXT" \
   --dry-run=client -o yaml | kubectl apply -f - --context "$CONTEXT"

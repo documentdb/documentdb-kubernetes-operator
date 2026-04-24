@@ -24,12 +24,6 @@ spec:
   nodeCount: 1
   instancesPerNode: 3
   documentDbCredentialSecret: documentdb-credentials
-  # The default gateway image (built from this repo's main) does NOT yet emit
-  # OTLP `db_client_*` metrics — that instrumentation lives in pgmongo and is
-  # not yet in a public release. We pin a community-built image here so the
-  # playground works out-of-box; replace with your own once an upstream release
-  # ships with OTel metrics support. See README §Gateway image for build steps.
-  gatewayImage: "udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest"
   exposeViaService:
     serviceType: ClusterIP
   resource:
@@ -46,6 +40,7 @@ spec:
   # manager uses 9187 for its own /metrics endpoint, so we use 9188 here.
   monitoring:
     enabled: true
+    kubeletstats: {}
     exporter:
       prometheus:
         port: 9188

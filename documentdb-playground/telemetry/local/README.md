@@ -1,6 +1,6 @@
 # DocumentDB Telemetry Playground (Local)
 
-A metrics-focused observability stack for DocumentDB running on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel Collector sidecar enabled and pre-configured Grafana dashboards for **gateway** and **container/node** metrics out of the box.
+A metrics-focused observability stack for DocumentDB running on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel Collector sidecar enabled (with the `kubeletstats` receiver) and a pre-configured Grafana dashboard for container/pod resource metrics.
 
 ## Prerequisites
 
@@ -9,14 +9,6 @@ A metrics-focused observability stack for DocumentDB running on a local Kind clu
 - **kubectl**
 - **Helm 3** — [install](https://helm.sh/docs/intro/install/)
 - **jq** — for JSON processing in deploy scripts
-
-> **⚠️ Gateway image requirement.** Out of the box, this playground pins
-> `udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest` in
-> `k8s/documentdb/cluster.yaml`. The default upstream gateway image does **not**
-> yet emit OTLP `db_client_*` metrics — that instrumentation lives in the
-> pgmongo project and has not been published in an upstream release. Once an
-> upstream release ships with OTel support, swap the pin back to the default.
-> See [Gateway image](#gateway-image) for build instructions.
 
 ## Quick Start
 
@@ -50,52 +42,12 @@ The operator chart is installed **from this branch** (`operator/documentdb-helm-
 | cert-manager | `cert-manager` | TLS certificate management |
 | DocumentDB operator | `documentdb-operator` | Operator + CNPG (Helm chart from this branch) |
 | DocumentDB HA cluster | `documentdb-preview-ns` | 1 primary + 2 streaming replicas |
-| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true` |
-| Prometheus | `observability` | Metrics storage + alerting rules; scrapes pods via annotation discovery + kubelet/cAdvisor directly |
-| Grafana | `observability` | Dashboards (Gateway + Internals) |
+| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. The `kubeletstats` receiver scrapes the local kubelet for container resource metrics. |
+| Prometheus | `observability` | Metrics storage + alerting rules; scrapes the per-pod sidecar via annotation discovery |
+| Grafana | `observability` | Dashboard (Internals — container/pod resources) |
 | Traffic generators | `documentdb-preview-ns` | Read/write workload via mongosh |
 
-There is **no central OTel Collector Deployment** and **no per-node DaemonSet** — every signal lives in the per-pod sidecar (gateway metrics) or comes straight from kubelet/cAdvisor (container/node metrics).
-
-### Gateway image
-
-The playground pins a community-built gateway image
-(`udsmiley/documentdb-gateway-otel:k8s-pgmongo-main-latest`) that includes the
-OTLP metrics exporter required by the dashboards. Two reasons that pin exists:
-
-1. The upstream `documentdb-gateway` image (built from this repo's `main`) does
-   not yet enable OTLP metrics — it gates initialization behind
-   `OTEL_METRICS_ENABLED=true` (set by the operator's sidecar-injector) **and**
-   the OTel exporter library being linked in (only true for builds based on a
-   recent pgmongo `oss/main`).
-2. Once an upstream release lands with OTel metrics, edit
-   `k8s/documentdb/cluster.yaml` and either remove the `gatewayImage:` line
-   (to fall back to the operator default) or point it at the new tag.
-
-#### Building your own from pgmongo
-
-```bash
-# 1. Build the deb + emulator-shape image from pgmongo
-cd ~/repos/pgmongo/oss
-./packaging/build_packages.sh --os deb13 --pg 17 --output-dir downloaded-artifacts
-docker build \
-  -f packaging/gateway/docker/Dockerfile_documentdb_local \
-  --build-arg DEB_PACKAGE_REL_PATH=downloaded-artifacts/<deb-name>.deb \
-  --build-arg POSTGRES_VERSION=17 \
-  --build-arg BASE_IMAGE=debian:trixie-slim \
-  -t my-gateway:emulator .
-
-# 2. Re-wrap as the slim K8s shape using this repo's Dockerfile
-cd ~/repos/documentdb-kubernetes-operator
-docker build \
-  -f .github/dockerfiles/Dockerfile_gateway_public_image \
-  --build-arg SOURCE_IMAGE=my-gateway:emulator \
-  -t localhost:5001/documentdb-gateway:dev .
-docker push localhost:5001/documentdb-gateway:dev
-
-# 3. Point cluster.yaml at it
-#    gatewayImage: "localhost:5001/documentdb-gateway:dev"
-```
+There is **no central OTel Collector Deployment** and **no per-node DaemonSet** — every signal lives in the per-pod sidecar.
 
 ## Architecture
 
@@ -103,41 +55,42 @@ docker push localhost:5001/documentdb-gateway:dev
 graph TB
     subgraph cluster["Kind Cluster (documentdb-telemetry)"]
         subgraph obs["observability namespace"]
-            prometheus["Prometheus<br/>annotation discovery + kubelet/cAdvisor scrape"]
-            grafana["Grafana<br/>:3000<br/>Gateway + Internals dashboards"]
+            prometheus["Prometheus<br/>annotation discovery"]
+            grafana["Grafana<br/>:3000<br/>Internals dashboard"]
             prometheus --> grafana
         end
 
         subgraph docdb["documentdb-preview-ns"]
             subgraph pod1["Pod: preview-1 (primary)"]
                 pg1["postgres :5432"]
-                gw1["documentdb-gateway :10260<br/>OTLP push → :4317"]
-                otel1["otel-collector sidecar<br/>OTLP :4317 in / Prom :9188 out"]
-                gw1 -. OTLP .-> otel1
+                gw1["documentdb-gateway :10260"]
+                otel1["otel-collector sidecar<br/>kubeletstats / Prom :9188"]
             end
             subgraph pod2["Pod: preview-2 (replica)"]
                 pg2["postgres :5432"]
                 gw2["documentdb-gateway :10260"]
                 otel2["otel-collector sidecar"]
-                gw2 -. OTLP .-> otel2
             end
             subgraph pod3["Pod: preview-3 (replica)"]
                 pg3["postgres :5432"]
                 gw3["documentdb-gateway :10260"]
                 otel3["otel-collector sidecar"]
-                gw3 -. OTLP .-> otel3
             end
             traffic_rw["Traffic Gen (RW)"]
             traffic_ro["Traffic Gen (RO)"]
         end
 
+        kubelet["kubelet :10250 (each node)"]
+
         traffic_rw --> gw1
         traffic_ro --> gw2
         traffic_ro --> gw3
+        otel1 -- "stats/summary" --> kubelet
+        otel2 -- "stats/summary" --> kubelet
+        otel3 -- "stats/summary" --> kubelet
         prometheus -- "scrape :9188 (annotation)" --> otel1
         prometheus -- "scrape :9188 (annotation)" --> otel2
         prometheus -- "scrape :9188 (annotation)" --> otel3
-        prometheus -- "/metrics/cadvisor" --> kubelet["kubelet (each node)"]
     end
 
     user["Browser"] --> grafana
@@ -153,34 +106,30 @@ local/
 │   ├── validate.sh            # Health check — verifies sidecar + data flow
 │   └── teardown.sh            # Deletes cluster and proxy containers
 ├── k8s/
-│   ├── observability/         # Namespace, Prometheus (with annotation discovery + kubelet scrape), Grafana
-│   ├── documentdb/            # DocumentDB CR (with spec.monitoring.enabled) + credentials
+│   ├── observability/         # Namespace, Prometheus (annotation discovery), Grafana
+│   ├── documentdb/            # DocumentDB CR (with spec.monitoring.enabled + kubeletstats) + credentials
 │   └── traffic/               # Traffic generator services + jobs
 └── dashboards/
-    ├── gateway.json           # Gateway metrics dashboard
-    └── internals.json         # Container & node resources dashboard
+    └── internals.json         # Container & pod resources dashboard (kubeletstats)
 ```
 
 ## Dashboards
 
-Two dashboards are auto-provisioned in the **DocumentDB** folder:
+One dashboard is auto-provisioned in the **DocumentDB** folder:
 
 | Dashboard | Description |
 |-----------|-------------|
-| **Gateway** | Request rates, average latency, error rates, document throughput, request/response sizes, gateway container CPU/memory and pod network I/O |
-| **Internals** | Container CPU / memory (working set, RSS) / filesystem usage, pod network rx/tx, node-level memory available, sidecar pod count |
+| **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the OTel sidecar's `kubeletstats` receiver. |
 
 Dashboards auto-refresh every 30 seconds. Edits made in the Grafana UI persist until the pod restarts.
 
 ## Alerting Rules
 
-Prometheus includes sample alerting rules:
+Prometheus includes a sample alerting rule:
 
 | Alert | Condition |
 |-------|-----------|
-| **GatewayHighErrorRate** | Error rate > 5% for 5 minutes |
-| **GatewayDown** | No gateway metrics for 2 minutes |
-| **ContainerHighMemory** | Informational — container memory observed |
+| **ContainerHighMemory** | Container working-set memory > 1Gi for 5 minutes |
 
 View firing alerts at `http://localhost:9090/alerts` (after port-forwarding Prometheus).
 
@@ -192,7 +141,7 @@ After deployment, verify everything is working:
 ./scripts/validate.sh
 ```
 
-This checks: pods running, the `otel-collector` sidecar is injected on every DocumentDB pod, Prometheus has active targets, the sidecar scrape job is UP, and gateway + cAdvisor metrics are present.
+This checks: pods running, the `otel-collector` sidecar is injected on every DocumentDB pod, Prometheus has active targets, the sidecar scrape job is UP, and kubeletstats container metrics are present.
 
 ## Restarting Traffic Generators
 
@@ -219,11 +168,11 @@ This deletes the Kind cluster and any proxy containers. The local Docker registr
 
 ## Troubleshooting
 
-**Gateway metrics missing (`db_client_operations_total` = 0)**
+**Container metrics missing (`k8s_container_cpu_usage` = 0)**
 
-- Check that traffic generators are running: `kubectl get jobs -n documentdb-preview-ns --context kind-documentdb-telemetry`. If completed, restart them (see [Restarting Traffic Generators](#restarting-traffic-generators)).
-- Verify the gateway image includes OTel metrics instrumentation. The gateway must be built from a version that includes the OpenTelemetry metrics changes.
-- Verify the sidecar is healthy: `kubectl logs documentdb-preview-1 -c otel-collector -n documentdb-preview-ns`. The sidecar should be listening on `127.0.0.1:4317` (gRPC, loopback only) and serving `/metrics` on the configured Prometheus port.
+- Verify `spec.monitoring.kubeletstats: {}` is set on the DocumentDB CR.
+- Check the per-cluster ClusterRoleBinding exists: `kubectl get clusterrolebinding | grep kubeletstats`. The operator creates one when `monitoring.kubeletstats` is set.
+- Verify the sidecar is healthy: `kubectl logs documentdb-preview-1 -c otel-collector -n documentdb-preview-ns`. The sidecar should report successful scrapes from `${K8S_NODE_NAME}:10250` and serve `/metrics` on the configured Prometheus port.
 
 **OTel sidecar not injected**
 

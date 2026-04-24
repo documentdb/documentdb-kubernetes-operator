@@ -1,11 +1,11 @@
 {
-  "title": "DocumentDB Internals - Container & Node Resources",
-  "description": "Container CPU / memory / network and node-level resources from cAdvisor and kubelet.",
+  "title": "DocumentDB Internals - Container & Pod Resources",
+  "description": "Container CPU / memory / filesystem and pod network from the OTel sidecar's kubeletstats receiver.",
   "uid": "documentdb-internals",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "tags": ["documentdb", "internals"],
+  "tags": ["documentdb", "internals", "kubeletstats"],
   "time": { "from": "now-30m", "to": "now" },
   "templating": {
     "list": [
@@ -20,7 +20,7 @@
         "name": "pod",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(container_cpu_usage_seconds_total{namespace=\"$namespace\", container!=\"\", container!=\"POD\"}, pod)",
+        "query": "label_values(k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
         "refresh": 2,
         "multi": true,
         "includeAll": true,
@@ -45,8 +45,8 @@
       "fieldConfig": { "defaults": { "unit": "none" } },
       "targets": [
         {
-          "expr": "sum by (pod, container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"}[1m]))",
-          "legendFormat": "{{pod}} / {{container}}",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
       ]
@@ -60,8 +60,8 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (pod, container) (container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"})",
-          "legendFormat": "{{pod}} / {{container}}",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_memory_working_set{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
       ]
@@ -75,24 +75,24 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (pod, container) (container_memory_rss{namespace=\"$namespace\", pod=~\"$pod\", container!=\"\", container!=\"POD\"})",
-          "legendFormat": "{{pod}} / {{container}}",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_memory_rss{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Container filesystem write throughput",
-      "description": "Per-pod write bytes/sec to container filesystem. cAdvisor in recent kubelet builds no longer exports container_fs_usage_bytes; rate of container_fs_writes_bytes_total is the closest available signal.",
+      "title": "Container memory limit utilization",
+      "description": "Working-set memory as a fraction of the container's memory limit. Only present for containers with limits configured.",
       "id": 5,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "targets": [
         {
-          "expr": "sum by (pod) (rate(container_fs_writes_bytes_total{namespace=\"$namespace\", pod=~\"$pod\"}[5m]))",
-          "legendFormat": "{{pod}}",
+          "expr": "k8s_container_memory_limit_utilization{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"}",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
       ]
@@ -113,8 +113,8 @@
       "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
-          "expr": "sum by (pod) (rate(container_network_receive_bytes_total{namespace=\"$namespace\", pod=~\"$pod\"}[1m]))",
-          "legendFormat": "{{pod}}",
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"receive\"}[1m]))",
+          "legendFormat": "{{k8s_pod_name}}",
           "refId": "A"
         }
       ]
@@ -128,44 +128,45 @@
       "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
-          "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{namespace=\"$namespace\", pod=~\"$pod\"}[1m]))",
-          "legendFormat": "{{pod}}",
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"transmit\"}[1m]))",
+          "legendFormat": "{{k8s_pod_name}}",
           "refId": "A"
         }
       ]
     },
     {
       "type": "row",
-      "title": "Node",
+      "title": "Filesystem",
       "id": 9,
       "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
       "collapsed": false
     },
     {
       "type": "timeseries",
-      "title": "Node memory available (bytes)",
+      "title": "Container filesystem usage (bytes)",
       "id": 10,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (node) (machine_memory_bytes) - sum by (node) (container_memory_working_set_bytes{container=\"\"})",
-          "legendFormat": "{{node}}",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_filesystem_usage{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
       ]
     },
     {
       "type": "stat",
-      "title": "Pods up (DocumentDB cluster)",
+      "title": "Pods reporting kubeletstats",
+      "description": "Count of distinct pods reporting kubeletstats CPU usage in this namespace. Should equal the DocumentDB cluster size.",
       "id": 11,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 27, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "none" } },
       "targets": [
         {
-          "expr": "count(up{job=\"documentdb-otel-sidecar\", namespace=\"$namespace\"} == 1)",
+          "expr": "count(count by (k8s_pod_name) (k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\"}))",
           "refId": "A"
         }
       ]

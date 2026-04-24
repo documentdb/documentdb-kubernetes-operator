@@ -13,9 +13,9 @@ metadata:
   name: prometheus
 rules:
   - apiGroups: [""]
-    resources: ["pods", "services", "endpoints", "nodes", "nodes/metrics", "nodes/proxy"]
+    resources: ["pods", "services", "endpoints", "nodes", "nodes/proxy"]
     verbs: ["get", "list", "watch"]
-  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+  - nonResourceURLs: ["/metrics"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -108,49 +108,6 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
             target_label: cnpg_cluster
 
-      # CNPG operator-managed instance metrics (replication slot, backup, etc.)
-      # exposed by the CNPG instance manager on each Postgres pod, port 9187.
-      # NOTE: The OTel collector sidecar exposes its own /metrics on port 9188
-      # (see cluster.yaml) precisely to avoid colliding with this port.
-      - job_name: cnpg
-        kubernetes_sd_configs:
-          - role: pod
-            namespaces:
-              names: ['documentdb-preview-ns']
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
-            regex: documentdb-preview
-            action: keep
-          # The CNPG instance-manager container and the OTel collector sidecar
-          # both expose Prometheus /metrics on the same pod (different ports
-          # — 9187 vs 9188). Filter to the instance-manager port by name so
-          # we don't accidentally double-scrape the sidecar via this job.
-          - source_labels: [__meta_kubernetes_pod_container_port_name]
-            regex: metrics
-            action: keep
-          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_container_port_number]
-            target_label: __address__
-            separator: ":"
-
-      # Node-level container metrics via kubelet's built-in cAdvisor endpoint.
-      # Replaces the previous OTel kubeletstats DaemonSet — Prometheus can scrape
-      # kubelet directly with no extra collector deployment.
-      - job_name: kubelet-cadvisor
-        scheme: https
-        tls_config:
-          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-          insecure_skip_verify: true
-        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-        kubernetes_sd_configs:
-          - role: node
-        relabel_configs:
-          - target_label: __address__
-            replacement: kubernetes.default.svc:443
-          - source_labels: [__meta_kubernetes_node_name]
-            regex: (.+)
-            target_label: __metrics_path__
-            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
-
       # Kubelet's own /metrics endpoint (process-level metrics for each kubelet).
       - job_name: kubelet
         scheme: https
@@ -168,62 +125,22 @@ data:
             target_label: __metrics_path__
             replacement: /api/v1/nodes/$1/proxy/metrics
 
-      # Uncomment to scrape DocumentDB operator controller-runtime metrics.
-      # Requires the operator to be started with --metrics-bind-address=:8443.
-      # - job_name: documentdb-operator
-      #   scheme: https
-      #   tls_config:
-      #     insecure_skip_verify: true
-      #   kubernetes_sd_configs:
-      #     - role: pod
-      #       namespaces:
-      #         names: ['documentdb-operator']
-      #   relabel_configs:
-      #     - source_labels: [__meta_kubernetes_pod_label_app]
-      #       regex: documentdb
-      #       action: keep
-      #     - source_labels: [__meta_kubernetes_pod_ip]
-      #       target_label: __address__
-      #       replacement: $1:8443
-
   alerts.yml: |
     groups:
       - name: documentdb
         rules:
-          - alert: GatewayHighErrorRate
-            expr: |
-              (
-                sum(rate(db_client_operations_total{error_type!=""}[5m]))
-                / sum(rate(db_client_operations_total[5m]))
-              ) * 100 > 5
-            for: 5m
-            labels:
-              severity: warning
-            annotations:
-              summary: "Gateway error rate above 5%"
-              description: "{{ $value | printf \"%.1f\" }}% of gateway operations are failing."
-
-          - alert: GatewayDown
-            expr: absent(db_client_operations_total) == 1
-            for: 2m
-            labels:
-              severity: critical
-            annotations:
-              summary: "No gateway metrics — gateway may be down"
-              description: "The db_client_operations_total metric has been absent for 2 minutes."
-
           - alert: ContainerHighMemory
             expr: |
-              container_memory_working_set_bytes{
-                namespace="documentdb-preview-ns",
-                container!="",container!="POD"
+              k8s_container_memory_working_set{
+                k8s_namespace_name="documentdb-preview-ns",
+                k8s_container_name!=""
               } > 1073741824
             for: 5m
             labels:
               severity: warning
             annotations:
               summary: "Container working-set memory above 1Gi"
-              description: "{{ $labels.pod }}/{{ $labels.container }} working set: {{ $value | humanize1024 }}B."
+              description: "{{ $labels.k8s_pod_name }}/{{ $labels.k8s_container_name }} working set: {{ $value | humanize1024 }}B."
 ---
 apiVersion: v1
 kind: Service
