@@ -371,6 +371,39 @@ Types:
 - Mock external dependencies appropriately
 - Ensure tests are idempotent and isolated
 
+### Running E2E tests
+
+The end-to-end suite lives in [`test/e2e/`](test/e2e/) as a separate Go module
+and replaces the legacy `test-integration.yml`, `test-E2E.yml`,
+`test-backup-and-restore.yml`, and `test-upgrade-and-rollback.yml` workflows
+(and their bash / JavaScript / Python glue). It is a Go / Ginkgo v2 / Gomega
+suite that drives the operator end-to-end and speaks the Mongo wire protocol
+via `go.mongodb.org/mongo-driver/v2`.
+
+**Prereqs:** kind + the DocumentDB operator already installed in the target
+cluster. In CI, the `.github/actions/setup-test-environment` composite action
+handles cluster creation and operator install (via `make deploy`). Locally,
+`operator/src/scripts/development/deploy.sh` is the equivalent entry point.
+
+**Running:**
+
+```bash
+cd test/e2e
+ginkgo -r --label-filter=smoke ./tests/...          # smoke
+ginkgo -r --label-filter=lifecycle ./tests/...      # single area
+TEST_DEPTH=4 ginkgo -r --procs=4 ./tests/...        # full sweep (Lowest depth)
+```
+
+Labels are defined in `test/e2e/labels.go` (areas: `lifecycle`, `scale`,
+`data`, `performance`, `backup`, `recovery`, `tls`, `feature-gates`,
+`exposure`, `status`, `upgrade`; plus cross-cutting `smoke`/`basic`/
+`destructive`/`disruptive`/`slow` and capability `needs-*` labels). Depth is
+controlled by `TEST_DEPTH` (0=Highest … 4=Lowest, default 2=Medium).
+
+See [`test/e2e/README.md`](test/e2e/README.md) for the full env-var table
+(including `E2E_RUN_ID` and the `E2E_UPGRADE_*` upgrade-suite variables),
+helper-package index, troubleshooting, and CNPG dependency policy.
+
 ### Code Review
 
 For thorough code reviews, reference the code review agent:

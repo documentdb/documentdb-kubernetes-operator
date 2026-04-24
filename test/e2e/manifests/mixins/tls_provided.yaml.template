@@ -1,0 +1,11 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  tls:
+    gateway:
+      mode: Provided
+      provided:
+        secretName: ${TLS_SECRET_NAME}
