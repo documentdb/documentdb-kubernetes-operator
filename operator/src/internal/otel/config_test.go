@@ -4,6 +4,7 @@
 package otel
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -179,6 +180,75 @@ var _ = Describe("GenerateConfigMapData", func() {
 		dynCfg := parseCfg(data["dynamic.yaml"])
 		Expect(dynCfg.Service).To(BeNil())
 		Expect(dynCfg.Exporters).To(BeEmpty())
+	})
+
+	// Regression guards — see comments in config.go for the why behind each.
+	It("uses 'insert' (not 'upsert') on the resource processor so kubeletstats per-stream attrs survive", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Must not contain 'upsert' — that would clobber per-datapoint k8s.pod.name
+		// from the kubeletstats receiver, collapsing all containers' metrics into
+		// the collector pod's identity. See config.go GenerateDynamicConfig.
+		Expect(data["dynamic.yaml"]).NotTo(ContainSubstring("upsert"))
+		// Should use 'insert' for all three resource attrs.
+		Expect(strings.Count(data["dynamic.yaml"], "action: insert")).To(Equal(3))
+	})
+
+	It("enables resource_to_telemetry_conversion on the prometheus exporter so resource attrs become labels", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+		// Without this option the prometheus exporter writes resource attrs only
+		// to target_info, hiding k8s_pod_name/k8s_container_name etc. from
+		// kubeletstats metrics.
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("resource_to_telemetry_conversion"))
+		Expect(data["dynamic.yaml"]).To(MatchRegexp(`resource_to_telemetry_conversion:\s*\n\s+enabled:\s*true`))
+	})
+
+	It("adds the kubeletstats receiver to the metrics pipeline when KubeletStats is set", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled:      true,
+			KubeletStats: &dbpreview.KubeletStatsSpec{},
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Receivers).To(HaveKey("kubeletstats"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery", "kubeletstats"))
+		// auth_type and node-name env are required for the receiver to function.
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("auth_type: serviceAccount"))
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("${env:K8S_NODE_NAME}:10250"))
+	})
+
+	It("omits the kubeletstats receiver when KubeletStats is nil", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Receivers).NotTo(HaveKey("kubeletstats"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery"))
 	})
 })
 
