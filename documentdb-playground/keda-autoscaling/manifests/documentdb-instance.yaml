@@ -1,0 +1,16 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: DOCUMENTDB_NAME_PLACEHOLDER
+  labels:
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: DOCUMENTDB_SECRET_PLACEHOLDER
+  resource:
+    storage:
+      pvcSize: 2Gi
+  exposeViaService:
+    serviceType: ClusterIP
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io

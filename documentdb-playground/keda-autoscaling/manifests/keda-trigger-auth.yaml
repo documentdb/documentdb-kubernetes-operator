@@ -1,0 +1,11 @@
+apiVersion: keda.sh/v1alpha1
+kind: ClusterTriggerAuthentication
+metadata:
+  name: documentdb-trigger-auth
+  labels:
+    app.kubernetes.io/part-of: keda-documentdb-demo
+spec:
+  secretTargetRef:
+    - parameter: connectionString
+      name: documentdb-keda-connection
+      key: connectionString
