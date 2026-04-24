@@ -43,11 +43,45 @@ else
   # DocumentDB operator from the local chart in this branch.
   echo "  Building chart dependencies..."
   ( cd "$OPERATOR_CHART_DIR" && helm dependency update >/dev/null )
+
+  # Build & load the in-tree operator and sidecar-injector images so the
+  # playground exercises uncommitted code (e.g. spec.monitoring.kubeletstats
+  # and the matching K8S_NODE_NAME downward-API injection). Without this the
+  # chart's default values pull released GHCR images that predate in-flight
+  # changes, leaving dashboards empty.
+  USE_LOCAL_IMAGES="${USE_LOCAL_IMAGES:-true}"
+  HELM_IMAGE_FLAGS=()
+  if [[ "$USE_LOCAL_IMAGES" == "true" ]]; then
+    LOCAL_TAG="playground-local"
+    OPERATOR_IMG="documentdb-operator-local:${LOCAL_TAG}"
+    SIDECAR_IMG="documentdb-sidecar-injector-local:${LOCAL_TAG}"
+
+    echo "  Building local operator image (${OPERATOR_IMG})..."
+    ( cd "${REPO_ROOT}/operator/src" && IMG="${OPERATOR_IMG}" make docker-build >/dev/null )
+
+    echo "  Building local sidecar-injector image (${SIDECAR_IMG})..."
+    ( cd "${REPO_ROOT}/operator/cnpg-plugins/sidecar-injector" && IMG="${SIDECAR_IMG}" make docker-build >/dev/null )
+
+    echo "  Loading images into Kind cluster ${CLUSTER_NAME}..."
+    kind load docker-image "${OPERATOR_IMG}" --name "${CLUSTER_NAME}"
+    kind load docker-image "${SIDECAR_IMG}" --name "${CLUSTER_NAME}"
+
+    HELM_IMAGE_FLAGS=(
+      --set "image.documentdbk8soperator.repository=documentdb-operator-local"
+      --set "image.documentdbk8soperator.tag=${LOCAL_TAG}"
+      --set "image.documentdbk8soperator.pullPolicy=IfNotPresent"
+      --set "image.sidecarinjector.repository=documentdb-sidecar-injector-local"
+      --set "image.sidecarinjector.tag=${LOCAL_TAG}"
+      --set "image.sidecarinjector.pullPolicy=IfNotPresent"
+    )
+  fi
+
   echo "  Installing DocumentDB operator from ${OPERATOR_CHART_DIR}..."
   helm install documentdb-operator "$OPERATOR_CHART_DIR" \
     --namespace documentdb-operator \
     --create-namespace \
     --kube-context "$CONTEXT" \
+    ${HELM_IMAGE_FLAGS[@]+"${HELM_IMAGE_FLAGS[@]}"} \
     --wait --timeout 180s
 fi
 
@@ -79,7 +113,7 @@ kubectl wait --for=condition=Available deployment --all -n observability --conte
 # Step 6: Deploy traffic generators
 echo "[6/6] Deploying traffic generators..."
 echo "  Waiting for DocumentDB pods (this may take a few minutes)..."
-kubectl wait --for=condition=Ready pod -l app=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" --timeout=300s 2>/dev/null || echo "  (DocumentDB pods not ready yet - deploy traffic manually later)"
+kubectl wait --for=condition=Ready pod -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" --timeout=300s 2>/dev/null || echo "  (DocumentDB pods not ready yet - deploy traffic manually later)"
 kubectl apply -f "$LOCAL_DIR/k8s/traffic/" --context "$CONTEXT"
 
 echo ""

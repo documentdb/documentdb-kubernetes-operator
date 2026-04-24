@@ -32,7 +32,7 @@ kubectl port-forward svc/prometheus 9090:9090 -n observability --context kind-do
 
 `deploy.sh` is idempotent — re-running it after a failure will skip already-completed steps.
 
-The operator chart is installed **from this branch** (`operator/documentdb-helm-chart/`), not from the public Helm repo, so any in-tree operator changes (e.g. updates to `base_config.yaml`) are exercised end-to-end.
+The operator chart is installed **from this branch** (`operator/documentdb-helm-chart/`), not from the public Helm repo. By default `deploy.sh` also **builds and `kind load`s the in-tree operator and sidecar-injector images** so any uncommitted code (e.g. a new `MonitoringSpec` field, a new sidecar env-var) is exercised end-to-end. To skip the local build and pull the chart's default GHCR images instead, set `USE_LOCAL_IMAGES=false`.
 
 ### What gets deployed
 
@@ -178,7 +178,7 @@ This deletes the Kind cluster and any proxy containers. The local Docker registr
 
 - Confirm `spec.monitoring.enabled: true` is set on the `DocumentDB` CR.
 - Check the operator logs for the OTel ConfigMap reconciliation: `kubectl logs -n documentdb-operator deploy/documentdb-operator | grep -i otel`.
-- Confirm pods have 3/3 containers: `kubectl get pods -n documentdb-preview-ns -l app=documentdb-preview`.
+- Confirm pods have 3/3 containers: `kubectl get pods -n documentdb-preview-ns -l cnpg.io/cluster=documentdb-preview`.
 
 **`deploy.sh` fails at "Installing DocumentDB operator"**
 
