@@ -1,0 +1,88 @@
+# Namespace definition with Istio injection enabled
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+  labels:
+    istio-injection: enabled
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: default_user
+  password: {{DOCUMENTDB_PASSWORD}}
+
+---
+
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  gatewayImage: ghcr.io/microsoft/documentdb/documentdb-local:16
+  resource:
+    storage:
+      pvcSize: 10Gi
+  # Note: k3s clusters use 'aks' environment (only aks/eks/gke are supported)
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    # Use Istio for cross-cluster communication
+    crossCloudNetworkingStrategy: Istio
+    primary: {{PRIMARY_CLUSTER}}
+    clusterList:
+{{CLUSTER_LIST}}
+  exposeViaService:
+    serviceType: LoadBalancer
+  logLevel: info
+
+---
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-namespace-crp
+spec:
+  resourceSelectors:
+    - group: ""
+      version: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+      selectionScope: NamespaceOnly
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+
+---
+
+# ResourcePlacement for DocumentDB resources within the namespace
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ResourcePlacement
+metadata:
+  name: documentdb-resource-rp
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - group: documentdb.io
+      kind: DocumentDB
+      version: preview
+      name: documentdb-preview
+    - group: ""
+      version: v1
+      kind: Secret
+      name: documentdb-credentials
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
