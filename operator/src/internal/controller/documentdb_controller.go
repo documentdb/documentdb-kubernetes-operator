@@ -151,6 +151,22 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
+	// Ensure (or remove) the per-cluster ClusterRoleBinding granting the
+	// cluster's ServiceAccount access to the chart-installed
+	// `documentdb-kubeletstats-reader` ClusterRole. The OTel sidecar's
+	// kubeletstats receiver needs this to call the kubelet's /stats/summary.
+	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled && documentdb.Spec.Monitoring.KubeletStats != nil {
+		if err := util.CreateOrUpdateKubeletStatsClusterRoleBinding(ctx, r.Client, documentdb.Name, req.Namespace); err != nil {
+			logger.Error(err, "Failed to create kubeletstats ClusterRoleBinding; Requeuing.")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
+	} else {
+		if err := util.DeleteKubeletStatsClusterRoleBinding(ctx, r.Client, documentdb.Name, req.Namespace); err != nil {
+			logger.Error(err, "Failed to delete kubeletstats ClusterRoleBinding")
+			// Not fatal; continue
+		}
+	}
+
 	// create the CNPG Cluster
 	documentdbImage := util.GetDocumentDBImageForInstance(documentdb)
 
@@ -335,6 +351,13 @@ func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Re
 	if err := util.DeleteRole(ctx, r.Client, req.Name, req.Namespace); err != nil {
 		log.Error(err, "Failed to delete Role during cleanup", "RoleName", req.Name)
 		// Continue with other cleanup even if this fails
+	}
+
+	// Best-effort cleanup of the kubeletstats ClusterRoleBinding (if any).
+	// Cluster-scoped, so it must be deleted explicitly — owner references
+	// to namespaced objects are not honoured for cluster-scoped resources.
+	if err := util.DeleteKubeletStatsClusterRoleBinding(ctx, r.Client, req.Name, req.Namespace); err != nil {
+		log.Error(err, "Failed to delete kubeletstats ClusterRoleBinding during cleanup", "DocumentDB", req.Name)
 	}
 
 	log.Info("Cleanup process completed", "DocumentDB", req.Name, "Namespace", req.Namespace)
@@ -1018,7 +1041,6 @@ func (r *DocumentDBReconciler) determineSchemaTarget(
 		return targetPgVersion, fmt.Sprintf("ALTER EXTENSION documentdb UPDATE TO '%s'", targetPgVersion)
 	}
 }
-
 
 // updateImageStatus reads the current extension and gateway images from the CNPG cluster
 // and persists them into the DocumentDB status fields. This is a no-op if both fields

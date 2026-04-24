@@ -89,6 +89,29 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		},
 	}
 
+	// Pipeline receivers always include sqlquery (declared in static.yaml).
+	// Add kubeletstats when opted in via spec.KubeletStats.
+	receiverNames := []string{"sqlquery"}
+	if spec.KubeletStats != nil {
+		if cfg.Receivers == nil {
+			cfg.Receivers = map[string]any{}
+		}
+		// auth_type: serviceAccount uses the pod's ServiceAccount token to
+		// call kubelet's /stats/summary. Requires a ClusterRoleBinding to
+		// "documentdb-kubeletstats-reader" (managed by the operator when
+		// KubeletStats is set).
+		// insecure_skip_verify is required because the kubelet's serving cert
+		// is typically self-signed and not present in the pod's trust store.
+		cfg.Receivers["kubeletstats"] = map[string]any{
+			"collection_interval":  "30s",
+			"auth_type":            "serviceAccount",
+			"endpoint":             "${env:K8S_NODE_NAME}:10250",
+			"insecure_skip_verify": true,
+			"metric_groups":        []string{"container", "pod", "node"},
+		}
+		receiverNames = append(receiverNames, "kubeletstats")
+	}
+
 	exporterNames := []string{}
 
 	if spec.Exporter != nil {
@@ -135,7 +158,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			},
 			Pipelines: map[string]pipelineConfig{
 				"metrics": {
-					Receivers:  []string{"sqlquery"},
+					Receivers:  receiverNames,
 					Processors: []string{"resource", "batch"},
 					Exporters:  exporterNames,
 				},

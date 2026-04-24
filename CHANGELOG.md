@@ -4,6 +4,7 @@
 
 ### Major Features
 - **Two-Phase Extension Upgrade**: New `spec.schemaVersion` field separates binary upgrades (`spec.documentDBVersion`) from irreversible schema migrations (`ALTER EXTENSION UPDATE`). The default behavior gives you a rollback-safe window — update the binary first, validate, then finalize the schema. Set `schemaVersion: "auto"` for single-step upgrades in development environments. See the [upgrade guide](docs/operator-public-documentation/preview/operations/upgrades.md) for details.
+- **Container metrics via OTel sidecar (kubeletstats)**: New `spec.monitoring.kubeletstats` field on `DocumentDB` activates a `kubeletstats` receiver in the injected OpenTelemetry sidecar, exposing CPU, memory, network, and filesystem metrics for the cluster's pods at the sidecar's Prometheus endpoint. The Helm chart installs a `documentdb-kubeletstats-reader` ClusterRole; the operator manages a per-cluster ClusterRoleBinding granting the cluster's ServiceAccount access to `nodes/stats` on the local kubelet.
 
 ### Breaking Changes
 - **Validating webhook added**: A new `ValidatingWebhookConfiguration` enforces that `spec.schemaVersion` never exceeds the binary version and blocks `spec.documentDBVersion` rollbacks below the committed schema version. This requires [cert-manager](https://cert-manager.io/) to be installed in the cluster (it is already a prerequisite for the sidecar injector). Existing clusters upgrading to this release will have the webhook activated automatically via `helm upgrade`.
