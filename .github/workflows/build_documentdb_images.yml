@@ -13,14 +13,14 @@ on:
         description: 'Released DocumentDB version to package (for example 0.109.0)'
         required: false
         default: '0.109.0'
-      documentdb_repo:
-        description: 'GitHub repo name for DocumentDB extension releases (repo only, owner derived from current repo)'
+      documentdb_extension_github_repo:
+        description: 'GitHub owner/repo for DocumentDB extension releases'
         required: false
-        default: 'documentdb'
-      gateway_source_image:
-        description: 'Gateway source image path under owner (e.g., documentdb/documentdb-local)'
+        default: 'documentdb/documentdb'
+      documentdb_gateway_image_repo:
+        description: 'Container image repo for gateway source (without tag)'
         required: false
-        default: 'documentdb/documentdb-local'
+        default: 'ghcr.io/documentdb/documentdb/documentdb-local'
 
   repository_dispatch:
     types: [documentdb-release]
@@ -32,8 +32,8 @@ permissions:
 
 env:
   DEFAULT_DOCUMENTDB_VERSION: '0.109.0'
-  DOCUMENTDB_RELEASE_REPO: ${{ github.repository_owner }}/${{ github.event.inputs.documentdb_repo || 'documentdb' }}
-  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/${{ github.event.inputs.gateway_source_image || 'documentdb/documentdb-local' }}
+  DOCUMENTDB_EXTENSION_GITHUB_REPO: ${{ github.event.inputs.documentdb_extension_github_repo || 'documentdb/documentdb' }}
+  DOCUMENTDB_GATEWAY_IMAGE_REPO: ${{ github.event.inputs.documentdb_gateway_image_repo || 'ghcr.io/documentdb/documentdb/documentdb-local' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ jobs:
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
-        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
+        GATEWAY_SOURCE_IMAGE="${{ env.DOCUMENTDB_GATEWAY_IMAGE_REPO }}:pg17-${VERSION}"
         echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
         echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
         echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
@@ -81,7 +81,7 @@ jobs:
       run: |
         set -euo pipefail
         for ARCH in amd64 arm64; do
-          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
+          ASSET_URL="https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${VERSION_DASH}/deb13-postgresql-18-documentdb_${VERSION_DASH}_${ARCH}.deb"
           echo "Checking $ASSET_URL"
           curl -fsI -L "$ASSET_URL" >/dev/null
         done
@@ -127,7 +127,7 @@ jobs:
         set -euo pipefail
         mkdir -p packages
         DEB_FILE="deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_${{ matrix.arch }}.deb"
-        ASSET_URL="https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
+        ASSET_URL="https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/${DEB_FILE}"
         curl -fsSL -o "packages/${DEB_FILE}" -L "$ASSET_URL"
         ls -lh packages/
 
@@ -216,7 +216,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **DocumentDB Version**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Candidate Image Tag**: \`${{ needs.resolve-public-artifacts.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_RELEASE_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Extension Package Source**: \`https://github.com/${{ env.DOCUMENTDB_EXTENSION_GITHUB_REPO }}/releases/download/v${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}/deb13-postgresql-18-documentdb_${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}_{amd64,arm64}.deb\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Images**: documentdb, gateway" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
