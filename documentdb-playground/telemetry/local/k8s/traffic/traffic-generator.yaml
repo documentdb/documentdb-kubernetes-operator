@@ -1,6 +1,6 @@
 ---
-# ⚠️  DEMO/PLAYGROUND ONLY — hardcoded passwords below are for local development.
-# Do NOT use these credentials in production.
+# ⚠️  DEMO/PLAYGROUND ONLY — this manifest is intended for local development.
+# Do NOT use this configuration in production; use proper secret management instead.
 #
 # Service to expose gateway port 10260 on PRIMARY
 apiVersion: v1

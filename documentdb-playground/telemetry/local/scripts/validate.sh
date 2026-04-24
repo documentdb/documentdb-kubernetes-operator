@@ -38,19 +38,23 @@ else
   red "No DocumentDB pods running"
 fi
 
-# Verify each running pod has 3/3 containers (postgres + documentdb-gateway + otel-collector).
+# Verify each running pod has all 3 expected containers (postgres + documentdb-gateway + otel-collector).
 short=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[*].name}{"\n"}{end}' 2>/dev/null || true)
 missing_sidecar=0
+expected_containers=("postgres" "documentdb-gateway" "otel-collector")
 while IFS= read -r line; do
   [ -z "$line" ] && continue
-  if ! echo "$line" | grep -q "otel-collector"; then
-    red "pod $(echo "$line" | awk '{print $1}') is missing the otel-collector sidecar"
-    missing_sidecar=$((missing_sidecar + 1))
-  fi
+  pod_name=$(echo "$line" | awk '{print $1}')
+  for c in "${expected_containers[@]}"; do
+    if ! echo "$line" | grep -qw "$c"; then
+      red "pod $pod_name is missing expected container: $c"
+      missing_sidecar=$((missing_sidecar + 1))
+    fi
+  done
 done <<< "$short"
 if [ "$missing_sidecar" -eq 0 ] && [ "$running" -ge 1 ]; then
-  green "otel-collector sidecar injected on all DocumentDB pods"
+  green "all DocumentDB pods have postgres + documentdb-gateway + otel-collector"
 fi
 
 # 3. Check Prometheus targets and key metrics

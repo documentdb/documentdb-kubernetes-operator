@@ -164,7 +164,7 @@ kubectl apply -f k8s/traffic/ --context $CONTEXT
 ./scripts/teardown.sh
 ```
 
-This deletes the Kind cluster and any proxy containers. The local Docker registry is kept for reuse.
+This deletes the Kind cluster. The local Docker registry is kept for reuse.
 
 ## Troubleshooting
 

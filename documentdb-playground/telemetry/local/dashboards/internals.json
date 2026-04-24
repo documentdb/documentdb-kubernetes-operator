@@ -39,6 +39,7 @@
     {
       "type": "timeseries",
       "title": "Container CPU usage (cores)",
+      "description": "Cumulative CPU consumption of each container in fractional cores (1.0 = one full core). Sourced from kubeletstats `container.cpu.usage`. Use this to spot CPU-hungry sidecars or runaway query workers.",
       "id": 2,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
@@ -54,6 +55,7 @@
     {
       "type": "timeseries",
       "title": "Container memory working set (bytes)",
+      "description": "Working-set memory per container — the amount the kernel considers actively in use and not reclaimable under pressure. This is what the OOM killer compares against the container's memory limit.",
       "id": 3,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
@@ -69,6 +71,7 @@
     {
       "type": "timeseries",
       "title": "Container memory RSS (bytes)",
+      "description": "Resident Set Size — anonymous (non-file-backed) memory pages held by each container. Typically lower than working set, which also includes active page cache.",
       "id": 4,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
@@ -83,15 +86,15 @@
     },
     {
       "type": "timeseries",
-      "title": "Container memory limit utilization",
-      "description": "Working-set memory as a fraction of the container's memory limit. Requires resource limits set on the container AND the metric to be enabled in the kubeletstats receiver. Empty by default in this playground.",
+      "title": "Container memory usage (bytes)",
+      "description": "Total memory consumed by the container (working set + cache). For limit-utilization, set resource limits on the DocumentDB pods and enable container.memory_limit_utilization in the kubeletstats receiver.",
       "id": 5,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
-      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "container_memory_working_set_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"} / on(k8s_pod_name, k8s_container_name) group_left() container_memory_available_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"}",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_usage_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -107,6 +110,7 @@
     {
       "type": "timeseries",
       "title": "Network bytes received (per pod)",
+      "description": "Inbound network throughput per pod (rate of `k8s.pod.network.io` with direction=receive, 1m window). Aggregates across all pod interfaces.",
       "id": 7,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
@@ -122,6 +126,7 @@
     {
       "type": "timeseries",
       "title": "Network bytes transmitted (per pod)",
+      "description": "Outbound network throughput per pod (rate of `k8s.pod.network.io` with direction=transmit, 1m window). Useful for spotting replication or backup egress spikes.",
       "id": 8,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
@@ -144,6 +149,7 @@
     {
       "type": "timeseries",
       "title": "Container filesystem usage (bytes)",
+      "description": "Bytes consumed on the container's writable filesystem layer (excludes mounted PVCs). Watch for runaway logs or temp files. PVC usage is reported separately by CNPG.",
       "id": 10,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
