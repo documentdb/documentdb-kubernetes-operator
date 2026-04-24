@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lightrag.fullname" . }}
+  labels:
+    {{- include "lightrag.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "lightrag.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include "lightrag.envContent" . | sha256sum }}
+      labels:
+        {{- include "lightrag.selectorLabels" . | nindent 8 }}
+    spec:
+      # Init container patches LightRAG's MongoDB storage layer for DocumentDB
+      # compatibility. DocumentDB does not support createIndex with collation,
+      # $listSearchIndexes, or secondary index creation (it hangs). The patch
+      # stubs out these calls so initialization completes cleanly.
+      initContainers:
+        - name: patch-for-documentdb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/app/.venv/bin/python3", "-B", "-c"]
+          args:
+            - |
+              import os, glob
+
+              targets = [
+                  "/app/lightrag/kg/mongo_impl.py",
+                  "/app/.venv/lib/python3.12/site-packages/lightrag/kg/mongo_impl.py",
+              ]
+              for fp in targets:
+                  if not os.path.exists(fp):
+                      continue
+                  with open(fp) as f:
+                      content = f.read()
+                  if "Skipping index creation (DocumentDB)" in content:
+                      print(f"Already patched: {fp}")
+                      continue
+                  patched = content
+                  patched = patched.replace(
+                      "async def create_and_migrate_indexes_if_not_exists(self):",
+                      "async def create_and_migrate_indexes_if_not_exists(self):\n"
+                      "        logger.info(f'[{self.workspace}] Skipping index creation (DocumentDB)')\n"
+                      "        return\n"
+                      "    async def _orig_create_indexes(self):",
+                  )
+                  patched = patched.replace(
+                      "async def create_search_index_if_not_exists(self):",
+                      "async def create_search_index_if_not_exists(self):\n"
+                      "        logger.info(f'[{self.workspace}] Skipping search index (DocumentDB)')\n"
+                      "        return\n"
+                      "    async def _orig_create_search_index(self):",
+                  )
+                  patched = patched.replace(
+                      "async def create_vector_index_if_not_exists(self):",
+                      "async def create_vector_index_if_not_exists(self):\n"
+                      "        logger.info('Skipping vector index (DocumentDB)')\n"
+                      "        return\n"
+                      "    async def _orig_create_vector_index(self):",
+                  )
+                  with open(fp, "w") as f:
+                      f.write(patched)
+                  cache_dir = os.path.join(os.path.dirname(fp), "__pycache__")
+                  for cf in glob.glob(os.path.join(cache_dir, "mongo_impl*")):
+                      os.remove(cf)
+                  print(f"Patched: {fp}")
+              print("DocumentDB compatibility patches applied")
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - exec lightrag-server
+          ports:
+            - name: http
+              containerPort: {{ .Values.env.PORT }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: rag-storage
+              mountPath: /app/data/rag_storage
+            - name: inputs
+              mountPath: /app/data/inputs
+            - name: env-file
+              mountPath: /app/.env
+              subPath: .env
+          {{- $envFrom := default (dict) .Values.envFrom }}
+          {{- $envFromEntries := list }}
+          {{- range (default (list) (index $envFrom "secrets")) }}
+          {{- $envFromEntries = append $envFromEntries (dict "secretRef" (dict "name" .name)) }}
+          {{- end }}
+          {{- range (default (list) (index $envFrom "configmaps")) }}
+          {{- $envFromEntries = append $envFromEntries (dict "configMapRef" (dict "name" .name)) }}
+          {{- end }}
+          {{- if gt (len $envFromEntries) 0 }}
+          envFrom:
+{{- toYaml $envFromEntries | nindent 12 }}
+          {{- end }}
+      {{- with .Values.image.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: env-file
+          secret:
+            secretName: {{ include "lightrag.fullname" . }}-env
+        {{- if .Values.persistence.enabled }}
+        - name: rag-storage
+          persistentVolumeClaim:
+            claimName: {{ include "lightrag.fullname" . }}-rag-storage
+        - name: inputs
+          persistentVolumeClaim:
+            claimName: {{ include "lightrag.fullname" . }}-inputs
+        {{- else }}
+        - name: rag-storage
+          emptyDir: {}
+        - name: inputs
+          emptyDir: {}
+        {{- end }}
+  strategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
