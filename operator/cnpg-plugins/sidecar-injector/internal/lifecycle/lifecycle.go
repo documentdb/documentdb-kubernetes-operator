@@ -348,18 +348,12 @@ func (impl Implementation) reconcileMetadata(
 			return nil, err
 		}
 
-		// Set OTEL_EXPORTER_OTLP_ENDPOINT on the gateway container so it can
-		// forward its own traces to the co-located OTel Collector sidecar.
-		// Only set when the sidecar is present to avoid connection errors.
-		for i := range mutatedPod.Spec.Containers {
-			if mutatedPod.Spec.Containers[i].Name == "documentdb-gateway" {
-				mutatedPod.Spec.Containers[i].Env = append(mutatedPod.Spec.Containers[i].Env, corev1.EnvVar{
-					Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-					Value: "http://localhost:4317",
-				})
-				break
-			}
-		}
+		// Set OTel-related env vars on the gateway container so it can push its
+		// own metrics (traces pipeline TBD) to the co-located OTel Collector
+		// sidecar and so that every signal carries a per-pod service.instance.id
+		// resource attribute. Only set when the sidecar is present to avoid
+		// connection errors and resource-attribute drift.
+		injectGatewayOTelEnv(mutatedPod)
 
 		log.Printf("OTel Collector sidecar injected successfully")
 	}
@@ -381,4 +375,60 @@ func (impl Implementation) reconcileMetadata(
 	return &lifecycle.OperatorLifecycleResponse{
 		JsonPatch: patch,
 	}, nil
+}
+
+// gatewayContainerName is the name of the documentdb gateway container that
+// pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
+// Kept as a package-level constant so tests can reference it.
+const gatewayContainerName = "documentdb-gateway"
+
+// gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
+// injector adds to the gateway container so it can push metrics to the
+// co-located OTel Collector sidecar.
+//
+// Per-pod attribution (k8s.pod.name) is added by the collector's resource
+// processor on every exported metric, so we don't need to set
+// OTEL_RESOURCE_ATTRIBUTES / service.instance.id here.
+func gatewayOTelEnvVars() []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
+			Value: "http://127.0.0.1:4317",
+		},
+		{
+			// Required to enable the gateway's OTLP metrics exporter; the
+			// pgmongo gateway gates OTel init off by default and checks this
+			// env var (or a JSON TelemetryOptions block) at startup.
+			Name:  "OTEL_METRICS_ENABLED",
+			Value: "true",
+		},
+	}
+}
+
+// injectGatewayOTelEnv mutates `pod` to append OTel env vars to the gateway
+// container, idempotently. Existing env vars with the same name are preserved
+// (we don't overwrite) and missing ones are appended in declaration order.
+//
+// Idempotency matters: this hook fires on both CREATE and PATCH operations.
+// Without name-based dedup, repeated reconciles would double-append env
+// entries and CNPG's pod metadata reconciler would fail with
+// "Pod is invalid: spec: Forbidden: pod updates may not change fields other
+// than ...".
+func injectGatewayOTelEnv(pod *corev1.Pod) {
+	envs := gatewayOTelEnvVars()
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name != gatewayContainerName {
+			continue
+		}
+		existing := make(map[string]bool, len(pod.Spec.Containers[i].Env))
+		for _, e := range pod.Spec.Containers[i].Env {
+			existing[e.Name] = true
+		}
+		for _, e := range envs {
+			if !existing[e.Name] {
+				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, e)
+			}
+		}
+		return
+	}
 }

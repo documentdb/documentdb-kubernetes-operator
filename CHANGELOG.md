@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Major Features
+- **Gateway OTLP metrics in the per-pod sidecar**: when `spec.monitoring.enabled=true`, the OTel Collector sidecar now exposes an OTLP/gRPC receiver on `127.0.0.1:4317` and the documentdb-gateway is configured (via `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_METRICS_ENABLED`) to push its `db_client_*` metrics there. The sidecar's existing prometheus exporter re-exports them alongside the existing `documentdb.postgres.up` sqlquery output, with per-pod attribution added by the collector's resource processor. No new CRD fields; this turns on automatically wherever monitoring was already enabled.
 - **Two-Phase Extension Upgrade**: New `spec.schemaVersion` field separates binary upgrades (`spec.documentDBVersion`) from irreversible schema migrations (`ALTER EXTENSION UPDATE`). The default behavior gives you a rollback-safe window — update the binary first, validate, then finalize the schema. Set `schemaVersion: "auto"` for single-step upgrades in development environments. See the [upgrade guide](docs/operator-public-documentation/preview/operations/upgrades.md) for details.
 
 ### Breaking Changes

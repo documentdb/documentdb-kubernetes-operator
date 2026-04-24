@@ -135,7 +135,10 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			},
 			Pipelines: map[string]pipelineConfig{
 				"metrics": {
-					Receivers:  []string{"sqlquery"},
+					// Both receivers come from the embedded base_config.yaml.
+					// sqlquery emits Postgres health metrics; otlp receives metrics
+					// pushed from co-located containers (e.g. documentdb-gateway).
+					Receivers:  []string{"sqlquery", "otlp"},
 					Processors: []string{"resource", "batch"},
 					Exporters:  exporterNames,
 				},
