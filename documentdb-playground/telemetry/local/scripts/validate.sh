@@ -39,7 +39,8 @@ else
 fi
 
 # Verify each running pod has all 3 expected containers (postgres + documentdb-gateway + otel-collector).
-short=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" \
+# --field-selector excludes the completed initdb Job pod (which is also labeled cnpg.io/cluster).
+short=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview --field-selector=status.phase=Running -n documentdb-preview-ns --context "$CONTEXT" \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[*].name}{"\n"}{end}' 2>/dev/null || true)
 missing_sidecar=0
 expected_containers=("postgres" "documentdb-gateway" "otel-collector")
@@ -77,8 +78,10 @@ if [ -n "$PROM_POD" ]; then
   fi
 
   # Sidecar scrape job is up?
+  # Prometheus returns "value":[<unix-timestamp-as-number>,"1"] — the timestamp
+  # is JSON number (no quotes), so don't anchor on a quoted first element.
   sidecar_up=$(query 'up{job="documentdb-otel-sidecar"}')
-  if echo "$sidecar_up" | grep -q '"value":\["[^"]*","1"\]'; then
+  if echo "$sidecar_up" | grep -q '"value":\[[^,]*,"1"\]'; then
     green "OTel sidecar scrape targets are UP"
   else
     warn "OTel sidecar scrape targets not UP yet (sidecar may still be starting)"
@@ -91,7 +94,7 @@ if [ -n "$PROM_POD" ]; then
   echo "Waiting up to 120s for kubeletstats container metrics to appear..."
   container_metric_found=0
   for _ in $(seq 1 24); do
-    if echo "$(query 'container_cpu_usage{k8s_namespace_name=\"documentdb-preview-ns\"}')" | grep -q '"result":\[{'; then
+    if echo "$(query 'container_cpu_usage{k8s_namespace_name="documentdb-preview-ns"}')" | grep -q '"result":\[{'; then
       container_metric_found=1
       break
     fi
