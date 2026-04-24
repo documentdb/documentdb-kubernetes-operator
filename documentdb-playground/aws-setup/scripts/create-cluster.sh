@@ -8,10 +8,17 @@ set -e  # Exit on any error
 # Configuration
 CLUSTER_NAME="documentdb-cluster"
 REGION="us-west-2"
-NODE_TYPE="m5.large"
+K8S_VERSION="${K8S_VERSION:-1.35}"
+NODE_TYPE="${NODE_TYPE:-m7g.large}"
 NODES=3
 NODES_MIN=1
 NODES_MAX=4
+
+# Cost-optimization configuration
+# USE_SPOT: when "true", eksctl provisions Spot-backed managed nodes (dev/test only).
+# CLUSTER_TAGS: comma-separated key=value pairs passed to AWS for cost allocation in Cost Explorer.
+USE_SPOT="${USE_SPOT:-false}"
+CLUSTER_TAGS="${CLUSTER_TAGS:-project=documentdb-playground,environment=dev,managed-by=eksctl}"
 
 # DocumentDB Operator Configuration
 # For production: use documentdb/documentdb-operator (official)
@@ -58,6 +65,22 @@ while [[ $# -gt 0 ]]; do
             GITHUB_TOKEN="$2"
             shift 2
             ;;
+        --node-type)
+            NODE_TYPE="$2"
+            shift 2
+            ;;
+        --eks-version|--k8s-version)
+            K8S_VERSION="$2"
+            shift 2
+            ;;
+        --spot)
+            USE_SPOT="true"
+            shift
+            ;;
+        --tags)
+            CLUSTER_TAGS="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -70,6 +93,14 @@ while [[ $# -gt 0 ]]; do
             echo "  --region REGION       AWS region (default: us-west-2)"
             echo "  --github-username     GitHub username for operator installation"
             echo "  --github-token        GitHub token for operator installation"
+            echo ""
+            echo "Cost-optimization options:"
+            echo "  --node-type TYPE      EC2 instance type (default: m7g.large, Graviton/ARM)"
+            echo "  --eks-version VER     Kubernetes/EKS version (default: 1.35)"
+            echo "  --spot                Use Spot-backed managed nodes (DEV/TEST ONLY - can be terminated)"
+            echo "  --tags TAGS           Cost allocation tags as key=value pairs (comma-separated)"
+            echo "                        (default: project=documentdb-playground,environment=dev,managed-by=eksctl)"
+            echo ""
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
@@ -77,6 +108,8 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --install-operator                 # Create cluster with operator, no instance"
             echo "  $0 --deploy-instance                  # Create cluster with instance (auto-enables operator)"
             echo "  $0 --github-username user --github-token ghp_xxx --install-operator  # With GitHub auth"
+            echo "  $0 --node-type m5.large               # Use x86 instance type instead of Graviton"
+            echo "  $0 --spot --tags \"project=myproj,team=platform\"  # Spot dev cluster with custom tags"
             exit 0
             ;;
         *)
@@ -146,24 +179,43 @@ check_prerequisites() {
 # Create EKS cluster
 create_cluster() {
     log "Creating EKS cluster: $CLUSTER_NAME in region: $REGION"
-    
+
     # Check if cluster already exists
     if eksctl get cluster --name $CLUSTER_NAME --region $REGION &> /dev/null; then
         warn "Cluster $CLUSTER_NAME already exists. Skipping cluster creation."
         return 0
     fi
-    
-    # Create cluster with basic configuration
-    eksctl create cluster \
-        --name $CLUSTER_NAME \
-        --region $REGION \
-        --node-type $NODE_TYPE \
-        --nodes $NODES \
-        --nodes-min $NODES_MIN \
-        --nodes-max $NODES_MAX \
-        --managed \
+
+    if [ "$USE_SPOT" == "true" ]; then
+        warn "============================================================"
+        warn "SPOT INSTANCES ENABLED - FOR DEV/TEST USE ONLY"
+        warn "AWS can terminate Spot instances at any time with 2 minutes"
+        warn "notice. This WILL interrupt your database and require recovery."
+        warn "Do NOT use Spot for production or long-running workloads."
+        warn "============================================================"
+    fi
+
+    local EKSCTL_ARGS=(
+        --name "$CLUSTER_NAME"
+        --region "$REGION"
+        --version "$K8S_VERSION"
+        --nodes "$NODES"
+        --nodes-min "$NODES_MIN"
+        --nodes-max "$NODES_MAX"
+        --managed
         --with-oidc
-    
+        --tags "$CLUSTER_TAGS"
+    )
+
+    if [ "$USE_SPOT" == "true" ]; then
+        # Multiple instance types improve Spot availability; all Graviton to match the default.
+        EKSCTL_ARGS+=(--spot --instance-types "m7g.large,m6g.large,r7g.large,r6g.large,c7g.large,c6g.large")
+    else
+        EKSCTL_ARGS+=(--node-type "$NODE_TYPE")
+    fi
+
+    eksctl create cluster "${EKSCTL_ARGS[@]}"
+
     if [ $? -eq 0 ]; then
         success "EKS cluster created successfully"
     else
@@ -528,11 +580,15 @@ print_summary() {
     echo "=================================================="
     echo "Cluster Name: $CLUSTER_NAME"
     echo "Region: $REGION"
+    echo "Kubernetes: $K8S_VERSION"
+    echo "Node Type: $NODE_TYPE"
+    echo "Spot Instances: $USE_SPOT"
+    echo "Tags: $CLUSTER_TAGS"
     echo "Operator Installed: $INSTALL_OPERATOR"
     echo "Instance Deployed: $DEPLOY_INSTANCE"
     echo ""
     echo "✅ Components installed:"
-    echo "  - EKS cluster with managed nodes"
+    echo "  - EKS cluster with managed nodes ($NODE_TYPE)"
     echo "  - EBS CSI driver"
     echo "  - AWS Load Balancer Controller"
     echo "  - cert-manager"
@@ -567,6 +623,10 @@ main() {
     log "Configuration:"
     log "  Cluster: $CLUSTER_NAME"
     log "  Region: $REGION"
+    log "  Kubernetes: $K8S_VERSION"
+    log "  Node Type: $NODE_TYPE"
+    log "  Spot Instances: $USE_SPOT"
+    log "  Tags: $CLUSTER_TAGS"
     log "  Install Operator: $INSTALL_OPERATOR"
     log "  Deploy Instance: $DEPLOY_INSTANCE"
     echo ""
