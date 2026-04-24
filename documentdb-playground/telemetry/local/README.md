@@ -168,7 +168,7 @@ This deletes the Kind cluster and any proxy containers. The local Docker registr
 
 ## Troubleshooting
 
-**Container metrics missing (`k8s_container_cpu_usage` = 0)**
+**Container metrics missing (`container_cpu_usage` = 0)**
 
 - Verify `spec.monitoring.kubeletstats: {}` is set on the DocumentDB CR.
 - Check the per-cluster ClusterRoleBinding exists: `kubectl get clusterrolebinding | grep kubeletstats`. The operator creates one when `monitoring.kubeletstats` is set.

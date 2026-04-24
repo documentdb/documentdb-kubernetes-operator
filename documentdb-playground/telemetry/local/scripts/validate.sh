@@ -31,7 +31,7 @@ done
 # 2. Check DocumentDB pods AND that the otel-collector sidecar is injected.
 echo ""
 echo "--- DocumentDB ---"
-running=$(kubectl get pods -l app=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" --no-headers 2>/dev/null | grep -c "Running" || true)
+running=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" --no-headers 2>/dev/null | grep -c "Running" || true)
 if [ "$running" -ge 1 ]; then
   green "DocumentDB pods running ($running)"
 else
@@ -39,7 +39,7 @@ else
 fi
 
 # Verify each running pod has 3/3 containers (postgres + documentdb-gateway + otel-collector).
-short=$(kubectl get pods -l app=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" \
+short=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[*].name}{"\n"}{end}' 2>/dev/null || true)
 missing_sidecar=0
 while IFS= read -r line; do
@@ -87,14 +87,14 @@ if [ -n "$PROM_POD" ]; then
   echo "Waiting up to 120s for kubeletstats container metrics to appear..."
   container_metric_found=0
   for _ in $(seq 1 24); do
-    if echo "$(query 'k8s_container_cpu_usage{k8s_namespace_name=\"documentdb-preview-ns\"}')" | grep -q '"result":\[{'; then
+    if echo "$(query 'container_cpu_usage{k8s_namespace_name=\"documentdb-preview-ns\"}')" | grep -q '"result":\[{'; then
       container_metric_found=1
       break
     fi
     sleep 5
   done
   if [ "$container_metric_found" -eq 1 ]; then
-    green "Container metric k8s_container_cpu_usage present (via OTel sidecar kubeletstats)"
+    green "Container metric container_cpu_usage present (via OTel sidecar kubeletstats)"
   else
     red "kubeletstats container metrics absent after 120s — check sidecar logs and ClusterRoleBinding for nodes/stats RBAC."
   fi

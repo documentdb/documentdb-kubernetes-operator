@@ -21,6 +21,14 @@ rules:
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings", "clusterrolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Allow the operator to bind the kubeletstats ClusterRole to per-cluster
+# ServiceAccounts without holding nodes/stats itself (RBAC escalation
+# prevention requires either holding the granted permissions or having
+# explicit `bind` on the referenced ClusterRole).
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles"]
+  resourceNames: ["documentdb-kubeletstats-reader"]
+  verbs: ["bind"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

@@ -115,11 +115,11 @@ When `monitoring.kubeletstats.enabled` is true on the DocumentDB CR, the OTel si
 
 | Metric | Description |
 |--------|-------------|
-| `k8s.container.cpu.usage` (`k8s_container_cpu_usage`) | Container CPU usage (cores, gauge) |
-| `k8s.container.memory.working_set` (`k8s_container_memory_working_set`) | Working-set memory (matches OOM accounting) |
-| `k8s.container.memory.rss` (`k8s_container_memory_rss`) | Resident set size |
-| `k8s.pod.network.io` (`k8s_pod_network_io`) | Pod-level network bytes received/transmitted (with `direction` attribute) |
-| `k8s.container.filesystem.usage` (`k8s_container_filesystem_usage`) | Filesystem usage per container |
+| `k8s.container.cpu.usage` (`container_cpu_usage`) | Container CPU usage (cores, gauge) |
+| `k8s.container.memory.working_set` (`container_memory_working_set_bytes`) | Working-set memory (matches OOM accounting) |
+| `k8s.container.memory.rss` (`container_memory_rss_bytes`) | Resident set size |
+| `k8s.pod.network.io` (`k8s_pod_network_io_bytes_total`) | Pod-level network bytes received/transmitted (with `direction` attribute) |
+| `k8s.container.filesystem.usage` (`container_filesystem_usage_bytes`) | Filesystem usage per container |
 
 Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporter converts dots to underscores when scraping. Filter by `k8s_namespace_name`, `k8s_pod_name`, and `k8s_container_name`.
 
@@ -153,7 +153,7 @@ After deploying the monitoring stack, confirm metrics are flowing:
 NS=documentdb-preview-ns
 
 # 1. Pods are 3/3 (postgres + gateway + otel-collector)
-kubectl get pods -n $NS -l app=documentdb-preview
+kubectl get pods -n $NS -l cnpg.io/cluster=documentdb-preview
 
 # 2. The otel-collector sidecar exists on each pod
 kubectl get pod -n $NS -o jsonpath='{range .items[*]}{.metadata.name}{": "}{range .spec.containers[*]}{.name}{","}{end}{"\n"}{end}'
@@ -163,7 +163,7 @@ kubectl port-forward svc/prometheus 9090:9090 -n observability &
 curl -s 'http://localhost:9090/api/v1/query?query=up{job="documentdb-otel-sidecar"}' | jq '.data.result'
 
 # 4. Container resource metrics from kubeletstats are present
-curl -s 'http://localhost:9090/api/v1/query?query=k8s_container_cpu_usage{k8s_namespace_name="documentdb-preview-ns"}' | jq '.data.result | length'
+curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_usage{k8s_namespace_name="documentdb-preview-ns"}' | jq '.data.result | length'
 ```
 
 If no metrics appear, check:

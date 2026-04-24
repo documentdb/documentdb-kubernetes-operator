@@ -20,7 +20,7 @@
         "name": "pod",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "query": "label_values(k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
+        "query": "label_values(container_cpu_usage{k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
         "refresh": 2,
         "multi": true,
         "includeAll": true,
@@ -45,7 +45,7 @@
       "fieldConfig": { "defaults": { "unit": "none" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_cpu_usage{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -60,7 +60,7 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_memory_working_set{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_working_set_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -75,7 +75,7 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_memory_rss{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_rss_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -84,14 +84,14 @@
     {
       "type": "timeseries",
       "title": "Container memory limit utilization",
-      "description": "Working-set memory as a fraction of the container's memory limit. Only present for containers with limits configured.",
+      "description": "Working-set memory as a fraction of the container's memory limit. Requires resource limits set on the container AND the metric to be enabled in the kubeletstats receiver. Empty by default in this playground.",
       "id": 5,
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "targets": [
         {
-          "expr": "k8s_container_memory_limit_utilization{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"}",
+          "expr": "container_memory_working_set_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"} / on(k8s_pod_name, k8s_container_name) group_left() container_memory_available_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"}",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -113,7 +113,7 @@
       "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"receive\"}[1m]))",
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io_bytes_total{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"receive\"}[1m]))",
           "legendFormat": "{{k8s_pod_name}}",
           "refId": "A"
         }
@@ -128,7 +128,7 @@
       "fieldConfig": { "defaults": { "unit": "Bps" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"transmit\"}[1m]))",
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io_bytes_total{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"transmit\"}[1m]))",
           "legendFormat": "{{k8s_pod_name}}",
           "refId": "A"
         }
@@ -150,7 +150,7 @@
       "fieldConfig": { "defaults": { "unit": "bytes" } },
       "targets": [
         {
-          "expr": "sum by (k8s_pod_name, k8s_container_name) (k8s_container_filesystem_usage{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_filesystem_usage_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
           "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
           "refId": "A"
         }
@@ -166,7 +166,7 @@
       "fieldConfig": { "defaults": { "unit": "none" } },
       "targets": [
         {
-          "expr": "count(count by (k8s_pod_name) (k8s_container_cpu_usage{k8s_namespace_name=\"$namespace\"}))",
+          "expr": "count(count by (k8s_pod_name) (container_cpu_usage{k8s_namespace_name=\"$namespace\"}))",
           "refId": "A"
         }
       ]

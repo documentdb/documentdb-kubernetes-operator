@@ -79,11 +79,19 @@ func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.Monito
 func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
+			// `insert` (not `upsert`) so we don't clobber per-stream resource
+			// attributes set by receivers like kubeletstats — that receiver
+			// already tags each metric with the *scraped* container's
+			// k8s.pod.name / k8s.namespace.name / k8s.container.name. Using
+			// upsert here would overwrite them all with the collector pod's
+			// own identity, collapsing every container's metrics into one
+			// time series. `insert` only fills in the gap for receivers that
+			// don't supply these attrs (e.g. sqlquery).
 			"resource": map[string]any{
 				"attributes": []map[string]any{
-					{"key": "documentdb.cluster", "value": clusterName, "action": "upsert"},
-					{"key": "k8s.namespace.name", "value": namespace, "action": "upsert"},
-					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "upsert"},
+					{"key": "documentdb.cluster", "value": clusterName, "action": "insert"},
+					{"key": "k8s.namespace.name", "value": namespace, "action": "insert"},
+					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "insert"},
 				},
 			},
 		},
@@ -141,6 +149,14 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			}
 			cfg.Exporters["prometheus"] = map[string]any{
 				"endpoint": fmt.Sprintf("0.0.0.0:%d", port),
+				// Promote resource attributes (k8s.pod.name, k8s.container.name,
+				// k8s.namespace.name from kubeletstats; documentdb.cluster from
+				// our resource processor) onto each metric as Prometheus labels.
+				// Without this they'd only appear on `target_info` and
+				// dashboards couldn't filter by pod/container.
+				"resource_to_telemetry_conversion": map[string]any{
+					"enabled": true,
+				},
 			}
 			exporterNames = append(exporterNames, "prometheus")
 		}

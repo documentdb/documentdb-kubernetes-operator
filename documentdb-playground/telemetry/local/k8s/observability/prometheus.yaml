@@ -131,7 +131,7 @@ data:
         rules:
           - alert: ContainerHighMemory
             expr: |
-              k8s_container_memory_working_set{
+              container_memory_working_set_bytes{
                 k8s_namespace_name="documentdb-preview-ns",
                 k8s_container_name!=""
               } > 1073741824
