@@ -56,21 +56,20 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {
-	if ddb.Spec.TLS == nil || ddb.Spec.TLS.Gateway == nil {
-		return ctrl.Result{}, nil
+	// TLS is always enabled. When tls or tls.gateway is unset, default to SelfSigned
+	// so the operator provisions a managed cert (issue #356 - no plaintext path).
+	var gatewayCfg *dbpreview.GatewayTLS
+	if ddb.Spec.TLS != nil {
+		gatewayCfg = ddb.Spec.TLS.Gateway
+	}
+	if gatewayCfg == nil {
+		gatewayCfg = &dbpreview.GatewayTLS{Mode: "SelfSigned"}
 	}
 
-	gatewayCfg := ddb.Spec.TLS.Gateway
-	if gatewayCfg.Mode == "" || gatewayCfg.Mode == "Disabled" {
-		if ddb.Status.TLS != nil && ddb.Status.TLS.Ready {
-			if err := r.updateTLSStatus(ctx, ddb, func(status *dbpreview.TLSStatus) {
-				status.Ready = false
-				status.Message = "Gateway TLS disabled"
-			}); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-		return ctrl.Result{}, nil
+	// Empty mode defaults to SelfSigned for security - TLS is always enabled
+	mode := gatewayCfg.Mode
+	if mode == "" {
+		mode = "SelfSigned"
 	}
 
 	if ddb.Status.TLS == nil {
@@ -81,7 +80,7 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 		}
 	}
 
-	switch gatewayCfg.Mode {
+	switch mode {
 	case "SelfSigned":
 		return r.ensureSelfSignedCert(ctx, ddb)
 	case "Provided":
@@ -89,7 +88,15 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 	case "CertManager":
 		return r.ensureCertManagerManagedCert(ctx, ddb)
 	default:
-		return ctrl.Result{}, nil
+		// Unknown/legacy mode (e.g. "Disabled" from a pre-#357 resource still in etcd
+		// — apiserver does not re-validate stored objects against the trimmed enum).
+		// Fail-safe to SelfSigned so the gateway never serves plaintext.
+		log.FromContext(ctx).Info(
+			"unsupported TLS gateway mode; defaulting to SelfSigned to preserve no-plaintext invariant",
+			"requestedMode", mode,
+			"hint", "Update spec.tls.gateway.mode to SelfSigned, CertManager, or Provided.",
+		)
+		return r.ensureSelfSignedCert(ctx, ddb)
 	}
 }
 
