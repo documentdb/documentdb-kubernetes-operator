@@ -268,7 +268,9 @@ type TLSConfiguration struct {
 // GatewayTLS defines TLS configuration for the gateway sidecar (Phase 1: certificate provisioning only)
 type GatewayTLS struct {
 	// Mode selects the TLS management strategy.
-	// +kubebuilder:validation:Enum=Disabled;SelfSigned;CertManager;Provided
+	// Defaults to SelfSigned if not specified.
+	// +kubebuilder:validation:Enum=SelfSigned;CertManager;Provided
+	// +kubebuilder:default=SelfSigned
 	Mode string `json:"mode,omitempty"`
 
 	// CertManager config when Mode=CertManager.

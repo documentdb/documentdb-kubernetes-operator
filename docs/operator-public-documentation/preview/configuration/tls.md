@@ -1,6 +1,6 @@
 ---
 title: TLS Configuration
-description: Configure TLS certificate management for DocumentDB gateway connections — Disabled, SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
+description: Configure TLS certificate management for DocumentDB gateway connections — SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
 tags:
   - configuration
   - tls
@@ -8,6 +8,9 @@ tags:
 ---
 
 # TLS Configuration
+
+!!! warning "Breaking change in this release"
+    The `Disabled` TLS mode has been removed. If you previously set `spec.tls.gateway.mode: Disabled`, update it to `SelfSigned` (or remove the field — `SelfSigned` is now the default). See the [CHANGELOG](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md) for details.
 
 ## Overview
 
@@ -23,7 +26,7 @@ metadata:
 spec:
   tls:
     gateway:
-      mode: SelfSigned   # Disabled | SelfSigned | CertManager | Provided
+      mode: SelfSigned   # SelfSigned | CertManager | Provided
 ```
 
 For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconfiguration) in the API Reference.
@@ -31,41 +34,6 @@ For the full field reference, see [TLSConfiguration](../api-reference.md#tlsconf
 ## Configuration
 
 Select your TLS mode below. Each tab shows prerequisites, the complete YAML configuration, and connection instructions.
-
-=== "Disabled"
-
-    **Best for:** Development and testing only
-
-    !!! danger "Not recommended for production"
-
-    **Prerequisites:** None
-
-    Disabled mode means the operator does not manage TLS certificates. However, the gateway still encrypts all connections using an internally generated self-signed certificate. Clients must connect with `tls=true&tlsAllowInvalidCertificates=true`.
-
-    ```yaml title="documentdb-tls-disabled.yaml"
-    apiVersion: documentdb.io/preview
-    kind: DocumentDB
-    metadata:
-      name: my-documentdb
-      namespace: default
-    spec:
-      nodeCount: 1
-      instancesPerNode: 1
-      resource:
-        storage:
-          pvcSize: 10Gi
-      exposeViaService:
-        serviceType: ClusterIP
-      tls:
-        gateway:
-          mode: Disabled
-    ```
-
-    **Connect with mongosh:**
-
-    ```bash
-    mongosh "mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
-    ```
 
 === "SelfSigned"
 
@@ -181,7 +149,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
             secretName: my-documentdb-tls # (4)!
     ```
 
-    1. Must match the `metadata.name` of your Issuer or ClusterIssuer (e.g., `my-ca-issuer` from the prerequisite example above).
+    1. Must match the `metadata.name` of your Issuer or ClusterIssuer (for example, `my-ca-issuer` from the prerequisite example above).
     2. Use [`ClusterIssuer`](https://cert-manager.io/docs/concepts/issuer/#cluster-resource) for cluster-scoped issuers, or [`Issuer`](https://cert-manager.io/docs/concepts/issuer/#namespaces) for namespace-scoped.
     3. [Subject Alternative Names](https://en.wikipedia.org/wiki/Subject_Alternative_Name) — add all DNS names clients will use to connect.
     4. Optional. The Kubernetes Secret where cert-manager stores the issued certificate — you do not need to create this Secret yourself, cert-manager generates it automatically. Defaults to `<documentdb-name>-gateway-cert-tls` if not specified.
@@ -253,7 +221,7 @@ Select your TLS mode below. Each tab shows prerequisites, the complete YAML conf
       --tls --tlsCAFile ca.crt
     ```
 
-## Certificate Rotation
+## Certificate rotation
 
 Certificate rotation is automatic and zero-downtime. When a certificate is renewed, the gateway picks up the new certificate without restarting pods.
 
@@ -266,7 +234,7 @@ Certificate rotation is automatic and zero-downtime. When a certificate is renew
 !!! note
     Changing `spec.tls.gateway.provided.secretName` to point to a **different** Secret triggers a rolling restart of the DocumentDB cluster pods, which causes a brief period of downtime. To rotate certificates without downtime, update the contents of the **existing** Secret instead of changing the Secret name.
 
-### Monitoring Certificate Expiration
+### Monitor certificate expiration
 
 ```bash
 # Check certificate status via cert-manager
@@ -291,7 +259,7 @@ Example TLS status output:
 }
 ```
 
-## Additional Resources
+## Additional resources
 
 The [`documentdb-playground/tls/`](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/tls) directory provides automated scripts and end-to-end guides for TLS setup on AKS:
 

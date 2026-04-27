@@ -1400,9 +1400,11 @@ spec:
                         - issuerRef
                         type: object
                       mode:
-                        description: Mode selects the TLS management strategy.
+                        default: SelfSigned
+                        description: |-
+                          Mode selects the TLS management strategy.
+                          Defaults to SelfSigned if not specified.
                         enum:
-                        - Disabled
                         - SelfSigned
                         - CertManager
                         - Provided

@@ -97,9 +97,9 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		},
 	}
 
-	// Pipeline receivers always include sqlquery (declared in static.yaml).
-	// Add kubeletstats when opted in via spec.KubeletStats.
-	receiverNames := []string{"sqlquery"}
+	// Pipeline receivers from base_config.yaml: sqlquery (Postgres health),
+	// otlp (gateway-pushed metrics). Add kubeletstats when opted in.
+	receiverNames := []string{"sqlquery", "otlp"}
 	if spec.KubeletStats != nil {
 		if cfg.Receivers == nil {
 			cfg.Receivers = map[string]any{}

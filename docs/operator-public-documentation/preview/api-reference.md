@@ -201,7 +201,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _string_ | Mode selects the TLS management strategy. |  | Enum: [Disabled SelfSigned CertManager Provided] <br /> |
+| `mode` _string_ | Mode selects the TLS management strategy. Defaults to SelfSigned if not specified. | SelfSigned | Enum: [SelfSigned CertManager Provided] <br /> |
 | `certManager` _[CertManagerTLS](#certmanagertls)_ | CertManager config when Mode=CertManager. |  |  |
 | `provided` _[ProvidedTLS](#providedtls)_ | Provided secret reference when Mode=Provided. |  |  |
 

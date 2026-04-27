@@ -427,7 +427,6 @@ DocumentDB Gateway serves TLS by default. The TLS mode is configurable via the `
 | `SelfSigned` (default) | Operator generates a self-signed certificate | Use `tlsAllowInvalidCertificates=true` |
 | `CertManager` | cert-manager issues a trusted certificate | Validate against your CA bundle |
 | `Provided` | You supply your own certificate Secret | Validate against your CA |
-| `Disabled` | TLS disabled on the gateway | Not recommended |
 
 ### Connecting with a trusted certificate
 
