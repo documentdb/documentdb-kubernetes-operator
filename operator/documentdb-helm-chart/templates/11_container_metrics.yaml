@@ -1,0 +1,161 @@
+{{- if .Values.containerMetrics.enabled }}
+# Container resource metrics DaemonSet — one OTel Collector per node,
+# scraping the local kubelet's /stats/summary via the kubeletstats receiver
+# and exporting Prometheus metrics. The DaemonSet's ServiceAccount holds
+# nodes/stats; tenant DocumentDB pods do not.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: documentdb-container-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: documentdb-container-metrics
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+rules:
+  - apiGroups: [""]
+    resources: ["nodes/stats", "nodes/proxy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: documentdb-container-metrics
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: documentdb-container-metrics
+subjects:
+  - kind: ServiceAccount
+    name: documentdb-container-metrics
+    namespace: {{ .Values.namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: documentdb-container-metrics-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+data:
+  collector.yaml: |
+    receivers:
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: serviceAccount
+        endpoint: ${env:K8S_NODE_NAME}:10250
+        insecure_skip_verify: true
+        metric_groups: [container, pod, node]
+    processors:
+      batch:
+        send_batch_size: 1024
+        timeout: 10s
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:{{ .Values.containerMetrics.prometheusPort }}"
+        # Promote resource attrs to Prometheus labels instead of target_info.
+        resource_to_telemetry_conversion:
+          enabled: true
+    service:
+      pipelines:
+        metrics:
+          receivers: [kubeletstats]
+          processors: [batch]
+          exporters: [prometheus]
+      telemetry:
+        logs:
+          level: info
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: documentdb-container-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+      app.kubernetes.io/component: container-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+        app.kubernetes.io/component: container-metrics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.containerMetrics.prometheusPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: documentdb-container-metrics
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: otel-collector
+          image: {{ .Values.containerMetrics.image }}
+          args: ["--config=/etc/collector/collector.yaml"]
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: prom
+              containerPort: {{ .Values.containerMetrics.prometheusPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.containerMetrics.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/collector
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: documentdb-container-metrics-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-container-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: "Helm"
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    app.kubernetes.io/component: container-metrics
+  ports:
+    - name: prom
+      port: {{ .Values.containerMetrics.prometheusPort }}
+      targetPort: prom
+{{- end }}

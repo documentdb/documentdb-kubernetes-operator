@@ -1,0 +1,116 @@
+#!/bin/bash
+set -euo pipefail
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-telemetry}"
+CONTEXT="kind-${CLUSTER_NAME}"
+PASS=0
+FAIL=0
+
+green() { echo -e "\033[32m✓ $1\033[0m"; PASS=$((PASS + 1)); }
+red()   { echo -e "\033[31m✗ $1\033[0m"; FAIL=$((FAIL + 1)); }
+warn()  { echo -e "\033[33m⚠ $1\033[0m"; }
+
+echo "=== DocumentDB Telemetry Playground - Validation ==="
+echo ""
+
+# 1. Check observability deployments (no central OTel collector — every
+# DocumentDB pod runs its own sidecar via spec.monitoring).
+echo "--- Observability Stack ---"
+for deploy in prometheus grafana; do
+  if kubectl get deployment "$deploy" -n observability --context "$CONTEXT" &>/dev/null; then
+    ready=$(kubectl get deployment "$deploy" -n observability --context "$CONTEXT" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    if [ "${ready:-0}" -ge 1 ]; then
+      green "$deploy is running"
+    else
+      red "$deploy is not ready (readyReplicas=${ready:-0})"
+    fi
+  else
+    red "$deploy deployment not found"
+  fi
+done
+
+# 2. Check DocumentDB pods AND that the otel-collector sidecar is injected.
+echo ""
+echo "--- DocumentDB ---"
+running=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview -n documentdb-preview-ns --context "$CONTEXT" --no-headers 2>/dev/null | grep -c "Running" || true)
+if [ "$running" -ge 1 ]; then
+  green "DocumentDB pods running ($running)"
+else
+  red "No DocumentDB pods running"
+fi
+
+# Verify each running pod has all 3 expected containers (postgres + documentdb-gateway + otel-collector).
+# --field-selector excludes the completed initdb Job pod (which is also labeled cnpg.io/cluster).
+short=$(kubectl get pods -l cnpg.io/cluster=documentdb-preview --field-selector=status.phase=Running -n documentdb-preview-ns --context "$CONTEXT" \
+  -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[*].name}{"\n"}{end}' 2>/dev/null || true)
+missing_sidecar=0
+expected_containers=("postgres" "documentdb-gateway" "otel-collector")
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  pod_name=$(echo "$line" | awk '{print $1}')
+  for c in "${expected_containers[@]}"; do
+    if ! echo "$line" | grep -qw "$c"; then
+      red "pod $pod_name is missing expected container: $c"
+      missing_sidecar=$((missing_sidecar + 1))
+    fi
+  done
+done <<< "$short"
+if [ "$missing_sidecar" -eq 0 ] && [ "$running" -ge 1 ]; then
+  green "all DocumentDB pods have postgres + documentdb-gateway + otel-collector"
+fi
+
+# 3. Check Prometheus targets and key metrics
+echo ""
+echo "--- Data Flow ---"
+PROM_POD=$(kubectl get pod -l app=prometheus -n observability --context "$CONTEXT" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [ -n "$PROM_POD" ]; then
+  query() {
+    kubectl exec "$PROM_POD" -n observability --context "$CONTEXT" -- \
+      wget -qO- "http://localhost:9090/api/v1/query?query=$1" 2>/dev/null || echo ""
+  }
+
+  # Prometheus has at least one UP target?
+  target_up=$(query "up")
+  if echo "$target_up" | grep -q '"value"'; then
+    up_count=$(echo "$target_up" | grep -o '"value":\[' | wc -l)
+    green "Prometheus has $up_count active targets"
+  else
+    red "Cannot query Prometheus targets"
+  fi
+
+  # Sidecar scrape job is up?
+  # Prometheus returns "value":[<unix-timestamp-as-number>,"1"] — the timestamp
+  # is JSON number (no quotes), so don't anchor on a quoted first element.
+  sidecar_up=$(query 'up{job="documentdb-otel-sidecar"}')
+  if echo "$sidecar_up" | grep -q '"value":\[[^,]*,"1"\]'; then
+    green "OTel sidecar scrape targets are UP"
+  else
+    warn "OTel sidecar scrape targets not UP yet (sidecar may still be starting)"
+  fi
+
+  # Container metric from the chart-managed container-metrics DaemonSet.
+  # Allow ~120s for DaemonSet rollout, first scrape, and Prometheus discovery.
+  echo "Waiting up to 120s for container metrics from DaemonSet to appear..."
+  container_metric_found=0
+  for _ in $(seq 1 24); do
+    if echo "$(query 'container_cpu_time_seconds_total{k8s_namespace_name="documentdb-preview-ns"}')" | grep -q '"result":\[{'; then
+      container_metric_found=1
+      break
+    fi
+    sleep 5
+  done
+  if [ "$container_metric_found" -eq 1 ]; then
+    green "Container metric container_cpu_time_seconds_total present (via documentdb-container-metrics DaemonSet)"
+  else
+    red "Container metrics absent after 120s — check DaemonSet pods (kubectl get pods -n documentdb-operator -l app.kubernetes.io/component=container-metrics) and ClusterRoleBinding documentdb-container-metrics."
+  fi
+else
+  red "Prometheus pod not found"
+fi
+
+# Summary
+echo ""
+echo "=== Results: $PASS passed, $FAIL failed ==="
+if [ "$FAIL" -gt 0 ]; then
+  echo "Some checks failed. Components may still be starting up — retry in a minute."
+  exit 1
+fi

@@ -416,3 +416,7 @@ Chart.lock
 site/
 operator/src/coverage
 operator/src/webhook_coverage
+
+# Local helm dev: `make` / `helm dependency update` produces a flattened copy
+# of the chart under operator/src/ — not part of source.
+operator/src/documentdb-chart/

@@ -1,0 +1,181 @@
+{
+  "title": "DocumentDB Internals - Container & Pod Resources",
+  "description": "Container CPU / memory / filesystem and pod network sourced from the chart-managed container-metrics DaemonSet (kubeletstats receiver).",
+  "uid": "documentdb-internals",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["documentdb", "internals", "container-metrics"],
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "type": "constant",
+        "current": { "selected": false, "text": "documentdb-preview-ns", "value": "documentdb-preview-ns" },
+        "query": "documentdb-preview-ns",
+        "hide": 2
+      },
+      {
+        "name": "pod",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(container_cpu_time_seconds_total{k8s_namespace_name=\"$namespace\"}, k8s_pod_name)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Container CPU & Memory",
+      "id": 1,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Container CPU usage (cores)",
+      "description": "CPU cores used per container, computed as the 2-minute rate of `container_cpu_time_seconds_total`.",
+      "id": 2,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "none" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (rate(container_cpu_time_seconds_total{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"}[2m]))",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory working set (bytes)",
+      "description": "Container working-set memory in bytes — the portion the kernel considers actively in use and that the OOM killer compares against the memory limit.",
+      "id": 3,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_working_set_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory RSS (bytes)",
+      "description": "Container resident set size in bytes — anonymous (non-file-backed) memory pages held by the container.",
+      "id": 4,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_rss_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory usage (bytes)",
+      "description": "Total container memory in bytes (working set plus page cache).",
+      "id": 5,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_memory_usage_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Pod Network",
+      "id": 6,
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Network bytes received (per pod)",
+      "description": "Inbound bytes per second per pod, summed across all pod interfaces (1-minute rate of `k8s_pod_network_io_bytes_total{direction=\"receive\"}`).",
+      "id": 7,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io_bytes_total{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"receive\"}[1m]))",
+          "legendFormat": "{{k8s_pod_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Network bytes transmitted (per pod)",
+      "description": "Outbound bytes per second per pod, summed across all pod interfaces (1-minute rate of `k8s_pod_network_io_bytes_total{direction=\"transmit\"}`).",
+      "id": 8,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name) (rate(k8s_pod_network_io_bytes_total{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\", direction=\"transmit\"}[1m]))",
+          "legendFormat": "{{k8s_pod_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Filesystem",
+      "id": 9,
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Container filesystem usage (bytes)",
+      "description": "Bytes used on the container's writable root filesystem layer (kubelet `container.filesystem.usage`); does not include mounted volumes such as PVCs.",
+      "id": 10,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        {
+          "expr": "sum by (k8s_pod_name, k8s_container_name) (container_filesystem_usage_bytes{k8s_namespace_name=\"$namespace\", k8s_pod_name=~\"$pod\"})",
+          "legendFormat": "{{k8s_pod_name}} / {{k8s_container_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Pods reporting container metrics",
+      "description": "Number of distinct pods in this namespace currently emitting `container_cpu_time_seconds_total`.",
+      "id": 11,
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 27, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "none" } },
+      "targets": [
+        {
+          "expr": "count(count by (k8s_pod_name) (container_cpu_time_seconds_total{k8s_namespace_name=\"$namespace\"}))",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

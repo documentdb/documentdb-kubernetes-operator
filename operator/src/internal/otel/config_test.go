@@ -4,6 +4,7 @@
 package otel
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -193,6 +194,39 @@ var _ = Describe("GenerateConfigMapData", func() {
 		dynCfg := parseCfg(data["dynamic.yaml"])
 		Expect(dynCfg.Service).To(BeNil())
 		Expect(dynCfg.Exporters).To(BeEmpty())
+	})
+
+	// Regression guards — see comments in config.go for the why behind each.
+	It("uses 'insert' (not 'upsert') on the resource processor so per-datapoint k8s attrs survive", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Must not contain 'upsert' — that would clobber per-datapoint resource
+		// attrs from any receiver that emits its own k8s.* identity.
+		Expect(data["dynamic.yaml"]).NotTo(ContainSubstring("upsert"))
+		// Should use 'insert' for all three resource attrs.
+		Expect(strings.Count(data["dynamic.yaml"], "action: insert")).To(Equal(3))
+	})
+
+	It("enables resource_to_telemetry_conversion on the prometheus exporter so resource attrs become labels", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+		// Without this option the prometheus exporter writes resource attrs only
+		// to target_info, hiding documentdb.cluster / k8s.* labels.
+		Expect(data["dynamic.yaml"]).To(ContainSubstring("resource_to_telemetry_conversion"))
+		Expect(data["dynamic.yaml"]).To(MatchRegexp(`resource_to_telemetry_conversion:\s*\n\s+enabled:\s*true`))
 	})
 })
 

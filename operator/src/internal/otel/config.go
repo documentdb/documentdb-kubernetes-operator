@@ -74,20 +74,29 @@ func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.Monito
 	}, nil
 }
 
-// generateDynamicConfig builds the per-cluster dynamic config: resource processor,
-// exporters, and pipeline wiring. The OTel Collector deep-merges this with static.yaml.
+// generateDynamicConfig builds the per-cluster dynamic config (resource
+// processor, exporters, pipeline wiring) that the collector deep-merges
+// with the embedded base_config.yaml.
 func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
+			// `insert` (not `upsert`) so receivers that already emit their
+			// own k8s.* resource attrs keep them; `insert` only fills the
+			// gap for receivers that don't (e.g. sqlquery).
 			"resource": map[string]any{
 				"attributes": []map[string]any{
-					{"key": "documentdb.cluster", "value": clusterName, "action": "upsert"},
-					{"key": "k8s.namespace.name", "value": namespace, "action": "upsert"},
-					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "upsert"},
+					{"key": "documentdb.cluster", "value": clusterName, "action": "insert"},
+					{"key": "k8s.namespace.name", "value": namespace, "action": "insert"},
+					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "insert"},
 				},
 			},
 		},
 	}
+
+	// sqlquery (Postgres health) + otlp (gateway-pushed metrics) come from
+	// base_config.yaml. Container/node resource metrics are served by the
+	// chart-managed DaemonSet, not this sidecar.
+	receiverNames := []string{"sqlquery", "otlp"}
 
 	exporterNames := []string{}
 
@@ -118,6 +127,12 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			}
 			cfg.Exporters["prometheus"] = map[string]any{
 				"endpoint": fmt.Sprintf("0.0.0.0:%d", port),
+				// Surface resource attributes as Prometheus labels (instead
+				// of burying them in target_info) so dashboards can filter
+				// by pod/container/cluster.
+				"resource_to_telemetry_conversion": map[string]any{
+					"enabled": true,
+				},
 			}
 			exporterNames = append(exporterNames, "prometheus")
 		}
@@ -135,10 +150,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			},
 			Pipelines: map[string]pipelineConfig{
 				"metrics": {
-					// Both receivers come from the embedded base_config.yaml.
-					// sqlquery emits Postgres health metrics; otlp receives metrics
-					// pushed from co-located containers (e.g. documentdb-gateway).
-					Receivers:  []string{"sqlquery", "otlp"},
+					Receivers:  receiverNames,
 					Processors: []string{"resource", "batch"},
 					Exporters:  exporterNames,
 				},
