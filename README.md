@@ -19,6 +19,23 @@ The DocumentDB Kubernetes Operator extends Kubernetes with Custom Resource Defin
 
 For installation guides, configuration options, and examples, visit our [documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/).
 
+## 📦 Install
+
+The operator Helm chart is published as an OCI artifact to the GitHub Container Registry. Pick a release version from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) (OCI registries do not support `helm search repo`), then install:
+
+```bash
+# Pin the release you want to install
+DOCUMENTDB_VERSION=0.2.0
+
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+  --version ${DOCUMENTDB_VERSION} \
+  --namespace documentdb-operator \
+  --create-namespace \
+  --wait
+```
+
+Requires Helm 3.8+ (OCI support is on by default). For the full prerequisites (cert-manager, supported Kubernetes versions, container runtimes) and platform-specific setup, see the [installation guide](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/).
+
 ## 🚀 Quick Start
 
 Ready to get started? Check out our [Quick Start Guide](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/#quickstart) for step-by-step instructions to deploy your first DocumentDB cluster in minutes.

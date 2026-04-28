@@ -82,14 +82,9 @@ flowchart TB
     aws sts get-caller-identity
     ```
 
-### Helm Repository Setup
+### Helm Chart Distribution
 
-The DocumentDB operator Helm chart is available from the public GitHub Pages repository.
-
-```bash
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-```
+The DocumentDB operator Helm chart is published as an OCI artifact to the GitHub Container Registry. There is no `helm repo add` step — install with `helm install ... oci://ghcr.io/documentdb/documentdb-operator --version <X>`. Released versions are listed at <https://github.com/documentdb/documentdb-kubernetes-operator/releases>.
 
 ## Quick Start with Playground Scripts
 
@@ -308,12 +303,12 @@ kubectl apply -f documentdb-storage-class.yaml
 ### Step 6: Install DocumentDB Operator
 
 ```bash
-# Add the Helm repository
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
+# Choose a release version (see https://github.com/documentdb/documentdb-kubernetes-operator/releases)
+DOCUMENTDB_VERSION=0.2.0
 
-# Install the operator
-helm install documentdb-operator documentdb/documentdb-operator \
+# Install the operator from the GHCR OCI Helm chart
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+    --version ${DOCUMENTDB_VERSION} \
     --namespace documentdb-operator \
     --create-namespace \
     --wait

@@ -78,7 +78,7 @@ inputs:
     required: false
     default: 'v1.35.0'
   released-chart-version:
-    description: 'Install operator from public Helm repo instead of built artifacts. Use "latest" for latest version or a specific version string.'
+    description: 'Install operator from the public GHCR OCI Helm chart instead of built artifacts. Use "latest" to resolve the most recent published GitHub release tag, or pass an explicit version (e.g. "0.2.0") for reproducible installs (recommended).'
     required: false
     default: ''
 
@@ -610,31 +610,47 @@ runs:
       if: inputs.released-chart-version != ''
       shell: bash
       run: |
-        echo "Installing DocumentDB Operator from public Helm repo..."
+        echo "Installing DocumentDB Operator from public GHCR OCI Helm chart..."
         echo "Requested chart version: ${{ inputs.released-chart-version }}"
-        
-        # Add the public DocumentDB Helm repository
-        helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-        helm repo update
-        
-        # Install the released chart
-        # If version is 'latest', omit --version to get the latest available
+
+        # The released chart is published from the canonical documentdb org regardless of
+        # which repository owner is running CI. Forks consume the same upstream chart.
+        OCI_CHART="oci://ghcr.io/documentdb/documentdb-operator"
+
+        # Log in to GHCR so private/throttled pulls succeed; public charts also accept this.
+        echo "${{ inputs.github-token }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
+
+        # Resolve the chart version. OCI registries do not support `helm search repo`, so
+        # "latest" is resolved by listing the GHCR OCI tags (the actual source of truth for
+        # what is installable) and picking the highest stable SemVer. Reproducible installs
+        # should pass an explicit version instead of "latest".
         CHART_VERSION="${{ inputs.released-chart-version }}"
         if [[ "$CHART_VERSION" == "latest" ]]; then
-          echo "Installing latest released version..."
-          helm install documentdb-operator documentdb/documentdb-operator \
-            --namespace ${{ inputs.operator-namespace }} \
-            --create-namespace \
-            --wait --timeout=15m
-        else
-          echo "Installing version $CHART_VERSION..."
-          helm install documentdb-operator documentdb/documentdb-operator \
-            --namespace ${{ inputs.operator-namespace }} \
-            --create-namespace \
-            --version "$CHART_VERSION" \
-            --wait --timeout=15m
+          echo "Resolving latest released chart version from GHCR OCI tags..."
+          GHCR_TOKEN=$(curl -sSL 'https://ghcr.io/token?scope=repository:documentdb/documentdb-operator:pull' | jq -r '.token' 2>/dev/null || echo "")
+          RESOLVED_VERSION=$(curl -sSL "https://ghcr.io/v2/documentdb/documentdb-operator/tags/list" \
+              -H "Authorization: Bearer ${GHCR_TOKEN}" 2>/dev/null \
+            | jq -r '.tags[]?' 2>/dev/null \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1 \
+            || echo "")
+          if [[ -z "$RESOLVED_VERSION" ]]; then
+            echo "❌ Failed to resolve latest released chart version from GHCR OCI tags."
+            echo "   Pass an explicit released-chart-version (e.g. '0.2.0') to avoid this dependency."
+            exit 1
+          fi
+          CHART_VERSION="$RESOLVED_VERSION"
+          echo "Resolved 'latest' to chart version: $CHART_VERSION"
         fi
-        
+
+        echo "Installing $OCI_CHART --version $CHART_VERSION..."
+        helm install documentdb-operator "$OCI_CHART" \
+          --namespace ${{ inputs.operator-namespace }} \
+          --create-namespace \
+          --version "$CHART_VERSION" \
+          --wait --timeout=15m
+
         # Log resolved version
         echo "Installed Helm releases:"
         helm list -n ${{ inputs.operator-namespace }}

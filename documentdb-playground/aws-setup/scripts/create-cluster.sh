@@ -432,63 +432,32 @@ install_documentdb_operator() {
         warn "DocumentDB operator already installed. Skipping installation."
         return 0
     fi
-    
-    # Try public Helm repository first (no authentication required)
-    log "Adding DocumentDB public Helm repository..."
-    helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
-    helm repo update documentdb
-    
-    log "Installing DocumentDB operator from public Helm repository..."
-    if helm install documentdb-operator documentdb/documentdb-operator \
+
+    # Install from the GHCR OCI Helm chart. The chart is published only to OCI;
+    # the previously documented public Helm repository (gh-pages) has been retired.
+    # GHCR allows anonymous pulls of public charts; if your environment requires
+    # authentication, set GITHUB_USERNAME and GITHUB_TOKEN (with read:packages scope)
+    # before running this script and we will run `helm registry login` for you.
+    if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_USERNAME:-}" ]; then
+        log "Authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            error "Failed to authenticate with GitHub Container Registry. Please verify GITHUB_TOKEN and GITHUB_USERNAME."
+        fi
+    fi
+
+    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (version ${OPERATOR_CHART_VERSION})..."
+    if helm install documentdb-operator \
+        oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
+        --version ${OPERATOR_CHART_VERSION} \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
-        --timeout 10m 2>/dev/null; then
-        success "DocumentDB operator installed successfully from public Helm repository"
+        --timeout 10m; then
+        success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
     else
-        # Fallback to OCI registry with GitHub authentication
-        warn "Public Helm repository installation failed. Falling back to OCI registry..."
-        
-        # Check for GitHub authentication
-        if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-            error "DocumentDB operator installation requires GitHub authentication as fallback.
-
-Please set the following environment variables:
-  export GITHUB_USERNAME='your-github-username'
-  export GITHUB_TOKEN='your-github-token'
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Export the token as shown above
-
-Then run the script again with --install-operator"
-        fi
-        
-        # Authenticate with GitHub Container Registry
-        log "Authenticating with GitHub Container Registry..."
-        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-            error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
-        fi
-        
-        # Install DocumentDB operator from OCI registry
-        log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
-        helm install documentdb-operator \
-            oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-            --version ${OPERATOR_CHART_VERSION} \
-            --namespace documentdb-operator \
-            --create-namespace \
-            --wait \
-            --timeout 10m
-
-        if [ $? -eq 0 ]; then
-            success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
-        else
-            error "Failed to install DocumentDB operator. Please verify:
-- Your GitHub token has 'read:packages' scope
-- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
-        fi
+        error "Failed to install DocumentDB operator. Please verify:
+- The chart version ${OPERATOR_CHART_VERSION} exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
+- If your network requires authentication, set GITHUB_USERNAME and GITHUB_TOKEN (read:packages scope) and re-run"
     fi
     
     # Wait for operator to be ready

@@ -57,18 +57,23 @@ if [ "$BUILD_CHART" == true ]; then
       --create-namespace
   fi
 else
-  echo "Installing from Helm repository 'documentdb' (chart documentdb/documentdb-operator)..."
-  helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-  helm repo update
+  echo "Installing operator from the GHCR OCI Helm chart (oci://ghcr.io/documentdb/documentdb-operator)..."
+  echo "Set CHART_VERSION to pin a specific release (e.g. CHART_VERSION=0.2.0); see https://github.com/documentdb/documentdb-kubernetes-operator/releases for available versions."
+  if [ -z "${CHART_VERSION:-}" ]; then
+    echo "Error: CHART_VERSION is required when installing from the OCI registry. Re-run with CHART_VERSION=<x.y.z> set." >&2
+    exit 1
+  fi
   if [ -n "$VALUES_FILE" ] && [ -f "$VALUES_FILE" ]; then
     echo "Using values file: $VALUES_FILE"
-    helm upgrade --install documentdb-operator documentdb/documentdb-operator \
+    helm upgrade --install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version "$CHART_VERSION" \
       --namespace documentdb-operator \
       --kube-context "$HUB_CLUSTER" \
       --create-namespace \
       --values "$VALUES_FILE"
   else
-    helm upgrade --install documentdb-operator documentdb/documentdb-operator \
+    helm upgrade --install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version "$CHART_VERSION" \
       --namespace documentdb-operator \
       --kube-context "$HUB_CLUSTER" \
       --create-namespace

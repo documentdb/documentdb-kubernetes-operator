@@ -157,4 +157,4 @@ export CLUSTER_TAGS="project=myproj,team=platform"
 ## Support
 
 - [GitHub Issues](https://github.com/documentdb/documentdb-kubernetes-operator/issues)
-- [Documentation](https://documentdb.github.io/documentdb-kubernetes-operator)
+- [Documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/)

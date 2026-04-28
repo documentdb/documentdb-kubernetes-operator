@@ -29,17 +29,22 @@ The operator is deployed via Helm. Upgrading it does **not** restart your Docume
 !!! info
     The operator Helm chart bundles [CloudNative-PG](https://cloudnative-pg.io/) as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.
 
-### Step 1: Update the Helm Repository
+### Step 1: Choose a Target Version
+
+The DocumentDB operator Helm chart is published as an OCI artifact at `oci://ghcr.io/documentdb/documentdb-operator`. OCI registries do not support `helm repo update` or `helm search repo`, so available chart versions are listed on the GitHub Releases page:
+
+<https://github.com/documentdb/documentdb-kubernetes-operator/releases>
+
+Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:
 
 ```bash
-helm repo update documentdb
+# Set this to the release tag you are upgrading to (e.g., 0.2.0)
+TARGET_VERSION=0.2.0
 ```
 
-### Step 2: Review Available Versions
+### Step 2: Review the Release Notes
 
-```bash
-helm search repo documentdb/documentdb-operator --versions
-```
+Open the GitHub release page for `${TARGET_VERSION}` to review breaking changes, new features, and any required migration steps before proceeding.
 
 !!! note
     Per the [release strategy](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/designs/release-strategy.md), each minor version is supported for three months after the next minor release. Plan to upgrade within this window.
@@ -49,9 +54,6 @@ helm search repo documentdb/documentdb-operator --versions
 Helm only installs CRDs on initial `helm install` — it does **not** update them on `helm upgrade`. If the new operator version introduces CRD schema changes, you must apply them manually first:
 
 ```bash
-# Set this to the release tag you are upgrading to (e.g., 0.2.0)
-TARGET_VERSION=0.2.0
-
 kubectl apply --server-side --force-conflicts \
   -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml \
   -f https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/${TARGET_VERSION}/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml \
@@ -66,7 +68,8 @@ Server-side apply (`--server-side --force-conflicts`) is required because the Do
 ### Step 4: Upgrade the Operator
 
 ```bash
-helm upgrade documentdb-operator documentdb/documentdb-operator \
+helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+  --version ${TARGET_VERSION} \
   --namespace documentdb-operator \
   --wait
 ```
@@ -75,7 +78,8 @@ helm upgrade documentdb-operator documentdb/documentdb-operator \
     Add `--atomic` to automatically roll back the release if the upgrade fails:
 
     ```bash
-    helm upgrade documentdb-operator documentdb/documentdb-operator \
+    helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version ${TARGET_VERSION} \
       --namespace documentdb-operator \
       --atomic
     ```
