@@ -149,22 +149,3 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Note**: Images promoted from \`${{ github.event.inputs.candidate_version }}\` to \`${{ github.event.inputs.version }}\` and Helm chart published" >> $GITHUB_STEP_SUMMARY
 
-  publish-helm-pages:
-    name: Publish Helm Repository
-    needs: publish-helm-chart
-    if: ${{ always() && needs.publish-helm-chart.result == 'success' }}
-    permissions:
-      contents: write
-    uses: ./.github/workflows/repair_helm_pages_release.yml
-    with:
-      version: ${{ inputs.version }}
-      release_ref: ${{ inputs.source_ref }}
-      publish_branch: gh-pages
-      repo_url: https://documentdb.github.io/documentdb-kubernetes-operator
-      dry_run: false
-      confirm_version: ${{ inputs.version }}
-      normalize_chart_metadata: true
-      # Follow the same gh-pages branch used by mike in deploy_docs.yml.
-      allow_pages_source_mismatch: true
-    secrets: inherit
-  

@@ -147,17 +147,22 @@ jobs:
     - name: Determine initial DocumentDB image
       run: |
         echo "=== Determining DocumentDB image for initial deployment ==="
-        
-        # Add the public DocumentDB Helm repository
-        helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
-        helm repo update
-        
-        # Resolve the released chart version
+
+        # Resolve the released chart version. OCI registries do not support `helm search repo`,
+        # so "latest" is resolved by listing the GHCR OCI tags (the actual source of truth
+        # for what is installable) and picking the highest stable SemVer.
         CHART_VERSION="${{ env.RELEASED_CHART_VERSION }}"
         if [[ "$CHART_VERSION" == "latest" ]]; then
-          RESOLVED_VERSION=$(helm search repo documentdb/documentdb-operator -o json | jq -r '.[0].version' 2>/dev/null || echo "")
-          if [[ -z "$RESOLVED_VERSION" || "$RESOLVED_VERSION" == "null" ]]; then
-            echo "⚠️ Failed to resolve chart version from Helm repo, defaulting to threshold"
+          GHCR_TOKEN=$(curl -sSL 'https://ghcr.io/token?scope=repository:documentdb/documentdb-operator:pull' | jq -r '.token' 2>/dev/null || echo "")
+          RESOLVED_VERSION=$(curl -sSL "https://ghcr.io/v2/documentdb/documentdb-operator/tags/list" \
+              -H "Authorization: Bearer ${GHCR_TOKEN}" 2>/dev/null \
+            | jq -r '.tags[]?' 2>/dev/null \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V \
+            | tail -1 \
+            || echo "")
+          if [[ -z "$RESOLVED_VERSION" ]]; then
+            echo "⚠️ Failed to resolve chart version from GHCR OCI tags, defaulting to threshold"
             RESOLVED_VERSION="0.1.3"
           fi
         else
