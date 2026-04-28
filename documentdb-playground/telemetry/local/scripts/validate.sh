@@ -87,23 +87,21 @@ if [ -n "$PROM_POD" ]; then
     warn "OTel sidecar scrape targets not UP yet (sidecar may still be starting)"
   fi
 
-  # Container resource metric collected by the OTel sidecar's kubeletstats
-  # receiver and exported as Prometheus. The receiver scrapes the local
-  # kubelet for the pod the sidecar runs in. Wait up to ~120s for the first
-  # scrape interval + RBAC propagation.
-  echo "Waiting up to 120s for kubeletstats container metrics to appear..."
+  # Container metric from the chart-managed container-metrics DaemonSet.
+  # Allow ~120s for DaemonSet rollout, first scrape, and Prometheus discovery.
+  echo "Waiting up to 120s for container metrics from DaemonSet to appear..."
   container_metric_found=0
   for _ in $(seq 1 24); do
-    if echo "$(query 'container_cpu_usage{k8s_namespace_name="documentdb-preview-ns"}')" | grep -q '"result":\[{'; then
+    if echo "$(query 'container_cpu_time_seconds_total{k8s_namespace_name="documentdb-preview-ns"}')" | grep -q '"result":\[{'; then
       container_metric_found=1
       break
     fi
     sleep 5
   done
   if [ "$container_metric_found" -eq 1 ]; then
-    green "Container metric container_cpu_usage present (via OTel sidecar kubeletstats)"
+    green "Container metric container_cpu_time_seconds_total present (via documentdb-container-metrics DaemonSet)"
   else
-    red "kubeletstats container metrics absent after 120s — check sidecar logs and ClusterRoleBinding for nodes/stats RBAC."
+    red "Container metrics absent after 120s — check DaemonSet pods (kubectl get pods -n documentdb-operator -l app.kubernetes.io/component=container-metrics) and ClusterRoleBinding documentdb-container-metrics."
   fi
 else
   red "Prometheus pod not found"

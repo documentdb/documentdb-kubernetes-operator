@@ -40,7 +40,6 @@ spec:
   # manager uses 9187 for its own /metrics endpoint, so we use 9188 here.
   monitoring:
     enabled: true
-    kubeletstats: {}
     exporter:
       prometheus:
         port: 9188

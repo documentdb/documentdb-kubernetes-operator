@@ -108,6 +108,27 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
             target_label: cnpg_cluster
 
+      # Container resource metrics from the chart-managed DaemonSet
+      # (kubeletstats per node). Pods carry prometheus.io/scrape annotations.
+      - job_name: documentdb-container-metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: ['documentdb-operator']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            action: keep
+            regex: container-metrics
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+          - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+            target_label: cnpg_cluster
+
       # Kubelet's own /metrics endpoint (process-level metrics for each kubelet).
       - job_name: kubelet
         scheme: https

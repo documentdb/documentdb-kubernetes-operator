@@ -1248,17 +1248,6 @@ spec:
                             type: integer
                         type: object
                     type: object
-                  kubeletstats:
-                    description: |-
-                      KubeletStats opts in to container/pod resource metrics collection
-                      via the OTel sidecar's kubeletstats receiver. The receiver scrapes
-                      the local kubelet (the one on the pod's own node) and emits metrics
-                      like k8s.container.cpu.usage and k8s.container.memory.working_set.
-
-                      When set, the operator binds the cluster's ServiceAccount to the
-                      chart-installed `documentdb-kubeletstats-reader` ClusterRole so the
-                      receiver can call /stats/summary on the kubelet.
-                    type: object
                 type: object
               nodeCount:
                 description: NodeCount is the number of nodes in the DocumentDB cluster.

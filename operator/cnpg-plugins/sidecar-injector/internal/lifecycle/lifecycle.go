@@ -284,18 +284,6 @@ func (impl Implementation) reconcileMetadata(
 					},
 				},
 				{
-					// Used by the kubeletstats receiver (when enabled by the
-					// operator via spec.monitoring.kubeletstats) to address
-					// the local kubelet at ${K8S_NODE_NAME}:10250. Injected
-					// unconditionally because it's cheap and unused otherwise.
-					Name: "K8S_NODE_NAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "spec.nodeName",
-						},
-					},
-				},
-				{
 					Name: "PGUSER",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{

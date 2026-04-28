@@ -4,6 +4,39 @@
 
 This document outlines the telemetry architecture for collecting CPU and memory metrics from DocumentDB instances running on Kubernetes and visualizing them through Grafana dashboards.
 
+## Current Implementation Status
+
+As of the Path A rescope, the local telemetry playground uses a **split collector model**, not the earlier unified-collector design captured later in this document:
+
+1. **Per-pod OTel sidecar** (`spec.monitoring.enabled=true`) collects pod-local signals:
+   - `sqlquery` for PostgreSQL / DocumentDB health
+   - `otlp` on `127.0.0.1:4317` for gateway-pushed metrics
+   - Prometheus export on port `9188`
+2. **Chart-managed `containerMetrics` DaemonSet** (`--set containerMetrics.enabled=true`) collects kubelet-backed resource metrics:
+   - `kubeletstats` against the local kubelet `/stats/summary`
+   - container / pod / node CPU, memory, network, and filesystem metrics
+   - Prometheus export on port `8889`
+
+This split keeps pod-local metrics inside the workload while moving the kubelet `nodes/stats` privilege to a single chart-managed ServiceAccount. It also matches OpenTelemetry guidance for the kubeletstats receiver: **DaemonSet preferred, sidecar not supported**.
+
+```mermaid
+flowchart LR
+  subgraph pod["DocumentDB pod"]
+    pg["PostgreSQL / DocumentDB"]
+    gw["Gateway"]
+    sidecar["OTel sidecar :9188"]
+    pg --> sidecar
+    gw -->|OTLP 127.0.0.1:4317| sidecar
+  end
+
+  kubelet["kubelet /stats/summary"] --> ds["containerMetrics DaemonSet :8889"]
+  sidecar -->|scrape| prom["Prometheus"]
+  ds -->|scrape| prom
+  prom --> grafana["Grafana"]
+```
+
+Prometheus in the local playground scrapes both jobs directly. Any references below to a unified collector, `k8s_cluster`, `filelog`, `prometheusremotewrite`, or `K8S_NODE_NAME` describe the earlier design exploration and future ideas, not the current manifests.
+
 ## Current DocumentDB Architecture
 
 ### Pod Structure
@@ -18,7 +51,7 @@ Each DocumentDB instance consists of:
 2. **Operator Installation**: Deploy DocumentDB operator
 3. **Instance Deployment**: Create DocumentDB custom resources
 
-## Proposed Telemetry Architecture
+## Historical / Future Telemetry Architecture
 
 ### Architecture Decision: DaemonSet vs Sidecar
 

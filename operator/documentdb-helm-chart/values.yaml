@@ -23,7 +23,7 @@ serviceAccount:
   automount: true
   annotations: {}
   name: "documentdb-operator"
-  
+
 # WAL Replica feature flag
 walReplica: false  # Set to true to deploy the WAL replica plugin
 
@@ -42,3 +42,19 @@ cloudnative-pg:
   additionalEnv:
     - name: ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES
       value: "true"
+
+# Container resource metrics: chart-managed DaemonSet of OTel Collectors
+# (one per node) scraping each node's kubelet. Opt-in because it needs
+# cluster-wide nodes/stats GET; the privilege is held by a chart-managed
+# ServiceAccount, never by tenant DocumentDB pods.
+containerMetrics:
+  enabled: false
+  image: otel/opentelemetry-collector-contrib:0.114.0
+  prometheusPort: 8889
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

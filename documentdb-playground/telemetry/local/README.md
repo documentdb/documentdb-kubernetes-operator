@@ -1,6 +1,6 @@
 # DocumentDB Telemetry Playground (Local)
 
-A metrics-focused observability stack for DocumentDB running on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel Collector sidecar enabled (with the `kubeletstats` receiver) and a pre-configured Grafana dashboard for container/pod resource metrics.
+A metrics-focused observability stack for DocumentDB on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel sidecar enabled, a chart-managed container-metrics DaemonSet, and a pre-configured Grafana dashboard for container/pod resource metrics.
 
 ## Prerequisites
 
@@ -42,12 +42,13 @@ The operator chart is installed **from this branch** (`operator/documentdb-helm-
 | cert-manager | `cert-manager` | TLS certificate management |
 | DocumentDB operator | `documentdb-operator` | Operator + CNPG (Helm chart from this branch) |
 | DocumentDB HA cluster | `documentdb-preview-ns` | 1 primary + 2 streaming replicas |
-| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. The `kubeletstats` receiver scrapes the local kubelet for container resource metrics. |
+| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. Receives gateway OTLP metrics and runs the `sqlquery` Postgres-health receiver. |
+| Container-metrics DaemonSet | `documentdb-operator` | One OTel Collector per node (chart-managed, gated by `containerMetrics.enabled=true`). Scrapes each node's local kubelet for container/pod/node CPU, memory, network, filesystem metrics. |
 | Prometheus | `observability` | Metrics storage + alerting rules; scrapes the per-pod sidecar via annotation discovery |
 | Grafana | `observability` | Dashboard (Internals — container/pod resources) |
 | Traffic generators | `documentdb-preview-ns` | Read/write workload via mongosh |
 
-There is **no central OTel Collector Deployment** and **no per-node DaemonSet** — every signal lives in the per-pod sidecar.
+There is **no central OTel Collector Deployment**. Per-pod sidecars handle pod-local signals (Postgres health, gateway OTLP); a chart-managed DaemonSet handles node-local kubelet scraping for container resource metrics.
 
 ## Architecture
 
@@ -64,7 +65,7 @@ graph TB
             subgraph pod1["Pod: preview-1 (primary)"]
                 pg1["postgres :5432"]
                 gw1["documentdb-gateway :10260"]
-                otel1["otel-collector sidecar<br/>kubeletstats / Prom :9188"]
+                otel1["otel-collector sidecar<br/>sqlquery + otlp / Prom :9188"]
             end
             subgraph pod2["Pod: preview-2 (replica)"]
                 pg2["postgres :5432"]
@@ -81,16 +82,16 @@ graph TB
         end
 
         kubelet["kubelet :10250 (each node)"]
+        ds["container-metrics DaemonSet<br/>kubeletstats / Prom :8889 (per node)"]
 
         traffic_rw --> gw1
         traffic_ro --> gw2
         traffic_ro --> gw3
-        otel1 -- "stats/summary" --> kubelet
-        otel2 -- "stats/summary" --> kubelet
-        otel3 -- "stats/summary" --> kubelet
+        ds -- "stats/summary" --> kubelet
         prometheus -- "scrape :9188 (annotation)" --> otel1
         prometheus -- "scrape :9188 (annotation)" --> otel2
         prometheus -- "scrape :9188 (annotation)" --> otel3
+        prometheus -- "scrape :8889 (annotation)" --> ds
     end
 
     user["Browser"] --> grafana
@@ -107,10 +108,10 @@ local/
 │   └── teardown.sh            # Deletes cluster and proxy containers
 ├── k8s/
 │   ├── observability/         # Namespace, Prometheus (annotation discovery), Grafana
-│   ├── documentdb/            # DocumentDB CR (with spec.monitoring.enabled + kubeletstats) + credentials
+│   ├── documentdb/            # DocumentDB CR (with spec.monitoring.enabled) + credentials
 │   └── traffic/               # Traffic generator services + jobs
 └── dashboards/
-    └── internals.json         # Container & pod resources dashboard (kubeletstats)
+    └── internals.json         # Container & pod resources dashboard (DaemonSet kubeletstats)
 ```
 
 ## Dashboards
@@ -119,7 +120,7 @@ One dashboard is auto-provisioned in the **DocumentDB** folder:
 
 | Dashboard | Description |
 |-----------|-------------|
-| **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the OTel sidecar's `kubeletstats` receiver. |
+| **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the chart-managed `containerMetrics` DaemonSet. |
 
 Dashboards auto-refresh every 30 seconds. Edits made in the Grafana UI persist until the pod restarts.
 
@@ -141,7 +142,7 @@ After deployment, verify everything is working:
 ./scripts/validate.sh
 ```
 
-This checks: pods running, the `otel-collector` sidecar is injected on every DocumentDB pod, Prometheus has active targets, the sidecar scrape job is UP, and kubeletstats container metrics are present.
+This checks: pods running, the `otel-collector` sidecar is injected on every DocumentDB pod, Prometheus has active targets, the sidecar scrape job is UP, and container metrics from the DaemonSet are present.
 
 ## Restarting Traffic Generators
 
@@ -168,11 +169,11 @@ This deletes the Kind cluster. The local Docker registry is kept for reuse.
 
 ## Troubleshooting
 
-**Container metrics missing (`container_cpu_usage` = 0)**
+**Container metrics missing (`container_cpu_time_seconds_total` empty)**
 
-- Verify `spec.monitoring.kubeletstats: {}` is set on the DocumentDB CR.
-- Check the per-cluster ClusterRoleBinding exists: `kubectl get clusterrolebinding | grep kubeletstats`. The operator creates one when `monitoring.kubeletstats` is set.
-- Verify the sidecar is healthy: `kubectl logs documentdb-preview-1 -c otel-collector -n documentdb-preview-ns`. The sidecar should report successful scrapes from `${K8S_NODE_NAME}:10250` and serve `/metrics` on the configured Prometheus port.
+- Verify the chart was installed with `--set containerMetrics.enabled=true` (the playground does this in `deploy.sh`).
+- Check the DaemonSet pods are healthy: `kubectl get pods -n documentdb-operator -l app.kubernetes.io/component=container-metrics`. There should be one per node.
+- Check collector logs for kubelet auth issues: `kubectl logs -n documentdb-operator -l app.kubernetes.io/component=container-metrics`.
 
 **OTel sidecar not injected**
 

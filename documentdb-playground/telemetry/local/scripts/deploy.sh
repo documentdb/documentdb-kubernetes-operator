@@ -45,10 +45,8 @@ else
   ( cd "$OPERATOR_CHART_DIR" && helm dependency update >/dev/null )
 
   # Build & load the in-tree operator and sidecar-injector images so the
-  # playground exercises uncommitted code (e.g. spec.monitoring.kubeletstats
-  # and the matching K8S_NODE_NAME downward-API injection). Without this the
-  # chart's default values pull released GHCR images that predate in-flight
-  # changes, leaving dashboards empty.
+  # Local images: playground exercises uncommitted code; chart defaults
+  # would otherwise pull released GHCR images that predate in-flight changes.
   USE_LOCAL_IMAGES="${USE_LOCAL_IMAGES:-true}"
   HELM_IMAGE_FLAGS=()
   if [[ "$USE_LOCAL_IMAGES" == "true" ]]; then
@@ -77,10 +75,13 @@ else
   fi
 
   echo "  Installing DocumentDB operator from ${OPERATOR_CHART_DIR}..."
+  # Enable the chart-managed container-metrics DaemonSet (kubeletstats per
+  # node). Tenant DocumentDB pods get no nodes/stats privilege.
   helm install documentdb-operator "$OPERATOR_CHART_DIR" \
     --namespace documentdb-operator \
     --create-namespace \
     --kube-context "$CONTEXT" \
+    --set containerMetrics.enabled=true \
     ${HELM_IMAGE_FLAGS[@]+"${HELM_IMAGE_FLAGS[@]}"} \
     --wait --timeout 180s
 fi

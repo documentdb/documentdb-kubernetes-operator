@@ -314,26 +314,9 @@ type MonitoringSpec struct {
 	// Enabled turns on the OTel Collector sidecar for metrics collection.
 	Enabled bool `json:"enabled,omitempty"`
 
-	// KubeletStats opts in to container/pod resource metrics collection
-	// via the OTel sidecar's kubeletstats receiver. The receiver scrapes
-	// the local kubelet (the one on the pod's own node) and emits metrics
-	// like k8s.container.cpu.usage and k8s.container.memory.working_set.
-	//
-	// When set, the operator binds the cluster's ServiceAccount to the
-	// chart-installed `documentdb-kubeletstats-reader` ClusterRole so the
-	// receiver can call /stats/summary on the kubelet.
-	// +optional
-	KubeletStats *KubeletStatsSpec `json:"kubeletstats,omitempty"`
-
 	// Exporter configures where metrics are sent.
 	// +optional
 	Exporter *ExporterSpec `json:"exporter,omitempty"`
-}
-
-// KubeletStatsSpec configures the kubeletstats receiver in the OTel sidecar.
-// Currently a placeholder for future tuning knobs (collection interval,
-// metric_groups, insecure TLS skip, etc.).
-type KubeletStatsSpec struct {
 }
 
 // ExporterSpec configures metric export destinations.

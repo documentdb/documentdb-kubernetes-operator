@@ -14,7 +14,7 @@ This page documents the key metrics available when monitoring a DocumentDB clust
 
 ## Container Resource Metrics
 
-These metrics are collected by the **OTel Collector sidecar's `kubeletstats` receiver** running in every DocumentDB pod and exported via the sidecar's Prometheus exporter. The receiver scrapes the local kubelet (the one on the pod's own node) and emits container, pod, and node-level resource metrics. Enable by setting `spec.monitoring.kubeletstats: {}` on the DocumentDB CR — this triggers the operator to add the receiver to the sidecar's config and to bind the cluster's ServiceAccount to the chart-installed `documentdb-kubeletstats-reader` ClusterRole.
+These metrics are collected by the **chart-managed `containerMetrics` DaemonSet** — one OTel Collector per node, each scraping its local kubelet's `/stats/summary` and exporting via Prometheus. Enable at chart install time with `--set containerMetrics.enabled=true`. The DaemonSet uses a single chart-managed ServiceAccount with `nodes/stats` GET; tenant DocumentDB pods receive no kubelet privileges. This matches OpenTelemetry's [recommended deployment for the kubeletstats receiver](https://opentelemetry.io/docs/platforms/kubernetes/collector/components/#kubeletstats-receiver).
 
 Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporter converts dots to underscores at scrape time, which is the form Prometheus stores.
 
@@ -22,23 +22,23 @@ Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporte
 
 | Metric (OTel) | Metric (Prometheus form) | Type | Description |
 |---------------|--------------------------|------|-------------|
-| `k8s.container.cpu.usage` | `container_cpu_usage` | Gauge | Container CPU usage (cores) |
-| `k8s.container.cpu.time` | `container_cpu_time_seconds_total` | Counter | Cumulative container CPU time (seconds) |
+| `container.cpu.time` | `container_cpu_time_seconds_total` | Counter | Cumulative container CPU time (seconds) |
+| `container.cpu.utilization` | `container_cpu_utilization_ratio` | Gauge | Container CPU utilization (fraction of one core) |
 
 **Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`, `k8s_node_name`
 
-> **CPU/memory limit utilization.** The kubeletstats receiver can also emit `container.cpu_limit_utilization` and `container.memory_limit_utilization`, but only when the container has resource limits configured. They are not enabled in this PR; expose them by setting `resources.limits` on your DocumentDB cluster's pods and (optionally) enabling the `metrics.container.cpu_limit_utilization` field in the receiver config.
+> **CPU/memory limit utilization.** The kubeletstats receiver can also emit `container.cpu_limit_utilization` and `container.memory_limit_utilization`, but only when the container has resource limits configured. The default chart-managed `containerMetrics` config does not enable these metrics.
 
 #### Example Query
 
-CPU usage per container:
+CPU rate per container:
 
 ```promql
 sum by (k8s_pod_name, k8s_container_name) (
-  container_cpu_usage{
+  rate(container_cpu_time_seconds_total{
     k8s_namespace_name="documentdb-preview-ns",
     k8s_container_name=~"postgres|documentdb-gateway"
-  }
+  }[5m])
 )
 ```
 

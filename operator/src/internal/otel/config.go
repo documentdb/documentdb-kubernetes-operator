@@ -74,19 +74,15 @@ func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.Monito
 	}, nil
 }
 
-// generateDynamicConfig builds the per-cluster dynamic config: resource processor,
-// exporters, and pipeline wiring. The OTel Collector deep-merges this with static.yaml.
+// generateDynamicConfig builds the per-cluster dynamic config (resource
+// processor, exporters, pipeline wiring) that the collector deep-merges
+// with the embedded base_config.yaml.
 func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
-			// `insert` (not `upsert`) so we don't clobber per-stream resource
-			// attributes set by receivers like kubeletstats — that receiver
-			// already tags each metric with the *scraped* container's
-			// k8s.pod.name / k8s.namespace.name / k8s.container.name. Using
-			// upsert here would overwrite them all with the collector pod's
-			// own identity, collapsing every container's metrics into one
-			// time series. `insert` only fills in the gap for receivers that
-			// don't supply these attrs (e.g. sqlquery).
+			// `insert` (not `upsert`) so receivers that already emit their
+			// own k8s.* resource attrs keep them; `insert` only fills the
+			// gap for receivers that don't (e.g. sqlquery).
 			"resource": map[string]any{
 				"attributes": []map[string]any{
 					{"key": "documentdb.cluster", "value": clusterName, "action": "insert"},
@@ -97,28 +93,10 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		},
 	}
 
-	// Pipeline receivers from base_config.yaml: sqlquery (Postgres health),
-	// otlp (gateway-pushed metrics). Add kubeletstats when opted in.
+	// sqlquery (Postgres health) + otlp (gateway-pushed metrics) come from
+	// base_config.yaml. Container/node resource metrics are served by the
+	// chart-managed DaemonSet, not this sidecar.
 	receiverNames := []string{"sqlquery", "otlp"}
-	if spec.KubeletStats != nil {
-		if cfg.Receivers == nil {
-			cfg.Receivers = map[string]any{}
-		}
-		// auth_type: serviceAccount uses the pod's ServiceAccount token to
-		// call kubelet's /stats/summary. Requires a ClusterRoleBinding to
-		// "documentdb-kubeletstats-reader" (managed by the operator when
-		// KubeletStats is set).
-		// insecure_skip_verify is required because the kubelet's serving cert
-		// is typically self-signed and not present in the pod's trust store.
-		cfg.Receivers["kubeletstats"] = map[string]any{
-			"collection_interval":  "30s",
-			"auth_type":            "serviceAccount",
-			"endpoint":             "${env:K8S_NODE_NAME}:10250",
-			"insecure_skip_verify": true,
-			"metric_groups":        []string{"container", "pod", "node"},
-		}
-		receiverNames = append(receiverNames, "kubeletstats")
-	}
 
 	exporterNames := []string{}
 
@@ -149,11 +127,9 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			}
 			cfg.Exporters["prometheus"] = map[string]any{
 				"endpoint": fmt.Sprintf("0.0.0.0:%d", port),
-				// Promote resource attributes (k8s.pod.name, k8s.container.name,
-				// k8s.namespace.name from kubeletstats; documentdb.cluster from
-				// our resource processor) onto each metric as Prometheus labels.
-				// Without this they'd only appear on `target_info` and
-				// dashboards couldn't filter by pod/container.
+				// Surface resource attributes as Prometheus labels (instead
+				// of burying them in target_info) so dashboards can filter
+				// by pod/container/cluster.
 				"resource_to_telemetry_conversion": map[string]any{
 					"enabled": true,
 				},
