@@ -87,7 +87,7 @@ if [ -n "$PROM_POD" ]; then
     warn "OTel sidecar scrape targets not UP yet (sidecar may still be starting)"
   fi
 
-  # Container metric from the chart-managed container-metrics DaemonSet.
+  # Container metric from the playground's container-metrics DaemonSet.
   # Allow ~120s for DaemonSet rollout, first scrape, and Prometheus discovery.
   echo "Waiting up to 120s for container metrics from DaemonSet to appear..."
   container_metric_found=0

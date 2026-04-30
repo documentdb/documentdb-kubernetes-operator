@@ -14,7 +14,7 @@ This page documents the key metrics available when monitoring a DocumentDB clust
 
 ## Container Resource Metrics
 
-These metrics are collected by the **chart-managed `containerMetrics` DaemonSet** — one OTel Collector per node, each scraping its local kubelet's `/stats/summary` and exporting via Prometheus. Enable at chart install time with `--set containerMetrics.enabled=true`. The DaemonSet uses a single chart-managed ServiceAccount with `nodes/stats` GET; tenant DocumentDB pods receive no kubelet privileges. This matches OpenTelemetry's [recommended deployment for the kubeletstats receiver](https://opentelemetry.io/docs/platforms/kubernetes/collector/components/#kubeletstats-receiver).
+These metrics come from a node-level collector that scrapes kubelet's `/stats/summary` endpoint. Most production clusters already provide this through kube-prometheus-stack, an OTel Collector DaemonSet, or a managed monitoring agent. If your cluster does not, the playground includes a reference DaemonSet at `documentdb-playground/telemetry/container-metrics/`. The operator chart does not install this collector or grant kubelet privileges to tenant DocumentDB pods. This matches OpenTelemetry's [recommended deployment for the kubeletstats receiver](https://opentelemetry.io/docs/platforms/kubernetes/collector/components/#kubeletstats-receiver).
 
 Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporter converts dots to underscores at scrape time, which is the form Prometheus stores.
 
@@ -27,7 +27,7 @@ Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporte
 
 **Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`, `k8s_node_name`
 
-> **CPU/memory limit utilization.** The kubeletstats receiver can also emit `container.cpu_limit_utilization` and `container.memory_limit_utilization`, but only when the container has resource limits configured. The default chart-managed `containerMetrics` config does not enable these metrics.
+> **CPU/memory limit utilization.** The kubeletstats receiver can also emit `container.cpu_limit_utilization` and `container.memory_limit_utilization`, but only when the container has resource limits configured. The playground reference collector does not enable these metrics.
 
 #### Example Query
 

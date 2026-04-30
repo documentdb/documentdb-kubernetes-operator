@@ -1,6 +1,6 @@
 {
   "title": "DocumentDB Internals - Container & Pod Resources",
-  "description": "Container CPU / memory / filesystem and pod network sourced from the chart-managed container-metrics DaemonSet (kubeletstats receiver).",
+  "description": "Container CPU / memory / filesystem and pod network sourced from the reference container-metrics DaemonSet (kubeletstats receiver).",
   "uid": "documentdb-internals",
   "schemaVersion": 39,
   "version": 1,

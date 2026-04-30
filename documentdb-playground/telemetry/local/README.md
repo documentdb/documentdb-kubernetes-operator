@@ -1,6 +1,6 @@
 # DocumentDB Telemetry Playground (Local)
 
-A metrics-focused observability stack for DocumentDB on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel sidecar enabled, a chart-managed container-metrics DaemonSet, and a pre-configured Grafana dashboard for container/pod resource metrics.
+A metrics-focused observability stack for DocumentDB on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel sidecar enabled, a reference container-metrics DaemonSet, and a pre-configured Grafana dashboard for container/pod resource metrics.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ kubectl port-forward svc/prometheus 9090:9090 -n observability --context kind-do
 
 `deploy.sh` is idempotent — re-running it after a failure will skip already-completed steps.
 
-The operator chart is installed **from this branch** (`operator/documentdb-helm-chart/`), not from the public Helm repo. By default `deploy.sh` also **builds and `kind load`s the in-tree operator and sidecar-injector images** so any uncommitted code (e.g. a new `MonitoringSpec` field, a new sidecar env-var) is exercised end-to-end. To skip the local build and pull the chart's default GHCR images instead, set `USE_LOCAL_IMAGES=false`.
+The operator chart is installed **from this branch** (`operator/documentdb-helm-chart/`), not from the public Helm repo. By default `deploy.sh` also **builds and `kind load`s the in-tree operator and sidecar-injector images** so local operator changes are exercised end-to-end. To skip the local build and pull the chart's default GHCR images instead, set `USE_LOCAL_IMAGES=false`.
 
 ### What gets deployed
 
@@ -43,12 +43,12 @@ The operator chart is installed **from this branch** (`operator/documentdb-helm-
 | DocumentDB operator | `documentdb-operator` | Operator + CNPG (Helm chart from this branch) |
 | DocumentDB HA cluster | `documentdb-preview-ns` | 1 primary + 2 streaming replicas |
 | OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. Receives gateway OTLP metrics and runs the `sqlquery` Postgres-health receiver. |
-| Container-metrics DaemonSet | `documentdb-operator` | One OTel Collector per node (chart-managed, gated by `containerMetrics.enabled=true`). Scrapes each node's local kubelet for container/pod/node CPU, memory, network, filesystem metrics. |
-| Prometheus | `observability` | Metrics storage + alerting rules; scrapes the per-pod sidecar via annotation discovery |
+| Container-metrics DaemonSet | `documentdb-operator` | One OTel Collector per node from `documentdb-playground/telemetry/container-metrics/`. Scrapes each node's local kubelet for container/pod/node CPU, memory, network, filesystem metrics. |
+| Prometheus | `observability` | Metrics storage + alerting rules; scrapes the per-pod sidecar and reference DaemonSet via annotation discovery |
 | Grafana | `observability` | Dashboard (Internals — container/pod resources) |
 | Traffic generators | `documentdb-preview-ns` | Read/write workload via mongosh |
 
-There is **no central OTel Collector Deployment**. Per-pod sidecars handle pod-local signals (Postgres health, gateway OTLP); a chart-managed DaemonSet handles node-local kubelet scraping for container resource metrics.
+There is **no central OTel Collector Deployment**. Per-pod sidecars handle pod-local signals (Postgres health, gateway OTLP); the playground's reference DaemonSet handles node-local kubelet scraping for container resource metrics.
 
 ## Architecture
 
@@ -112,6 +112,8 @@ local/
 │   └── traffic/               # Traffic generator services + jobs
 └── dashboards/
     └── internals.json         # Container & pod resources dashboard (DaemonSet kubeletstats)
+../container-metrics/
+└── container-metrics.yaml     # Reference node-level collector for playground/demo clusters
 ```
 
 ## Dashboards
@@ -120,7 +122,7 @@ One dashboard is auto-provisioned in the **DocumentDB** folder:
 
 | Dashboard | Description |
 |-----------|-------------|
-| **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the chart-managed `containerMetrics` DaemonSet. |
+| **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the reference container-metrics DaemonSet. |
 
 Dashboards auto-refresh every 30 seconds. Edits made in the Grafana UI persist until the pod restarts.
 
@@ -171,7 +173,7 @@ This deletes the Kind cluster. The local Docker registry is kept for reuse.
 
 **Container metrics missing (`container_cpu_time_seconds_total` empty)**
 
-- Verify the chart was installed with `--set containerMetrics.enabled=true` (the playground does this in `deploy.sh`).
+- Verify `deploy.sh` applied `documentdb-playground/telemetry/container-metrics/`.
 - Check the DaemonSet pods are healthy: `kubectl get pods -n documentdb-operator -l app.kubernetes.io/component=container-metrics`. There should be one per node.
 - Check collector logs for kubelet auth issues: `kubectl logs -n documentdb-operator -l app.kubernetes.io/component=container-metrics`.
 
@@ -190,4 +192,3 @@ This deletes the Kind cluster. The local Docker registry is kept for reuse.
 
 - Check Docker has enough resources allocated (recommended: 8GB RAM, 4 CPUs).
 - Verify the Kind node image exists: `docker images kindest/node:v1.35.0`
-

@@ -75,16 +75,19 @@ else
   fi
 
   echo "  Installing DocumentDB operator from ${OPERATOR_CHART_DIR}..."
-  # Enable the chart-managed container-metrics DaemonSet (kubeletstats per
-  # node). Tenant DocumentDB pods get no nodes/stats privilege.
   helm install documentdb-operator "$OPERATOR_CHART_DIR" \
     --namespace documentdb-operator \
     --create-namespace \
     --kube-context "$CONTEXT" \
-    --set containerMetrics.enabled=true \
     ${HELM_IMAGE_FLAGS[@]+"${HELM_IMAGE_FLAGS[@]}"} \
     --wait --timeout 180s
 fi
+
+# The operator chart does not install a node-level metrics collector. The
+# playground applies this reference DaemonSet so the demo has container metrics
+# even on clusters without an existing platform collector.
+echo "  Applying container-metrics reference collector..."
+kubectl apply -f "${REPO_ROOT}/documentdb-playground/telemetry/container-metrics/" --context "$CONTEXT"
 
 # Step 4: Deploy observability stack (Prometheus + Grafana only — no central collector;
 # every DocumentDB pod runs its own OTel Collector sidecar via spec.monitoring).

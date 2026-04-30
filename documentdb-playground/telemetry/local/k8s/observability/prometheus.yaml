@@ -108,7 +108,7 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
             target_label: cnpg_cluster
 
-      # Container resource metrics from the chart-managed DaemonSet
+      # Container resource metrics from the reference DaemonSet
       # (kubeletstats per node). Pods carry prometheus.io/scrape annotations.
       - job_name: documentdb-container-metrics
         kubernetes_sd_configs:

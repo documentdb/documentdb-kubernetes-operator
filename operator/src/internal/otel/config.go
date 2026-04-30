@@ -94,8 +94,9 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 	}
 
 	// sqlquery (Postgres health) + otlp (gateway-pushed metrics) come from
-	// base_config.yaml. Container/node resource metrics are served by the
-	// chart-managed DaemonSet, not this sidecar.
+	// base_config.yaml. Container/node resource metrics are served by a
+	// node-level collector such as the playground reference DaemonSet, not
+	// this sidecar.
 	receiverNames := []string{"sqlquery", "otlp"}
 
 	exporterNames := []string{}

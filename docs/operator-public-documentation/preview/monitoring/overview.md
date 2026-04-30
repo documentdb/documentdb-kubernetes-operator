@@ -21,10 +21,10 @@ This guide describes how to monitor DocumentDB clusters running on Kubernetes us
 
 ## Architecture
 
-DocumentDB metrics come from two complementary OTel Collectors:
+DocumentDB monitoring uses two layers:
 
 1. **Per-pod sidecar** (opt-in via `spec.monitoring.enabled: true` on a `DocumentDB`) — runs alongside `postgres` and `documentdb-gateway` in every cluster pod. Collects pod-local signals: Postgres health (`sqlquery` receiver) and gateway-pushed metrics (`otlp` receiver on `127.0.0.1:4317`). No cluster-wide RBAC.
-2. **Chart-managed DaemonSet** (opt-in via `--set containerMetrics.enabled=true` at `helm install`) — one OTel Collector per node, scraping its local kubelet's `/stats/summary` for container, pod, and node CPU/memory/network/filesystem metrics.
+2. **Platform node-level collector** — most production clusters already have one through kube-prometheus-stack, an OTel Collector DaemonSet, or a managed monitoring agent. If yours does not, the playground provides a reference DaemonSet under `documentdb-playground/telemetry/container-metrics/`.
 
 ```mermaid
 graph TB
@@ -35,7 +35,7 @@ graph TB
             otel["otel-collector sidecar<br/>sqlquery + otlp / Prom :9188"]
         end
         kubelet["kubelet :10250"]
-        ds["container-metrics DaemonSet<br/>kubeletstats / Prom :8889"]
+        ds["platform or reference container-metrics DaemonSet<br/>kubeletstats / Prom :8889"]
         gw -- "OTLP localhost:4317" --> otel
         ds -- "stats/summary" --> kubelet
     end
@@ -50,9 +50,9 @@ graph TB
 Key properties:
 
 - **Sidecar holds no cluster-wide privileges.** It only reads pod-local sources; tenant ServiceAccounts are untouched.
-- **DaemonSet privilege is held once.** The Helm release installs a single ServiceAccount with `nodes/stats` GET; `helm uninstall` removes it. Per-tenant ClusterRoleBindings are not created.
+- **The operator chart does not install a node-level collector.** Container resource metrics should come from your platform's existing collector, or from the playground reference DaemonSet if you need a demo collector.
 - **The DaemonSet is the OTel-recommended deployment for the kubeletstats receiver** — see [OpenTelemetry Kubernetes collector components](https://opentelemetry.io/docs/platforms/kubernetes/collector/components/#kubeletstats-receiver). Sidecar deployment of kubeletstats is explicitly not supported by upstream because kubelet's `/stats/summary` cannot be scoped per-caller.
-- **Discovery via pod annotations.** Both collectors carry `prometheus.io/scrape=true` annotations so a single annotation-based scrape config picks them both up.
+- **Discovery via pod annotations.** The sidecar and playground reference DaemonSet carry `prometheus.io/scrape=true` annotations so a pod-annotation scrape config can discover both.
 
 ### Enabling the sidecar
 
@@ -69,17 +69,15 @@ spec:
         port: 9188              # avoid CNPG instance manager's 9187
 ```
 
-### Enabling container/node resource metrics
+### Container/node resource metrics
 
-At chart install or upgrade time:
+DocumentDB does not ship a production node-level metrics collector in the operator chart. If your cluster already collects kubelet metrics, no DocumentDB-specific collector is required. If it does not, apply the playground reference example:
 
 ```bash
-helm upgrade --install documentdb-operator <chart> \
-  --namespace documentdb-operator \
-  --set containerMetrics.enabled=true
+kubectl apply -f documentdb-playground/telemetry/container-metrics/
 ```
 
-This is a cluster-admin decision, not a per-DocumentDB toggle: enabling it grants `nodes/stats` to a single chart-managed ServiceAccount, and the DaemonSet exposes container metrics for every pod on each node it lands on.
+This is a cluster-admin decision, not a per-DocumentDB toggle: a kubeletstats DaemonSet needs `nodes/stats` and exposes container metrics for every pod on each node it lands on.
 
 ### Sidecar pipeline
 
@@ -120,13 +118,13 @@ For Prometheus Operator users, a `PodMonitor` selecting the same labels achieves
 
 ### Container & node metrics
 
-Container CPU, memory, network, and filesystem metrics are produced by the chart-managed `containerMetrics` DaemonSet (one OTel Collector per node, scraping its local kubelet). Enable with `--set containerMetrics.enabled=true` at chart install/upgrade. The DaemonSet pods carry `prometheus.io/scrape=true` annotations and are discovered by the same pod-annotation scrape config above (or filter to `app.kubernetes.io/component=container-metrics` to give them their own job).
+Container CPU, memory, network, and filesystem metrics are produced by your platform's node-level collector, or by the playground reference DaemonSet (one OTel Collector per node, scraping its local kubelet). The reference DaemonSet pods carry `prometheus.io/scrape=true` annotations and can be discovered by the same pod-annotation scrape config above, or by a separate job filtered to `app.kubernetes.io/component=container-metrics`.
 
 ## Key Metrics
 
-### Container & node metrics (chart-managed DaemonSet)
+### Container & node metrics
 
-When `containerMetrics.enabled=true`, the DaemonSet emits container/pod/node-level resource metrics:
+When a kubeletstats collector is present, it emits container/pod/node-level resource metrics:
 
 | Metric | Description |
 |--------|-------------|
@@ -148,7 +146,7 @@ Operator controller-runtime metrics are not yet exposed end-to-end through the o
 The [`documentdb-playground/telemetry/local/`](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry/local) directory contains a self-contained Kind-based reference implementation:
 
 - 3-instance DocumentDB HA cluster (1 primary + 2 streaming replicas) with `spec.monitoring.enabled: true`
-- Operator chart installed with `--set containerMetrics.enabled=true` so the DaemonSet collector is deployed
+- Reference container-metrics DaemonSet applied from `documentdb-playground/telemetry/container-metrics/`
 - Prometheus configured with pod-annotation discovery
 - Grafana with a pre-built container/pod resource dashboard
 - Traffic generator for demo workload
@@ -186,7 +184,7 @@ curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_time_seconds_tot
 If no metrics appear, check:
 
 - `spec.monitoring.enabled: true` is set on the `DocumentDB` resource (for sidecar metrics)
-- The chart was installed with `--set containerMetrics.enabled=true` (for container metrics)
+- Your platform collector is scraping kubelet metrics, or the playground reference DaemonSet is applied
 - Pods are 3/3; if not, check `kubectl logs deploy/documentdb-operator -n documentdb-operator` and the sidecar-injector logs
 - The sidecar is healthy: `kubectl logs <pod> -c otel-collector -n $NS`
 - The container-metrics DaemonSet is running: `kubectl get pods -n documentdb-operator -l app.kubernetes.io/component=container-metrics`
