@@ -1,5 +1,8 @@
 # LightRAG configuration for DocumentDB backend.
-# Update MONGO_URI with your DocumentDB connection string before deploying.
+#
+# MONGO_URI is the only field you typically need to edit. When deploying via
+# scripts/deploy.sh the URI is auto-populated from the DocumentDB resource's
+# status.connectionString, so the placeholder below is overridden.
 replicaCount: 1
 
 image:
@@ -16,11 +19,11 @@ service:
 
 resources:
   limits:
-    cpu: 1000m
-    memory: 2Gi
+    cpu: 2000m
+    memory: 4Gi
   requests:
     cpu: 500m
-    memory: 1Gi
+    memory: 2Gi
 
 persistence:
   enabled: true
@@ -39,6 +42,11 @@ env:
   LLM_MODEL: qwen2.5:3b
   LLM_BINDING_HOST: "http://ollama.lightrag.svc.cluster.local:11434"
   LLM_BINDING_API_KEY: ""
+  # Increase LLM/Embedding timeouts for slow CPU inference (defaults are 180s/30s)
+  LLM_TIMEOUT: "900"
+  EMBEDDING_TIMEOUT: "120"
+  # Reduce concurrent LLM calls to avoid overloading single-replica Ollama
+  MAX_ASYNC: "2"
   # Embedding - Ollama (in-cluster)
   EMBEDDING_BINDING: ollama
   EMBEDDING_MODEL: nomic-embed-text
@@ -49,8 +57,12 @@ env:
   LIGHTRAG_VECTOR_STORAGE: NanoVectorDBStorage
   LIGHTRAG_GRAPH_STORAGE: MongoGraphStorage
   LIGHTRAG_DOC_STATUS_STORAGE: MongoDocStatusStorage
-  # DocumentDB connection — update these values for your cluster
-  MONGO_URI: "mongodb://docdbadmin:SecurePassword123!@documentdb-service-lightrag-test.documentdb-test.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+  # DocumentDB connection — replace <user>, <password>, <service>, <namespace>
+  # with values from your cluster, or let scripts/deploy.sh populate this
+  # automatically from the DocumentDB resource's status.connectionString.
+  MONGO_URI: "mongodb://<user>:<password>@<documentdb-service>.<documentdb-namespace>.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+  # Must match the chart default (helm/lightrag/values.yaml). If you change
+  # this, change both — running with mismatched databases splits data silently.
   MONGO_DATABASE: "lightrag"
 
 envFrom:

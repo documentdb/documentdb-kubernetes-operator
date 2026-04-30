@@ -15,6 +15,10 @@ kubectl delete pvc -l app.kubernetes.io/name=lightrag -n "$NAMESPACE" 2>/dev/nul
 echo "Deleting Ollama..."
 kubectl delete deployment ollama -n "$NAMESPACE" 2>/dev/null || true
 kubectl delete service ollama -n "$NAMESPACE" 2>/dev/null || true
+# ollama-models PVC is not labeled app.kubernetes.io/name=lightrag, so the
+# label-selector delete above skips it. Delete it explicitly so a Ctrl-C
+# before the namespace delete does not orphan the PV.
+kubectl delete pvc ollama-models -n "$NAMESPACE" 2>/dev/null || true
 
 echo "Deleting namespace..."
 kubectl delete namespace "$NAMESPACE" 2>/dev/null || true

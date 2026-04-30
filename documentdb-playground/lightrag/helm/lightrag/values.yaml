@@ -46,7 +46,7 @@ env:
   LIGHTRAG_GRAPH_STORAGE: MongoGraphStorage
   LIGHTRAG_DOC_STATUS_STORAGE: MongoDocStatusStorage
   MONGO_URI: ""
-  MONGO_DATABASE: "LightRAG"
+  MONGO_DATABASE: "lightrag"
 
 envFrom:
   configmaps: []

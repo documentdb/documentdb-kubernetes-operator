@@ -3,13 +3,16 @@
 # Prerequisites: kubectl, helm, a running cluster with DocumentDB deployed.
 set -euo pipefail
 
+command -v kubectl >/dev/null || { echo "kubectl is required" >&2; exit 1; }
+command -v helm >/dev/null || { echo "helm is required" >&2; exit 1; }
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHART_DIR="$SCRIPT_DIR/../helm/lightrag"
 VALUES_FILE="$SCRIPT_DIR/../helm/lightrag-values.yaml"
 OLLAMA_MANIFEST="$SCRIPT_DIR/../helm/ollama.yaml"
 NAMESPACE="${LIGHTRAG_NAMESPACE:-lightrag}"
-DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-demo}"
-DOCUMENTDB_CLUSTER="${DOCUMENTDB_CLUSTER:-my-cluster}"
+DOCUMENTDB_NAMESPACE="${DOCUMENTDB_NAMESPACE:-documentdb-test}"
+DOCUMENTDB_CLUSTER="${DOCUMENTDB_CLUSTER:-documentdb-cluster}"
 
 echo "=== LightRAG + DocumentDB Deployment ==="
 
@@ -17,8 +20,8 @@ echo "=== LightRAG + DocumentDB Deployment ==="
 echo ""
 echo "--- Step 1: Deploy Ollama ---"
 kubectl apply -f "$OLLAMA_MANIFEST"
-echo "Waiting for Ollama pod to be ready..."
-kubectl wait --for=condition=Ready pod -l app=ollama -n "$NAMESPACE" --timeout=120s
+echo "Waiting for Ollama pod to be ready (first pull of ollama image can take a few minutes)..."
+kubectl wait --for=condition=Ready pod -l app=ollama -n "$NAMESPACE" --timeout=300s
 
 # 2. Pull models
 echo ""
@@ -36,9 +39,10 @@ RAW_CONN=$(kubectl get documentdb "$DOCUMENTDB_CLUSTER" -n "$DOCUMENTDB_NAMESPAC
     -o jsonpath='{.status.connectionString}' 2>/dev/null) || true
 
 if [ -n "$RAW_CONN" ]; then
-    # The connection string contains embedded kubectl commands for credentials.
-    # eval resolves them into a usable URI. The inner quoting prevents & from
-    # being interpreted as a shell background operator.
+    # The connection string contains embedded $(kubectl get secret ...)
+    # substitutions placed there by the DocumentDB operator. We rely on `eval`
+    # to resolve them. This trusts the operator-supplied field; do not point
+    # this script at an untrusted DocumentDB resource.
     MONGO_URI=$(eval "echo \"$RAW_CONN\"")
 
     # Replace ClusterIP with DNS name for cross-namespace resolution.
@@ -47,6 +51,15 @@ if [ -n "$RAW_CONN" ]; then
         SVC_DNS="documentdb-service-${DOCUMENTDB_CLUSTER}.${DOCUMENTDB_NAMESPACE}.svc.cluster.local"
         MONGO_URI=$(echo "$MONGO_URI" | sed "s/$SVC_IP/$SVC_DNS/g")
     fi
+
+    # The DocumentDB connection string sets both directConnection=true and
+    # replicaSet=rs0. pymongo treats these as conflicting: with directConnection
+    # it does not perform replica-set discovery, but the gateway does not
+    # advertise the replica-set name, so the driver fails with
+    # "client is configured to connect to a replica set named 'rs0' but this
+    # node belongs to a set named 'None'". Strip replicaSet for direct gateway
+    # connections.
+    MONGO_URI=$(echo "$MONGO_URI" | sed -E 's/[?&]replicaSet=[^&]*//g')
 
     echo "Connection string retrieved from DocumentDB status."
 else

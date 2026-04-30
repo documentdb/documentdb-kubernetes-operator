@@ -8,6 +8,18 @@ kind: Namespace
 metadata:
   name: lightrag
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: lightrag
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,6 +27,8 @@ metadata:
   namespace: lightrag
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ollama
@@ -31,16 +45,17 @@ spec:
         resources:
           requests:
             cpu: 500m
-            memory: 3Gi
+            memory: 4Gi
           limits:
             cpu: "4"
-            memory: 4Gi
+            memory: 8Gi
         volumeMounts:
         - name: ollama-data
           mountPath: /root/.ollama
       volumes:
       - name: ollama-data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: ollama-models
 ---
 apiVersion: v1
 kind: Service
