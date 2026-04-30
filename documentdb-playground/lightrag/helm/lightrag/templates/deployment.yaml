@@ -16,59 +16,6 @@ spec:
       labels:
         {{- include "lightrag.selectorLabels" . | nindent 8 }}
     spec:
-      # Init container patches LightRAG's MongoDB storage layer for DocumentDB
-      # compatibility. DocumentDB does not support createIndex with collation,
-      # $listSearchIndexes, or secondary index creation (it hangs). The patch
-      # stubs out these calls so initialization completes cleanly.
-      initContainers:
-        - name: patch-for-documentdb
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          command: ["/app/.venv/bin/python3", "-B", "-c"]
-          args:
-            - |
-              import os, glob
-
-              targets = [
-                  "/app/lightrag/kg/mongo_impl.py",
-                  "/app/.venv/lib/python3.12/site-packages/lightrag/kg/mongo_impl.py",
-              ]
-              for fp in targets:
-                  if not os.path.exists(fp):
-                      continue
-                  with open(fp) as f:
-                      content = f.read()
-                  if "Skipping index creation (DocumentDB)" in content:
-                      print(f"Already patched: {fp}")
-                      continue
-                  patched = content
-                  patched = patched.replace(
-                      "async def create_and_migrate_indexes_if_not_exists(self):",
-                      "async def create_and_migrate_indexes_if_not_exists(self):\n"
-                      "        logger.info(f'[{self.workspace}] Skipping index creation (DocumentDB)')\n"
-                      "        return\n"
-                      "    async def _orig_create_indexes(self):",
-                  )
-                  patched = patched.replace(
-                      "async def create_search_index_if_not_exists(self):",
-                      "async def create_search_index_if_not_exists(self):\n"
-                      "        logger.info(f'[{self.workspace}] Skipping search index (DocumentDB)')\n"
-                      "        return\n"
-                      "    async def _orig_create_search_index(self):",
-                  )
-                  patched = patched.replace(
-                      "async def create_vector_index_if_not_exists(self):",
-                      "async def create_vector_index_if_not_exists(self):\n"
-                      "        logger.info('Skipping vector index (DocumentDB)')\n"
-                      "        return\n"
-                      "    async def _orig_create_vector_index(self):",
-                  )
-                  with open(fp, "w") as f:
-                      f.write(patched)
-                  cache_dir = os.path.join(os.path.dirname(fp), "__pycache__")
-                  for cf in glob.glob(os.path.join(cache_dir, "mongo_impl*")):
-                      os.remove(cf)
-                  print(f"Patched: {fp}")
-              print("DocumentDB compatibility patches applied")
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

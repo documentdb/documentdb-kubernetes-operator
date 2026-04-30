@@ -136,25 +136,18 @@ env:
 DocumentDB does not implement the MongoDB Atlas `$vectorSearch` aggregation
 operator that `MongoVectorDBStorage` requires.
 
-## DocumentDB Compatibility Patches
+## Expected Startup Warnings
 
-The `helm/lightrag` chart's `deployment.yaml` runs an init container
-(`patch-for-documentdb`) that no-ops three async methods in
-`lightrag/kg/mongo_impl.py` before the main container starts:
+LightRAG logs two non-fatal errors during startup against DocumentDB. They
+are safe to ignore:
 
-| Method                                    | Reason                                                                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `create_and_migrate_indexes_if_not_exists`| Calls `createIndex` with collation (DocumentDB returns `not implemented yet`) and secondary indexes (hangs).          |
-| `create_search_index_if_not_exists`       | Calls `$listSearchIndexes` (Atlas-only). LightRAG already swallows the error; the patch silences the noisy log line.  |
-| `create_vector_index_if_not_exists`       | Creates Atlas `$vectorSearch` indexes — not relevant because we use `NanoVectorDBStorage`.                            |
+| Log line                                                         | Why it's harmless                                                                 |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `createIndex.collation is not implemented yet` (on `doc_status`) | DocumentDB doesn't support collation indexes; LightRAG continues without them.    |
+| `Pipeline stage name not recognized: $listSearchIndexes`         | Atlas-only API; LightRAG already falls back to regex search and logs as much.     |
 
-The patches are applied to both `/app/lightrag/` (dev install) and
-`/app/.venv/lib/python3.12/site-packages/lightrag/` (venv install) because the
-upstream image ships both copies, and the bytecode caches are cleared so the
-modified source is reloaded on import.
-
-LightRAG operates normally without these indexes. The trade-off is slower
-queries on very large datasets, which is acceptable for a playground.
+`MongoVectorDBStorage` would call Atlas `$vectorSearch`, but we don't use it
+(see [Storage backends](#storage-backends)).
 
 ## Verification
 
@@ -187,6 +180,31 @@ Open <http://localhost:9621> for the WebUI:
 - **Documents** — ingestion status
 - **Knowledge Graph** — extracted entities and relationships
 - **Query** — interactive RAG with `naive`, `local`, `global`, `hybrid` modes
+
+### Verify the storage backends
+
+Confirm that KV, graph, and doc-status data are actually living in DocumentDB,
+and that vectors are on the local PVC.
+
+```bash
+# 1. Check the env LightRAG actually loaded (chart writes to /app/.env, not container env)
+kubectl exec -n lightrag deploy/lightrag -- \
+    grep -E "LIGHTRAG_(KV|VECTOR|GRAPH|DOC_STATUS)_STORAGE|MONGO_DATABASE" /app/.env
+
+# 2. List collections in DocumentDB — should include full_docs, text_chunks,
+#    llm_response_cache (KV), entities/relationships (graph), doc_status.
+NS=documentdb-test
+CLUSTER=documentdb-cluster
+RAW=$(kubectl get documentdb "$CLUSTER" -n "$NS" -o jsonpath='{.status.connectionString}')
+URI=$(eval "echo \"$RAW\"" | sed -E 's/[?&]replicaSet=[^&]*//g')
+kubectl run mongo-test --rm -it --restart=Never -n lightrag --image=mongo:7 \
+    --command -- mongosh "$URI" \
+    --eval 'db.getSiblingDB("lightrag").getCollectionNames()'
+
+# 3. Confirm vectors are on the local PVC (NanoVectorDBStorage)
+kubectl exec -n lightrag deploy/lightrag -- ls -la /app/data/rag_storage/
+# Expected: vdb_chunks.json, vdb_entities.json, vdb_relationships.json
+```
 
 ## Troubleshooting
 
