@@ -553,9 +553,9 @@ kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager
 
 ### Helm chart authentication issues
 
-**Symptom:** Unable to pull the DocumentDB operator Helm chart from the public repository
+**Symptom:** Unable to pull the DocumentDB operator Helm chart from GHCR
 
-If the public Helm repository is unavailable or you encounter authentication errors, you can use GitHub Container Registry (GHCR) with a Personal Access Token as a fallback:
+The operator chart is distributed through GitHub Container Registry (GHCR) as an OCI artifact. Public pulls should work anonymously, but if your network, Helm registry config, or GHCR policy requires authentication, log in with a Personal Access Token:
 
 ```bash
 # Create a GitHub Personal Access Token with read:packages scope
@@ -565,6 +565,7 @@ If the public Helm repository is unavailable or you encounter authentication err
 # Set credentials
 export GITHUB_USERNAME="your-github-username"
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+export DOCUMENTDB_VERSION=0.2.0
 
 # Authenticate with GitHub Container Registry
 echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
@@ -574,6 +575,7 @@ echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
 # Install using OCI registry
 helm install documentdb-operator \
     oci://ghcr.io/documentdb/documentdb-operator \
+    --version ${DOCUMENTDB_VERSION} \
     --namespace documentdb-operator \
     --create-namespace \
     --wait

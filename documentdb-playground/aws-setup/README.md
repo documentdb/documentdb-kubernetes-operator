@@ -6,11 +6,11 @@ Simple automation scripts for deploying DocumentDB operator on AWS EKS.
 
 - AWS CLI configured: `aws configure`
 - Required tools: `aws`, `eksctl`, `kubectl`, `helm`, `jq`
-- **For operator installation**: GitHub account with access to microsoft/documentdb-operator
+- **Optional for operator installation**: GitHub account and token for authenticated GHCR pulls
 
-### GitHub Authentication (Required for Operator)
+### GitHub Authentication (Optional for Operator)
 
-To install the DocumentDB operator, you need GitHub Container Registry access:
+The DocumentDB operator chart is published to GHCR as a public OCI artifact and can usually be pulled anonymously. If your environment requires authenticated GHCR access, set credentials before running the script:
 
 1. **Create GitHub Personal Access Token**:
    - Go to https://github.com/settings/tokens
@@ -28,8 +28,6 @@ To install the DocumentDB operator, you need GitHub Container Registry access:
 
 ```bash
 # Create EKS cluster with DocumentDB (includes public IP LoadBalancer)
-export GITHUB_USERNAME="your-github-username"
-export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
 ./scripts/create-cluster.sh --deploy-instance
 
 # Delete cluster when done (avoid charges)

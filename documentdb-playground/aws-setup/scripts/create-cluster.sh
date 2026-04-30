@@ -445,10 +445,11 @@ install_documentdb_operator() {
         fi
     fi
 
-    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (version ${OPERATOR_CHART_VERSION})..."
+    OCI_CHART="oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
+    log "Installing DocumentDB operator from ${OCI_CHART} (version ${OPERATOR_CHART_VERSION})..."
     if helm install documentdb-operator \
-        oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
+        "$OCI_CHART" \
+        --version "$OPERATOR_CHART_VERSION" \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \

@@ -153,9 +153,12 @@ jobs:
         # for what is installable) and picking the highest stable SemVer.
         CHART_VERSION="${{ env.RELEASED_CHART_VERSION }}"
         if [[ "$CHART_VERSION" == "latest" ]]; then
-          GHCR_TOKEN=$(curl -sSL 'https://ghcr.io/token?scope=repository:documentdb/documentdb-operator:pull' | jq -r '.token' 2>/dev/null || echo "")
-          RESOLVED_VERSION=$(curl -sSL "https://ghcr.io/v2/documentdb/documentdb-operator/tags/list" \
-              -H "Authorization: Bearer ${GHCR_TOKEN}" 2>/dev/null \
+          GHCR_TOKEN=$(curl -sSL 'https://ghcr.io/token?scope=repository:documentdb/documentdb-operator:pull' | jq -r '.token // empty' 2>/dev/null || true)
+          CURL_ARGS=(-sSL "https://ghcr.io/v2/documentdb/documentdb-operator/tags/list")
+          if [[ -n "$GHCR_TOKEN" ]]; then
+            CURL_ARGS+=(-H "Authorization: Bearer ${GHCR_TOKEN}")
+          fi
+          RESOLVED_VERSION=$(curl "${CURL_ARGS[@]}" 2>/dev/null \
             | jq -r '.tags[]?' 2>/dev/null \
             | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V \
