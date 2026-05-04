@@ -72,9 +72,22 @@ func NewDocumentDBTestingEnvironment(ctx context.Context) (*environment.TestingE
 	}
 	env.Client = c
 	if ctx != nil {
-		env.Ctx = ctx
+		env.Ctx = detachEnvCtx(ctx)
 	}
 	return env, nil
+}
+
+// detachEnvCtx returns a context that preserves any values on parent
+// but ignores cancellation/deadline propagation. This is critical for
+// the long-lived env.Ctx stored on TestingEnvironment: SetupSuite is
+// invoked from Ginkgo's SynchronizedBeforeSuite with a SpecContext,
+// which Ginkgo cancels the instant BeforeSuite returns. Without this
+// detachment every subsequent BeforeAll/It that read env.Ctx would
+// see a pre-canceled context and surface "context canceled" at the
+// first k8s call (observed in the scale specs of the unified e2e
+// suite).
+func detachEnvCtx(parent context.Context) context.Context {
+	return context.WithoutCancel(parent)
 }
 
 // DefaultDocumentDBScheme returns a fresh scheme with the same group
