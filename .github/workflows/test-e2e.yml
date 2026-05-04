@@ -158,6 +158,12 @@ jobs:
       GINKGO_LABEL_FILTER: ${{ inputs.label != '' && inputs.label || matrix.default_filter }}
       E2E_KEEP_CLUSTERS: ${{ inputs.keep_clusters && '1' || '0' }}
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+      # documentdb / gateway images live on the database/extension version
+      # track (documentDbVersion in values.yaml), distinct from the operator
+      # image-tag. The build workflow surfaces it as ext_image_tag and we
+      # forward it to setup-test-environment as documentdb-image-tag so
+      # `kind load` resolves the correct ghcr.io tag.
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag }}
       CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
       # Upgrade job knobs. Defaults point at the public OCI chart;
       # repository admins may override via `vars`/`secrets` for private
@@ -196,6 +202,7 @@ jobs:
             echo "- **Depth**: \`${TEST_DEPTH}\`"
             echo "- **Run ID**: \`${E2E_RUN_ID}\`"
             echo "- **Image tag**: \`${IMAGE_TAG}\`"
+            echo "- **Extension image tag**: \`${EXT_IMAGE_TAG}\`"
             echo "- **Chart version**: \`${CHART_VERSION}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -216,6 +223,7 @@ jobs:
           db-password: ${{ env.DB_PASSWORD }}
           db-port: ${{ env.DB_PORT }}
           image-tag: ${{ env.IMAGE_TAG }}
+          documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
           chart-version: ${{ env.CHART_VERSION }}
           use-external-images: 'false'
           github-token: ${{ secrets.GITHUB_TOKEN }}
