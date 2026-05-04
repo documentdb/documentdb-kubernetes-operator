@@ -261,6 +261,20 @@ jobs:
         run: |
           mkdir -p artifacts
           set -o pipefail
+          # The setup-test-environment composite action loads
+          # platform-specific images (`<repo>:<tag>-${arch}`) into the
+          # kind cluster and exports DOCUMENTDB_IMAGE_RESOLVED /
+          # GATEWAY_IMAGE_RESOLVED with that platform-specific tag.
+          # Spec helpers (test/e2e/pkg/e2eutils/fixtures, tests/*/helpers_test.go)
+          # render CRs by reading $DOCUMENTDB_IMAGE / $GATEWAY_IMAGE,
+          # falling back to the operator chart's documentDbVersion
+          # default when those are empty — which omits the -${arch}
+          # suffix and resolves to an image that was never `kind load`ed,
+          # producing an ImagePullBackOff loop and a 600s spec timeout.
+          # Forward the resolved (suffixed) refs so every spec deploys a
+          # CR pointing at an image that's actually present in kind.
+          export DOCUMENTDB_IMAGE="${DOCUMENTDB_IMAGE_RESOLVED}"
+          export GATEWAY_IMAGE="${GATEWAY_IMAGE_RESOLVED}"
           # ginkgo `--procs` is integer-only. The matrix encodes "auto"
           # for groups that benefit from CPU-count parallelism; translate
           # it to `-p` (ginkgo's documented auto-detect flag), and pass an

@@ -260,13 +260,15 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
-# Re-include the E2E suite's manifests/backup/ template directory.
-# The generic Backup*/ pattern above (a Visual Studio output dir) was
-# silently swallowing it on case-insensitive filesystems (default on
-# macOS), causing the backup CR templates never to be committed and
-# the operator embed.go (//go:embed backup/*.yaml.template) to fail
-# to compile in CI.
+# Re-include the E2E suite's manifests/backup/ and tests/backup/
+# directories. The generic Backup*/ pattern above (a Visual Studio
+# output dir) silently swallows them on case-insensitive filesystems
+# (default on macOS), so the backup CR templates and the entire
+# Ginkgo backup area binary never reach CI — embed.go
+# (//go:embed backup/*.yaml.template) fails to compile and ginkgo's
+# `-r ./tests/...` discovery never sees the Backup suite.
 !test/e2e/manifests/backup/
+!test/e2e/tests/backup/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/
