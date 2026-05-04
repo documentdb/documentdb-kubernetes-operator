@@ -18,6 +18,11 @@ on:
       source_ref:
         description: 'Git ref to package the Helm chart from (tag or commit recommended to avoid drift)'
         required: true
+      force:
+        description: 'Break-glass: skip TEST - E2E verification on source_ref (records actor in summary)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -27,19 +32,45 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # NOTE: Pre-release E2E/integration/backup gates were removed when the
-  # legacy test-E2E.yml / test-integration.yml / test-backup-and-restore.yml
-  # workflows were consolidated into the unified test-e2e.yml workflow
-  # (see docs/designs/e2e-test-suite.md). That workflow is triggered
-  # on pull_request to main and guards merges to the source branch.
-  # This release workflow now assumes the candidate artifact has
-  # already passed PR-level CI.
+  # Verify TEST - E2E passed on the source_ref commit before promoting images.
+  #
+  # Contract: this gate ensures the SHA we package the Helm chart from has a
+  # successful TEST - E2E run. It does NOT prove the candidate image (referred
+  # to by candidate_version) was built from that ref; image-to-source provenance
+  # would require attestation/signing and is out of scope here. Operators MUST
+  # ensure source_ref matches the commit the candidate was built from.
+  #
+  # Set inputs.force=true to bypass (break-glass; records actor in step summary).
+  # ---------------------------------------------------------------------------
+  verify-e2e-passed:
+    name: Verify TEST - E2E passed on source_ref
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    steps:
+      - name: Checkout (script only)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts/verify-e2e-passed.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Verify or skip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          FORCE: ${{ inputs.force }}
+        run: bash .github/scripts/verify-e2e-passed.sh
 
   # ---------------------------------------------------------------------------
   # Promote operator and sidecar images (retag candidate → release)
   # ---------------------------------------------------------------------------
   promote-operator-images:
     name: Promote ${{ matrix.image }}
+    needs: verify-e2e-passed
     runs-on: ubuntu-latest
     strategy:
       matrix:
