@@ -186,11 +186,24 @@ jobs:
           go-version-file: test/e2e/go.mod
           cache-dependency-path: test/e2e/go.sum
 
-      - name: Download build artifacts
+      # Only fetch the artifacts the setup-test-environment composite
+      # actually consumes: the consolidated platform-specific image
+      # tarball (loaded into the kind cluster) and the per-arch helm
+      # chart. The other build-* artifacts (per-image tars, deb/rpm
+      # packages, gateway runtime files) are only used upstream by
+      # consolidate-images and would add ~4 GB of unused download per
+      # matrix row.
+      - name: Download platform images artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: 'build-*'
-          path: ./artifacts
+          name: build-platform-images
+          path: ./artifacts/build-platform-images
+
+      - name: Download helm chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-helm-chart-${{ matrix.architecture }}
+          path: ./artifacts/build-helm-chart-${{ matrix.architecture }}
 
       - name: Log test configuration
         run: |
@@ -232,7 +245,15 @@ jobs:
       - name: Install Ginkgo CLI
         working-directory: test/e2e
         run: |
-          go install github.com/onsi/ginkgo/v2/ginkgo
+          # Pin the ginkgo CLI to the version declared in test/e2e/go.mod
+          # so the binary's flag handling and bundled runtime match the
+          # version the specs were compiled against. An unpinned
+          # `go install ...@latest` would silently pick up newer
+          # ginkgo versions and re-introduce flag-parse / behavior
+          # drift between local and CI runs.
+          GINKGO_VERSION="$(go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)"
+          echo "Installing ginkgo CLI ${GINKGO_VERSION}"
+          go install "github.com/onsi/ginkgo/v2/ginkgo@${GINKGO_VERSION}"
           ginkgo version
 
       - name: Run E2E specs
