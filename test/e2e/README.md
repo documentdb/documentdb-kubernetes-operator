@@ -3,7 +3,7 @@
 ## What this is
 
 A unified Go / Ginkgo v2 / Gomega end-to-end test suite that drives the
-DocumentDB Kubernetes Operator against a real cluster. It replaces the four
+DocumentDB Kubernetes Operator against a real Kubernetes cluster. It replaces the four
 legacy GitHub Actions workflows (`test-integration.yml`, `test-E2E.yml`,
 `test-backup-and-restore.yml`, `test-upgrade-and-rollback.yml`) and their
 bash / JavaScript (mongosh) / Python (pymongo) glue with a single Go module
@@ -20,12 +20,12 @@ scope: [`docs/designs/e2e-test-suite.md`](../../docs/designs/e2e-test-suite.md).
 | Go | 1.25.x (match `test/e2e/go.mod` — currently `go 1.25.8`) | Separate module from the operator |
 | Docker | any recent | Required for kind |
 | kind | any recent | Local Kubernetes |
-| kubectl | matching cluster | |
+| kubectl | matching the target Kubernetes cluster | |
 | helm | 3.x | Operator install |
 | `ginkgo` CLI | v2 | `go install github.com/onsi/ginkgo/v2/ginkgo@latest` |
 
-The suite itself installs no cluster components — it expects an already-running
-cluster with the operator deployed. Backup specs additionally need the CSI
+The suite itself installs no Kubernetes-cluster components — it expects an already-running
+Kubernetes cluster with the operator deployed. Backup specs additionally need the CSI
 snapshot CRDs; TLS cert-manager specs need cert-manager. Both gate with a
 runtime probe and `Skip()` rather than fail when the dependency is missing.
 
@@ -41,7 +41,7 @@ cd operator/src
 DEPLOY=true DEPLOY_CLUSTER=true ./scripts/development/deploy.sh
 cd -
 
-# 2. Run the smoke label against that cluster.
+# 2. Run the smoke label against that Kubernetes cluster.
 cd test/e2e
 ginkgo -r --label-filter=smoke ./tests/...
 ```
@@ -86,14 +86,15 @@ and capability labels).
 | Capability | `needs-cert-manager`, `needs-metallb`, `needs-csi-snapshots`, `needs-csi-resize` |
 | Depth | `level:lowest`, `level:low`, `level:medium`, `level:high`, `level:highest` |
 
-**Depth gate.** `TEST_DEPTH` takes an integer 0–4 mapping to
-`Highest` (0), `High`, `Medium`, `Low`, `Lowest` (4). Default is `Medium` (2)
-— the authoritative gate is `e2e.SkipUnlessLevel(e2e.Medium)`, which reads
-`TEST_DEPTH` at runtime and `Skip()`s when the configured depth is shallower.
+**Depth gate.** `TEST_DEPTH` accepts an integer `0`–`4` or a case-insensitive name
+(`Highest`, `High`, `Medium`, `Low`, `Lowest`) mapping to `Highest` (0) … `Lowest` (4).
+Default is `Medium` (2) — the authoritative gate is `e2e.SkipUnlessLevel(e2e.Medium)`,
+which reads `TEST_DEPTH` at runtime and `Skip()`s when the configured depth is shallower.
+Invalid values fall back to `Medium` and emit a one-time warning to GinkgoWriter.
 The `level:*` labels are informational duplicates for Ginkgo's `--label-filter`.
-(CNPG v1.28.1 does not currently export a `tests/utils/levels` package;
-[`levels.go`](levels.go) is our local implementation and will be replaced
-with a thin re-export if upstream adds one.)
+The `Level` type and constants are re-exported from CNPG's
+[`tests`](https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/tests) package
+via type alias; only `SkipUnlessLevel` is local.
 
 Examples:
 
@@ -101,7 +102,7 @@ Examples:
 # Fast smoke — typically Highest depth
 TEST_DEPTH=0 ginkgo -r --label-filter=smoke ./tests/...
 
-# Full backup area at default depth, skipping clusters without CSI snapshots
+# Full backup area at default depth, skipping Kubernetes clusters without CSI snapshot support
 ginkgo -r --label-filter='backup && !needs-csi-snapshots' ./tests/backup
 
 # Nightly: everything
@@ -116,12 +117,12 @@ E2E_UPGRADE=1 E2E_UPGRADE_PREVIOUS_CHART=… \
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TEST_DEPTH` | `2` (Medium) | Depth gate; 0=Highest … 4=Lowest |
+| `TEST_DEPTH` | `Medium` (2) | Depth gate; accepts `0`–`4` or `Highest`/`High`/`Medium`/`Low`/`Lowest` (case-insensitive) |
 | `E2E_RUN_ID` | auto-generated | Stable id stamped onto shared fixtures + cluster-scoped objects. Set this in CI so parallel Ginkgo binaries share fixtures; leave **unset locally** — an auto-generated id is safer for ad-hoc runs |
 | `E2E_ARTIFACTS_DIR` | `./_artifacts/<RunID>/proc-<N>/` | Override the JUnit / log dump directory |
 | `DOCUMENTDB_IMAGE` | chart default | Overrides the extension image used by fresh fixtures |
 | `GATEWAY_IMAGE` | chart default | Overrides the gateway image used by fresh fixtures |
-| `E2E_STORAGE_CLASS` | cluster default | StorageClass for fresh fixtures |
+| `E2E_STORAGE_CLASS` | Kubernetes cluster default | StorageClass for fresh fixtures |
 | `E2E_STORAGE_SIZE` | `1Gi` | PVC size for fresh fixtures |
 | `GINKGO_PARALLEL_PROCESS` | set by Ginkgo | Consumed; do not set manually |
 | `POSTGRES_IMG` | dummy stub | Set by `testenv` to satisfy CNPG's `TestingEnvironment`; do not override |
@@ -140,10 +141,11 @@ E2E_UPGRADE=1 E2E_UPGRADE_PREVIOUS_CHART=… \
 | `E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE` | Extension image used before upgrade |
 | `E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE` | Extension image used after upgrade |
 
-> A note on `E2E_KEEP_CLUSTERS`: the design doc discusses a keep-clusters
-> flag, but no such knob is honored by the current suite code. Skip-on-prereq
-> is the intended mechanism; to inspect a cluster after a failing spec, pass
-> `--fail-fast` and manually defer cluster teardown outside the suite.
+> A note on `E2E_KEEP_CLUSTERS`: the design doc discusses a flag for keeping
+> DocumentDB-cluster fixtures around after a failed spec, but no such knob is
+> honored by the current suite code. Skip-on-prereq is the intended mechanism;
+> to inspect a DocumentDB cluster (CR) after a failing spec, pass `--fail-fast`
+> and manually defer DocumentDB-CR teardown outside the suite.
 
 **Missing prereqs are `Skip()`, not `Fail()`.** Backup specs probe the
 `VolumeSnapshot`/`VolumeSnapshotClass` CRDs at runtime (`Skip` when absent),
@@ -156,7 +158,7 @@ you already know your environment.
 
 **Adding a spec to an existing area.** Create a new `*_test.go` in
 `tests/<area>/`, import the area suite's label, attach the right depth
-label, and use the suite's shared fixture rather than a fresh cluster when
+label, and use the suite's shared fixture rather than a fresh DocumentDB cluster (CR) when
 the spec is read-only:
 
 ```go
@@ -198,7 +200,7 @@ so callers can wrap them in `Eventually(...).Should(Succeed())`.
 | `assertions/` | Composable Gomega verbs (`AssertDocumentDBReady`, `AssertInstanceCount`, `AssertPrimaryUnchanged`, `AssertPVCCount`, `AssertTLSSecretReady`, `AssertServiceType`, `AssertConnectionStringMatches`). |
 | `timeouts/` | DocumentDB-specific overrides layered on top of CNPG's `timeouts` map (`DocumentDBReady`, `DocumentDBUpgrade`, `InstanceScale`, `PVCResize`). |
 | `seed/` | Canonical datasets (`SmallDataset(10)`, `MediumDataset(1000)`, sort/agg fixtures) shared by data / performance / backup / upgrade specs. |
-| `fixtures/` | Session-scoped shared clusters (`shared_ro.go`, `shared_scale.go`) and lazy MinIO (`minio.go`). Honors `E2E_RUN_ID`, `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE`, `E2E_STORAGE_CLASS`, `E2E_STORAGE_SIZE`. |
+| `fixtures/` | Session-scoped shared DocumentDB clusters (`shared_ro.go`, `shared_scale.go`) and lazy MinIO (`minio.go`). Honors `E2E_RUN_ID`, `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE`, `E2E_STORAGE_CLASS`, `E2E_STORAGE_SIZE`. |
 | `namespaces/` | Per-proc, run-id-scoped namespace naming (`e2e-<proc>-<hash>`). |
 | `operatorhealth/` | Operator-pod UID + restart-count gate; flips a package sentinel on churn so subsequent non-`disruptive`/`upgrade` specs skip. |
 | `clusterprobe/` | Capability probes (CSI snapshot CRDs, cert-manager, StorageClass resize support) used by area `Skip*` helpers. |
@@ -236,7 +238,7 @@ Each job runs `setup-test-environment` → `ginkgo -r --label-filter=…
   (`mongo/connect.go`: `connectRetryTimeout` / `connectRetryBackoff`). If
   you consistently exceed it, the gateway pod is probably not Ready — check
   the DocumentDB CR status and the gateway container logs.
-- **Backup specs all Skip.** Your cluster lacks the CSI snapshot CRDs
+- **Backup specs all Skip.** Your Kubernetes cluster lacks the CSI snapshot CRDs
   (`VolumeSnapshotClass`, `VolumeSnapshot`) or the configured StorageClass
   isn't backed by a snapshot-capable CSI driver. `scripts/test-scripts/deploy-csi-driver.sh`
   under `operator/src/` installs a hostpath CSI driver suitable for kind.
