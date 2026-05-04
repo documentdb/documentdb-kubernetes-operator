@@ -1,0 +1,21 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  nodeCount: 1
+  instancesPerNode: ${INSTANCES}
+  documentDBImage: ${DOCUMENTDB_IMAGE}
+  gatewayImage: ${GATEWAY_IMAGE}
+  documentDbCredentialSecret: ${CREDENTIAL_SECRET}
+  resource:
+    storage:
+      pvcSize: ${STORAGE_SIZE}
+      storageClass: ${STORAGE_CLASS}
+  exposeViaService:
+    serviceType: ${EXPOSURE_TYPE}
+  bootstrap:
+    recovery:
+      persistentVolume:
+        name: ${PV_NAME}
