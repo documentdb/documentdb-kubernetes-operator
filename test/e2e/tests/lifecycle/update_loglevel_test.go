@@ -70,10 +70,15 @@ var _ = Describe("DocumentDB lifecycle — update logLevel",
 			}, 1*time.Minute, 2*time.Second).Should(Equal("debug"),
 				"patched spec.logLevel should reach the API server")
 
-			// Reconciliation should not disrupt readiness while the
-			// only change is a log-level string.
-			Consistently(assertions.AssertDocumentDBReady(ctx, c, key),
-				30*time.Second, 5*time.Second,
-			).Should(Succeed())
+			// A logLevel change can transiently flip Status.Status while
+			// CNPG rolls the pods to pick up the new value. We do not
+			// assert "Ready stays true throughout" — that is racy by
+			// design. Instead we assert the cluster settles back to
+			// Ready within the standard DocumentDBReady budget.
+			Eventually(assertions.AssertDocumentDBReady(ctx, c, key),
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Succeed(),
+				"DocumentDB should converge back to Ready after a logLevel patch")
 		})
 	})

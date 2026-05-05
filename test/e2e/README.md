@@ -195,7 +195,7 @@ so callers can wrap them in `Eventually(...).Should(Succeed())`.
 |---|---|
 | `testenv/` | Wraps CNPG's `environment.TestingEnvironment` with dummy `POSTGRES_IMG`; registers our `api/preview` scheme on the typed `client.Client`. |
 | `documentdb/` | DocumentDB CR verbs: `RenderCR` (base + mixin envsubst), `Create` (multi-doc merge), `PatchSpec`, `WaitHealthy`, `Delete`, `List`. |
-| `mongo/` | `go.mongodb.org/mongo-driver/v2` client builder, seed/probe/count helpers; owns the 10 s post-port-forward ping retry budget (`connectRetryTimeout`). |
+| `mongo/` | `go.mongodb.org/mongo-driver/v2` client builder, seed/probe/count helpers; owns the post-port-forward ping retry budget (`connectRetryTimeout`). |
 | `portforward/` | Thin wrapper over CNPG's `forwardconnection` for the DocumentDB gateway port. |
 | `assertions/` | Composable Gomega verbs (`AssertDocumentDBReady`, `AssertInstanceCount`, `AssertPrimaryUnchanged`, `AssertPVCCount`, `AssertTLSSecretReady`, `AssertServiceType`, `AssertConnectionStringMatches`). |
 | `timeouts/` | DocumentDB-specific overrides layered on top of CNPG's `timeouts` map (`DocumentDBReady`, `DocumentDBUpgrade`, `InstanceScale`, `PVCResize`). |
@@ -234,7 +234,7 @@ Each job runs `setup-test-environment` → `ginkgo -r --label-filter=…
 ## Troubleshooting
 
 - **Port-forward / Mongo connect fails with "connection refused."** The
-  post-port-forward retry budget is 10 s at 100 ms backoff
+  post-port-forward retry budget is 60 s at 100 ms backoff
   (`mongo/connect.go`: `connectRetryTimeout` / `connectRetryBackoff`). If
   you consistently exceed it, the gateway pod is probably not Ready — check
   the DocumentDB CR status and the gateway container logs.

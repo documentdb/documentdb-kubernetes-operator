@@ -90,9 +90,12 @@ var _ = Describe("DocumentDB data — complex pipelines",
 			Expect(out).To(HaveLen(3))
 			for _, doc := range out {
 				Expect(doc["customer"]).To(Equal("alice"))
-				product, ok := doc["product"].(bson.M)
-				Expect(ok).To(BeTrue(), "product should be an embedded doc post-lookup")
-				Expect(product).To(HaveKey("name"))
+				// mongo-driver v2 decodes nested subdocuments as bson.D
+				// even when the parent map is bson.M; accept either to
+				// stay registry-agnostic.
+				name, ok := lookupSubdocField(doc["product"], "name")
+				Expect(ok).To(BeTrue(), "product should be an embedded doc post-lookup with a 'name' field")
+				Expect(name).NotTo(BeEmpty())
 			}
 		})
 
@@ -118,3 +121,27 @@ var _ = Describe("DocumentDB data — complex pipelines",
 		})
 	},
 )
+
+// lookupSubdocField returns the string value at field within the
+// supplied embedded subdocument. mongo-driver v2 decodes nested
+// subdocs into bson.D when the parent decoder target is bson.M, but
+// in some registry configurations the same value can land as
+// bson.M. This helper accepts either shape so callers can avoid a
+// brittle type-assertion.
+func lookupSubdocField(v any, field string) (string, bool) {
+	switch sub := v.(type) {
+	case bson.M:
+		s, ok := sub[field].(string)
+		return s, ok
+	case bson.D:
+		for _, e := range sub {
+			if e.Key == field {
+				s, ok := e.Value.(string)
+				return s, ok
+			}
+		}
+		return "", false
+	default:
+		return "", false
+	}
+}

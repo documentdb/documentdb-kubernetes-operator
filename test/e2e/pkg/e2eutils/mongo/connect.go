@@ -71,13 +71,15 @@ func (h *Handle) Close(ctx context.Context) error {
 	return serr
 }
 
-// connectRetryTimeout bounds the post-port-forward ping/retry loop
-// because forwardconnection's goroutine takes a brief moment to bind
-// the chosen local port. 10s @ 100ms backoff absorbs ~100 attempts,
-// which is plenty for the typical <1s bind delay without stretching
-// the happy path.
+// connectRetryTimeout bounds the post-port-forward ping/retry loop.
+// The forwarder goroutine takes a brief moment to bind the chosen
+// local port, and on a busy CI runner the gateway sidecar may not
+// have its mongo listener fully ready the instant the CR reports
+// healthy. This budget therefore covers both the local-bind window
+// and a short gateway-listener-ready window. PollInterval keeps the
+// happy path fast.
 const (
-	connectRetryTimeout = 10 * time.Second
+	connectRetryTimeout = 60 * time.Second
 	connectRetryBackoff = 100 * time.Millisecond
 )
 
