@@ -1,0 +1,87 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Long Haul Test Monitor
+#
+# Polls the AKS cluster every 15 minutes to check the long-haul test status.
+# If the test Job has failed or the ConfigMap reports a failure, this workflow
+# fails — which sends email notifications to repo watchers.
+#
+name: "Long Haul Monitor"
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # Every 15 minutes
+  workflow_dispatch: {} # Allow manual trigger
+
+env:
+  RESOURCE_GROUP: wenting-test-rg
+  CLUSTER_NAME: wenting-aks
+  NAMESPACE: documentdb-test-ns
+  JOB_NAME: longhaul-test
+
+jobs:
+  check-longhaul:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --cluster-name ${{ env.CLUSTER_NAME }} \
+            --overwrite-existing
+
+      - name: Check Job exists
+        id: job-check
+        run: |
+          STATUS=$(kubectl get job ${{ env.JOB_NAME }} -n ${{ env.NAMESPACE }} -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "NotFound")
+          echo "failed_status=$STATUS" >> "$GITHUB_OUTPUT"
+
+          ACTIVE=$(kubectl get job ${{ env.JOB_NAME }} -n ${{ env.NAMESPACE }} -o jsonpath='{.status.active}' 2>/dev/null || echo "0")
+          echo "active=$ACTIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Check ConfigMap report
+        id: report-check
+        run: |
+          RESULT=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.result}' 2>/dev/null || echo "UNKNOWN")
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+          REPORT=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.latest-report}' 2>/dev/null || echo "No report available")
+          echo "report<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$REPORT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate status
+        run: |
+          echo "=== Long Haul Test Status ==="
+          echo "Job failed condition: ${{ steps.job-check.outputs.failed_status }}"
+          echo "Job active pods: ${{ steps.job-check.outputs.active }}"
+          echo "Report result: ${{ steps.report-check.outputs.result }}"
+          echo ""
+          echo "=== Latest Report ==="
+          echo "${{ steps.report-check.outputs.report }}"
+          echo ""
+
+          # Fail if Job has failed
+          if [ "${{ steps.job-check.outputs.failed_status }}" = "True" ]; then
+            echo "::error::Long haul test Job FAILED"
+            exit 1
+          fi
+
+          # Fail if ConfigMap reports failure
+          if [ "${{ steps.report-check.outputs.result }}" = "FAIL" ]; then
+            echo "::error::Long haul test reported FAIL in ConfigMap"
+            exit 1
+          fi
+
+          # Warn if no active pods and job not found
+          if [ "${{ steps.job-check.outputs.failed_status }}" = "NotFound" ]; then
+            echo "::notice::No long-haul Job found — test may not be running"
+          fi
+
+          echo "✅ Long haul test is healthy"
