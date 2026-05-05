@@ -1125,7 +1125,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					// Images match cluster so updateImageStatus is a no-op
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					// SchemaVersion is stale — triggers step 5 status update
-					SchemaVersion: "0.109.0",
+					SchemaVersion: "0.110.0",
 				},
 			}
 
@@ -1193,7 +1193,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					// Images match cluster so updateImageStatus is a no-op
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					// Version matches installed so step 5 is a no-op
-					SchemaVersion: "0.109.0",
+					SchemaVersion: "0.110.0",
 				},
 			}
 
@@ -1293,7 +1293,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Status should reflect installed version, NOT the binary version
 			updatedDB := &dbpreview.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
-			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.109.0"))
+			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 
 			// SchemaUpdateAvailable event should have been emitted
 			Expect(recorder.Events).To(HaveLen(1))
@@ -1510,7 +1510,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Status should reflect installed version (not upgraded)
 			updatedDB := &dbpreview.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
-			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.109.0"))
+			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
 
 		It("should skip when explicit schemaVersion matches installed version", func() {
@@ -1546,7 +1546,7 @@ var _ = Describe("DocumentDB Controller", func() {
 					Namespace: clusterNamespace,
 				},
 				Spec: dbpreview.DocumentDBSpec{
-					SchemaVersion: "0.109.0",
+					SchemaVersion: "0.110.0",
 				},
 			}
 

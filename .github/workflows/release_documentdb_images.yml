@@ -14,7 +14,7 @@ on:
       version:
         description: 'Database image release version (e.g., 0.111.0)'
         required: true
-        default: '0.109.0'
+        default: '0.110.0'
       update_defaults:
         description: 'Create PR to update default image versions in code'
         required: false

@@ -18,7 +18,7 @@ KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.35.0}"
 OPERATOR_GITHUB_ORG="documentdb"
 # Optional: Pin specific versions (by default, installs latest)
 # OPERATOR_CHART_VERSION="0.2.0"    # Operator and sidecar image versions (matches Chart.appVersion)
-# DOCUMENTDB_VERSION="0.109.0"      # Database image version (matches values.yaml documentDbVersion)
+# DOCUMENTDB_VERSION="0.110.0"      # Database image version (matches values.yaml documentDbVersion)
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -395,7 +395,7 @@ install_documentdb_operator() {
         --timeout 10m
     # To pin specific versions, add these options:
     #   --version ${OPERATOR_CHART_VERSION}                    # Pin operator chart version (e.g., 0.2.0)
-    #   --set documentDbVersion=${DOCUMENTDB_VERSION}          # Pin database image version (e.g., 0.109.0)
+    #   --set documentDbVersion=${DOCUMENTDB_VERSION}          # Pin database image version (e.g., 0.110.0)
     # To use custom image repositories (e.g., for forks), add:
     #   --set image.documentdbk8soperator.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/operator
     #   --set image.sidecarinjector.repository=ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/sidecar
