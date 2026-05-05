@@ -292,6 +292,7 @@ jobs:
             --label-filter="${GINKGO_LABEL_FILTER}" \
             ${PROCS_FLAG} \
             --timeout=75m \
+            --flake-attempts=2 \
             --keep-going \
             --junit-report=junit.xml \
             --output-dir=artifacts \
