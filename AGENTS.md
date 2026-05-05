@@ -71,7 +71,7 @@ The project uses **two independent version tracks** for container images:
 
 | Track | Images | Version Source | Tag Example |
 |-------|--------|---------------|-------------|
-| **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.1.3` |
+| **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.2.0` |
 | **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.110.0` |
 
 - Operator images are built from this repo's Go source
