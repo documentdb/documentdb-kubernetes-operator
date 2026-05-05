@@ -149,7 +149,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
-      fail-fast: false
+      # fail-fast: any matrix row failing cancels all in-flight rows.
+      # Saves runner-minutes on broken PRs at the cost of visibility into
+      # whether other suites would also have failed. Use "rerun failed
+      # jobs" after a fix to revalidate just the cancelled slices.
+      fail-fast: true
       matrix:
         include: ${{ fromJSON(needs.compute-matrix.outputs.include) }}
     env:
