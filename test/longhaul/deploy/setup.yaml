@@ -1,0 +1,73 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Long Haul Test — DocumentDB Cluster Setup
+#
+# This manifest deploys a DocumentDB cluster for long-haul testing.
+# It creates the target namespace, credentials secret, and DocumentDB CR.
+#
+# Prerequisites:
+#   1. AKS cluster with k8s >= 1.30
+#   2. cert-manager installed:
+#      helm repo add jetstack https://charts.jetstack.io && helm repo update
+#      helm install cert-manager jetstack/cert-manager --namespace cert-manager \
+#        --create-namespace --set crds.enabled=true
+#   3. DocumentDB operator installed:
+#      helm install documentdb-operator \
+#        oci://ghcr.io/documentdb/documentdb-operator \
+#        --namespace documentdb-operator --create-namespace --wait --timeout 10m
+#
+# Usage:
+#   kubectl apply -f deploy/setup.yaml
+#
+# After the cluster is healthy (~3-5 min), deploy the long-haul test:
+#   kubectl apply -f deploy/rbac.yaml
+#   kubectl apply -f deploy/job.yaml
+#
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-test-ns
+  labels:
+    app.kubernetes.io/part-of: longhaul-test
+---
+# Credentials for the DocumentDB cluster.
+# The operator creates the MongoDB user with these credentials.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-test-ns
+type: kubernetes.io/basic-auth
+stringData:
+  username: longhaul-user
+  password: LongHaul-T3st-Passw0rd!
+---
+# DocumentDB cluster for long-haul testing.
+#
+# Spec notes:
+#   - nodeCount: 1 (the long-haul test scales up/down via operations scheduler)
+#   - instancesPerNode: 1 (standard topology)
+#   - pvcSize: 10Gi (sufficient for continuous writes over 72h)
+#   - LoadBalancer exposes the cluster for monitoring/debugging
+#
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-cluster
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/part-of: longhaul-test
+    app.kubernetes.io/component: database
+spec:
+  environment: aks
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 10Gi
+  exposeViaService:
+    serviceType: LoadBalancer
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io

@@ -44,7 +44,7 @@ data:
   LONGHAUL_RECOVERY_TIMEOUT: "5m"
   # Replica range for scale operations.
   LONGHAUL_MIN_REPLICAS: "1"
-  LONGHAUL_MAX_REPLICAS: "3"
+  LONGHAUL_MAX_REPLICAS: "1"
 ---
 apiVersion: batch/v1
 kind: Job
@@ -67,7 +67,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: longhaul
-          image: ghcr.io/documentdb/longhaul-test:latest  # TODO: update with actual registry
+          image: documentdblonghaul.azurecr.io/longhaul-test:latest  # Built from test/longhaul/Dockerfile
           imagePullPolicy: Always
           envFrom:
             - configMapRef:

@@ -15,8 +15,8 @@ on:
   workflow_dispatch: {} # Allow manual trigger
 
 env:
-  RESOURCE_GROUP: wenting-test-rg
-  CLUSTER_NAME: wenting-aks
+  RESOURCE_GROUP: longhaul-rg
+  CLUSTER_NAME: longhaul-aks
   NAMESPACE: documentdb-test-ns
   JOB_NAME: longhaul-test
 
