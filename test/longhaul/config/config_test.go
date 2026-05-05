@@ -17,6 +17,13 @@ var _ = Describe("Config", func() {
 			Expect(cfg.MaxDuration).To(Equal(30 * time.Minute))
 			Expect(cfg.Namespace).To(Equal("default"))
 			Expect(cfg.ClusterName).To(BeEmpty())
+			Expect(cfg.NumWriters).To(Equal(5))
+			Expect(cfg.NumVerifiers).To(Equal(2))
+			Expect(cfg.OpCooldown).To(Equal(5 * time.Minute))
+			Expect(cfg.RecoveryTimeout).To(Equal(5 * time.Minute))
+			Expect(cfg.SteadyStateWait).To(Equal(60 * time.Second))
+			Expect(cfg.MinReplicas).To(Equal(2))
+			Expect(cfg.MaxReplicas).To(Equal(5))
 		})
 	})
 
@@ -59,6 +66,34 @@ var _ = Describe("Config", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(EnvMaxDuration))
 		})
+
+		It("parses NumWriters from env", func() {
+			GinkgoT().Setenv(EnvNumWriters, "10")
+			cfg, err := LoadFromEnv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.NumWriters).To(Equal(10))
+		})
+
+		It("returns error for invalid NumWriters", func() {
+			GinkgoT().Setenv(EnvNumWriters, "abc")
+			_, err := LoadFromEnv()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(EnvNumWriters))
+		})
+
+		It("parses OpCooldown from env", func() {
+			GinkgoT().Setenv(EnvOpCooldown, "10m")
+			cfg, err := LoadFromEnv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.OpCooldown).To(Equal(10 * time.Minute))
+		})
+
+		It("parses MongoURI from env", func() {
+			GinkgoT().Setenv(EnvMongoURI, "mongodb://localhost:27017")
+			cfg, err := LoadFromEnv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.MongoURI).To(Equal("mongodb://localhost:27017"))
+		})
 	})
 
 	Describe("Validate", func() {
@@ -85,6 +120,28 @@ var _ = Describe("Config", func() {
 			cfg.ClusterName = "test"
 			cfg.MaxDuration = -1 * time.Second
 			Expect(cfg.Validate()).To(MatchError(ContainSubstring("max duration must not be negative")))
+		})
+
+		It("fails when NumWriters is zero", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.NumWriters = 0
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("num writers")))
+		})
+
+		It("fails when RecoveryTimeout is zero", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.RecoveryTimeout = 0
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("recovery timeout")))
+		})
+
+		It("fails when MaxReplicas < MinReplicas", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.MinReplicas = 5
+			cfg.MaxReplicas = 3
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("max replicas")))
 		})
 	})
 
