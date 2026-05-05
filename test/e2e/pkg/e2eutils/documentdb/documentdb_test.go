@@ -241,18 +241,18 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// TestCreateAppliesTLSDisabledMixin uses the real base + tls_disabled
+// TestCreateAppliesTLSSelfSignedMixin uses the real base + tls_selfsigned
 // mixin shipped under test/e2e/manifests/ to prove the multi-document
 // merge in Create is no longer a silent drop: the mixin's
 // Spec.TLS.Gateway.Mode must round-trip to the created object.
-func TestCreateAppliesTLSDisabledMixin(t *testing.T) {
+func TestCreateAppliesTLSSelfSignedMixin(t *testing.T) {
 	root := realManifestsRoot(t)
 	s := newScheme(t)
 	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
 
 	obj, err := Create(context.Background(), c, "ns1", "dd1", CreateOptions{
 		Base:          "documentdb",
-		Mixins:        []string{"tls_disabled"},
+		Mixins:        []string{"tls_selfsigned"},
 		ManifestsRoot: root,
 		Vars: map[string]string{
 			"INSTANCES":         "1",
@@ -273,8 +273,8 @@ func TestCreateAppliesTLSDisabledMixin(t *testing.T) {
 	if obj.Spec.TLS == nil || obj.Spec.TLS.Gateway == nil {
 		t.Fatalf("returned object missing Spec.TLS.Gateway; got %+v", obj.Spec)
 	}
-	if obj.Spec.TLS.Gateway.Mode != "Disabled" {
-		t.Fatalf("returned Spec.TLS.Gateway.Mode=%q, want Disabled", obj.Spec.TLS.Gateway.Mode)
+	if obj.Spec.TLS.Gateway.Mode != "SelfSigned" {
+		t.Fatalf("returned Spec.TLS.Gateway.Mode=%q, want SelfSigned", obj.Spec.TLS.Gateway.Mode)
 	}
 
 	got, err := Get(context.Background(), c, types.NamespacedName{Namespace: "ns1", Name: "dd1"})
@@ -284,8 +284,8 @@ func TestCreateAppliesTLSDisabledMixin(t *testing.T) {
 	if got.Spec.TLS == nil || got.Spec.TLS.Gateway == nil {
 		t.Fatalf("stored object missing Spec.TLS.Gateway; got %+v", got.Spec)
 	}
-	if got.Spec.TLS.Gateway.Mode != "Disabled" {
-		t.Fatalf("stored Spec.TLS.Gateway.Mode=%q, want Disabled", got.Spec.TLS.Gateway.Mode)
+	if got.Spec.TLS.Gateway.Mode != "SelfSigned" {
+		t.Fatalf("stored Spec.TLS.Gateway.Mode=%q, want SelfSigned", got.Spec.TLS.Gateway.Mode)
 	}
 	// Base fields must still be present after the merge.
 	if got.Spec.InstancesPerNode != 1 {

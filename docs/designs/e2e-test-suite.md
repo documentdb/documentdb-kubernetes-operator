@@ -92,7 +92,6 @@ test/e2e/                                       # new top-level Go test tree
 │   ├── base/
 │   │   └── documentdb.yaml.template
 │   ├── mixins/                                 # concatenated into base; simple sh envsubst pipeline
-│   │   ├── tls_disabled.yaml.template
 │   │   ├── tls_selfsigned.yaml.template
 │   │   ├── tls_certmanager.yaml.template
 │   │   ├── tls_provided.yaml.template
@@ -143,7 +142,6 @@ test/e2e/                                       # new top-level Go test tree
     │   └── restore_from_pv_test.go
     ├── tls/
     │   ├── tls_suite_test.go
-    │   ├── tls_disabled_test.go
     │   ├── tls_selfsigned_test.go
     │   ├── tls_certmanager_test.go             # skipped via Label("needs-certmanager")
     │   └── tls_provided_test.go

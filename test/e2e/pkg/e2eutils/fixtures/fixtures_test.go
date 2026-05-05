@@ -62,7 +62,6 @@ func TestRenderTLSMixins(t *testing.T) {
 		path     string
 		wantMode string
 	}{
-		{"mixins/tls_disabled.yaml.template", "Disabled"},
 		{"mixins/tls_selfsigned.yaml.template", "SelfSigned"},
 	} {
 		vars := map[string]string{"NAMESPACE": "ns", "NAME": "c"}
