@@ -79,11 +79,12 @@ var _ = Describe("DocumentDB exposure — ClusterIP",
 				pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
 				defer pingCancel()
 				cli, err := mongo.NewClient(pingCtx, mongo.ClientOptions{
-					Host:     "127.0.0.1",
-					Port:     strconv.Itoa(localPort),
-					User:     credUser,
-					Password: credPassword,
-					TLS:      false,
+					Host:        "127.0.0.1",
+					Port:        strconv.Itoa(localPort),
+					User:        credUser,
+					Password:    credPassword,
+					TLS:         true,
+					TLSInsecure: true,
 				})
 				if err != nil {
 					pingErr = err
