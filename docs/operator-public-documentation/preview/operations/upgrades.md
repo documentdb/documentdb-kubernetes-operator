@@ -38,8 +38,8 @@ The DocumentDB operator Helm chart is published as an OCI artifact at `oci://ghc
 Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:
 
 ```bash
-# Set this to the release tag you are upgrading to (e.g., 0.2.0)
-TARGET_VERSION=0.2.0
+# Set this to the release tag you are upgrading to.
+TARGET_VERSION=<release-version>
 ```
 
 ### Step 2: Review the Release Notes

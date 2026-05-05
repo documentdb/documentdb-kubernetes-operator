@@ -21,18 +21,16 @@ For installation guides, configuration options, and examples, visit our [documen
 
 ## 📦 Install
 
-The operator Helm chart is published as an OCI artifact to the GitHub Container Registry. Pick a release version from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) (OCI registries do not support `helm search repo`), then install:
+The operator Helm chart is published as an OCI artifact to the GitHub Container Registry. Install the latest stable chart with:
 
 ```bash
-# Pin the release you want to install
-DOCUMENTDB_VERSION=0.2.0
-
 helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
-  --version ${DOCUMENTDB_VERSION} \
   --namespace documentdb-operator \
   --create-namespace \
   --wait
 ```
+
+For production or repeatable installs, pick a release from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) and add `--version <release-version>` to the command. OCI registries do not support `helm search repo`.
 
 Requires Helm 3.8+ (OCI support is on by default). For the full prerequisites (cert-manager, supported Kubernetes versions, container runtimes) and platform-specific setup, see the [installation guide](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/).
 

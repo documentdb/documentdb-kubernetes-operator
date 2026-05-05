@@ -50,7 +50,7 @@ Install the operator on each Kubernetes cluster.
 
 ```bash
 # Choose a release version (see https://github.com/documentdb/documentdb-kubernetes-operator/releases)
-DOCUMENTDB_VERSION=0.2.0
+DOCUMENTDB_VERSION=<release-version>
 
 helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --version ${DOCUMENTDB_VERSION} \

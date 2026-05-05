@@ -84,7 +84,7 @@ flowchart TB
 
 ### Helm Chart Distribution
 
-The DocumentDB operator Helm chart is published as an OCI artifact to the GitHub Container Registry. There is no `helm repo add` step — install with `helm install ... oci://ghcr.io/documentdb/documentdb-operator --version <X>`. Released versions are listed at <https://github.com/documentdb/documentdb-kubernetes-operator/releases>.
+The DocumentDB operator Helm chart is published as an OCI artifact to the GitHub Container Registry. There is no `helm repo add` step — install with `helm install ... oci://ghcr.io/documentdb/documentdb-operator`. For production or repeatable installs, add `--version <release-version>` using a version from <https://github.com/documentdb/documentdb-kubernetes-operator/releases>.
 
 ## Quick Start with Playground Scripts
 
@@ -303,12 +303,7 @@ kubectl apply -f documentdb-storage-class.yaml
 ### Step 6: Install DocumentDB Operator
 
 ```bash
-# Choose a release version (see https://github.com/documentdb/documentdb-kubernetes-operator/releases)
-DOCUMENTDB_VERSION=0.2.0
-
-# Install the operator from the GHCR OCI Helm chart
 helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
-    --version ${DOCUMENTDB_VERSION} \
     --namespace documentdb-operator \
     --create-namespace \
     --wait
@@ -316,6 +311,9 @@ helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
 # Verify installation
 kubectl get pods -n documentdb-operator
 ```
+
+!!! tip "Pin production installs"
+    This quickstart installs the latest stable chart. For production or repeatable installs, add `--version <release-version>`.
 
 ### Step 7: Deploy DocumentDB instance
 
@@ -565,7 +563,7 @@ The operator chart is distributed through GitHub Container Registry (GHCR) as an
 # Set credentials
 export GITHUB_USERNAME="your-github-username"
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
-export DOCUMENTDB_VERSION=0.2.0
+export DOCUMENTDB_VERSION=<release-version>
 
 # Authenticate with GitHub Container Registry
 echo "$GITHUB_TOKEN" | helm registry login ghcr.io \

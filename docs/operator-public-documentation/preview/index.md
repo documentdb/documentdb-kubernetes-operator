@@ -71,16 +71,14 @@ The operator Helm chart automatically installs the [CloudNativePG operator](http
     If CloudNativePG is already installed in your cluster, you may experience conflicts. See the Helm chart documentation for options to skip the CNPG dependency.
 
 ```bash
-# Choose a release version (see https://github.com/documentdb/documentdb-kubernetes-operator/releases)
-DOCUMENTDB_VERSION=0.2.0
-
-# Install the operator from the GHCR OCI Helm chart
 helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
-  --version ${DOCUMENTDB_VERSION} \
   --namespace documentdb-operator \
   --create-namespace \
   --wait
 ```
+
+!!! tip "Pin production installs"
+    Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) and add `--version <release-version>`.
 
 Verify the operator is running:
 

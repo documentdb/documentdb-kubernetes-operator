@@ -119,7 +119,7 @@ Yes. The operator supports multi-cloud deployment with cross-cluster replication
 Upgrade the operator using Helm. Pick the target version from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) (OCI registries do not support `helm search repo`):
 
 ```bash
-TARGET_VERSION=0.2.0
+TARGET_VERSION=<release-version>
 helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --version ${TARGET_VERSION} \
   --namespace documentdb-operator
