@@ -118,9 +118,18 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Check and upgrade operator
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Expected version from repo
-          EXPECTED=$(grep 'appVersion:' operator/documentdb-helm-chart/Chart.yaml | awk '{print $2}' | tr -d '"')
+          # Get latest published operator image tag from GHCR
+          EXPECTED=$(gh api /orgs/documentdb/packages/container/documentdb-kubernetes-operator%2Foperator/versions \
+            --jq '[.[].metadata.container.tags[] | select(test("^[0-9]"))] | sort_by(. | split(".") | map(tonumber)) | last' 2>/dev/null || echo "")
+
+          if [ -z "$EXPECTED" ]; then
+            # Fallback to Chart.yaml if GHCR query fails
+            EXPECTED=$(grep 'appVersion:' operator/documentdb-helm-chart/Chart.yaml | awk '{print $2}' | tr -d '"')
+            echo "ℹ️ GHCR query failed, using Chart.yaml: $EXPECTED"
+          fi
 
           # Running version from cluster
           RUNNING=$(kubectl get deployment -n ${{ env.OPERATOR_NAMESPACE }} -l app.kubernetes.io/name=documentdb-operator \
@@ -142,9 +151,18 @@ jobs:
           fi
 
       - name: Check and upgrade DocumentDB version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Expected version from repo
-          EXPECTED=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | awk '{print $2}' | tr -d '"')
+          # Get latest published DocumentDB image tag from GHCR
+          EXPECTED=$(gh api /orgs/documentdb/packages/container/documentdb-kubernetes-operator%2Fdocumentdb/versions \
+            --jq '[.[].metadata.container.tags[] | select(test("^[0-9]"))] | sort_by(. | split(".") | map(tonumber)) | last' 2>/dev/null || echo "")
+
+          if [ -z "$EXPECTED" ]; then
+            # Fallback to values.yaml if GHCR query fails
+            EXPECTED=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | awk '{print $2}' | tr -d '"')
+            echo "ℹ️ GHCR query failed, using values.yaml: $EXPECTED"
+          fi
 
           # Running version from cluster
           RUNNING=$(kubectl get documentdb documentdb-cluster -n ${{ env.NAMESPACE }} \
