@@ -75,6 +75,10 @@ var _ = Describe("Long Haul Test", func() {
 
 		db := mongoClient.Database("longhaul")
 
+		// Drop previous test data to avoid duplicate key conflicts.
+		err = db.Collection(workload.CollectionName).Drop(ctx)
+		Expect(err).NotTo(HaveOccurred(), "Failed to drop previous test collection")
+
 		// Create indexes.
 		err = workload.EnsureIndexes(ctx, db)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create indexes")
