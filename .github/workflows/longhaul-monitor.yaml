@@ -3,9 +3,11 @@
 
 # Long Haul Test Monitor
 #
-# Polls the AKS cluster every hour to check the long-haul test status.
-# Matches LONGHAUL_REPORT_INTERVAL (default 1h).
-# Fails if: Job failed, ConfigMap reports FAIL, or report is stale (>2h old).
+# Polls the AKS cluster every hour to:
+# 1. Check health: Job status, report staleness, test result
+# 2. Auto-upgrade: If healthy, upgrade operator/DocumentDB to latest versions from repo
+#
+# Fails if: Job failed, ConfigMap reports FAIL, report is stale (>2h), or Job not found.
 #
 name: "Long Haul Monitor"
 
@@ -15,10 +17,9 @@ on:
   workflow_dispatch: {} # Allow manual trigger
 
 env:
-  RESOURCE_GROUP: longhaul-rg
-  CLUSTER_NAME: longhaul-aks
   NAMESPACE: documentdb-test-ns
   JOB_NAME: longhaul-test
+  OPERATOR_NAMESPACE: documentdb-operator
 
 jobs:
   check-longhaul:
@@ -100,3 +101,64 @@ jobs:
           fi
 
           echo "✅ Long haul test is healthy"
+
+  upgrade-if-needed:
+    runs-on: ubuntu-latest
+    needs: check-longhaul # Only upgrade if cluster is healthy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.LONGHAUL_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Check and upgrade operator
+        run: |
+          # Expected version from repo
+          EXPECTED=$(grep 'appVersion:' operator/documentdb-helm-chart/Chart.yaml | awk '{print $2}' | tr -d '"')
+
+          # Running version from cluster
+          RUNNING=$(kubectl get deployment -n ${{ env.OPERATOR_NAMESPACE }} -l app.kubernetes.io/name=documentdb-operator \
+            -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
+
+          echo "Operator: expected=$EXPECTED running=$RUNNING"
+
+          if [ -z "$RUNNING" ]; then
+            echo "::warning::Could not determine running operator version"
+          elif [ "$RUNNING" != "$EXPECTED" ]; then
+            echo "⬆️ Upgrading operator: $RUNNING → $EXPECTED"
+            helm upgrade documentdb-operator operator/documentdb-helm-chart \
+              -n ${{ env.OPERATOR_NAMESPACE }} \
+              --set image.tag="$EXPECTED" \
+              --wait --timeout 5m
+            echo "✅ Operator upgraded to $EXPECTED"
+          else
+            echo "✅ Operator is up to date ($RUNNING)"
+          fi
+
+      - name: Check and upgrade DocumentDB version
+        run: |
+          # Expected version from repo
+          EXPECTED=$(grep 'documentDbVersion:' operator/documentdb-helm-chart/values.yaml | awk '{print $2}' | tr -d '"')
+
+          # Running version from cluster
+          RUNNING=$(kubectl get documentdb documentdb-cluster -n ${{ env.NAMESPACE }} \
+            -o jsonpath='{.spec.documentDbVersion}' 2>/dev/null)
+
+          echo "DocumentDB: expected=$EXPECTED running=$RUNNING"
+
+          if [ -z "$RUNNING" ]; then
+            echo "::warning::Could not determine running DocumentDB version"
+          elif [ "$RUNNING" != "$EXPECTED" ]; then
+            echo "⬆️ Upgrading DocumentDB: $RUNNING → $EXPECTED"
+            kubectl patch documentdb documentdb-cluster -n ${{ env.NAMESPACE }} \
+              --type merge -p "{\"spec\":{\"documentDbVersion\":\"$EXPECTED\"}}"
+            echo "✅ DocumentDB version patched to $EXPECTED (rolling update in progress)"
+          else
+            echo "✅ DocumentDB is up to date ($RUNNING)"
+          fi
