@@ -3,15 +3,15 @@
 
 # Long Haul Test Monitor
 #
-# Polls the AKS cluster every 15 minutes to check the long-haul test status.
-# If the test Job has failed or the ConfigMap reports a failure, this workflow
-# fails — which sends email notifications to repo watchers.
+# Polls the AKS cluster every hour to check the long-haul test status.
+# Matches LONGHAUL_REPORT_INTERVAL (default 1h).
+# Fails if: Job failed, ConfigMap reports FAIL, or report is stale (>2h old).
 #
 name: "Long Haul Monitor"
 
 on:
   schedule:
-    - cron: "*/15 * * * *" # Every 15 minutes
+    - cron: "0 * * * *" # Every hour (matches LONGHAUL_REPORT_INTERVAL)
   workflow_dispatch: {} # Allow manual trigger
 
 env:
@@ -45,6 +45,9 @@ jobs:
           RESULT=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.result}' 2>/dev/null || echo "UNKNOWN")
           echo "result=$RESULT" >> "$GITHUB_OUTPUT"
 
+          LAST_UPDATED=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.last-updated}' 2>/dev/null || echo "")
+          echo "last_updated=$LAST_UPDATED" >> "$GITHUB_OUTPUT"
+
           REPORT=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.latest-report}' 2>/dev/null || echo "No report available")
           echo "report<<EOF" >> "$GITHUB_OUTPUT"
           echo "$REPORT" >> "$GITHUB_OUTPUT"
@@ -56,6 +59,7 @@ jobs:
           echo "Job failed condition: ${{ steps.job-check.outputs.failed_status }}"
           echo "Job active pods: ${{ steps.job-check.outputs.active }}"
           echo "Report result: ${{ steps.report-check.outputs.result }}"
+          echo "Last updated: ${{ steps.report-check.outputs.last_updated }}"
           echo ""
           echo "=== Latest Report ==="
           echo "${{ steps.report-check.outputs.report }}"
@@ -71,6 +75,18 @@ jobs:
           if [ "${{ steps.report-check.outputs.result }}" = "FAIL" ]; then
             echo "::error::Long haul test reported FAIL in ConfigMap"
             exit 1
+          fi
+
+          # Fail if report is stale (>2h old) — indicates the test may be hung
+          LAST="${{ steps.report-check.outputs.last_updated }}"
+          if [ -n "$LAST" ] && [ "$LAST" != "UNKNOWN" ]; then
+            LAST_EPOCH=$(date -d "$LAST" +%s 2>/dev/null || echo "0")
+            NOW_EPOCH=$(date +%s)
+            AGE_SECONDS=$((NOW_EPOCH - LAST_EPOCH))
+            if [ "$AGE_SECONDS" -gt 7200 ]; then
+              echo "::error::Long haul report is stale (last updated ${AGE_SECONDS}s ago, threshold 7200s). Test may be hung."
+              exit 1
+            fi
           fi
 
           # Warn if no active pods and job not found
