@@ -18,11 +18,6 @@ on:
         description: 'Image tag to deploy (e.g. sha-5c30d7b or main).'
         required: true
         default: 'main'
-      apply_manifests:
-        description: 'Also apply setup.yaml + rbac.yaml + deployment.yaml (first deploy or RBAC change).'
-        type: boolean
-        required: false
-        default: false
 
 permissions:
   contents: read
@@ -65,19 +60,18 @@ jobs:
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Resolved image: ${IMAGE}"
 
-      - name: Apply manifests (optional)
-        if: ${{ github.event.inputs.apply_manifests == 'true' }}
+      - name: Apply Deployment manifest
+        # The Deployment manifest is the only thing the deploy workflow
+        # owns. Bootstrap resources (namespace, DocumentDB CR, credentials
+        # secret, driver ServiceAccount/Role/ClusterRole) live in
+        # setup.yaml + rbac.yaml and are applied once by a cluster admin
+        # (the deployer SA is intentionally namespace-scoped and cannot
+        # create those).
         run: |
           set -euo pipefail
           OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
           TAG="${{ github.event.inputs.image_tag }}"
 
-          # setup.yaml = namespace + PVC + ServiceAccount; rbac.yaml = Role/RoleBinding
-          # for the test driver itself (not the deployer SA).
-          kubectl apply -f test/longhaul/deploy/setup.yaml
-          kubectl apply -f test/longhaul/deploy/rbac.yaml
-
-          # Substitute placeholders in deployment.yaml
           sed -e "s|__OWNER__|${OWNER_LC}|g" \
               -e "s|__IMAGE_TAG__|${TAG}|g" \
               test/longhaul/deploy/deployment.yaml | kubectl apply -f -
@@ -129,5 +123,4 @@ jobs:
             echo "| Image | \`${{ steps.img.outputs.image }}\` |"
             echo "| Namespace | \`$NAMESPACE\` |"
             echo "| Deployment | \`$DEPLOYMENT\` |"
-            echo "| apply_manifests | \`${{ github.event.inputs.apply_manifests }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
