@@ -153,7 +153,9 @@ helm upgrade --install hub-agent ./charts/hub-agent/ \
 
 # Run the script.
 chmod +x ./hack/membership/joinMC.sh
-sed -i 's/--set namespace=fleet-system/--namespace=fleet-system --create-namespace/' hack/membership/joinMC.sh
+HUB_CA=$(kubectl config view --raw -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.certificate-authority-data}")
+sed -i "s/--set namespace=fleet-system/--namespace=fleet-system --create-namespace --set config.hubCA=$HUB_CA/" hack/membership/joinMC.sh
+
 ./hack/membership/joinMC.sh  $TAG $HUB_CLUSTER $MEMBER_CLUSTER_NAMES
 popd
 
