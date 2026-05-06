@@ -485,9 +485,15 @@ ISTIO_VERSION=1.29.2
 curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_VERSION sh -
 export PATH="$PWD/istio-$ISTIO_VERSION/bin:$PATH"
 
-# 2) For each member cluster, re-apply the canonical IstioOperator spec
-#    (matches the spec installed by deploy.sh, with the new control plane version)
-for cluster in azure-documentdb aws-documentdb; do
+# 2) For *each* member cluster, re-apply the canonical IstioOperator spec
+#    (matches the spec installed by deploy.sh, with the new control plane version).
+#    Replace MEMBER_CLUSTERS with the kubectl contexts for ALL of your member
+#    clusters — for the default 3-cloud demo this is azure-documentdb,
+#    gcp-documentdb, and aws-documentdb. Leaving any member on the stale
+#    sidecar-injector will keep the failure mode on that cluster.
+MEMBER_CLUSTERS=(azure-documentdb gcp-documentdb aws-documentdb)
+index=0
+for cluster in "${MEMBER_CLUSTERS[@]}"; do
   index=$(( index + 1 ))
   istioctl --context "$cluster" x precheck
   cat <<EOF | istioctl --context "$cluster" install -y -f -
@@ -505,8 +511,14 @@ EOF
   kubectl --context "$cluster" -n istio-system rollout restart deploy istio-eastwestgateway
 done
 
-# 4) Recreate the CNPG cluster CR (operator will recreate it from the DocumentDB CR)
-kubectl --context azure-documentdb -n documentdb-preview-ns delete cluster.postgresql.cnpg.io --all
+# 4) Recreate the CNPG cluster CR on the *primary* cluster (the operator will
+#    then recreate it from the DocumentDB CR). Discover which member is
+#    primary from the DocumentDB spec rather than hard-coding it:
+PRIMARY_CLUSTER=$(kubectl --context "$HUB_CONTEXT" -n documentdb-preview-ns \
+  get documentdb documentdb-preview \
+  -o jsonpath='{.spec.clusterReplication.primary}')
+kubectl --context "$PRIMARY_CLUSTER" -n documentdb-preview-ns \
+  delete cluster.postgresql.cnpg.io --all
 ```
 
 **Verification:** Within ~30s the operator recreates the CNPG `Cluster`. The `*-initdb` Job pod should now reach `Completed`, the primary pod should run `3/3`, and the cross-cloud replica's `*-join` Job should follow shortly. `kubectl get documentdb.documentdb.io` will report `Cluster in healthy state`.
