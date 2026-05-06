@@ -1,0 +1,133 @@
+name: LONGHAUL - Deploy Test Driver to AKS
+
+# Rolls a longhaul-test image onto the long-haul AKS cluster.
+#
+# Auth: long-lived ServiceAccount-token kubeconfig stored as the
+# LONGHAUL_KUBECONFIG repo secret. Scoped to namespace
+# documentdb-test-ns via Role/RoleBinding (see
+# test/longhaul/deploy/rbac.yaml). No Azure auth on the runner.
+#
+# Manual only (workflow_dispatch). Intent is that a maintainer reviews
+# every roll. Pin to :sha-<short> for runs whose results need to be
+# correlated with a specific commit; :main is fine for quick smokes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (e.g. sha-5c30d7b or main).'
+        required: true
+        default: 'main'
+      apply_manifests:
+        description: 'Also apply setup.yaml + rbac.yaml + deployment.yaml (first deploy or RBAC change).'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  NAMESPACE: documentdb-test-ns
+  DEPLOYMENT: longhaul-test
+  CONTAINER: driver
+
+jobs:
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write kubeconfig
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$RUNNER_TEMP/.kube"
+          KCFG="$RUNNER_TEMP/.kube/config"
+          printf '%s' "${{ secrets.LONGHAUL_KUBECONFIG }}" > "$KCFG"
+          chmod 600 "$KCFG"
+          echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
+
+      - name: Verify cluster access
+        run: |
+          set -euo pipefail
+          kubectl version --client=false --output=yaml | head -20 || true
+          kubectl -n "$NAMESPACE" get all || true
+
+      - name: Compute image ref
+        id: img
+        run: |
+          set -euo pipefail
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          REPO_NAME="$(basename "${{ github.repository }}")"
+          IMAGE="ghcr.io/${OWNER_LC}/${REPO_NAME}/longhaul-test:${{ github.event.inputs.image_tag }}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved image: ${IMAGE}"
+
+      - name: Apply manifests (optional)
+        if: ${{ github.event.inputs.apply_manifests == 'true' }}
+        run: |
+          set -euo pipefail
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          TAG="${{ github.event.inputs.image_tag }}"
+
+          # setup.yaml = namespace + PVC + ServiceAccount; rbac.yaml = Role/RoleBinding
+          # for the test driver itself (not the deployer SA).
+          kubectl apply -f test/longhaul/deploy/setup.yaml
+          kubectl apply -f test/longhaul/deploy/rbac.yaml
+
+          # Substitute placeholders in deployment.yaml
+          sed -e "s|__OWNER__|${OWNER_LC}|g" \
+              -e "s|__IMAGE_TAG__|${TAG}|g" \
+              test/longhaul/deploy/deployment.yaml | kubectl apply -f -
+
+      - name: Roll image
+        run: |
+          set -euo pipefail
+          IMAGE='${{ steps.img.outputs.image }}'
+
+          # If apply_manifests was true, the Deployment already has this image,
+          # but `set image` is a no-op in that case (and emits a warning to stderr).
+          # If apply_manifests was false, this is the actual roll.
+          kubectl -n "$NAMESPACE" set image \
+            "deployment/${DEPLOYMENT}" \
+            "${CONTAINER}=${IMAGE}" \
+            --record=false || true
+
+          # Force a restart so the same tag (e.g. :main) re-pulls if image changed.
+          kubectl -n "$NAMESPACE" rollout restart "deployment/${DEPLOYMENT}"
+
+      - name: Wait for rollout
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" rollout status \
+            "deployment/${DEPLOYMENT}" --timeout=5m
+
+      - name: Pod status
+        if: always()
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" get deployment "${DEPLOYMENT}" -o wide || true
+          kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/name=longhaul-test -o wide || true
+          POD="$(kubectl -n "$NAMESPACE" get pod -l app.kubernetes.io/name=longhaul-test \
+                  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+          if [ -n "$POD" ]; then
+            echo "::group::Recent driver logs ($POD)"
+            kubectl -n "$NAMESPACE" logs "$POD" --tail=80 || true
+            echo "::endgroup::"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Long-haul deploy"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Image | \`${{ steps.img.outputs.image }}\` |"
+            echo "| Namespace | \`$NAMESPACE\` |"
+            echo "| Deployment | \`$DEPLOYMENT\` |"
+            echo "| apply_manifests | \`${{ github.event.inputs.apply_manifests }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

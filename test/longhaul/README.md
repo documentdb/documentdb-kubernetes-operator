@@ -19,7 +19,7 @@ test/longhaul/
 │   └── main.go           # Standalone binary entry point
 ├── deploy/
 │   ├── setup.yaml        # Namespace + credentials + DocumentDB CR (bootstrap)
-│   ├── job.yaml          # Kubernetes Job + ConfigMap manifest
+│   ├── deployment.yaml   # Kubernetes Deployment + ConfigMap manifest (templated)
 │   └── rbac.yaml         # ServiceAccount + RBAC roles
 ├── config/
 │   ├── config.go         # Config struct, env var loading, validation
@@ -52,6 +52,15 @@ test/longhaul/
 - `kubectl` configured to access the cluster
 - Go 1.25+
 
+> **HA topology required for upgrade tests.** The `upgrade-documentdb` operation
+> auto-skips when `spec.instancesPerNode < 2` because a single-instance cluster
+> has no standby to absorb writes during the rolling restart — the upgrade
+> would produce real (true-positive) downtime that no operator change can
+> prevent. Run with `instancesPerNode: 2` (or `3`) to exercise the HA upgrade
+> path. The skip is "free": no cooldown is consumed, and the next 10s scheduler
+> tick re-evaluates eligibility, so scaling up at any point makes the upgrade
+> immediately schedulable.
+
 ### Run the Config Unit Tests
 
 These are fast and require no cluster:
@@ -75,15 +84,22 @@ LONGHAUL_MAX_DURATION=5m \
 go run ./cmd/longhaul/
 ```
 
-### Deploy as Kubernetes Job (Recommended for Real Runs)
+### Deploy as Kubernetes Deployment (Recommended for Real Runs)
 
 This is the intended deployment model. The test runs inside the cluster with direct
 access to the DocumentDB service (no port-forward needed).
 
+**Production path (CI):** the `LONGHAUL - Build Test Driver Image` workflow builds
+the image to GHCR; the `LONGHAUL - Deploy Test Driver to AKS` workflow rolls it
+onto the cluster using a long-lived ServiceAccount-token kubeconfig stored in the
+`LONGHAUL_KUBECONFIG` repo secret. Trigger both via the Actions tab.
+
+**Manual path (one-off / local cluster):**
+
 ```bash
 cd test/longhaul
 
-# 1. Build and push the container image
+# 1. Build and push the container image (or use the GHCR image from CI).
 docker build -t <your-registry>/longhaul-test:latest -f Dockerfile .
 docker push <your-registry>/longhaul-test:latest
 
@@ -92,22 +108,32 @@ kubectl create secret generic longhaul-mongo-credentials \
   --from-literal=uri='mongodb://docdb:YourPass@documentdb-service-documentdb-cluster.documentdb-test-ns.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true' \
   -n documentdb-test-ns
 
-# 3. Deploy RBAC and Job
+# 3. Deploy RBAC and Deployment. deployment.yaml has placeholders
+#    __OWNER__ and __IMAGE_TAG__ that are normally substituted by the
+#    deploy workflow; for a manual apply, sed them yourself or edit
+#    the file in place.
+kubectl apply -f deploy/setup.yaml
 kubectl apply -f deploy/rbac.yaml
-kubectl apply -f deploy/job.yaml
+sed -e 's|__OWNER__|<your-registry>|g' \
+    -e 's|__IMAGE_TAG__|latest|g' \
+    deploy/deployment.yaml | kubectl apply -f -
 
 # 4. Monitor progress
-kubectl logs -f job/longhaul-test -n documentdb-test-ns
+kubectl logs -f deployment/longhaul-test -n documentdb-test-ns
 
-# 5. Check result
-kubectl get job longhaul-test -n documentdb-test-ns
+# 5. Check status (Deployment auto-restarts pods on crash, so use
+#    the report ConfigMap or alerts as the source of truth for "did
+#    the test pass?", not the pod status alone).
+kubectl get deployment longhaul-test -n documentdb-test-ns
+kubectl get configmap longhaul-report -n documentdb-test-ns -o yaml
 ```
 
-To re-run, delete the old Job first:
+To roll a new image (e.g. after a code change rebuilt by CI):
 
 ```bash
-kubectl delete job longhaul-test -n documentdb-test-ns
-kubectl apply -f deploy/job.yaml
+kubectl -n documentdb-test-ns set image deployment/longhaul-test \
+  driver=ghcr.io/<owner>/documentdb-kubernetes-operator/longhaul-test:sha-abc1234
+kubectl -n documentdb-test-ns rollout status deployment/longhaul-test
 ```
 
 ## Configuration
@@ -124,8 +150,8 @@ All configuration is via environment variables.
 | `LONGHAUL_NUM_VERIFIERS` | No | `2` | Number of concurrent verifiers. |
 | `LONGHAUL_OP_COOLDOWN` | No | `5m` | Cooldown between management operations. |
 | `LONGHAUL_RECOVERY_TIMEOUT` | No | `5m` | Max wait for cluster recovery after an operation. |
-| `LONGHAUL_MIN_REPLICAS` | No | `1` | Minimum replicas for scale-down operations. |
-| `LONGHAUL_MAX_REPLICAS` | No | `3` | Maximum replicas for scale-up operations. |
+| `LONGHAUL_MIN_INSTANCES` | No | `1` | Minimum `spec.instancesPerNode` for scale-down operations (CRD lower bound: 1). |
+| `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
 
 ## CI Safety

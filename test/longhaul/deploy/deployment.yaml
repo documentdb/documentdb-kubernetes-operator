@@ -1,0 +1,95 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Long Haul Test - Kubernetes Deployment
+#
+# Why a Deployment (not a Job)?
+#   A Job's pod spec is immutable, so rolling a new image requires
+#   delete-and-recreate. Using Deployment(replicas=1) lets the deploy
+#   workflow do `kubectl set image deployment/longhaul-test ...` for
+#   one-line image rolls. The driver itself is restart-safe: it persists
+#   journal/checkpoint state to PVC and resumes from it.
+#
+# Strategy: Recreate (single-replica stateful driver — never run two
+# pods concurrently against the same PVC).
+#
+# Failure semantics: on critical failure (data loss, policy violation)
+# the driver exits non-zero. The Deployment auto-restarts the pod, which
+# gives MTBF data; the alert workflow polls the report ConfigMap and
+# pages on incident-count thresholds.
+#
+# Image refs are templated; the longhaul-deploy workflow substitutes:
+#   __OWNER__      -> lowercased ${{ github.repository_owner }}
+#   __IMAGE_TAG__  -> input.image_tag (e.g. sha-5c30d7b or main)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: longhaul-test-config
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+data:
+  # Test duration. "0s" = run-until-failure (the design default for the
+  # long-haul cluster). Override to a finite value (e.g. "30m", "3h") only
+  # for short ad-hoc / smoke runs.
+  LONGHAUL_MAX_DURATION: "0s"
+  # Target DocumentDB cluster.
+  LONGHAUL_NAMESPACE: "documentdb-test-ns"
+  LONGHAUL_CLUSTER_NAME: "documentdb-cluster"
+  # Writer/verifier counts.
+  LONGHAUL_NUM_WRITERS: "5"
+  LONGHAUL_NUM_VERIFIERS: "2"
+  # Operation scheduling.
+  LONGHAUL_OP_COOLDOWN: "10m"
+  LONGHAUL_RECOVERY_TIMEOUT: "5m"
+  # Replica range for scale operations.
+  # Bounds for spec.instancesPerNode (CRD allows 1-3). Default Min=1, Max=3
+  # exercises full scale-up/down cycle. Set Min=Max to disable scale ops.
+  LONGHAUL_MIN_INSTANCES: "1"
+  LONGHAUL_MAX_INSTANCES: "3"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhaul-test
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: longhaul-test
+      app.kubernetes.io/component: testing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: longhaul-test
+        app.kubernetes.io/component: testing
+    spec:
+      serviceAccountName: longhaul-test
+      restartPolicy: Always
+      containers:
+        - name: driver
+          image: ghcr.io/__OWNER__/documentdb-kubernetes-operator/longhaul-test:__IMAGE_TAG__
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: longhaul-test-config
+          env:
+            - name: LONGHAUL_MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: longhaul-mongo-credentials
+                  key: uri
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
