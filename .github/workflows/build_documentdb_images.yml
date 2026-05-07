@@ -25,7 +25,8 @@ permissions:
 env:
   DEFAULT_DOCUMENTDB_VERSION: '0.109.0'
   DOCUMENTDB_RELEASE_REPO: documentdb/documentdb
-  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
+  # Use hossain-rayhan's fork for gateway source (contains IPv4 fix for AKS Edge)
+  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/hossain-rayhan/documentdb/documentdb-local
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -57,7 +58,8 @@ jobs:
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
-        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
+        # Use 'latest' tag for hossain-rayhan's fork (contains IPv4 fix)
+        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:latest"
         echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
         echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
         echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
