@@ -32,6 +32,7 @@ type UpgradeDocumentDB struct {
 	client    monitor.ClusterClient
 	clientset kubernetes.Interface
 	healthMon *monitor.HealthMonitor
+	j         *journal.Journal
 	namespace string
 	recovery  time.Duration
 }
@@ -41,6 +42,7 @@ func NewUpgradeDocumentDB(
 	client monitor.ClusterClient,
 	clientset kubernetes.Interface,
 	health *monitor.HealthMonitor,
+	j *journal.Journal,
 	namespace string,
 	recovery time.Duration,
 ) *UpgradeDocumentDB {
@@ -48,6 +50,7 @@ func NewUpgradeDocumentDB(
 		client:    client,
 		clientset: clientset,
 		healthMon: health,
+		j:         j,
 		namespace: namespace,
 		recovery:  recovery,
 	}
@@ -137,6 +140,13 @@ func (u *UpgradeDocumentDB) waitForImage(ctx context.Context, desired, previous 
 		case <-ticker.C:
 			tag, err := u.client.GetCurrentDocumentDBImageTag(ctx)
 			if err != nil {
+				// Transient read errors during a rolling upgrade are
+				// expected (apiserver throttling, brief CR webhook
+				// blips, etc.) — retry on the next tick rather than
+				// fail the whole operation. But surface them to the
+				// journal so a sustained read outage is visible in
+				// the report instead of being silently dropped.
+				u.j.Warn("upgrade", fmt.Sprintf("status read error (will retry): %v", err))
 				continue
 			}
 			if tag == desired {

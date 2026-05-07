@@ -121,7 +121,7 @@ func run(cfg config.Config) int {
 	ops := []operations.Operation{
 		operations.NewScaleUp(clusterClient, healthMon, cfg.MaxInstances, cfg.RecoveryTimeout),
 		operations.NewScaleDown(clusterClient, healthMon, cfg.MinInstances, cfg.RecoveryTimeout),
-		operations.NewUpgradeDocumentDB(clusterClient, k8sClientset, healthMon, cfg.Namespace, cfg.RecoveryTimeout),
+		operations.NewUpgradeDocumentDB(clusterClient, k8sClientset, healthMon, j, cfg.Namespace, cfg.RecoveryTimeout),
 	}
 
 	// Start operation scheduler.

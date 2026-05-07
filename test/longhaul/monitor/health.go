@@ -21,13 +21,12 @@ const (
 
 // ClusterHealth represents the observed health of the cluster at a point in time.
 type ClusterHealth struct {
-	Timestamp     time.Time
-	AllPodsReady  bool
-	ReadyPods     int
-	TotalPods     int
-	CRReady       bool
-	RestartCount  int32
-	WritesHealthy bool
+	Timestamp    time.Time
+	AllPodsReady bool
+	ReadyPods    int
+	TotalPods    int
+	CRReady      bool
+	RestartCount int32
 }
 
 // ClusterClient is the interface for querying cluster state.

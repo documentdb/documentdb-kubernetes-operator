@@ -59,6 +59,15 @@ func (w *DisruptionWindow) Duration() time.Duration {
 }
 
 // ExceededPolicy returns true if the window has violated its outage policy.
+//
+// TODO(longhaul, #220): also enforce Policy.AllowedDowntime here. Today
+// AllowedDowntime is set by every operation's OutagePolicy() but never
+// consulted — only the (always-set) MustRecoverWithin and AllowedWriteFailures
+// budgets are actually checked. To enforce AllowedDowntime, the journal needs
+// to start tracking the actual write-unavailable interval inside the window
+// (e.g., longest contiguous run of write failures or first-failure to
+// first-recovery). That requires changes in writer.go to feed per-write
+// timestamps into the active window, so it's a separate change.
 func (w *DisruptionWindow) ExceededPolicy() bool {
 	if w.Duration() > w.Policy.MustRecoverWithin {
 		return true

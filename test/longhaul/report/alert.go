@@ -6,6 +6,7 @@ package report
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // isGitHubActions returns true when running inside GitHub Actions.
@@ -32,12 +33,12 @@ func EmitAnnotation(s Summary) {
 	case ResultPass:
 		// For intermediate checkpoints, emit a notice.
 		fmt.Printf("::notice title=Long Haul Checkpoint::PASS after %s — %d writes, %d ops, %d gaps\n",
-			s.Duration.Round(1), s.Metrics.WriteAttempted, s.OpsExecuted, s.Metrics.GapsDetected)
+			s.Duration.Round(time.Second), s.Metrics.WriteAttempted, s.OpsExecuted, s.Metrics.GapsDetected)
 	}
 
 	// Emit warning for memory leak regardless of result.
 	if s.LeakAnalysis.HasLeak {
 		fmt.Printf("::warning title=Memory Leak Suspected::%.2f MB/hour over %s (%d samples)\n",
-			s.LeakAnalysis.MemorySlopeMB, s.LeakAnalysis.Duration.Round(1), s.LeakAnalysis.SampleCount)
+			s.LeakAnalysis.MemorySlopeMB, s.LeakAnalysis.Duration.Round(time.Second), s.LeakAnalysis.SampleCount)
 	}
 }
