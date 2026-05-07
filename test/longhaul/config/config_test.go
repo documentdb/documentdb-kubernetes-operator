@@ -28,10 +28,20 @@ var _ = Describe("Config", func() {
 	})
 
 	Describe("LoadFromEnv", func() {
+		// Clear every LONGHAUL_* env var before each spec so tests do not pick up
+		// values from the developer's shell (Copilot review feedback on PR #348).
+		BeforeEach(func() {
+			for _, k := range []string{
+				EnvEnabled, EnvMaxDuration, EnvNamespace, EnvClusterName,
+				EnvMongoURI, EnvNumWriters, EnvNumVerifiers,
+				EnvOpCooldown, EnvRecoveryTimeout, EnvSteadyStateWait,
+				EnvMinReplicas, EnvMaxReplicas, EnvReportInterval,
+			} {
+				GinkgoT().Setenv(k, "")
+			}
+		})
+
 		It("uses defaults when no env vars set", func() {
-			GinkgoT().Setenv(EnvMaxDuration, "")
-			GinkgoT().Setenv(EnvNamespace, "")
-			GinkgoT().Setenv(EnvClusterName, "")
 			cfg, err := LoadFromEnv()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.MaxDuration).To(Equal(30 * time.Minute))
