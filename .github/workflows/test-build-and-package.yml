@@ -9,9 +9,9 @@ on:
         default: '0.1.0'
         type: string
       documentdb_ref:
-        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
+        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages. Empty = derive from chart documentDbVersion.'
         required: false
-        default: 'main'
+        default: ''
         type: string
     outputs:
       image_tag:
@@ -170,13 +170,45 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       DOCUMENTDB_REPO: documentdb/documentdb
-      DOCUMENTDB_REPO_REF: ${{ inputs.documentdb_ref || 'main' }}
     steps:
+    - name: Checkout operator repo (read chart documentDbVersion)
+      uses: actions/checkout@v4
+      with:
+        path: operator-checkout
+
+    - name: Determine DocumentDB ref
+      # Pin the documentdb source build to the chart's default documentDbVersion
+      # (formatted as the upstream tag, e.g. 0.109.0 -> v0.109-0). This keeps the
+      # CI build in lock-step with the version the operator chart actually ships,
+      # and avoids picking up unstable upstream main where regression tests can
+      # flip success/fail per SHA. Callers can still override via the
+      # documentdb_ref input.
+      id: dbref
+      shell: bash
+      run: |
+        set -euo pipefail
+        INPUT_REF="${{ inputs.documentdb_ref }}"
+        if [[ -n "$INPUT_REF" ]]; then
+          REF="$INPUT_REF"
+          echo "Using caller-provided documentdb_ref: $REF"
+        else
+          VALUES_FILE="operator-checkout/operator/documentdb-helm-chart/values.yaml"
+          VERSION=$(grep -E '^documentDbVersion:' "$VALUES_FILE" \
+            | sed -E 's/^documentDbVersion:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: failed to parse documentDbVersion from $VALUES_FILE (got '$VERSION')" >&2
+            exit 1
+          fi
+          REF="v${VERSION%.*}-${VERSION##*.}"
+          echo "Derived documentdb ref from chart documentDbVersion=$VERSION -> $REF"
+        fi
+        echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
     - name: Checkout documentdb source
       uses: actions/checkout@v4
       with:
         repository: ${{ env.DOCUMENTDB_REPO }}
-        ref: ${{ env.DOCUMENTDB_REPO_REF }}
+        ref: ${{ steps.dbref.outputs.ref }}
 
     - name: Build extension deb (PG18)
       run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
