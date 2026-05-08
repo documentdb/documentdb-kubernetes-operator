@@ -50,6 +50,8 @@ jobs:
     - name: Probe documentdb + gateway images
       id: probe
       shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         set -euo pipefail
         # If caller pinned a specific upstream documentdb_ref, always build from
@@ -73,19 +75,21 @@ jobs:
         fi
 
         OWNER="${{ github.repository_owner }}"
+        # Use the GitHub Packages REST API (works with the workflow's
+        # GITHUB_TOKEN — no anonymous registry token dance required).
+        # Package names are URL-encoded: documentdb-kubernetes-operator/<img>
+        # -> documentdb-kubernetes-operator%2F<img>.
         probe_image() {
           local img="$1"
-          local tok
-          tok=$(curl -sf "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/documentdb-kubernetes-operator/${img}:pull" \
-            | jq -r '.token')
-          if [[ -z "$tok" || "$tok" == "null" ]]; then
-            echo "  ! could not get pull token for ${img} (package may not exist or be public)"
-            return 1
-          fi
-          curl -sf -o /dev/null \
-            -H "Authorization: Bearer $tok" \
-            -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json" \
-            "https://ghcr.io/v2/${OWNER}/documentdb-kubernetes-operator/${img}/manifests/${VERSION}"
+          local pkg="documentdb-kubernetes-operator%2F${img}"
+          local count
+          # Try org endpoint first, fall back to user endpoint.
+          count=$(gh api "/orgs/${OWNER}/packages/container/${pkg}/versions" \
+              --jq "[.[] | select(.metadata.container.tags[]? == \"${VERSION}\")] | length" 2>/dev/null) \
+            || count=$(gh api "/users/${OWNER}/packages/container/${pkg}/versions" \
+              --jq "[.[] | select(.metadata.container.tags[]? == \"${VERSION}\")] | length" 2>/dev/null) \
+            || count=0
+          [[ "${count:-0}" -gt 0 ]]
         }
 
         DOC_OK=0; GW_OK=0
