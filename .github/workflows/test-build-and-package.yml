@@ -216,7 +216,20 @@ jobs:
     - name: Build gateway deb
       # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
       # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
-      run: ./packaging/gateway/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+      # The script was relocated upstream from ./packaging/build_gateway_packages.sh (older
+      # tags, e.g. v0.109-0) to ./packaging/gateway/build_gateway_packages.sh (main).
+      # Probe for either path so this step works against both the chart-pinned tag and main.
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -x ./packaging/gateway/build_gateway_packages.sh ]]; then
+          ./packaging/gateway/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+        elif [[ -x ./packaging/build_gateway_packages.sh ]]; then
+          ./packaging/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+        else
+          echo "ERROR: gateway packaging script not found at packaging/gateway/build_gateway_packages.sh or packaging/build_gateway_packages.sh" >&2
+          exit 1
+        fi
 
     - name: Upload packages
       uses: actions/upload-artifact@v4
