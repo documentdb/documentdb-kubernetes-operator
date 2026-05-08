@@ -1,6 +1,8 @@
 module github.com/documentdb/documentdb-operator
 
-go 1.25.10
+go 1.25.0
+
+toolchain go1.25.10
 
 godebug default=go1.23
 

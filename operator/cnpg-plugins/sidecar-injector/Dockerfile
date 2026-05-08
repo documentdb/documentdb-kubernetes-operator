@@ -8,11 +8,6 @@ ARG ARCH
 FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/go/microsoft/golang:1.25-azurelinux3.0 AS builder
 
 
-# Allow Go to auto-download a newer toolchain when go.mod requires a version
-# higher than what the base image ships (e.g. for security patches).
-ENV GOTOOLCHAIN=auto
-ENV MS_GOTOOLCHAIN_ALLOW_NON_LOCAL=1
-
 # Cache the dependencies
 WORKDIR /app
 COPY go.mod go.sum /app/
