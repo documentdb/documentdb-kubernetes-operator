@@ -667,6 +667,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [consolidate-images]
+    if: always() && needs.consolidate-images.result == 'success'
     strategy:
       matrix:
         arch: [amd64, arm64]
