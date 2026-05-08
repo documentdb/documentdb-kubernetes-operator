@@ -22,6 +22,7 @@ on:
       - 'operator/src/**'
       - 'operator/documentdb-helm-chart/**'
       - '.github/workflows/test-e2e.yml'
+      - '.github/workflows/test-build-and-package.yml'
       - '.github/actions/**'
   workflow_dispatch:
     inputs:
