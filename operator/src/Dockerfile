@@ -10,6 +10,7 @@ FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/oss/
 # Allow Go to auto-download a newer toolchain when go.mod requires a version
 # higher than what the base image ships (e.g. for security patches).
 ENV GOTOOLCHAIN=auto
+ENV MS_GOTOOLCHAIN_ALLOW_NON_LOCAL=1
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
