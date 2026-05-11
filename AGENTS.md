@@ -59,7 +59,7 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
 | Component | Version | Notes |
 |-----------|---------|-------|
 | Kubernetes | 1.30+ | Based on k8s.io/api v0.34.2 |
-| CloudNative-PG | 1.28.0 | Helm chart uses CNPG chart 0.27.0 |
+| CloudNative-PG | 1.29.1 | Helm chart uses CNPG chart 0.28.1 |
 | cert-manager | 1.19.2 | Required for TLS certificate management |
 | controller-runtime | 0.22.4 | Kubebuilder framework |
 | Go | 1.25.0 | See `operator/src/go.mod` |
