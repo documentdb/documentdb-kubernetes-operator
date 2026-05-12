@@ -5,118 +5,95 @@ package workload
 
 import (
 	"sync"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestNewMetrics_StartTimeRecent(t *testing.T) {
-	before := time.Now()
-	m := NewMetrics()
-	after := time.Now()
-	if m.StartTime.Before(before) || m.StartTime.After(after) {
-		t.Errorf("StartTime=%v not within [%v, %v]", m.StartTime, before, after)
-	}
-}
+var _ = Describe("Metrics", func() {
+	It("NewMetrics records StartTime in the present", func() {
+		before := time.Now()
+		m := NewMetrics()
+		after := time.Now()
+		Expect(m.StartTime).To(BeTemporally(">=", before))
+		Expect(m.StartTime).To(BeTemporally("<=", after))
+	})
 
-func TestSnapshot_ReadsAllCounters(t *testing.T) {
-	m := NewMetrics()
-	m.WriteAttempted.Store(10)
-	m.WriteAcknowledged.Store(8)
-	m.WriteFailed.Store(2)
-	m.VerifyPasses.Store(3)
-	m.VerifyGapsDetected.Store(1)
-	m.ChecksumErrors.Store(0)
+	It("Snapshot reads all counters and reports a positive elapsed", func() {
+		m := NewMetrics()
+		m.WriteAttempted.Store(10)
+		m.WriteAcknowledged.Store(8)
+		m.WriteFailed.Store(2)
+		m.VerifyPasses.Store(3)
+		m.VerifyGapsDetected.Store(1)
+		m.ChecksumErrors.Store(0)
 
-	time.Sleep(2 * time.Millisecond)
-	s := m.Snapshot()
-	if s.WriteAttempted != 10 || s.WriteAcknowledged != 8 || s.WriteFailed != 2 {
-		t.Errorf("write counters wrong: %+v", s)
-	}
-	if s.VerifyPasses != 3 || s.GapsDetected != 1 || s.ChecksumErrors != 0 {
-		t.Errorf("verify counters wrong: %+v", s)
-	}
-	if s.Elapsed <= 0 {
-		t.Errorf("Elapsed=%v, want positive", s.Elapsed)
-	}
-}
+		time.Sleep(2 * time.Millisecond)
+		s := m.Snapshot()
+		Expect(s.WriteAttempted).To(Equal(int64(10)))
+		Expect(s.WriteAcknowledged).To(Equal(int64(8)))
+		Expect(s.WriteFailed).To(Equal(int64(2)))
+		Expect(s.VerifyPasses).To(Equal(int64(3)))
+		Expect(s.GapsDetected).To(Equal(int64(1)))
+		Expect(s.ChecksumErrors).To(Equal(int64(0)))
+		Expect(s.Elapsed).To(BeNumerically(">", 0))
+	})
 
-func TestWriteSuccessRate(t *testing.T) {
-	cases := []struct {
-		name      string
-		attempted int64
-		acked     int64
-		want      float64
-	}{
-		{"no attempts returns 1.0", 0, 0, 1.0},
-		{"all succeeded", 100, 100, 1.0},
-		{"none succeeded", 100, 0, 0.0},
-		{"half succeeded", 100, 50, 0.5},
-		{"acked exceeds attempted (sanity)", 10, 12, 1.2}, // not clamped; document behavior
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := MetricsSnapshot{WriteAttempted: tc.attempted, WriteAcknowledged: tc.acked}
-			if got := s.WriteSuccessRate(); got != tc.want {
-				t.Errorf("WriteSuccessRate=%v, want %v", got, tc.want)
-			}
-		})
-	}
-}
+	DescribeTable("WriteSuccessRate",
+		func(attempted, acked int64, want float64) {
+			s := MetricsSnapshot{WriteAttempted: attempted, WriteAcknowledged: acked}
+			Expect(s.WriteSuccessRate()).To(Equal(want))
+		},
+		Entry("no attempts returns 1.0", int64(0), int64(0), 1.0),
+		Entry("all succeeded", int64(100), int64(100), 1.0),
+		Entry("none succeeded", int64(100), int64(0), 0.0),
+		Entry("half succeeded", int64(100), int64(50), 0.5),
+		Entry("acked exceeds attempted (sanity, not clamped)", int64(10), int64(12), 1.2),
+	)
 
-func TestHasDataLoss(t *testing.T) {
-	cases := []struct {
-		name      string
-		gaps      int64
-		checksums int64
-		want      bool
-	}{
-		{"clean", 0, 0, false},
-		{"one gap", 1, 0, true},
-		{"one checksum mismatch", 0, 1, true},
-		{"both", 5, 7, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			s := MetricsSnapshot{GapsDetected: tc.gaps, ChecksumErrors: tc.checksums}
-			if got := s.HasDataLoss(); got != tc.want {
-				t.Errorf("HasDataLoss=%v, want %v", got, tc.want)
-			}
-		})
-	}
-}
+	DescribeTable("HasDataLoss",
+		func(gaps, checksums int64, want bool) {
+			s := MetricsSnapshot{GapsDetected: gaps, ChecksumErrors: checksums}
+			Expect(s.HasDataLoss()).To(Equal(want))
+		},
+		Entry("clean", int64(0), int64(0), false),
+		Entry("one gap", int64(1), int64(0), true),
+		Entry("one checksum mismatch", int64(0), int64(1), true),
+		Entry("both", int64(5), int64(7), true),
+	)
 
-func TestMetrics_ConcurrentAtomicSafety(t *testing.T) {
-	// All counter mutations happen across goroutines in production
-	// (writer + verifier + scheduler). Verify the atomic.Int64 fields
-	// don't race under concurrent increment + Snapshot reads.
-	m := NewMetrics()
-	const writers = 8
-	const perWriter = 1000
+	It("counters are atomic-safe under concurrent increment + Snapshot", func() {
+		// All counter mutations happen across goroutines in production
+		// (writer + verifier + scheduler). Verify the atomic.Int64 fields
+		// don't race under concurrent increment + Snapshot reads.
+		m := NewMetrics()
+		const writers = 8
+		const perWriter = 1000
 
-	var wg sync.WaitGroup
-	wg.Add(writers + 1)
+		var wg sync.WaitGroup
+		wg.Add(writers + 1)
 
-	// concurrent writers
-	for i := 0; i < writers; i++ {
+		for i := 0; i < writers; i++ {
+			go func() {
+				defer wg.Done()
+				for j := 0; j < perWriter; j++ {
+					m.WriteAttempted.Add(1)
+					m.WriteAcknowledged.Add(1)
+				}
+			}()
+		}
 		go func() {
 			defer wg.Done()
-			for j := 0; j < perWriter; j++ {
-				m.WriteAttempted.Add(1)
-				m.WriteAcknowledged.Add(1)
+			for i := 0; i < 1000; i++ {
+				_ = m.Snapshot()
 			}
 		}()
-	}
-	// concurrent reader
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000; i++ {
-			_ = m.Snapshot()
-		}
-	}()
-	wg.Wait()
+		wg.Wait()
 
-	s := m.Snapshot()
-	if want := int64(writers * perWriter); s.WriteAttempted != want || s.WriteAcknowledged != want {
-		t.Errorf("counters lost increments: attempted=%d acked=%d want=%d", s.WriteAttempted, s.WriteAcknowledged, want)
-	}
-}
+		s := m.Snapshot()
+		want := int64(writers * perWriter)
+		Expect(s.WriteAttempted).To(Equal(want))
+		Expect(s.WriteAcknowledged).To(Equal(want))
+	})
+})

@@ -6,8 +6,10 @@ package operations
 import (
 	"context"
 	"errors"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 )
@@ -21,8 +23,8 @@ type fakeOp struct {
 	err       error
 }
 
-func (f *fakeOp) Name() string  { return f.name }
-func (f *fakeOp) Weight() int   { return f.weight }
+func (f *fakeOp) Name() string { return f.name }
+func (f *fakeOp) Weight() int  { return f.weight }
 func (f *fakeOp) Precondition(_ context.Context) (bool, string) {
 	if f.available {
 		return true, ""
@@ -43,90 +45,79 @@ func newSchedulerForTest(ops ...Operation) *Scheduler {
 	}
 }
 
-func TestScheduler_SelectOperation_NoCandidates(t *testing.T) {
-	s := newSchedulerForTest(&fakeOp{name: "a", weight: 1, available: false})
-	if got := s.selectOperation(context.Background()); got != nil {
-		t.Errorf("selectOperation returned %v, want nil when no candidates pass precondition", got)
-	}
-}
+var _ = Describe("Scheduler", func() {
+	Describe("selectOperation", func() {
+		It("returns nil when no candidates pass precondition", func() {
+			s := newSchedulerForTest(&fakeOp{name: "a", weight: 1, available: false})
+			Expect(s.selectOperation(context.Background())).To(BeNil())
+		})
 
-func TestScheduler_SelectOperation_ZeroWeightSkipped(t *testing.T) {
-	a := &fakeOp{name: "a", weight: 0, available: true}
-	s := newSchedulerForTest(a)
-	if got := s.selectOperation(context.Background()); got != nil {
-		t.Errorf("selectOperation returned %v, want nil when total weight is zero", got)
-	}
-}
+		It("returns nil when total weight is zero", func() {
+			a := &fakeOp{name: "a", weight: 0, available: true}
+			s := newSchedulerForTest(a)
+			Expect(s.selectOperation(context.Background())).To(BeNil())
+		})
 
-func TestScheduler_SelectOperation_OnlyEligibleReturned(t *testing.T) {
-	a := &fakeOp{name: "a", weight: 1, available: false}
-	b := &fakeOp{name: "b", weight: 1, available: true}
-	s := newSchedulerForTest(a, b)
-	for i := 0; i < 50; i++ {
-		got := s.selectOperation(context.Background())
-		if got == nil || got.Name() != "b" {
-			t.Fatalf("expected only b to be selected, got %v on iter %d", got, i)
-		}
-	}
-}
+		It("picks only operations whose precondition passes", func() {
+			a := &fakeOp{name: "a", weight: 1, available: false}
+			b := &fakeOp{name: "b", weight: 1, available: true}
+			s := newSchedulerForTest(a, b)
+			for i := 0; i < 50; i++ {
+				got := s.selectOperation(context.Background())
+				Expect(got).NotTo(BeNil(), "iter %d", i)
+				Expect(got.Name()).To(Equal("b"))
+			}
+		})
 
-func TestScheduler_SelectOperation_WeightedDistribution(t *testing.T) {
-	// a:weight=1, b:weight=9 -> b should be selected ~90% of the time.
-	a := &fakeOp{name: "a", weight: 1, available: true}
-	b := &fakeOp{name: "b", weight: 9, available: true}
-	s := newSchedulerForTest(a, b)
+		It("respects relative weights (a:1, b:9 -> b ~ 90%)", func() {
+			a := &fakeOp{name: "a", weight: 1, available: true}
+			b := &fakeOp{name: "b", weight: 9, available: true}
+			s := newSchedulerForTest(a, b)
 
-	const trials = 2000
-	bCount := 0
-	for i := 0; i < trials; i++ {
-		if s.selectOperation(context.Background()).Name() == "b" {
-			bCount++
-		}
-	}
-	// Expected 0.9 * 2000 = 1800; allow generous ±10% (180) for randomness.
-	if bCount < 1620 || bCount > 1980 {
-		t.Errorf("weighted selection skewed: b=%d/%d (want ~1800)", bCount, trials)
-	}
-}
+			const trials = 2000
+			bCount := 0
+			for i := 0; i < trials; i++ {
+				if s.selectOperation(context.Background()).Name() == "b" {
+					bCount++
+				}
+			}
+			// Expected 1800; allow generous +/-10% (180) for randomness.
+			Expect(bCount).To(BeNumerically(">=", 1620))
+			Expect(bCount).To(BeNumerically("<=", 1980))
+		})
+	})
 
-func TestScheduler_ExecuteOpOpensAndClosesWindow(t *testing.T) {
-	op := &fakeOp{name: "op", weight: 1, available: true}
-	s := newSchedulerForTest(op)
-	s.executeOp(context.Background(), op)
-	if op.executed != 1 {
-		t.Errorf("Execute called %d times, want 1", op.executed)
-	}
-	if s.journal.ActiveWindow() != nil {
-		t.Error("expected window to be closed after executeOp")
-	}
-	if got := s.journal.DisruptionWindows(); len(got) != 1 || got[0].OperationName != "op" {
-		t.Errorf("expected one closed window for 'op', got %+v", got)
-	}
-}
+	Describe("executeOp", func() {
+		It("opens and closes a disruption window around the call", func() {
+			op := &fakeOp{name: "op", weight: 1, available: true}
+			s := newSchedulerForTest(op)
+			s.executeOp(context.Background(), op)
+			Expect(op.executed).To(Equal(1))
+			Expect(s.journal.ActiveWindow()).To(BeNil())
+			closed := s.journal.DisruptionWindows()
+			Expect(closed).To(HaveLen(1))
+			Expect(closed[0].OperationName).To(Equal("op"))
+		})
 
-func TestScheduler_ExecuteOpRecordsErrorEvent(t *testing.T) {
-	op := &fakeOp{name: "boom", weight: 1, available: true, err: errors.New("kaboom")}
-	s := newSchedulerForTest(op)
-	s.executeOp(context.Background(), op)
+		It("records an ERROR event when Execute fails", func() {
+			op := &fakeOp{name: "boom", weight: 1, available: true, err: errors.New("kaboom")}
+			s := newSchedulerForTest(op)
+			s.executeOp(context.Background(), op)
 
-	var sawError bool
-	for _, e := range s.journal.Events() {
-		if e.Level == journal.LevelError && e.Component == "scheduler" {
-			sawError = true
-		}
-	}
-	if !sawError {
-		t.Error("expected scheduler ERROR event on Execute failure")
-	}
-}
+			var sawError bool
+			for _, e := range s.journal.Events() {
+				if e.Level == journal.LevelError && e.Component == "scheduler" {
+					sawError = true
+				}
+			}
+			Expect(sawError).To(BeTrue(), "expected scheduler ERROR event on Execute failure")
+		})
+	})
 
-func TestScheduler_OpsExecutedCounter(t *testing.T) {
-	s := newSchedulerForTest()
-	if got := s.OpsExecuted(); got != 0 {
-		t.Errorf("OpsExecuted() = %d on new scheduler, want 0", got)
-	}
-	s.opsExecuted = 7
-	if got := s.OpsExecuted(); got != 7 {
-		t.Errorf("OpsExecuted() = %d, want 7", got)
-	}
-}
+	It("OpsExecuted mirrors the internal counter", func() {
+		s := newSchedulerForTest()
+		Expect(s.OpsExecuted()).To(Equal(0))
+		s.opsExecuted = 7
+		Expect(s.OpsExecuted()).To(Equal(7))
+	})
+})

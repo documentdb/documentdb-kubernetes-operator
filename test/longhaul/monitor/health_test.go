@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 )
@@ -39,92 +41,77 @@ func (f *fakeClusterClient) GetClusterHealth(_ context.Context) (ClusterHealth, 
 func (f *fakeClusterClient) GetCurrentDocumentDBImageTag(_ context.Context) (string, error) {
 	return "", nil
 }
-func (f *fakeClusterClient) GetInstancesPerNode(_ context.Context) (int, error)        { return 1, nil }
-func (f *fakeClusterClient) ScaleCluster(_ context.Context, _ int) error               { return nil }
-func (f *fakeClusterClient) UpgradeDocumentDB(_ context.Context, _ string) error       { return nil }
+func (f *fakeClusterClient) GetInstancesPerNode(_ context.Context) (int, error)  { return 1, nil }
+func (f *fakeClusterClient) ScaleCluster(_ context.Context, _ int) error         { return nil }
+func (f *fakeClusterClient) UpgradeDocumentDB(_ context.Context, _ string) error { return nil }
 
-func TestHealthMonitor_IsSteadyState_NotHealthyYet(t *testing.T) {
-	c := &fakeClusterClient{}
-	h := NewHealthMonitor(c, journal.New(), 100*time.Millisecond)
-	if h.IsSteadyState() {
-		t.Error("IsSteadyState() = true before any check")
-	}
-}
+var _ = Describe("HealthMonitor", func() {
+	Describe("IsSteadyState", func() {
+		It("is false before any check", func() {
+			c := &fakeClusterClient{}
+			h := NewHealthMonitor(c, journal.New(), 100*time.Millisecond)
+			Expect(h.IsSteadyState()).To(BeFalse())
+		})
 
-func TestHealthMonitor_IsSteadyState_BecomesHealthy(t *testing.T) {
-	c := &fakeClusterClient{}
-	c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true, ReadyPods: 2, TotalPods: 2})
-	h := NewHealthMonitor(c, journal.New(), 50*time.Millisecond)
+		It("becomes true after staying healthy beyond steadyStateWait", func() {
+			c := &fakeClusterClient{}
+			c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true, ReadyPods: 2, TotalPods: 2})
+			h := NewHealthMonitor(c, journal.New(), 50*time.Millisecond)
 
-	// First check sets steadySince but duration is 0.
-	h.check(context.Background())
-	if h.IsSteadyState() {
-		t.Error("IsSteadyState() = true immediately after first healthy check")
-	}
+			h.check(context.Background())
+			Expect(h.IsSteadyState()).To(BeFalse(), "first healthy check sets steadySince but elapsed=0")
 
-	time.Sleep(60 * time.Millisecond)
-	if !h.IsSteadyState() {
-		t.Error("IsSteadyState() = false after waiting > steadyStateWait")
-	}
-}
+			time.Sleep(60 * time.Millisecond)
+			Expect(h.IsSteadyState()).To(BeTrue())
+		})
 
-func TestHealthMonitor_LossOfHealthResetsSteady(t *testing.T) {
-	c := &fakeClusterClient{}
-	c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
-	h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
-	h.check(context.Background())
-	time.Sleep(2 * time.Millisecond)
-	if !h.IsSteadyState() {
-		t.Fatal("expected steady state to be reached")
-	}
+		It("resets to false when health is lost", func() {
+			c := &fakeClusterClient{}
+			c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
+			h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
+			h.check(context.Background())
+			time.Sleep(2 * time.Millisecond)
+			Expect(h.IsSteadyState()).To(BeTrue())
 
-	c.setHealth(ClusterHealth{AllPodsReady: false, CRReady: false})
-	h.check(context.Background())
-	if h.IsSteadyState() {
-		t.Error("IsSteadyState() = true after losing health")
-	}
-}
+			c.setHealth(ClusterHealth{AllPodsReady: false, CRReady: false})
+			h.check(context.Background())
+			Expect(h.IsSteadyState()).To(BeFalse())
+		})
 
-func TestHealthMonitor_PollErrorResetsSteady(t *testing.T) {
-	c := &fakeClusterClient{}
-	c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
-	h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
-	h.check(context.Background())
-	time.Sleep(2 * time.Millisecond)
-	if !h.IsSteadyState() {
-		t.Fatal("expected steady state to be reached")
-	}
+		It("resets to false on poll error", func() {
+			c := &fakeClusterClient{}
+			c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
+			h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
+			h.check(context.Background())
+			time.Sleep(2 * time.Millisecond)
+			Expect(h.IsSteadyState()).To(BeTrue())
 
-	c.setErr(errors.New("apiserver unreachable"))
-	h.check(context.Background())
-	if h.IsSteadyState() {
-		t.Error("IsSteadyState() = true after poll error")
-	}
-}
+			c.setErr(errors.New("apiserver unreachable"))
+			h.check(context.Background())
+			Expect(h.IsSteadyState()).To(BeFalse())
+		})
+	})
 
-func TestHealthMonitor_WaitForSteadyState_Cancelled(t *testing.T) {
-	c := &fakeClusterClient{}
-	h := NewHealthMonitor(c, journal.New(), 10*time.Second)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-	err := h.WaitForSteadyState(ctx)
-	if err == nil {
-		t.Error("WaitForSteadyState should return an error on context expiry")
-	}
-}
+	Describe("WaitForSteadyState", func() {
+		It("returns an error when the context is cancelled", func() {
+			c := &fakeClusterClient{}
+			h := NewHealthMonitor(c, journal.New(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+			defer cancel()
+			Expect(h.WaitForSteadyState(ctx)).To(HaveOccurred())
+		})
 
-func TestHealthMonitor_WaitForSteadyState_Reached(t *testing.T) {
-	c := &fakeClusterClient{}
-	c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
-	h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
+		It("returns nil once steady state is reached", func() {
+			c := &fakeClusterClient{}
+			c.setHealth(ClusterHealth{AllPodsReady: true, CRReady: true})
+			h := NewHealthMonitor(c, journal.New(), 1*time.Millisecond)
 
-	// Get steady-state before WaitForSteadyState's first tick.
-	h.check(context.Background())
-	time.Sleep(5 * time.Millisecond)
+			h.check(context.Background())
+			time.Sleep(5 * time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	if err := h.WaitForSteadyState(ctx); err != nil {
-		t.Errorf("WaitForSteadyState returned error: %v", err)
-	}
-}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			Expect(h.WaitForSteadyState(ctx)).To(Succeed())
+		})
+	})
+})

@@ -4,115 +4,82 @@
 package journal
 
 import (
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-func TestDisruptionWindow_IsActive(t *testing.T) {
-	now := time.Now()
-	tests := []struct {
-		name string
-		w    DisruptionWindow
-		want bool
-	}{
-		{"open window", DisruptionWindow{StartTime: now}, true},
-		{"closed window", DisruptionWindow{StartTime: now, EndTime: now.Add(time.Second)}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.w.IsActive(); got != tt.want {
-				t.Errorf("IsActive() = %v, want %v", got, tt.want)
-			}
+var _ = Describe("DisruptionWindow", func() {
+	Describe("IsActive", func() {
+		It("returns true for an open window (no end time)", func() {
+			w := DisruptionWindow{StartTime: time.Now()}
+			Expect(w.IsActive()).To(BeTrue())
 		})
-	}
-}
-
-func TestDisruptionWindow_Duration(t *testing.T) {
-	t.Run("closed window returns end-start", func(t *testing.T) {
-		start := time.Now()
-		end := start.Add(7 * time.Second)
-		w := DisruptionWindow{StartTime: start, EndTime: end}
-		if got := w.Duration(); got != 7*time.Second {
-			t.Errorf("Duration() = %v, want 7s", got)
-		}
+		It("returns false once EndTime is set", func() {
+			now := time.Now()
+			w := DisruptionWindow{StartTime: now, EndTime: now.Add(time.Second)}
+			Expect(w.IsActive()).To(BeFalse())
+		})
 	})
-	t.Run("active window returns at-least-since-start", func(t *testing.T) {
-		start := time.Now().Add(-3 * time.Second)
-		w := DisruptionWindow{StartTime: start}
-		got := w.Duration()
-		if got < 3*time.Second {
-			t.Errorf("Duration() = %v, want >= 3s", got)
-		}
-	})
-}
 
-func TestDisruptionWindow_ExceededPolicy(t *testing.T) {
-	tests := []struct {
-		name string
-		w    DisruptionWindow
-		want bool
-	}{
-		{
-			name: "within all budgets",
-			w: DisruptionWindow{
+	Describe("Duration", func() {
+		It("returns end-start for a closed window", func() {
+			start := time.Now()
+			end := start.Add(7 * time.Second)
+			w := DisruptionWindow{StartTime: start, EndTime: end}
+			Expect(w.Duration()).To(Equal(7 * time.Second))
+		})
+		It("returns at-least-since-start for an active window", func() {
+			start := time.Now().Add(-3 * time.Second)
+			w := DisruptionWindow{StartTime: start}
+			Expect(w.Duration()).To(BeNumerically(">=", 3*time.Second))
+		})
+	})
+
+	DescribeTable("ExceededPolicy",
+		func(w DisruptionWindow, want bool) {
+			Expect(w.ExceededPolicy()).To(Equal(want))
+		},
+		Entry("within all budgets",
+			DisruptionWindow{
 				StartTime:     time.Now().Add(-10 * time.Second),
 				EndTime:       time.Now(),
 				WriteFailures: 5,
 				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
-			},
-			want: false,
-		},
-		{
-			name: "exceeds MustRecoverWithin",
-			w: DisruptionWindow{
+			}, false),
+		Entry("exceeds MustRecoverWithin",
+			DisruptionWindow{
 				StartTime:     time.Now().Add(-2 * time.Minute),
 				EndTime:       time.Now(),
 				WriteFailures: 1,
 				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
-			},
-			want: true,
-		},
-		{
-			name: "exceeds AllowedWriteFailures",
-			w: DisruptionWindow{
+			}, true),
+		Entry("exceeds AllowedWriteFailures",
+			DisruptionWindow{
 				StartTime:     time.Now().Add(-10 * time.Second),
 				EndTime:       time.Now(),
 				WriteFailures: 100,
 				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
-			},
-			want: true,
-		},
-		{
-			name: "boundary: WriteFailures equal to budget is allowed",
-			w: DisruptionWindow{
+			}, true),
+		Entry("boundary: equal to write-failure budget is allowed",
+			DisruptionWindow{
 				StartTime:     time.Now().Add(-10 * time.Second),
 				EndTime:       time.Now(),
 				WriteFailures: 50,
 				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
-			},
-			want: false,
-		},
-		{
-			name: "active window also evaluated against MustRecoverWithin",
-			w: DisruptionWindow{
+			}, false),
+		Entry("active window also evaluated against MustRecoverWithin",
+			DisruptionWindow{
 				StartTime: time.Now().Add(-2 * time.Minute),
 				Policy:    OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
-			},
-			want: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.w.ExceededPolicy(); got != tt.want {
-				t.Errorf("ExceededPolicy() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+			}, true),
+	)
 
-func TestDefaultOutagePolicy(t *testing.T) {
-	p := DefaultOutagePolicy()
-	if p.MustRecoverWithin == 0 || p.AllowedWriteFailures == 0 || p.AllowedDowntime == 0 {
-		t.Errorf("DefaultOutagePolicy() returned zero-valued field: %+v", p)
-	}
-}
+	It("DefaultOutagePolicy returns no zero-valued field", func() {
+		p := DefaultOutagePolicy()
+		Expect(p.MustRecoverWithin).NotTo(BeZero())
+		Expect(p.AllowedWriteFailures).NotTo(BeZero())
+		Expect(p.AllowedDowntime).NotTo(BeZero())
+	})
+})
