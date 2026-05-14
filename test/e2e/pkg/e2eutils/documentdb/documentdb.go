@@ -30,16 +30,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/envsubst"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	e2emanifests "github.com/documentdb/documentdb-operator/test/e2e/manifests"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // ManifestsFS is the filesystem RenderCR reads templates from when the
@@ -57,15 +56,28 @@ const (
 	yamlSeparator = "---\n"
 
 	// DefaultWaitPoll is the polling interval for WaitHealthy/Delete.
-	DefaultWaitPoll = 2 * time.Second
+	// Re-exported from test/shared/documentdb so existing e2e callers
+	// continue to reference documentdb.DefaultWaitPoll.
+	DefaultWaitPoll = shareddoc.DefaultWaitPoll
 
 	// ReadyStatus is the DocumentDBStatus.Status value the operator
-	// surfaces once the underlying CNPG cluster is healthy. It mirrors
-	// the CNPG Cluster status verbatim (see
-	// operator/src/api/preview/documentdb_types.go). Exposed as an
-	// exported constant so sibling packages (assertions, fixtures)
-	// share a single source of truth.
-	ReadyStatus = "Cluster in healthy state"
+	// surfaces once the underlying CNPG cluster is healthy. Re-exported
+	// from test/shared/documentdb so e2e and long-haul share a single
+	// source of truth.
+	ReadyStatus = shareddoc.ReadyStatus
+)
+
+// Re-exports of the framework-agnostic CR operations now living in
+// test/shared/documentdb. e2e suite code continues to call
+// documentdb.Get / PatchInstances / etc. unchanged.
+var (
+	Get            = shareddoc.Get
+	List           = shareddoc.List
+	PatchInstances = shareddoc.PatchInstances
+	PatchSpec      = shareddoc.PatchSpec
+	WaitHealthy    = shareddoc.WaitHealthy
+	IsHealthy      = shareddoc.IsHealthy
+	Delete         = shareddoc.Delete
 )
 
 // CreateOptions drives Create. Base names the file in manifests/base/,
@@ -289,148 +301,6 @@ func dropEmptyVarLines(data []byte, merged map[string]string) []byte {
 		}
 	}
 	return out.Bytes()
-}
-
-// PatchInstances fetches the DocumentDB named by (ns, name) and
-// patches its Spec.InstancesPerNode to want. Returns an error if the
-// CR cannot be fetched, the desired value is out of the supported
-// range (1..3 per the CRD), or the patch fails. When the CR already
-// has the desired value the call is a no-op and returns nil.
-func PatchInstances(ctx context.Context, c client.Client, ns, name string, want int) error {
-	if c == nil {
-		return errors.New("PatchInstances: client must not be nil")
-	}
-	if want < 1 || want > 3 {
-		return fmt.Errorf("PatchInstances: want=%d out of supported range 1..3", want)
-	}
-	dd := &previewv1.DocumentDB{}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, dd); err != nil {
-		return fmt.Errorf("get DocumentDB %s/%s: %w", ns, name, err)
-	}
-	if dd.Spec.InstancesPerNode == want {
-		return nil
-	}
-	before := dd.DeepCopy()
-	dd.Spec.InstancesPerNode = want
-	if err := c.Patch(ctx, dd, client.MergeFrom(before)); err != nil {
-		return fmt.Errorf("patch DocumentDB %s/%s instances=%d: %w", ns, name, want, err)
-	}
-	return nil
-}
-
-// PatchSpec applies a merge-from patch that mutates the provided
-// DocumentDB's spec in place. mutate receives a pointer to the Spec and
-// may set any fields; the diff against the pre-mutation object is sent
-// to the API server.
-func PatchSpec(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, mutate func(*previewv1.DocumentDBSpec)) error {
-	if dd == nil || mutate == nil {
-		return errors.New("PatchSpec: dd and mutate must not be nil")
-	}
-	before := dd.DeepCopy()
-	mutate(&dd.Spec)
-	if err := c.Patch(ctx, dd, client.MergeFrom(before)); err != nil {
-		return fmt.Errorf("patching DocumentDB %s/%s: %w", dd.Namespace, dd.Name, err)
-	}
-	return nil
-}
-
-// WaitHealthy polls until the DocumentDB named by key reports a healthy
-// status or the timeout elapses. "Healthy" is defined as
-// Status.Status == ReadyStatus (the CNPG cluster status propagated via
-// DocumentDBStatus.Status) or the presence of a Ready=True condition on
-// the object (future-proofing).
-//
-// The polling interval is DefaultWaitPoll; the function returns nil on
-// first healthy observation or an error describing the last observed
-// state on timeout.
-func WaitHealthy(ctx context.Context, c client.Client, key client.ObjectKey, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	var last previewv1.DocumentDB
-	for {
-		if err := c.Get(ctx, key, &last); err == nil {
-			if isHealthy(&last) {
-				return nil
-			}
-		} else if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("getting DocumentDB %s: %w", key, err)
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s waiting for DocumentDB %s to be healthy (last status=%q)",
-				timeout, key, last.Status.Status)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(DefaultWaitPoll):
-		}
-	}
-}
-
-// isHealthy implements the predicate documented on WaitHealthy.
-func isHealthy(dd *previewv1.DocumentDB) bool {
-	if dd == nil {
-		return false
-	}
-	if dd.Status.Status == ReadyStatus {
-		return true
-	}
-	// Defensive: DocumentDBStatus today has no Conditions field, but if
-	// one is added later a Ready=True condition should also be honored.
-	// Reflectively check via annotations or leave to future extension.
-	return false
-}
-
-// Delete issues a foreground delete on the given DocumentDB and polls
-// until the object is gone or timeout elapses.
-func Delete(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, timeout time.Duration) error {
-	if dd == nil {
-		return errors.New("Delete: dd must not be nil")
-	}
-	if err := c.Delete(ctx, dd); err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("deleting DocumentDB %s/%s: %w", dd.Namespace, dd.Name, err)
-	}
-	key := client.ObjectKeyFromObject(dd)
-	deadline := time.Now().Add(timeout)
-	for {
-		var got previewv1.DocumentDB
-		err := c.Get(ctx, key, &got)
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("polling deletion of %s: %w", key, err)
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out after %s waiting for DocumentDB %s to be deleted", timeout, key)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(DefaultWaitPoll):
-		}
-	}
-}
-
-// List returns all DocumentDB objects in the given namespace.
-func List(ctx context.Context, c client.Client, ns string) ([]previewv1.DocumentDB, error) {
-	var ddList previewv1.DocumentDBList
-	opts := []client.ListOption{}
-	if ns != "" {
-		opts = append(opts, client.InNamespace(ns))
-	}
-	if err := c.List(ctx, &ddList, opts...); err != nil {
-		return nil, fmt.Errorf("listing DocumentDB in %q: %w", ns, err)
-	}
-	return ddList.Items, nil
-}
-
-// Get fetches a DocumentDB by key.
-func Get(ctx context.Context, c client.Client, key client.ObjectKey) (*previewv1.DocumentDB, error) {
-	var dd previewv1.DocumentDB
-	if err := c.Get(ctx, key, &dd); err != nil {
-		return nil, fmt.Errorf("getting DocumentDB %s: %w", key, err)
-	}
-	return &dd, nil
 }
 
 // objectMetaFor is a small helper that constructs an ObjectMeta for

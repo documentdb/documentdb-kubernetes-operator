@@ -5,6 +5,7 @@ go 1.25.9
 require (
 	github.com/cloudnative-pg/cloudnative-pg v1.28.1
 	github.com/documentdb/documentdb-operator v0.0.0-00010101000000-000000000000
+	github.com/documentdb/documentdb-operator/test/shared v0.0.0-00010101000000-000000000000
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
@@ -108,3 +109,5 @@ require (
 )
 
 replace github.com/documentdb/documentdb-operator => ../../operator/src
+
+replace github.com/documentdb/documentdb-operator/test/shared => ../shared
