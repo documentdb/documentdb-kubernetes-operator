@@ -19,8 +19,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/longhaul/report"
 	"github.com/documentdb/documentdb-operator/test/longhaul/workload"
 
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -63,7 +62,7 @@ func run(cfg config.Config) int {
 	if cfg.MongoURI == "" {
 		log.Fatal("LONGHAUL_MONGO_URI must be set")
 	}
-	mongoClient, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
+	mongoClient, err := sharedmongo.NewFromURI(ctx, cfg.MongoURI)
 	if err != nil {
 		log.Fatalf("failed to connect to MongoDB: %v", err)
 	}

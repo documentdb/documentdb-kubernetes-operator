@@ -5,7 +5,6 @@ package monitor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -13,14 +12,16 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // PodMetrics holds resource usage for a single pod.
@@ -33,11 +34,10 @@ type PodMetrics struct {
 // K8sClusterClient implements ClusterClient using real Kubernetes API calls.
 type K8sClusterClient struct {
 	clientset     kubernetes.Interface
-	dynamicClient dynamic.Interface
+	crClient      ctrlclient.Client
 	metricsClient metricsv.Interface
 	namespace     string
 	clusterName   string
-	crGVR         schema.GroupVersionResource
 	metricsAvail  bool
 }
 
@@ -61,9 +61,13 @@ func NewK8sClusterClient(cfg K8sClientConfig) (*K8sClusterClient, error) {
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
-	dynClient, err := dynamic.NewForConfig(restConfig)
+	scheme := runtime.NewScheme()
+	if err := previewv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add previewv1 to scheme: %w", err)
+	}
+	crClient, err := ctrlclient.New(restConfig, ctrlclient.Options{Scheme: scheme})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+		return nil, fmt.Errorf("failed to create controller-runtime client: %w", err)
 	}
 
 	// Try to create metrics client (graceful fallback).
@@ -71,16 +75,11 @@ func NewK8sClusterClient(cfg K8sClientConfig) (*K8sClusterClient, error) {
 
 	return &K8sClusterClient{
 		clientset:     clientset,
-		dynamicClient: dynClient,
+		crClient:      crClient,
 		metricsClient: metricsClient,
 		namespace:     cfg.Namespace,
 		clusterName:   cfg.ClusterName,
-		crGVR: schema.GroupVersionResource{
-			Group:    "documentdb.io",
-			Version:  "preview",
-			Resource: "dbs",
-		},
-		metricsAvail: metricsAvail,
+		metricsAvail:  metricsAvail,
 	}, nil
 }
 
@@ -138,35 +137,34 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 	health.AllPodsReady = readyCount == health.TotalPods && health.TotalPods > 0
 	health.RestartCount = totalRestarts
 
-	// Get the DocumentDB CR status.
-	cr, err := k.dynamicClient.Resource(k.crGVR).Namespace(k.namespace).Get(ctx, k.clusterName, metav1.GetOptions{})
+	// Get the DocumentDB CR status via the shared typed helper. Using
+	// shareddoc.IsHealthy keeps the readiness predicate consistent with
+	// the e2e suite (single source of truth for ReadyStatus).
+	dd, err := shareddoc.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
 	if err != nil {
 		return health, fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
-
-	status, _, _ := unstructured.NestedString(cr.Object, "status", "status")
-	health.CRReady = status == "Cluster in healthy state"
+	health.CRReady = shareddoc.IsHealthy(dd)
 
 	return health, nil
 }
 
 // GetInstancesPerNode reads spec.instancesPerNode from the DocumentDB CR.
 // Range is 1-3 per the CRD; 1 means no HA, >=2 means at least one standby.
+//
+// The previous unstructured-based implementation returned 1 when the
+// field was omitted from the CR (operator default). The typed
+// previewv1.DocumentDB gives a zero-value of 0 for omitted ints, so we
+// preserve the original semantics explicitly here.
 func (k *K8sClusterClient) GetInstancesPerNode(ctx context.Context) (int, error) {
-	cr, err := k.dynamicClient.Resource(k.crGVR).Namespace(k.namespace).Get(ctx, k.clusterName, metav1.GetOptions{})
+	dd, err := shareddoc.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
-
-	ipn, found, err := unstructured.NestedInt64(cr.Object, "spec", "instancesPerNode")
-	if err != nil {
-		return 0, fmt.Errorf("spec.instancesPerNode read error: %w", err)
-	}
-	if !found {
-		// Field omitted on CR — operator default is 1 (single instance).
+	if dd.Spec.InstancesPerNode == 0 {
 		return 1, nil
 	}
-	return int(ipn), nil
+	return dd.Spec.InstancesPerNode, nil
 }
 
 // ScaleCluster patches spec.instancesPerNode on the DocumentDB CR.
@@ -176,38 +174,24 @@ func (k *K8sClusterClient) GetInstancesPerNode(ctx context.Context) (int, error)
 // Each instance is a CNPG replica (1 primary + N-1 standbys); growing this
 // dimension is what gives the cluster HA.
 func (k *K8sClusterClient) ScaleCluster(ctx context.Context, instancesPerNode int) error {
-	patch := map[string]interface{}{
-		"spec": map[string]interface{}{
-			"instancesPerNode": instancesPerNode,
-		},
-	}
-	patchBytes, err := json.Marshal(patch)
-	if err != nil {
-		return fmt.Errorf("failed to marshal patch: %w", err)
-	}
-
-	_, err = k.dynamicClient.Resource(k.crGVR).Namespace(k.namespace).Patch(
-		ctx, k.clusterName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
-	if err != nil {
+	if err := shareddoc.PatchInstances(ctx, k.crClient, k.namespace, k.clusterName, instancesPerNode); err != nil {
 		return fmt.Errorf("failed to patch DocumentDB CR: %w", err)
 	}
-
 	return nil
 }
 
 // GetCurrentDocumentDBImageTag reads status.documentDBImage from the CR
 // and returns the tag portion (after the last colon).
 func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (string, error) {
-	cr, err := k.dynamicClient.Resource(k.crGVR).Namespace(k.namespace).Get(ctx, k.clusterName, metav1.GetOptions{})
+	dd, err := shareddoc.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
 	if err != nil {
 		return "", fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
 
-	image, found, err := unstructured.NestedString(cr.Object, "status", "documentDBImage")
-	if err != nil || !found || image == "" {
+	image := dd.Status.DocumentDBImage
+	if image == "" {
 		return "", nil
 	}
-
 	idx := strings.LastIndex(image, ":")
 	if idx < 0 || idx == len(image)-1 {
 		return "", nil
@@ -219,20 +203,14 @@ func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (st
 // and schemaVersion="auto" so the operator performs a rolling upgrade.
 // NOTE: the CRD field is documentDBVersion (capital DB), not documentDbVersion.
 func (k *K8sClusterClient) UpgradeDocumentDB(ctx context.Context, version string) error {
-	patch := map[string]interface{}{
-		"spec": map[string]interface{}{
-			"documentDBVersion": version,
-			"schemaVersion":     "auto",
-		},
-	}
-	patchBytes, err := json.Marshal(patch)
+	dd, err := shareddoc.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
 	if err != nil {
-		return fmt.Errorf("failed to marshal patch: %w", err)
+		return fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
-
-	_, err = k.dynamicClient.Resource(k.crGVR).Namespace(k.namespace).Patch(
-		ctx, k.clusterName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
-	if err != nil {
+	if err := shareddoc.PatchSpec(ctx, k.crClient, dd, func(spec *previewv1.DocumentDBSpec) {
+		spec.DocumentDBVersion = version
+		spec.SchemaVersion = "auto"
+	}); err != nil {
 		return fmt.Errorf("failed to patch DocumentDB CR: %w", err)
 	}
 	return nil

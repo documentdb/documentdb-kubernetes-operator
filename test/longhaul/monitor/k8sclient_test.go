@@ -11,59 +11,45 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
-var testCRGVR = schema.GroupVersionResource{
-	Group:    "documentdb.io",
-	Version:  "preview",
-	Resource: "dbs",
+func newTestScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+	Expect(previewv1.AddToScheme(s)).To(Succeed())
+	return s
 }
 
-func newTestCR(ns, name string, modify func(obj map[string]interface{})) *unstructured.Unstructured {
-	obj := map[string]interface{}{
-		"apiVersion": "documentdb.io/preview",
-		"kind":       "DocumentDB",
-		"metadata": map[string]interface{}{
-			"namespace": ns,
-			"name":      name,
-		},
-		"spec":   map[string]interface{}{},
-		"status": map[string]interface{}{},
+func newTestDocumentDB(ns, name string, modify func(dd *previewv1.DocumentDB)) *previewv1.DocumentDB {
+	dd := &previewv1.DocumentDB{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
 	}
 	if modify != nil {
-		modify(obj)
+		modify(dd)
 	}
-	u := &unstructured.Unstructured{Object: obj}
-	u.SetGroupVersionKind(schema.GroupVersionKind{Group: "documentdb.io", Version: "preview", Kind: "DocumentDB"})
-	return u
+	return dd
 }
 
 // newTestK8sClient builds a K8sClusterClient backed by fake clients. Failures
 // are reported via Gomega's Expect, so it must be called from inside a spec.
-func newTestK8sClient(ns, cluster string, cs *fake.Clientset, objs ...runtime.Object) *K8sClusterClient {
-	scheme := runtime.NewScheme()
-	gvk := schema.GroupVersionKind{Group: "documentdb.io", Version: "preview", Kind: "DocumentDB"}
-	listGVK := schema.GroupVersionKind{Group: "documentdb.io", Version: "preview", Kind: "DocumentDBList"}
-	scheme.AddKnownTypeWithName(gvk, &unstructured.Unstructured{})
-	scheme.AddKnownTypeWithName(listGVK, &unstructured.UnstructuredList{})
-	gvrToListKind := map[schema.GroupVersionResource]string{testCRGVR: "DocumentDBList"}
-	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind)
-	for _, o := range objs {
-		u, ok := o.(*unstructured.Unstructured)
-		Expect(ok).To(BeTrue(), "newTestK8sClient: object is not *unstructured.Unstructured: %T", o)
-		Expect(dyn.Tracker().Create(testCRGVR, u, u.GetNamespace())).To(Succeed())
+func newTestK8sClient(ns, cluster string, cs *fake.Clientset, objs ...ctrlclient.Object) *K8sClusterClient {
+	scheme := newTestScheme()
+	builder := fakeclient.NewClientBuilder().WithScheme(scheme)
+	if len(objs) > 0 {
+		builder = builder.WithObjects(objs...)
 	}
 	return &K8sClusterClient{
-		clientset:     cs,
-		dynamicClient: dyn,
-		namespace:     ns,
-		clusterName:   cluster,
-		crGVR:         testCRGVR,
+		clientset:   cs,
+		crClient:    builder.Build(),
+		namespace:   ns,
+		clusterName: cluster,
 	}
 }
 
@@ -113,8 +99,8 @@ var _ = Describe("K8sClusterClient", func() {
 					},
 				},
 			}
-			cr := newTestCR(ns, cluster, func(o map[string]interface{}) {
-				o["status"] = map[string]interface{}{"status": "Cluster in healthy state"}
+			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+				dd.Status.Status = shareddoc.ReadyStatus
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(pods...), cr)
 
@@ -128,8 +114,8 @@ var _ = Describe("K8sClusterClient", func() {
 		})
 
 		It("flags CRReady=false when status is not healthy and no pods exist", func() {
-			cr := newTestCR(ns, cluster, func(o map[string]interface{}) {
-				o["status"] = map[string]interface{}{"status": "Reconciling"}
+			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+				dd.Status.Status = "Reconciling"
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 
@@ -142,19 +128,19 @@ var _ = Describe("K8sClusterClient", func() {
 
 	Describe("GetInstancesPerNode", func() {
 		DescribeTable("returns spec.instancesPerNode (defaulting to 1)",
-			func(modify func(map[string]interface{}), want int) {
-				cr := newTestCR(ns, cluster, modify)
+			func(modify func(dd *previewv1.DocumentDB), want int) {
+				cr := newTestDocumentDB(ns, cluster, modify)
 				k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 				got, err := k.GetInstancesPerNode(context.Background())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).To(Equal(want))
 			},
 			Entry("explicit ipn=2",
-				func(o map[string]interface{}) { o["spec"] = map[string]interface{}{"instancesPerNode": int64(2)} }, 2),
+				func(dd *previewv1.DocumentDB) { dd.Spec.InstancesPerNode = 2 }, 2),
 			Entry("explicit ipn=3",
-				func(o map[string]interface{}) { o["spec"] = map[string]interface{}{"instancesPerNode": int64(3)} }, 3),
+				func(dd *previewv1.DocumentDB) { dd.Spec.InstancesPerNode = 3 }, 3),
 			Entry("unset defaults to 1",
-				func(o map[string]interface{}) { o["spec"] = map[string]interface{}{} }, 1),
+				func(dd *previewv1.DocumentDB) {}, 1),
 		)
 
 		It("returns an error when the CR is missing", func() {
@@ -165,8 +151,8 @@ var _ = Describe("K8sClusterClient", func() {
 	})
 
 	It("ScaleCluster patches instancesPerNode", func() {
-		cr := newTestCR(ns, cluster, func(o map[string]interface{}) {
-			o["spec"] = map[string]interface{}{"instancesPerNode": int64(1)}
+		cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+			dd.Spec.InstancesPerNode = 1
 		})
 		k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 
@@ -177,38 +163,32 @@ var _ = Describe("K8sClusterClient", func() {
 	})
 
 	DescribeTable("GetCurrentDocumentDBImageTag",
-		func(image string, setStatus bool, want string) {
-			cr := newTestCR(ns, cluster, func(o map[string]interface{}) {
-				if setStatus {
-					o["status"] = map[string]interface{}{"documentDBImage": image}
-				}
+		func(image string, want string) {
+			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+				dd.Status.DocumentDBImage = image
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 			got, err := k.GetCurrentDocumentDBImageTag(context.Background())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(Equal(want))
 		},
-		Entry("unset", "", false, ""),
-		Entry("empty string", "", true, ""),
-		Entry("image with tag", "ghcr.io/foo/documentdb:0.109.0", true, "0.109.0"),
-		Entry("registry without tag", "ghcr.io/foo/documentdb", true, ""),
-		Entry("trailing colon (malformed)", "ghcr.io/foo/documentdb:", true, ""),
-		Entry("semver tag with port-like host", "host:5000/foo/documentdb:0.110.0-rc1", true, "0.110.0-rc1"),
+		Entry("empty string", "", ""),
+		Entry("image with tag", "ghcr.io/foo/documentdb:0.109.0", "0.109.0"),
+		Entry("registry without tag", "ghcr.io/foo/documentdb", ""),
+		Entry("trailing colon (malformed)", "ghcr.io/foo/documentdb:", ""),
+		Entry("semver tag with port-like host", "host:5000/foo/documentdb:0.110.0-rc1", "0.110.0-rc1"),
 	)
 
 	It("UpgradeDocumentDB patches version fields", func() {
-		cr := newTestCR(ns, cluster, nil)
+		cr := newTestDocumentDB(ns, cluster, nil)
 		k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 
 		Expect(k.UpgradeDocumentDB(context.Background(), "0.110.0")).To(Succeed())
 
-		got, err := k.dynamicClient.Resource(testCRGVR).Namespace(ns).Get(context.Background(), cluster, metav1.GetOptions{})
-		Expect(err).NotTo(HaveOccurred())
-
-		ver, _, _ := unstructured.NestedString(got.Object, "spec", "documentDBVersion")
-		Expect(ver).To(Equal("0.110.0"))
-		schemaVer, _, _ := unstructured.NestedString(got.Object, "spec", "schemaVersion")
-		Expect(schemaVer).To(Equal("auto"))
+		var got previewv1.DocumentDB
+		Expect(k.crClient.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: cluster}, &got)).To(Succeed())
+		Expect(got.Spec.DocumentDBVersion).To(Equal("0.110.0"))
+		Expect(got.Spec.SchemaVersion).To(Equal("auto"))
 	})
 
 	Describe("metrics", func() {
