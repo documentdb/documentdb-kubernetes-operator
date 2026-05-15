@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 name: LONGHAUL - Deploy Test Driver to AKS
 
 # Rolls a longhaul-test image onto the long-haul AKS cluster.

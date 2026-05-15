@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 name: LONGHAUL - Build Test Driver Image
 
 # Builds the long-haul test driver image (test/longhaul/Dockerfile) and pushes

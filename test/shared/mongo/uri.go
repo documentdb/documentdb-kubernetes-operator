@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Package mongo extras: NewFromURI is a convenience constructor for
 // callers (e.g. the long-haul driver) that already hold a fully-formed
 // mongodb:// URI from configuration and just need a connected client

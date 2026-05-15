@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Package documentdb provides framework-agnostic CRUD and lifecycle
 // helpers for the DocumentDB preview CR. It is consumed by both the
 // e2e suite (which wraps these in gomega.Eventually) and the long-haul
