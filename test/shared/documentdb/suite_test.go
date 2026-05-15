@@ -12,5 +12,5 @@ import (
 
 func TestDocumentDBShared(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Shared DocumentDB CR Helpers Suite")
+	RunSpecs(t, "Shared DocumentDB Lifecycle Helpers Suite")
 }

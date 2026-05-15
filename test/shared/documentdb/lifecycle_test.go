@@ -25,7 +25,7 @@ func newScheme() *runtime.Scheme {
 	return s
 }
 
-var _ = Describe("Shared CR helpers", func() {
+var _ = Describe("Shared lifecycle helpers", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
