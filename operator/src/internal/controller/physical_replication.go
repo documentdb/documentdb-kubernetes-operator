@@ -87,7 +87,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		}
 
 		/* TODO re-enable when we have a WAL replica image
-		walReplicaPluginName := documentdb.Spec.WalReplicaPluginName
+		walReplicaPluginName := ""
+		if documentdb.Spec.Plugins != nil {
+			walReplicaPluginName = documentdb.Spec.Plugins.WalReplicaName
+		}
 		if walReplicaPluginName == "" {
 			walReplicaPluginName = util.DEFAULT_WAL_REPLICA_PLUGIN
 		}
