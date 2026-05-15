@@ -21,6 +21,7 @@ import (
 	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -124,7 +125,7 @@ var _ = Describe("DocumentDB upgrade — images",
 			docs := seed.SmallDataset()
 			handle, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "connect to DocumentDB gateway on oldImage")
-			inserted, err := e2emongo.Seed(ctx, handle.Client(), dbName, collName, docs)
+			inserted, err := sharedmongo.Seed(ctx, handle.Client(), dbName, collName, docs)
 			Expect(err).NotTo(HaveOccurred(), "seed %s.%s", dbName, collName)
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			Expect(handle.Close(ctx)).To(Succeed())
@@ -159,7 +160,7 @@ var _ = Describe("DocumentDB upgrade — images",
 			handle2, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "reconnect to DocumentDB gateway on newImage")
 			DeferCleanup(func(ctx SpecContext) { _ = handle2.Close(ctx) })
-			n, err := e2emongo.Count(ctx, handle2.Client(), dbName, collName, bson.M{})
+			n, err := sharedmongo.Count(ctx, handle2.Client(), dbName, collName, bson.M{})
 			Expect(err).NotTo(HaveOccurred(), "count %s.%s on newImage", dbName, collName)
 			Expect(n).To(Equal(int64(seed.SmallDatasetSize)),
 				"seeded document count changed across image upgrade")

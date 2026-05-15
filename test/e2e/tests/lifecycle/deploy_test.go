@@ -15,6 +15,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -90,7 +91,7 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			h, err := mongohelper.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, name)
 			Expect(err).ToNot(HaveOccurred(), "connect mongo to freshly-deployed DocumentDB")
 			DeferCleanup(func(ctx SpecContext) { _ = h.Close(ctx) })
-			Expect(mongohelper.Ping(ctx, h.Client())).To(Succeed(),
+			Expect(sharedmongo.Ping(ctx, h.Client())).To(Succeed(),
 				"ping freshly-deployed DocumentDB gateway")
 		})
 	})

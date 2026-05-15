@@ -16,6 +16,7 @@ import (
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
@@ -67,7 +68,7 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 
 			h, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, sourceName)
 			Expect(err).NotTo(HaveOccurred(), "connect to source DocumentDB")
-			inserted, err := emongo.Seed(ctx, h.Client(), dbName, collName, seed.SmallDataset())
+			inserted, err := sharedmongo.Seed(ctx, h.Client(), dbName, collName, seed.SmallDataset())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			Expect(h.Close(ctx)).To(Succeed())
@@ -105,7 +106,7 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 			rh, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, recoveryName)
 			Expect(err).NotTo(HaveOccurred(), "connect to recovery DocumentDB")
 			DeferCleanup(func(ctx SpecContext) { _ = rh.Close(ctx) })
-			n, err := emongo.Count(ctx, rh.Client(), dbName, collName, bson.M{})
+			n, err := sharedmongo.Count(ctx, rh.Client(), dbName, collName, bson.M{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(seed.SmallDatasetSize)),
 				"restored cluster should contain the full seeded dataset")
