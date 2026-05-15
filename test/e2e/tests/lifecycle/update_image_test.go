@@ -21,12 +21,13 @@ import (
 
 // The design doc calls the field `spec.documentDbVersion`; the CRD at
 // operator/src/api/preview/documentdb_types.go names it DocumentDBVersion
-// (JSON `documentDBVersion`) and also exposes DocumentDBImage / GatewayImage
-// which take precedence when set. Because the base template provides
-// DocumentDBImage (not Version), we exercise the rollout via the image
-// field and assert against Status.DocumentDBImage — Phase 3 follow-up to
-// parameterise this once the Version-only path is wired into manifests.
-var _ = Describe("DocumentDB lifecycle — update documentDBImage",
+// (JSON `documentDBVersion`) and also exposes spec.image.documentDB /
+// spec.image.gateway which take precedence when set. Because the base
+// template provides spec.image.documentDB (not Version), we exercise the
+// rollout via the image field and assert against Status.DocumentDBImage —
+// Phase 3 follow-up to parameterise this once the Version-only path is
+// wired into manifests.
+var _ = Describe("DocumentDB lifecycle — update spec.image.documentDB",
 	Label(e2e.LifecycleLabel, e2e.DisruptiveLabel), e2e.MediumLevelLabel,
 	func() {
 		const name = "lifecycle-update-image"
@@ -81,7 +82,10 @@ var _ = Describe("DocumentDB lifecycle — update documentDBImage",
 			// Refetch for a fresh resourceVersion before patching.
 			fresh := getDD(ctx, ns, name)
 			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
-				s.DocumentDBImage = targetImage
+				if s.Image == nil {
+					s.Image = &previewv1.ImageSpec{}
+				}
+				s.Image.DocumentDB = targetImage
 			})).To(Succeed())
 
 			Eventually(func() string {

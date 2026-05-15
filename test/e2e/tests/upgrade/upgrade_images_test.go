@@ -26,8 +26,8 @@ import (
 )
 
 // DocumentDB upgrade — images: with the operator already running at
-// the current version, patches the DocumentDB spec.documentDBImage
-// (and spec.gatewayImage) from an old image tag to a new one and
+// the current version, patches the DocumentDB spec.image.documentDB
+// (and spec.image.gateway) from an old image tag to a new one and
 // verifies the rollout completes + the seeded dataset is retained.
 // Unlike upgrade_control_plane_test.go this does not touch the Helm
 // release; it only exercises the CR-driven data-plane image upgrade
@@ -128,13 +128,16 @@ var _ = Describe("DocumentDB upgrade — images",
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			Expect(handle.Close(ctx)).To(Succeed())
 
-			By("patching spec.documentDBImage (and optionally gatewayImage) to the new image")
+			By("patching spec.image.documentDB (and optionally image.gateway) to the new image")
 			fresh, err := documentdb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before patch")
 			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
-				s.DocumentDBImage = newImage
+				if s.Image == nil {
+					s.Image = &previewv1.ImageSpec{}
+				}
+				s.Image.DocumentDB = newImage
 				if newGwImage != "" {
-					s.GatewayImage = newGwImage
+					s.Image.Gateway = newGwImage
 				}
 			})).To(Succeed(), "patch DocumentDB image from %s to %s", oldImage, newImage)
 
