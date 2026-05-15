@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 package mongo
 
 import (
@@ -9,96 +12,18 @@ import (
 	"encoding/pem"
 	"math/big"
 	"strings"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
-
-func TestBuildURI_Basic(t *testing.T) {
-	t.Parallel()
-	got, err := BuildURI(ClientOptions{
-		Host: "gw.example", Port: "10260", User: "alice", Password: "secret",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := "mongodb://alice:secret@gw.example:10260/?tls=false&authSource=admin"
-	if got != want {
-		t.Fatalf("uri mismatch:\n got=%s\nwant=%s", got, want)
-	}
-}
-
-func TestBuildURI_EscapesCreds(t *testing.T) {
-	t.Parallel()
-	got, err := BuildURI(ClientOptions{
-		Host: "h", Port: "1", User: "a@b", Password: "p@ss:w/rd?&",
-	})
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	// '@', ':', '/', '?', '&' must all be percent-encoded so the driver
-	// doesn't mis-parse the URI.
-	for _, bad := range []string{"a@b:", "@ss:", "w/rd?", "?&@"} {
-		if strings.Contains(got, bad) {
-			t.Fatalf("uri must escape %q; got %s", bad, got)
-		}
-	}
-	if !strings.Contains(got, "a%40b") {
-		t.Fatalf("expected user to contain 'a%%40b'; got %s", got)
-	}
-	if !strings.Contains(got, "p%40ss%3Aw%2Frd%3F%26") {
-		t.Fatalf("expected escaped password; got %s", got)
-	}
-}
-
-func TestBuildURI_TLSFlag(t *testing.T) {
-	t.Parallel()
-	on, _ := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p", TLS: true})
-	if !strings.Contains(on, "tls=true") {
-		t.Fatalf("expected tls=true, got %s", on)
-	}
-	off, _ := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p", TLS: false})
-	if !strings.Contains(off, "tls=false") {
-		t.Fatalf("expected tls=false, got %s", off)
-	}
-}
-
-func TestBuildURI_AuthDBOverride(t *testing.T) {
-	t.Parallel()
-	got, _ := BuildURI(ClientOptions{
-		Host: "h", Port: "1", User: "u", Password: "p", AuthDB: "mydb",
-	})
-	if !strings.Contains(got, "authSource=mydb") {
-		t.Fatalf("expected authSource=mydb; got %s", got)
-	}
-	def, _ := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p"})
-	if !strings.Contains(def, "authSource=admin") {
-		t.Fatalf("expected default authSource=admin; got %s", def)
-	}
-}
-
-func TestBuildURI_MissingRequired(t *testing.T) {
-	t.Parallel()
-	cases := []ClientOptions{
-		{Port: "1", User: "u"},
-		{Host: "h", User: "u"},
-		{Host: "h", Port: "1"},
-	}
-	for i, c := range cases {
-		if _, err := BuildURI(c); err == nil {
-			t.Fatalf("case %d: expected error for incomplete opts %+v", i, c)
-		}
-	}
-}
 
 // mintSelfSignedPEM returns a short-lived self-signed cert's PEM bytes.
 // Used only to feed buildTLSConfig a PEM it can parse; we never need to
 // serve TLS from it.
-func mintSelfSignedPEM(t *testing.T) []byte {
-	t.Helper()
+func mintSelfSignedPEM() []byte {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "test"},
@@ -109,99 +34,121 @@ func mintSelfSignedPEM(t *testing.T) []byte {
 		BasicConstraintsValid: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		t.Fatalf("create cert: %v", err)
-	}
+	Expect(err).NotTo(HaveOccurred())
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func TestBuildTLSConfig_RootCAsTakesPriority(t *testing.T) {
-	t.Parallel()
-	pool := x509.NewCertPool()
-	cfg, err := buildTLSConfig(ClientOptions{
-		TLS:         true,
-		RootCAs:     pool,
-		CABundlePEM: []byte("ignored"),
-		TLSInsecure: true,
-		ServerName:  "localhost",
+var _ = Describe("BuildURI", func() {
+	It("renders the basic mongodb URI form", func() {
+		got, err := BuildURI(ClientOptions{
+			Host: "gw.example", Port: "10260", User: "alice", Password: "secret",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(Equal("mongodb://alice:secret@gw.example:10260/?tls=false&authSource=admin"))
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config")
-	}
-	if cfg.RootCAs != pool {
-		t.Fatal("RootCAs must be the supplied pool, not a parsed bundle")
-	}
-	if cfg.InsecureSkipVerify {
-		t.Fatal("InsecureSkipVerify must not be set when RootCAs is supplied")
-	}
-	if cfg.ServerName != "localhost" {
-		t.Fatalf("ServerName = %q, want localhost", cfg.ServerName)
-	}
-	if cfg.MinVersion != 0x0303 { // TLS 1.2
-		t.Fatalf("MinVersion = %x, want TLS 1.2", cfg.MinVersion)
-	}
-}
 
-func TestBuildTLSConfig_CABundlePEMParsed(t *testing.T) {
-	t.Parallel()
-	pemBytes := mintSelfSignedPEM(t)
-	cfg, err := buildTLSConfig(ClientOptions{
-		TLS:         true,
-		CABundlePEM: pemBytes,
+	It("percent-encodes credential metacharacters", func() {
+		got, err := BuildURI(ClientOptions{
+			Host: "h", Port: "1", User: "a@b", Password: "p@ss:w/rd?&",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// '@', ':', '/', '?', '&' must all be percent-encoded so the driver
+		// doesn't mis-parse the URI.
+		for _, bad := range []string{"a@b:", "@ss:", "w/rd?", "?&@"} {
+			Expect(strings.Contains(got, bad)).To(BeFalse(), "uri must escape %q; got %s", bad, got)
+		}
+		Expect(got).To(ContainSubstring("a%40b"))
+		Expect(got).To(ContainSubstring("p%40ss%3Aw%2Frd%3F%26"))
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg == nil || cfg.RootCAs == nil {
-		t.Fatal("expected RootCAs parsed from PEM")
-	}
-}
 
-func TestBuildTLSConfig_CABundlePEMInvalid(t *testing.T) {
-	t.Parallel()
-	if _, err := buildTLSConfig(ClientOptions{
-		TLS:         true,
-		CABundlePEM: []byte("not a real pem"),
-	}); err == nil {
-		t.Fatal("expected error for unparseable CABundlePEM")
-	}
-}
+	It("propagates the TLS flag into the query string", func() {
+		on, err := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p", TLS: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(on).To(ContainSubstring("tls=true"))
 
-func TestBuildTLSConfig_Insecure(t *testing.T) {
-	t.Parallel()
-	cfg, err := buildTLSConfig(ClientOptions{TLS: true, TLSInsecure: true})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg == nil || !cfg.InsecureSkipVerify {
-		t.Fatal("expected InsecureSkipVerify=true")
-	}
-}
+		off, err := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p", TLS: false})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(off).To(ContainSubstring("tls=false"))
+	})
 
-func TestBuildTLSConfig_NilWhenNoHintsAndNoServerName(t *testing.T) {
-	t.Parallel()
-	cfg, err := buildTLSConfig(ClientOptions{TLS: true})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg != nil {
-		t.Fatalf("expected nil config when no CA/insecure/ServerName supplied, got %+v", cfg)
-	}
-}
+	It("respects an authDB override and defaults to admin", func() {
+		got, err := BuildURI(ClientOptions{
+			Host: "h", Port: "1", User: "u", Password: "p", AuthDB: "mydb",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(ContainSubstring("authSource=mydb"))
 
-func TestBuildTLSConfig_ServerNameOnlyReturnsConfig(t *testing.T) {
-	t.Parallel()
-	cfg, err := buildTLSConfig(ClientOptions{TLS: true, ServerName: "gw.example"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg == nil || cfg.ServerName != "gw.example" {
-		t.Fatalf("expected ServerName preserved, got %+v", cfg)
-	}
-	if cfg.RootCAs != nil || cfg.InsecureSkipVerify {
-		t.Fatal("ServerName-only config must not set RootCAs or InsecureSkipVerify")
-	}
-}
+		def, err := BuildURI(ClientOptions{Host: "h", Port: "1", User: "u", Password: "p"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(def).To(ContainSubstring("authSource=admin"))
+	})
+
+	DescribeTable("rejects incomplete options",
+		func(opts ClientOptions) {
+			_, err := BuildURI(opts)
+			Expect(err).To(HaveOccurred())
+		},
+		Entry("missing host", ClientOptions{Port: "1", User: "u"}),
+		Entry("missing port", ClientOptions{Host: "h", User: "u"}),
+		Entry("missing user", ClientOptions{Host: "h", Port: "1"}),
+	)
+})
+
+var _ = Describe("buildTLSConfig", func() {
+	It("prefers an explicit RootCAs pool over CABundlePEM and TLSInsecure", func() {
+		pool := x509.NewCertPool()
+		cfg, err := buildTLSConfig(ClientOptions{
+			TLS:         true,
+			RootCAs:     pool,
+			CABundlePEM: []byte("ignored"),
+			TLSInsecure: true,
+			ServerName:  "localhost",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).NotTo(BeNil())
+		Expect(cfg.RootCAs).To(BeIdenticalTo(pool))
+		Expect(cfg.InsecureSkipVerify).To(BeFalse())
+		Expect(cfg.ServerName).To(Equal("localhost"))
+		Expect(cfg.MinVersion).To(BeEquivalentTo(0x0303), "want TLS 1.2")
+	})
+
+	It("parses a CABundlePEM into a populated pool", func() {
+		cfg, err := buildTLSConfig(ClientOptions{
+			TLS:         true,
+			CABundlePEM: mintSelfSignedPEM(),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).NotTo(BeNil())
+		Expect(cfg.RootCAs).NotTo(BeNil())
+	})
+
+	It("fails when CABundlePEM is malformed", func() {
+		_, err := buildTLSConfig(ClientOptions{
+			TLS:         true,
+			CABundlePEM: []byte("not a real pem"),
+		})
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("honours TLSInsecure when no CA material is supplied", func() {
+		cfg, err := buildTLSConfig(ClientOptions{TLS: true, TLSInsecure: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).NotTo(BeNil())
+		Expect(cfg.InsecureSkipVerify).To(BeTrue())
+	})
+
+	It("returns nil when no CA, insecure flag, or ServerName is supplied", func() {
+		cfg, err := buildTLSConfig(ClientOptions{TLS: true})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).To(BeNil())
+	})
+
+	It("preserves a ServerName-only config without RootCAs or InsecureSkipVerify", func() {
+		cfg, err := buildTLSConfig(ClientOptions{TLS: true, ServerName: "gw.example"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).NotTo(BeNil())
+		Expect(cfg.ServerName).To(Equal("gw.example"))
+		Expect(cfg.RootCAs).To(BeNil())
+		Expect(cfg.InsecureSkipVerify).To(BeFalse())
+	})
+})

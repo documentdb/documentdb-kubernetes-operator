@@ -5,8 +5,10 @@ package documentdb
 
 import (
 	"context"
-	"testing"
 	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -17,166 +19,137 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 )
 
-func newScheme(t *testing.T) *runtime.Scheme {
-	t.Helper()
+func newScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
-	if err := previewv1.AddToScheme(s); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
-	}
+	Expect(previewv1.AddToScheme(s)).To(Succeed())
 	return s
 }
 
-func TestGetAndList(t *testing.T) {
-	s := newScheme(t)
-	objs := []client.Object{
-		&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}},
-		&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns1"}},
-		&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns2"}},
-	}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
-	ctx := context.Background()
+var _ = Describe("Shared CR helpers", func() {
+	var ctx context.Context
 
-	got, err := Get(ctx, c, types.NamespacedName{Name: "a", Namespace: "ns1"})
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.Name != "a" {
-		t.Errorf("got name %q want a", got.Name)
-	}
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
 
-	items, err := List(ctx, c, "ns1")
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(items) != 2 {
-		t.Errorf("got %d items want 2", len(items))
-	}
+	Describe("Get and List", func() {
+		It("returns the named object and filters by namespace", func() {
+			s := newScheme()
+			objs := []client.Object{
+				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}},
+				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns1"}},
+				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns2"}},
+			}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
 
-	all, err := List(ctx, c, "")
-	if err != nil {
-		t.Fatalf("List all: %v", err)
-	}
-	if len(all) != 3 {
-		t.Errorf("got %d items want 3", len(all))
-	}
-}
+			got, err := Get(ctx, c, types.NamespacedName{Name: "a", Namespace: "ns1"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Name).To(Equal("a"))
 
-func TestPatchSpec(t *testing.T) {
-	s := newScheme(t)
-	dd := &previewv1.DocumentDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"},
-		Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 1},
-	}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
-	ctx := context.Background()
+			items, err := List(ctx, c, "ns1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(items).To(HaveLen(2))
 
-	fresh, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if err := PatchSpec(ctx, c, fresh, func(spec *previewv1.DocumentDBSpec) {
-		spec.LogLevel = "debug"
-	}); err != nil {
-		t.Fatalf("PatchSpec: %v", err)
-	}
-	after, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
-	if err != nil {
-		t.Fatalf("Get after: %v", err)
-	}
-	if after.Spec.LogLevel != "debug" {
-		t.Errorf("expected LogLevel=debug, got %q", after.Spec.LogLevel)
-	}
-}
+			all, err := List(ctx, c, "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(all).To(HaveLen(3))
+		})
+	})
 
-func TestIsHealthyMatchesRunningStatus(t *testing.T) {
-	if IsHealthy(nil) {
-		t.Error("nil should not be healthy")
-	}
-	if IsHealthy(&previewv1.DocumentDB{}) {
-		t.Error("empty should not be healthy")
-	}
-	dd := &previewv1.DocumentDB{Status: previewv1.DocumentDBStatus{Status: ReadyStatus}}
-	if !IsHealthy(dd) {
-		t.Errorf("%q should be healthy", ReadyStatus)
-	}
-	notReady := &previewv1.DocumentDB{Status: previewv1.DocumentDBStatus{Status: "Running"}}
-	if IsHealthy(notReady) {
-		t.Error(`"Running" should not be healthy (ReadyStatus mismatch)`)
-	}
-}
+	Describe("PatchSpec", func() {
+		It("mutates and persists the spec", func() {
+			s := newScheme()
+			dd := &previewv1.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"},
+				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 1},
+			}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 
-func TestWaitHealthyTimeout(t *testing.T) {
-	s := newScheme(t)
-	dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	err := WaitHealthy(ctx, c, client.ObjectKeyFromObject(dd), 200*time.Millisecond)
-	if err == nil {
-		t.Fatal("expected timeout error")
-	}
-}
+			fresh, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(PatchSpec(ctx, c, fresh, func(spec *previewv1.DocumentDBSpec) {
+				spec.LogLevel = "debug"
+			})).To(Succeed())
 
-func TestDeleteRemovesObject(t *testing.T) {
-	s := newScheme(t)
-	dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
-	ctx := context.Background()
-	if err := Delete(ctx, c, dd, 2*time.Second); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := Get(ctx, c, client.ObjectKeyFromObject(dd)); err == nil {
-		t.Fatal("expected Get to fail after Delete")
-	}
-}
+			after, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(after.Spec.LogLevel).To(Equal("debug"))
+		})
+	})
 
-func TestPatchInstances_UpdatesSpec(t *testing.T) {
-	s := newScheme(t)
-	dd := &previewv1.DocumentDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1"},
-		Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
-	}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
-	ctx := context.Background()
+	Describe("IsHealthy", func() {
+		It("only matches the canonical ReadyStatus", func() {
+			Expect(IsHealthy(nil)).To(BeFalse())
+			Expect(IsHealthy(&previewv1.DocumentDB{})).To(BeFalse())
+			Expect(IsHealthy(&previewv1.DocumentDB{
+				Status: previewv1.DocumentDBStatus{Status: ReadyStatus},
+			})).To(BeTrue())
+			Expect(IsHealthy(&previewv1.DocumentDB{
+				Status: previewv1.DocumentDBStatus{Status: "Running"},
+			})).To(BeFalse())
+		})
+	})
 
-	if err := PatchInstances(ctx, c, "ns1", "dd", 3); err != nil {
-		t.Fatalf("PatchInstances: %v", err)
-	}
-	got, err := Get(ctx, c, types.NamespacedName{Namespace: "ns1", Name: "dd"})
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.Spec.InstancesPerNode != 3 {
-		t.Fatalf("InstancesPerNode=%d, want 3", got.Spec.InstancesPerNode)
-	}
-}
+	Describe("WaitHealthy", func() {
+		It("returns an error when the deadline elapses", func() {
+			s := newScheme()
+			dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
+			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			Expect(WaitHealthy(ctx, c, client.ObjectKeyFromObject(dd), 200*time.Millisecond)).To(HaveOccurred())
+		})
+	})
 
-func TestPatchInstances_NoopWhenEqual(t *testing.T) {
-	s := newScheme(t)
-	dd := &previewv1.DocumentDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1", ResourceVersion: "7"},
-		Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
-	}
-	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
-	if err := PatchInstances(context.Background(), c, "ns1", "dd", 2); err != nil {
-		t.Fatalf("PatchInstances no-op: %v", err)
-	}
-}
+	Describe("Delete", func() {
+		It("removes the object from the API", func() {
+			s := newScheme()
+			dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
+			Expect(Delete(ctx, c, dd, 2*time.Second)).To(Succeed())
+			_, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
+			Expect(err).To(HaveOccurred())
+		})
+	})
 
-func TestPatchInstances_RejectsOutOfRange(t *testing.T) {
-	s := newScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
-	for _, n := range []int{0, 4, -1} {
-		if err := PatchInstances(context.Background(), c, "ns1", "dd", n); err == nil {
-			t.Errorf("PatchInstances(%d) expected error, got nil", n)
-		}
-	}
-}
+	Describe("PatchInstances", func() {
+		It("updates InstancesPerNode", func() {
+			s := newScheme()
+			dd := &previewv1.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1"},
+				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
+			}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
+			Expect(PatchInstances(ctx, c, "ns1", "dd", 3)).To(Succeed())
 
-func TestPatchInstances_NotFound(t *testing.T) {
-	s := newScheme(t)
-	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
-	if err := PatchInstances(context.Background(), c, "ns1", "missing", 2); err == nil {
-		t.Fatal("expected error for missing DocumentDB")
-	}
-}
+			got, err := Get(ctx, c, types.NamespacedName{Namespace: "ns1", Name: "dd"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Spec.InstancesPerNode).To(Equal(3))
+		})
+
+		It("is a no-op when the requested value already matches", func() {
+			s := newScheme()
+			dd := &previewv1.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1", ResourceVersion: "7"},
+				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
+			}
+			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
+			Expect(PatchInstances(ctx, c, "ns1", "dd", 2)).To(Succeed())
+		})
+
+		It("rejects values outside the supported range", func() {
+			s := newScheme()
+			c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+			for _, n := range []int{0, 4, -1} {
+				Expect(PatchInstances(ctx, c, "ns1", "dd", n)).To(HaveOccurred(),
+					"PatchInstances(%d) should fail", n)
+			}
+		})
+
+		It("returns an error when the DocumentDB does not exist", func() {
+			s := newScheme()
+			c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+			Expect(PatchInstances(ctx, c, "ns1", "missing", 2)).To(HaveOccurred())
+		})
+	})
+})
