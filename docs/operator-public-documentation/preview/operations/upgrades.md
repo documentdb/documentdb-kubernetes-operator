@@ -323,7 +323,8 @@ In most cases, use `spec.documentDBVersion` to upgrade both components together.
 
     ```yaml
     spec:
-      documentDBImage: "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:<version>"
+      image:
+        documentDB: "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:<version>"
     ```
 
     This overrides only the database extension image while keeping the gateway at the version set by `documentDBVersion`.
@@ -332,7 +333,8 @@ In most cases, use `spec.documentDBVersion` to upgrade both components together.
 
     ```yaml
     spec:
-      gatewayImage: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:<version>"
+      image:
+        gateway: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:<version>"
     ```
 
     This overrides only the gateway sidecar image while keeping the extension at the version set by `documentDBVersion`.

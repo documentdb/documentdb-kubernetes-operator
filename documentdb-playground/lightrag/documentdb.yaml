@@ -29,12 +29,14 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  documentDBImage: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
-  gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
+  image:
+    documentDB: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
+    gateway: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
   documentDbCredentialSecret: docdb-credentials
   resource:
     storage:
       pvcSize: "10Gi"
   exposeViaService:
     serviceType: ClusterIP
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
