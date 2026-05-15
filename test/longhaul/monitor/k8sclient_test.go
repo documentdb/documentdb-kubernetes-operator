@@ -18,7 +18,7 @@ import (
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 func newTestScheme() *runtime.Scheme {
@@ -100,7 +100,7 @@ var _ = Describe("K8sClusterClient", func() {
 				},
 			}
 			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
-				dd.Status.Status = shareddoc.ReadyStatus
+				dd.Status.Status = shareddb.ReadyStatus
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(pods...), cr)
 

@@ -13,7 +13,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
@@ -47,7 +47,7 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			})
 			Expect(err).ToNot(HaveOccurred())
 			DeferCleanup(func(ctx SpecContext) {
-				_ = shareddoc.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: name}
