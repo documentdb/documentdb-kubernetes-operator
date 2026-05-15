@@ -12,6 +12,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/helmop"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
@@ -94,7 +95,7 @@ var _ = Describe("DocumentDB upgrade — control plane",
 			})
 			Expect(err).NotTo(HaveOccurred(), "create DocumentDB %s/%s", ns, ddName)
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: ddName}

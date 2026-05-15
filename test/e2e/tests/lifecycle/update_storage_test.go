@@ -16,6 +16,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -62,7 +63,7 @@ var _ = Describe("DocumentDB lifecycle — update storage.pvcSize",
 			})
 			Expect(err).ToNot(HaveOccurred())
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: name}
@@ -73,7 +74,7 @@ var _ = Describe("DocumentDB lifecycle — update storage.pvcSize",
 
 			// Patch the storage size.
 			fresh := getDD(ctx, ns, name)
-			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddoc.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
 				s.Resource.Storage.PvcSize = "2Gi"
 			})).To(Succeed())
 

@@ -15,7 +15,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 )
 
@@ -99,11 +99,11 @@ func createCredentialSecret(ctx context.Context, c client.Client, ns, name strin
 	}
 }
 
-// getDD is a convenience shortcut around documentdb.Get used by specs
+// getDD is a convenience shortcut around shareddoc.Get used by specs
 // that need to refetch the CR after a patch.
 func getDD(ctx context.Context, ns, name string) *previewv1.DocumentDB {
 	c := e2e.SuiteEnv().Client
-	dd, err := documentdb.Get(ctx, c, types.NamespacedName{Namespace: ns, Name: name})
+	dd, err := shareddoc.Get(ctx, c, types.NamespacedName{Namespace: ns, Name: name})
 	Expect(err).ToNot(HaveOccurred())
 	return dd
 }

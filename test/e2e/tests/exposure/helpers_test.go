@@ -14,6 +14,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -97,13 +98,13 @@ func setupFreshCluster(
 	Expect(err).ToNot(HaveOccurred(), "create DocumentDB")
 
 	Eventually(func() error {
-		return documentdbutil.WaitHealthy(ctx, c,
+		return shareddoc.WaitHealthy(ctx, c,
 			types.NamespacedName{Namespace: ns, Name: name},
 			timeouts.For(timeouts.DocumentDBReady))
 	}, timeouts.For(timeouts.DocumentDBReady)+30*time.Second, 10*time.Second).
 		Should(Succeed(), "DocumentDB %s/%s did not become healthy", ns, name)
 
-	live, err := documentdbutil.Get(ctx, c, client.ObjectKey{Namespace: ns, Name: name})
+	live, err := shareddoc.Get(ctx, c, client.ObjectKey{Namespace: ns, Name: name})
 	Expect(err).ToNot(HaveOccurred())
 
 	cleanup := func() {

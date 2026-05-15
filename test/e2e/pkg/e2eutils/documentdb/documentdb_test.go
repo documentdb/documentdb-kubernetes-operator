@@ -16,6 +16,7 @@ import (
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 func newScheme(t *testing.T) *runtime.Scheme {
@@ -119,7 +120,7 @@ func TestCreateAppliesTLSSelfSignedMixin(t *testing.T) {
 		t.Fatalf("returned Spec.TLS.Gateway.Mode=%q, want SelfSigned", obj.Spec.TLS.Gateway.Mode)
 	}
 
-	got, err := Get(context.Background(), c, types.NamespacedName{Namespace: "ns1", Name: "dd1"})
+	got, err := shareddoc.Get(context.Background(), c, types.NamespacedName{Namespace: "ns1", Name: "dd1"})
 	if err != nil {
 		t.Fatalf("Get back: %v", err)
 	}

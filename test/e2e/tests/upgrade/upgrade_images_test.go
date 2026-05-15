@@ -18,6 +18,7 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -110,7 +111,7 @@ var _ = Describe("DocumentDB upgrade — images",
 			})
 			Expect(err).NotTo(HaveOccurred(), "create DocumentDB %s/%s", ns, ddName)
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: ddName}
@@ -129,9 +130,9 @@ var _ = Describe("DocumentDB upgrade — images",
 			Expect(handle.Close(ctx)).To(Succeed())
 
 			By("patching spec.documentDBImage (and optionally gatewayImage) to the new image")
-			fresh, err := documentdb.Get(ctx, c, key)
+			fresh, err := shareddoc.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before patch")
-			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddoc.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
 				s.DocumentDBImage = newImage
 				if newGwImage != "" {
 					s.GatewayImage = newGwImage

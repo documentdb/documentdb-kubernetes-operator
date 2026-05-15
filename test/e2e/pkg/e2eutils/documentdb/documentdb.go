@@ -38,7 +38,6 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	e2emanifests "github.com/documentdb/documentdb-operator/test/e2e/manifests"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // ManifestsFS is the filesystem RenderCR reads templates from when the
@@ -54,21 +53,6 @@ const (
 	mixinSubdir   = "mixins"
 	templateExt   = ".yaml.template"
 	yamlSeparator = "---\n"
-)
-
-// Re-exports of the framework-agnostic CR operations now living in
-// test/shared/documentdb. e2e suite code continues to call
-// documentdb.Get / PatchInstances / etc. unchanged. Constants such as
-// ReadyStatus and DefaultWaitPoll are *not* re-exported — callers that
-// need them import test/shared/documentdb directly.
-var (
-	Get            = shareddoc.Get
-	List           = shareddoc.List
-	PatchInstances = shareddoc.PatchInstances
-	PatchSpec      = shareddoc.PatchSpec
-	WaitHealthy    = shareddoc.WaitHealthy
-	IsHealthy      = shareddoc.IsHealthy
-	Delete         = shareddoc.Delete
 )
 
 // CreateOptions drives Create. Base names the file in manifests/base/,

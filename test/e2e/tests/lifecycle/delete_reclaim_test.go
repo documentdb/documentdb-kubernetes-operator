@@ -14,6 +14,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -68,7 +69,7 @@ var _ = Describe("DocumentDB lifecycle — delete with Retain reclaim",
 			Expect(pvNames).ToNot(BeEmpty(), "expected bound PVs; got only pending PVCs")
 
 			// Delete the DocumentDB and wait for it to disappear.
-			Expect(documentdb.Delete(ctx, c, dd, 3*time.Minute)).To(Succeed())
+			Expect(shareddoc.Delete(ctx, c, dd, 3*time.Minute)).To(Succeed())
 
 			// Retained PVs should remain in the API server; their
 			// phase transitions to Released (or stays Bound briefly)

@@ -15,6 +15,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -74,7 +75,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 			// 2. Delete the source cluster. Default reclaimPolicy is
 			// Retain (per the DocumentDB CRD default), so the PV
 			// persists with the data blocks intact.
-			Expect(documentdb.Delete(ctx, c, src, 3*time.Minute)).To(Succeed())
+			Expect(shareddoc.Delete(ctx, c, src, 3*time.Minute)).To(Succeed())
 
 			// 3. Discover the retained PV that belonged to the now-
 			// deleted source cluster. FindRetainedPV matches both
@@ -94,7 +95,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 				"recovery_from_pv.yaml.template",
 				map[string]string{"PV_NAME": pv.Name})
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dst, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, dst, 3*time.Minute)
 			})
 			dstKey := types.NamespacedName{Namespace: ns, Name: recoveryName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, dstKey),

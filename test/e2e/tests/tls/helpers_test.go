@@ -21,6 +21,7 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -110,7 +111,7 @@ func provisionCluster(
 	})
 
 	key := types.NamespacedName{Namespace: nsName, Name: tlsDocumentDBName}
-	Expect(ddbutil.WaitHealthy(ctx, c, key, timeouts.For(timeouts.DocumentDBReady))).
+	Expect(shareddoc.WaitHealthy(ctx, c, key, timeouts.For(timeouts.DocumentDBReady))).
 		To(Succeed(), "documentdb did not become healthy within %s", timeouts.For(timeouts.DocumentDBReady))
 
 	return &clusterSetup{NamespaceName: nsName, DD: dd}

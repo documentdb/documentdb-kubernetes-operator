@@ -11,7 +11,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -44,7 +44,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			// only fetch whatever the status reports.
 			key := types.NamespacedName{Namespace: cluster.NamespaceName, Name: cluster.DD.Name}
 			Eventually(func(g Gomega) string {
-				dd, err := ddbutil.Get(ctx, env.Client, key)
+				dd, err := shareddoc.Get(ctx, env.Client, key)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dd.Status.TLS).NotTo(BeNil(), "status.tls not populated yet")
 				g.Expect(dd.Status.TLS.Ready).To(BeTrue(), "status.tls.ready false")
@@ -54,7 +54,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 
 			// Assert the projected secret looks like a TLS secret.
 			Eventually(func() error {
-				dd, err := ddbutil.Get(ctx, env.Client, key)
+				dd, err := shareddoc.Get(ctx, env.Client, key)
 				if err != nil {
 					return err
 				}

@@ -15,7 +15,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -56,7 +56,7 @@ var _ = Describe("DocumentDB scale — down",
 			e2e.SkipUnlessLevel(e2e.Medium)
 
 			// Grow to 3 first so we can assert a genuine 3→2 scale-down.
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 3)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 3)).To(Succeed())
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 3),
 				timeouts.For(timeouts.InstanceScale),
 				timeouts.PollInterval(timeouts.InstanceScale)).
@@ -66,7 +66,7 @@ var _ = Describe("DocumentDB scale — down",
 				timeouts.PollInterval(timeouts.InstanceScale)).
 				Should(Succeed())
 
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 2)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 2)).To(Succeed())
 
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 2),
 				timeouts.For(timeouts.InstanceScale),
@@ -86,7 +86,7 @@ var _ = Describe("DocumentDB scale — down",
 			Expect(primary).NotTo(BeNil())
 			GinkgoLogr.Info("initial primary before 2→1 scale-down", "pod", primary.Name)
 
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 1)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 1)).To(Succeed())
 
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 1),
 				timeouts.For(timeouts.InstanceScale),

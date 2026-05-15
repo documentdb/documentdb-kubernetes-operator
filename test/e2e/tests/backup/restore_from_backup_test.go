@@ -14,6 +14,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -56,7 +57,7 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 			})
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, src, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, src, 3*time.Minute)
 			})
 			srcKey := types.NamespacedName{Namespace: ns, Name: sourceName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, srcKey),
@@ -92,7 +93,7 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 				"recovery_from_backup.yaml.template",
 				map[string]string{"BACKUP_NAME": backupName})
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dst, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, dst, 3*time.Minute)
 			})
 			dstKey := types.NamespacedName{Namespace: ns, Name: recoveryName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, dstKey),

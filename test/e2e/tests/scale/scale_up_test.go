@@ -13,7 +13,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -58,7 +58,7 @@ var _ = Describe("DocumentDB scale — up",
 			Expect(primary).NotTo(BeNil())
 			initialPrimary := primary.Name
 
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 3)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 3)).To(Succeed())
 
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 3),
 				timeouts.For(timeouts.InstanceScale),
@@ -77,7 +77,7 @@ var _ = Describe("DocumentDB scale — up",
 		It("scales 1 → 2 instances after first scaling down to 1", func() {
 			e2e.SkipUnlessLevel(e2e.Medium)
 
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 1)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 1)).To(Succeed())
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 1),
 				timeouts.For(timeouts.InstanceScale),
 				timeouts.PollInterval(timeouts.InstanceScale)).
@@ -92,7 +92,7 @@ var _ = Describe("DocumentDB scale — up",
 			Expect(primary).NotTo(BeNil())
 			initialPrimary := primary.Name
 
-			Expect(documentdb.PatchInstances(ctx, c, key.Namespace, key.Name, 2)).To(Succeed())
+			Expect(shareddoc.PatchInstances(ctx, c, key.Namespace, key.Name, 2)).To(Succeed())
 
 			Eventually(assertions.AssertInstanceCount(ctx, c, key, 2),
 				timeouts.For(timeouts.InstanceScale),
