@@ -4,45 +4,7 @@ Long haul tests validate that DocumentDB Kubernetes Operator clusters remain hea
 continuous load over extended periods. They run a canary workload that writes and reads data,
 performs management operations, and checks for data integrity.
 
-> **Status:** Phase 1 complete. Canary workload (writers + verifiers), operation scheduler,
-> health monitor, and in-cluster deployment are implemented with a placeholder cluster client.
-> Phase 2 will add real Kubernetes operations. See [design document](../../docs/designs/long-haul-test-design.md).
-
-## Project Structure
-
-```
-test/longhaul/
-├── go.mod                # Separate Go module
-├── README.md             # This file
-├── Dockerfile            # Multi-stage build for in-cluster deployment
-├── cmd/longhaul/
-│   └── main.go           # Standalone binary entry point
-├── deploy/
-│   ├── setup.yaml        # Namespace + credentials + DocumentDB CR (bootstrap)
-│   ├── deployment.yaml   # Kubernetes Deployment + ConfigMap manifest (templated)
-│   └── rbac.yaml         # ServiceAccount + RBAC roles
-├── config/
-│   ├── config.go         # Config struct, env var loading, validation
-│   └── config_test.go    # Config unit tests
-├── workload/
-│   ├── writer.go         # Continuous writers with sequence tracking
-│   └── verifier.go       # Gap/checksum verification
-├── monitor/
-│   ├── health.go         # ClusterClient interface + health monitor
-│   └── leakdetect.go     # Resource leak detector
-├── operations/
-│   ├── scale.go          # Scale up/down operations
-│   └── scheduler.go      # Operation scheduling with cooldowns
-├── journal/
-│   └── journal.go        # Structured event log + disruption windows
-└── report/
-    └── checkpoint.go     # Periodic reporter (ConfigMap + stdout)
-```
-
-- **`test/longhaul/`** — The long-running canary. Designed to run for hours/days.
-- **`test/longhaul/cmd/longhaul/`** — Standalone binary, deployed as a Kubernetes Job.
-- **`test/longhaul/deploy/`** — Kubernetes manifests for in-cluster deployment.
-- **`test/longhaul/config/`** — Config parsing and validation. Fast unit tests, safe for CI.
+See the [design document](../../docs/designs/long-haul-test-design.md) for architecture and rationale.
 
 ## Quick Start
 
@@ -72,14 +34,29 @@ go test ./config/ -v
 
 ### Run Locally
 
-For development and validation against a port-forwarded cluster:
+Useful for iterating on driver code against a real cluster without rebuilding the
+container image. The driver auto-falls back to `~/.kube/config` when not running
+in-cluster, so the same binary works in both modes.
+
+You need network reachability from your machine to the DocumentDB gateway port
+(10260). If you're behind a firewall that blocks it, use the in-cluster deployment
+path below instead.
 
 ```bash
 cd test/longhaul
+NS=documentdb-test-ns
 
-LONGHAUL_MONGO_URI="mongodb://user:pass@localhost:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true" \
+# 1. Port-forward the gateway service in another terminal and leave it running.
+kubectl port-forward -n $NS svc/documentdb-service-documentdb-cluster 10260:10260
+
+# 2. Read credentials from the secret the operator created.
+USER=$(kubectl get secret documentdb-credentials -n $NS -o jsonpath='{.data.username}' | base64 -d)
+PASS=$(kubectl get secret documentdb-credentials -n $NS -o jsonpath='{.data.password}' | base64 -d)
+
+# 3. Run the driver. Override LONGHAUL_MAX_DURATION for short dev iterations.
+LONGHAUL_MONGO_URI="mongodb://${USER}:${PASS}@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true" \
 LONGHAUL_CLUSTER_NAME=documentdb-cluster \
-LONGHAUL_NAMESPACE=documentdb-test-ns \
+LONGHAUL_NAMESPACE=$NS \
 LONGHAUL_MAX_DURATION=5m \
 go run ./cmd/longhaul/
 ```
