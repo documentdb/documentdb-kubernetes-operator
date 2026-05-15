@@ -40,6 +40,7 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 
 	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // Ownership label keys stamped on every fixture-created namespace and
@@ -398,7 +399,7 @@ func waitDocumentDBHealthy(ctx context.Context, c client.Client, namespace, name
 			}
 			return false, err
 		}
-		return dd.Status.Status == documentdbutil.ReadyStatus, nil
+		return dd.Status.Status == shareddoc.ReadyStatus, nil
 	})
 }
 

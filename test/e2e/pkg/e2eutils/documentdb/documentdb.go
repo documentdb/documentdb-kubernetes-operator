@@ -54,22 +54,13 @@ const (
 	mixinSubdir   = "mixins"
 	templateExt   = ".yaml.template"
 	yamlSeparator = "---\n"
-
-	// DefaultWaitPoll is the polling interval for WaitHealthy/Delete.
-	// Re-exported from test/shared/documentdb so existing e2e callers
-	// continue to reference documentdb.DefaultWaitPoll.
-	DefaultWaitPoll = shareddoc.DefaultWaitPoll
-
-	// ReadyStatus is the DocumentDBStatus.Status value the operator
-	// surfaces once the underlying CNPG cluster is healthy. Re-exported
-	// from test/shared/documentdb so e2e and long-haul share a single
-	// source of truth.
-	ReadyStatus = shareddoc.ReadyStatus
 )
 
 // Re-exports of the framework-agnostic CR operations now living in
 // test/shared/documentdb. e2e suite code continues to call
-// documentdb.Get / PatchInstances / etc. unchanged.
+// documentdb.Get / PatchInstances / etc. unchanged. Constants such as
+// ReadyStatus and DefaultWaitPoll are *not* re-exported — callers that
+// need them import test/shared/documentdb directly.
 var (
 	Get            = shareddoc.Get
 	List           = shareddoc.List

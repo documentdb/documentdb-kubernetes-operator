@@ -17,13 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // runningStatus aliases the canonical ReadyStatus constant exported by
-// the documentdb helper package so all sibling helpers share a single
-// source of truth for the "DocumentDB is healthy" sentinel.
-const runningStatus = documentdbutil.ReadyStatus
+// test/shared/documentdb so e2e and long-haul share a single source of
+// truth for the "DocumentDB is healthy" sentinel.
+const runningStatus = shareddoc.ReadyStatus
 
 // clusterNameFor returns the CNPG Cluster name that backs the given
 // DocumentDB. For single-cluster (non-replicated) deployments this
