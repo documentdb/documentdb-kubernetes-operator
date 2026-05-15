@@ -1,6 +1,6 @@
 ---
 name: fleet-debugging
-description: "Skill for debugging Kubefleet and fleet networking in DocumentDB Kubernetes Operator."
+description: "Use when debugging issues in a multi-region or multi-cloud DocumentDB deployment"
 ---
 
 # Fleet Debug Skill
@@ -13,18 +13,18 @@ Use this skill to gather information and provide analysis for Kubefleet and flee
 
 Get all documentdb names.
 `kubectl get documentdb -Ao json | jq -r '.items | to_entries[] | "\(.key): \(.value.metadata.name)"'`
-If there are multiple, confirm which one is being debugged and replace the index value 0 in the following commands.
+If there are multiple, confirm which one is being debugged and replace the $DDB_INDEX in the following commands, if there's just one, set DDB_INDEX to 0.
 
 Get cluster names and primary from the DocumentDB custom resource:
-`kubectl get documentdb -Ao json | jq ".items[0].spec.clusterReplication | {clusters: [.clusterList[].name], primary: .primary}"`
+`kubectl get documentdb -Ao json | jq ".items[$DDB_INDEX].spec.clusterReplication | {clusters: [.clusterList[].name], primary: .primary}"`
 
 Identify which cluster is the hub:
-`for cluster in $(kubectl get documentdb -Ao json | jq -r ".items[0].spec.clusterReplication.clusterList[].name"); do echo -n "$cluster: "; if kubectl --context $cluster get ns fleet-system-hub &> /dev/null; then echo "HUB"; else echo "Member"; fi; done`
+`for cluster in $(kubectl get documentdb -Ao json | jq -r ".items[$DDB_INDEX].spec.clusterReplication.clusterList[].name"); do echo -n "$cluster: "; if kubectl --context $cluster get ns fleet-system-hub &> /dev/null; then echo "HUB"; else echo "Member"; fi; done`
 
 ## Health Checks
 
 Quick health check for member-side fleet components across all clusters:
-`for cluster in $(kubectl get documentdb -Ao json | jq -r ".items[0].spec.clusterReplication.clusterList[].name"); do echo "=== $cluster ===" && kubectl --context $cluster get pods -n fleet-system --no-headers | grep -E "member-agent|mcs-controller|member-net"; done`
+`for cluster in $(kubectl get documentdb -Ao json | jq -r ".items[$DDB_INDEX].spec.clusterReplication.clusterList[].name"); do echo "=== $cluster ===" && kubectl --context $cluster get pods -n fleet-system --no-headers | grep -E "member-agent|mcs-controller|member-net"; done`
 
 Check hub-side pods (run on the hub cluster, replace `{HUB_CLUSTER}` with the hub context):
 `kubectl --context {HUB_CLUSTER} get pods -n fleet-system-hub`
@@ -70,5 +70,5 @@ The commands given always look at just the first documentdb cluster. You should 
 
 # References
 
-Use https://github.com/kubefleet-dev/kubefleet to find information about Kubefleet placements, configurations, and best practices.
-Use https://github.com/Azure/fleet-networking to find information about MultiClusterServices, service exports and imports, and networking best practices.
+Use [kubefleet docs](https://github.com/kubefleet-dev/kubefleet) to find information about Kubefleet placements, configurations, and best practices.
+Use [fleet networking docs](https://github.com/Azure/fleet-networking) to find information about MultiClusterServices, service exports and imports, and networking best practices.
