@@ -5,7 +5,23 @@ package preview
 
 import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// Image mode constants for ImageSpec.Mode.
+const (
+	// ImageModeLayered (default) uses CNPG's Extensions configuration with
+	// pg_documentdb_core + pg_documentdb shipped via an ImageVolumeSource.
+	// Use this with images that contain only the extension layer.
+	ImageModeLayered = "layered"
+
+	// ImageModeCombined treats the PostgreSQL image itself as a fat image
+	// that already bundles the DocumentDB extension binaries.
+	// In this mode the operator does NOT inject an Extensions stanza or
+	// the default AdditionalLibraries list; callers must specify their
+	// own postgres.preloadLibraries.
+	ImageModeCombined = "combined"
 )
 
 // Feature gate constants. PascalCase names following the Kubernetes feature gate convention.
@@ -30,26 +46,21 @@ type DocumentDBSpec struct {
 	Resource Resource `json:"resource"`
 
 	// DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).
-	// When set, this overrides the default versions for documentDBImage and gatewayImage.
-	// Individual image fields take precedence over this version.
+	// When set, this overrides the default versions for image.documentDB and image.gateway.
+	// Individual image fields under spec.image take precedence over this version.
 	DocumentDBVersion string `json:"documentDBVersion,omitempty"`
 
-	// DocumentDBImage is the container image to use for DocumentDB.
-	// Changing this is not recommended for most users.
-	// If not specified, defaults based on documentDBVersion or operator defaults.
-	DocumentDBImage string `json:"documentDBImage,omitempty"`
-
-	// GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
-	// Changing this is not recommended for most users.
-	// If not specified, defaults to a version that matches the DocumentDB operator version.
-	GatewayImage string `json:"gatewayImage,omitempty"`
-
-	// PostgresImage is the container image to use for the PostgreSQL server.
-	// If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.
-	// Must use trixie (Debian 13) base to match the extension's GLIBC requirements.
-	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+	// Image groups container image settings for the DocumentDB stack
+	// (extension image, gateway image, PostgreSQL image, and image mode).
+	// All fields are optional; sensible defaults are applied when omitted.
 	// +optional
-	PostgresImage string `json:"postgresImage,omitempty"`
+	Image *ImageSpec `json:"image,omitempty"`
+
+	// ImagePullSecrets is an optional list of references to secrets in the same namespace
+	// to use for pulling any of the images used by this cluster. Passed through to the
+	// underlying CloudNative-PG cluster.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
 	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
@@ -62,12 +73,15 @@ type DocumentDBSpec struct {
 	// ClusterReplication configures cross-cluster replication for DocumentDB.
 	ClusterReplication *ClusterReplication `json:"clusterReplication,omitempty"`
 
-	// SidecarInjectorPluginName is the name of the sidecar injector plugin to use.
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sidecar injector plugin name cannot be changed after cluster creation"
-	SidecarInjectorPluginName string `json:"sidecarInjectorPluginName,omitempty"`
+	// Postgres groups PostgreSQL process-level tuning (UID/GID, preload libraries,
+	// custom post-init SQL). All fields are optional; defaults are preserved when omitted.
+	// +optional
+	Postgres *PostgresSpec `json:"postgres,omitempty"`
 
-	// WalReplicaPluginName is the name of the wal replica plugin to use.
-	WalReplicaPluginName string `json:"walReplicaPluginName,omitempty"`
+	// Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
+	// All fields are optional; defaults are preserved when omitted.
+	// +optional
+	Plugins *PluginsSpec `json:"plugins,omitempty"`
 
 	// ExposeViaService configures how to expose DocumentDB via a Kubernetes service.
 	// This can be a LoadBalancer or ClusterIP service.
@@ -140,6 +154,93 @@ type DocumentDBSpec struct {
 	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 }
 
+// ImageSpec groups container image settings for the DocumentDB stack.
+// All fields are optional; the operator falls back to documentDBVersion,
+// environment variables, and built-in defaults in that order.
+type ImageSpec struct {
+	// DocumentDB is the container image for the DocumentDB extension layer.
+	// In layered mode this image is mounted into the PostgreSQL container via
+	// CNPG's ImageVolumeSource so that the extension files are available
+	// alongside an upstream PostgreSQL image.
+	// In combined mode this field is ignored.
+	// +optional
+	DocumentDB string `json:"documentDB,omitempty"`
+
+	// Gateway is the container image for the DocumentDB Gateway sidecar.
+	// +optional
+	Gateway string `json:"gateway,omitempty"`
+
+	// Postgres is the container image for the PostgreSQL server.
+	// In layered mode (default) this is a vanilla CNPG-compatible PostgreSQL image.
+	// In combined mode this image is expected to already bundle the DocumentDB
+	// extension binaries; the operator will not inject an Extensions stanza.
+	// Must use trixie (Debian 13) base to match the extension's GLIBC requirements
+	// when running in layered mode.
+	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+	// +optional
+	Postgres string `json:"postgres,omitempty"`
+
+	// Mode controls how the DocumentDB extension is provisioned into the
+	// PostgreSQL container.
+	//
+	//   - layered (default): the operator mounts spec.image.documentDB as an
+	//     ImageVolumeSource via CNPG's Extensions stanza. Use this with
+	//     upstream-compatible CNPG PostgreSQL images.
+	//
+	//   - combined: the operator assumes spec.image.postgres already contains
+	//     the DocumentDB extension binaries. No Extensions stanza is emitted
+	//     and spec.postgres.preloadLibraries is used verbatim.
+	//
+	// +kubebuilder:validation:Enum=layered;combined
+	// +kubebuilder:default=layered
+	// +optional
+	Mode string `json:"mode,omitempty"`
+}
+
+// PostgresSpec groups PostgreSQL process-level tuning.
+// All fields are optional.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.uid) == has(self.gid)",message="uid and gid must be set together"
+type PostgresSpec struct {
+	// UID is the numeric user ID under which the PostgreSQL server process runs.
+	// When set, GID must also be set.
+	// +optional
+	UID *int64 `json:"uid,omitempty"`
+
+	// GID is the numeric group ID under which the PostgreSQL server process runs.
+	// When set, UID must also be set.
+	// +optional
+	GID *int64 `json:"gid,omitempty"`
+
+	// PreloadLibraries overrides the shared_preload_libraries list for the
+	// PostgreSQL server. Only honored when spec.image.mode is "combined";
+	// in layered mode the operator manages the preload libraries itself.
+	// +optional
+	PreloadLibraries []string `json:"preloadLibraries,omitempty"`
+
+	// PostInitSQL is an ordered list of SQL statements executed after the
+	// cluster is initialized. These statements run AFTER the operator's
+	// mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE
+	// documentdb, ALTER ROLE documentdb), so they can safely reference the
+	// documentdb extension and role.
+	// +optional
+	PostInitSQL []string `json:"postInitSQL,omitempty"`
+}
+
+// PluginsSpec groups CNPG plugin configuration.
+type PluginsSpec struct {
+	// SidecarInjectorName is the name of the CNPG sidecar injector plugin
+	// to use for the gateway and other sidecars. Immutable.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sidecar injector plugin name cannot be changed after cluster creation"
+	// +optional
+	SidecarInjectorName string `json:"sidecarInjectorName,omitempty"`
+
+	// WalReplicaName is the name of the WAL replica plugin to use for
+	// cross-cluster replication.
+	// +optional
+	WalReplicaName string `json:"walReplicaName,omitempty"`
+}
+
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
 type BootstrapConfiguration struct {
 	// Recovery configures recovery from a backup.
@@ -148,7 +249,7 @@ type BootstrapConfiguration struct {
 }
 
 // RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
-// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != '' && has(self.persistentVolume) && self.persistentVolume.name != '')",message="cannot specify both backup and persistentVolume recovery at the same time"
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && self.backup.name != ” && has(self.persistentVolume) && self.persistentVolume.name != ”)",message="cannot specify both backup and persistentVolume recovery at the same time"
 type RecoveryConfiguration struct {
 	// Backup specifies the source backup to restore from.
 	// +optional
