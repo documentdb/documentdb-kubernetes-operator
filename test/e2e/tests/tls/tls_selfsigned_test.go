@@ -12,7 +12,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
-	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
 
@@ -69,7 +69,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			connectCtx, cancelConnect := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
 			defer cancelConnect()
 
-			client, err := mongohelper.NewClient(connectCtx, mongohelper.ClientOptions{
+			client, err := sharedmongo.NewClient(connectCtx, sharedmongo.ClientOptions{
 				Host:        host,
 				Port:        port,
 				User:        tlsCredentialUser,
@@ -81,7 +81,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			defer func() { _ = client.Disconnect(ctx) }()
 
 			Eventually(func() error {
-				return mongohelper.Ping(connectCtx, client)
+				return sharedmongo.Ping(connectCtx, client)
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "TLS ping with insecure verify should succeed")
 		})
