@@ -1,106 +1,60 @@
 ---
 title: Metrics Reference
-description: Detailed reference of all metrics available when monitoring DocumentDB clusters, with PromQL examples.
+description: Reference for DocumentDB-owned metrics emitted by the operator-managed OpenTelemetry sidecar.
 tags:
   - monitoring
   - metrics
-  - prometheus
   - opentelemetry
 ---
 
 # Metrics Reference
 
-This page documents the key metrics available when monitoring a DocumentDB cluster, organized by source. Each section includes the metric name, description, labels, and example PromQL queries.
+This page documents metrics that are part of the DocumentDB operator monitoring contract. OpenTelemetry metric names are canonical; each backend may render names and labels differently.
 
-## Container Resource Metrics
+## Available metrics
 
-These metrics come from a node-level collector that scrapes kubelet's `/stats/summary` endpoint. Most production clusters already provide this through kube-prometheus-stack, an OTel Collector DaemonSet, or a managed monitoring agent. If your cluster does not, the playground includes a reference DaemonSet at `documentdb-playground/telemetry/container-metrics/`. The operator chart does not install this collector or grant kubelet privileges to tenant DocumentDB pods. This matches OpenTelemetry's [recommended deployment for the kubeletstats receiver](https://opentelemetry.io/docs/platforms/kubernetes/collector/components/#kubeletstats-receiver).
+### PostgreSQL health
 
-Metric names use OpenTelemetry semantic conventions; the OTel Prometheus exporter converts dots to underscores at scrape time, which is the form Prometheus stores.
+The sidecar runs a lightweight SQL health query against the local PostgreSQL container in each DocumentDB pod.
 
-### CPU
+| OpenTelemetry metric | Type | Description |
+|----------------------|------|-------------|
+| `documentdb.postgres.up` | Gauge | `1` when the local PostgreSQL container responds to the sidecar health query. |
 
-| Metric (OTel) | Metric (Prometheus form) | Type | Description |
-|---------------|--------------------------|------|-------------|
-| `container.cpu.time` | `container_cpu_time_seconds_total` | Counter | Cumulative container CPU time (seconds) |
-| `container.cpu.utilization` | `container_cpu_utilization_ratio` | Gauge | Container CPU utilization (fraction of one core) |
+Common resource attributes include:
 
-**Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`, `k8s_node_name`
+| Attribute | Description |
+|-----------|-------------|
+| `documentdb.cluster` | DocumentDB cluster name |
+| `k8s.namespace.name` | Kubernetes namespace |
+| `k8s.pod.name` | Kubernetes pod name |
 
-> **CPU/memory limit utilization.** The kubeletstats receiver can also emit `container.cpu_limit_utilization` and `container.memory_limit_utilization`, but only when the container has resource limits configured. The playground reference collector does not enable these metrics.
-
-#### Example Query
-
-CPU rate per container:
-
-```promql
-sum by (k8s_pod_name, k8s_container_name) (
-  rate(container_cpu_time_seconds_total{
-    k8s_namespace_name="documentdb-preview-ns",
-    k8s_container_name=~"postgres|documentdb-gateway"
-  }[5m])
-)
-```
-
-### Memory
-
-| Metric (OTel) | Metric (Prometheus form) | Type | Description |
-|---------------|--------------------------|------|-------------|
-| `k8s.container.memory.working_set` | `container_memory_working_set_bytes` | Gauge | Working set memory (bytes) — matches OOM accounting |
-| `k8s.container.memory.rss` | `container_memory_rss_bytes` | Gauge | Resident set size (bytes) |
-| `k8s.container.memory.usage` | `container_memory_usage_bytes` | Gauge | Total memory usage (bytes) |
-| `k8s.container.memory.available` | `container_memory_available_bytes` | Gauge | Memory available (bytes) — present only when limit is set |
-
-**Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`
-
-#### Example Query
-
-Working-set memory per container:
+When exported through the Prometheus exporter, this metric is commonly queried as:
 
 ```promql
-sum by (k8s_pod_name, k8s_container_name) (
-  container_memory_working_set_bytes{
-    k8s_namespace_name="documentdb-preview-ns"
-  }
-)
+documentdb_postgres_up{documentdb_cluster="my-cluster"}
 ```
 
-### Network
+## Planned DocumentDB metric groups
 
-| Metric (OTel) | Metric (Prometheus form) | Type | Description |
-|---------------|--------------------------|------|-------------|
-| `k8s.pod.network.io` | `k8s_pod_network_io_bytes_total` | Counter | Bytes sent / received per pod (with `direction` attribute: `transmit` / `receive`) |
+The preview monitoring API is intentionally small while instrumentation lands. These areas are planned or out of scope for the current preview docs:
 
-**Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `direction`, `interface`
+| Area | Status |
+|------|--------|
+| Gateway application metrics | Planned. The sidecar can receive local OTLP from the gateway, but user-facing gateway metrics will be documented after a public gateway image emits them. |
+| CNPG/PostgreSQL internals | Out of preview scope. A future revision may expose a curated subset such as replication freshness, PostgreSQL availability, WAL health, and database size. |
+| Operator controller metrics | Not yet exposed end-to-end through the operator Helm chart. |
 
-#### Example Queries
+## Pod and container resource metrics
 
-Network throughput (bytes/sec) per pod:
+Pod CPU, container memory, network I/O, filesystem usage, and node metrics are Kubernetes platform metrics. The DocumentDB operator does not install a node-level collector or grant kubelet permissions to DocumentDB pods.
 
-```promql
-sum by (k8s_pod_name) (
-  rate(k8s_pod_network_io_bytes_total{
-    k8s_namespace_name="documentdb-preview-ns"
-  }[5m])
-)
-```
+Use your existing platform collector, managed cloud agent, kube-prometheus-stack, or OTel Collector DaemonSet for these metrics. Filter that data to DocumentDB workloads using pod or container attributes such as:
 
-### Filesystem
+| Attribute | Typical values |
+|-----------|----------------|
+| `k8s.namespace.name` | Namespace that contains the DocumentDB cluster |
+| `k8s.pod.name` | DocumentDB pod name |
+| `k8s.container.name` | `postgres`, `documentdb-gateway`, `otel-collector` |
 
-| Metric (OTel) | Metric (Prometheus form) | Type | Description |
-|---------------|--------------------------|------|-------------|
-| `k8s.container.filesystem.usage` | `container_filesystem_usage_bytes` | Gauge | Filesystem usage (bytes) |
-| `k8s.container.filesystem.available` | `container_filesystem_available_bytes` | Gauge | Filesystem bytes available |
-| `k8s.container.filesystem.capacity` | `container_filesystem_capacity_bytes` | Gauge | Filesystem capacity (bytes) |
-
-**Common labels:** `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`
-
-> **Naming convention.** The OTel→Prometheus translator drops the `k8s.container.` prefix (so `k8s.container.cpu.usage` becomes `container_cpu_usage`) but keeps `k8s.pod.*` and `k8s.node.*` (so `k8s.pod.network.io` becomes `k8s_pod_network_io_bytes_total`).
-
-## Gateway Metrics
-
-The DocumentDB Gateway is being instrumented to emit application-level metrics over OTLP, and a future operator release will document these once the gateway image with that instrumentation ships in a public release.
-
-## CNPG / PostgreSQL Metrics
-
-PostgreSQL-level metrics from the CloudNative-PG instance manager are out of scope for this preview. A future revision of the operator will surface a curated set of these metrics through the OTel sidecar; until then, see the [CloudNative-PG monitoring docs](https://cloudnative-pg.io/documentation/current/monitoring/) if you need them today.
+If your cluster does not already collect kubelet-backed resource metrics, the playground includes a reference DaemonSet at [`documentdb-playground/telemetry/container-metrics/`](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/telemetry/container-metrics). Treat it as a starting point for demo or platform-owned deployments, not as part of the DocumentDB operator monitoring contract.
