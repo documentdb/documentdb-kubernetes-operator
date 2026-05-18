@@ -260,6 +260,24 @@ Generated_Code/
 # because we have git ;-)
 _UpgradeReport_Files/
 Backup*/
+# Re-include the E2E suite's three backup directories. The generic
+# Backup*/ pattern above (a Visual Studio output dir) silently
+# swallows them on case-insensitive filesystems (default on macOS).
+# Each one breaks CI in a different way:
+#   manifests/backup/  → operator //go:embed backup/*.yaml.template
+#                        compile error
+#   tests/backup/      → ginkgo -r ./tests/... sees 9 dirs not 10,
+#                        backup matrix row reports "0/0 specs"
+#                        (false green)
+#   pkg/e2eutils/backup/ → tests/backup imports it; ginkgo run
+#                          reports "Failed to compile backup" and
+#                          the whole binary exits non-zero, failing
+#                          every job that runs the suite (smoke,
+#                          lifecycle, scale, …) regardless of label
+#                          filter.
+!test/e2e/manifests/backup/
+!test/e2e/tests/backup/
+!test/e2e/pkg/e2eutils/backup/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/

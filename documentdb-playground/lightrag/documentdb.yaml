@@ -1,0 +1,40 @@
+# Sample DocumentDB instance sized for the LightRAG playground.
+#
+# Apply with:
+#   kubectl create namespace documentdb-test
+#   kubectl apply -f documentdb.yaml
+#
+# Notes:
+# - LightRAG requires DocumentDB extension v0.110.0 or later for the `_id`
+#   lookup fix (https://github.com/documentdb/documentdb/pull/459).
+#   v0.110.0+ is the default in recent operator releases; pinning the images
+#   here makes the requirement explicit.
+# - Replace the password before using outside a throwaway dev cluster.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docdb-credentials
+  namespace: documentdb-test
+type: Opaque
+stringData:
+  username: docdbadmin
+  password: "ChangeMe!ReplaceBeforeUsing"
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-cluster
+  namespace: documentdb-test
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDBImage: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
+  gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
+  documentDbCredentialSecret: docdb-credentials
+  resource:
+    storage:
+      pvcSize: "10Gi"
+  exposeViaService:
+    serviceType: ClusterIP
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io

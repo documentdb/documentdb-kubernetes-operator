@@ -1,4 +1,4 @@
-ARG SOURCE_IMAGE=ghcr.io/documentdb/documentdb/documentdb-local:pg17-0.109.0
+ARG SOURCE_IMAGE=ghcr.io/documentdb/documentdb/documentdb-local:pg17-0.110.0
 FROM ${SOURCE_IMAGE} AS source
 
 FROM debian:trixie-slim

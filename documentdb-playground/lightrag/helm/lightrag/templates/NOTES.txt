@@ -1,0 +1,20 @@
+LightRAG has been deployed with DocumentDB backend.
+
+1. Get the application URL:
+{{- if eq .Values.service.type "ClusterIP" }}
+  kubectl port-forward svc/{{ include "lightrag.fullname" . }} -n {{ .Release.Namespace }} 9621:{{ .Values.service.port }}
+  Then visit: http://localhost:9621
+{{- end }}
+
+2. Check health:
+  curl http://localhost:9621/health
+
+3. Insert a document:
+  curl -X POST http://localhost:9621/documents/text \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Your text here"}'
+
+4. Query the knowledge graph:
+  curl -X POST http://localhost:9621/query \
+    -H "Content-Type: application/json" \
+    -d '{"query": "Your question", "mode": "hybrid"}'

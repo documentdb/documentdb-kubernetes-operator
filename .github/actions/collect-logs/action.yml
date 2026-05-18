@@ -19,6 +19,13 @@ runs:
     - name: Collect comprehensive failure diagnostics
       shell: bash
       run: |
+        # Mirror the diagnostic dump to /tmp/cluster-logs/ so the
+        # upload-artifact step can preserve it on the run. Without this
+        # the artifact bundle ended up empty (printf-only) and post-hoc
+        # debugging was impossible. tee preserves the live web-log view.
+        mkdir -p /tmp/cluster-logs
+        exec > >(tee -a /tmp/cluster-logs/diagnostics.log) 2>&1
+
         echo "=== Comprehensive Failure Diagnostics for ${{ inputs.architecture }} ==="
         
         # Check if kubectl is working

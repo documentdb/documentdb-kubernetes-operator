@@ -1,0 +1,10 @@
+apiVersion: documentdb.io/preview
+kind: ScheduledBackup
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  cluster:
+    name: ${CLUSTER_NAME}
+  schedule: "${SCHEDULE}"
+  retentionDays: ${RETENTION_DAYS}

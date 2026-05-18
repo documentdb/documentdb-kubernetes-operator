@@ -64,10 +64,10 @@ The two version tracks are **independent** — they follow different release cad
 | **Images** | operator, sidecar, wal-replica | documentdb, gateway |
 | **Source repo** | This repo (Go) | `documentdb/documentdb` (C + Rust) |
 | **Version source** | `Chart.appVersion` in `Chart.yaml` | `documentDbVersion` in `values.yaml` |
-| **Current version** | `0.1.3` | `0.109.0` |
+| **Current version** | `0.2.0` | `0.110.0` |
 | **Build workflow** | `build_operator_images.yml` | `build_documentdb_images.yml` |
 | **Release workflow** | `release_operator.yml` | `release_documentdb_images.yml` |
-| **Tag example** | `ghcr.io/.../operator:0.1.3` | `ghcr.io/.../documentdb:0.109.0` |
+| **Tag example** | `ghcr.io/.../operator:0.2.0` | `ghcr.io/.../documentdb:0.110.0` |
 
 ### Why Two Tracks?
 
@@ -148,7 +148,7 @@ appVersion: "0.1.3"       # Default tag for operator/sidecar/wal-replica images
 
 ```yaml
 # Database image version (extension + gateway) — independent of Chart.appVersion
-documentDbVersion: "0.109.0"
+documentDbVersion: "0.110.0"
 
 image:
   documentdbk8soperator:
@@ -210,7 +210,7 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 | **Build time** | ~5 minutes (public artifact download + image build) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
-| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.109.0`) |
+| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.110.0`) |
 
 The build process:
 1. Resolves the released DocumentDB version to package
@@ -368,16 +368,16 @@ When bumping database image versions, the following locations must be updated (a
 
 | File | Field | Example |
 |------|-------|---------|
-| `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.109.0` |
-| `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.109.0` |
-| `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.109.0` |
-| `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.109.0` |
-| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.109.0"` |
-| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.109.0` |
-| `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.109.0` |
-| `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.109.0` |
-| `.github/workflows/release_documentdb_images.yml` | Input default | `0.109.0` |
-| `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.109.0` |
+| `operator/src/internal/utils/constants.go` | `DEFAULT_DOCUMENTDB_IMAGE` | `...documentdb:0.110.0` |
+| `operator/src/internal/utils/constants.go` | `DEFAULT_GATEWAY_IMAGE` | `...gateway:0.110.0` |
+| `operator/cnpg-plugins/sidecar-injector/internal/config/config.go` | Default gateway image | `...gateway:0.110.0` |
+| `operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go` | Expected gateway image | `...gateway:0.110.0` |
+| `operator/documentdb-helm-chart/values.yaml` | `documentDbVersion` | `"0.110.0"` |
+| `.github/workflows/test-backup-and-restore.yml` | `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` env | `...documentdb:0.110.0` |
+| `.github/workflows/test-upgrade-and-rollback.yml` | `RELEASED_DATABASE_VERSION` | `0.110.0` |
+| `.github/workflows/build_documentdb_images.yml` | `DEFAULT_DOCUMENTDB_VERSION`, input default | `0.110.0` |
+| `.github/workflows/release_documentdb_images.yml` | Input default | `0.110.0` |
+| `.github/dockerfiles/Dockerfile_gateway_public_image` | `SOURCE_IMAGE` ARG default | `...pg17-0.110.0` |
 
 When bumping operator versions, update:
 

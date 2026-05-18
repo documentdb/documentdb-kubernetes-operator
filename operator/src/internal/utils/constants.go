@@ -26,9 +26,9 @@ const (
 	MinK8sMinorVersion = 35
 
 	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
-	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.109.0"
+	DEFAULT_DOCUMENTDB_IMAGE              = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":0.110.0"
 	// NOTE: Keep in sync with operator/cnpg-plugins/sidecar-injector/internal/config/config.go:applyDefaults()
-	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.109.0"
+	DEFAULT_GATEWAY_IMAGE                 = GATEWAY_IMAGE_REPO + ":0.110.0"
 	DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET = "documentdb-credentials"
 	DEFAULT_OTEL_COLLECTOR_IMAGE           = "otel/opentelemetry-collector-contrib:0.149.0"
 

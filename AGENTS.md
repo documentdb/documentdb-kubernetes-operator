@@ -59,7 +59,7 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
 | Component | Version | Notes |
 |-----------|---------|-------|
 | Kubernetes | 1.30+ | Based on k8s.io/api v0.34.2 |
-| CloudNative-PG | 1.28.0 | Helm chart uses CNPG chart 0.27.0 |
+| CloudNative-PG | 1.29.1 | Helm chart uses CNPG chart 0.28.1 |
 | cert-manager | 1.19.2 | Required for TLS certificate management |
 | controller-runtime | 0.22.4 | Kubebuilder framework |
 | Go | 1.25.0 | See `operator/src/go.mod` |
@@ -71,8 +71,8 @@ The project uses **two independent version tracks** for container images:
 
 | Track | Images | Version Source | Tag Example |
 |-------|--------|---------------|-------------|
-| **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.1.3` |
-| **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.109.0` |
+| **Operator** | operator, sidecar, wal-replica | `Chart.appVersion` | `0.2.0` |
+| **Database** | documentdb (extension), gateway | `values.yaml` → `documentDbVersion` | `0.110.0` |
 
 - Operator images are built from this repo's Go source
 - Database images are built from public `documentdb/documentdb` release artifacts (extension `.deb` + gateway payload from `documentdb-local`)
@@ -370,6 +370,39 @@ Types:
 - E2E tests run via `make test-e2e` (requires Kind cluster)
 - Mock external dependencies appropriately
 - Ensure tests are idempotent and isolated
+
+### Running E2E tests
+
+The end-to-end suite lives in [`test/e2e/`](test/e2e/) as a separate Go module
+and replaces the legacy `test-integration.yml`, `test-E2E.yml`,
+`test-backup-and-restore.yml`, and `test-upgrade-and-rollback.yml` workflows
+(and their bash / JavaScript / Python glue). It is a Go / Ginkgo v2 / Gomega
+suite that drives the operator end-to-end and speaks the Mongo wire protocol
+via `go.mongodb.org/mongo-driver/v2`.
+
+**Prereqs:** kind + the DocumentDB operator already installed in the target
+cluster. In CI, the `.github/actions/setup-test-environment` composite action
+handles cluster creation and operator install (via `make deploy`). Locally,
+`operator/src/scripts/development/deploy.sh` is the equivalent entry point.
+
+**Running:**
+
+```bash
+cd test/e2e
+ginkgo -r --label-filter=smoke ./tests/...          # smoke
+ginkgo -r --label-filter=lifecycle ./tests/...      # single area
+TEST_DEPTH=4 ginkgo -r --procs=4 ./tests/...        # full sweep (Lowest depth)
+```
+
+Labels are defined in `test/e2e/labels.go` (areas: `lifecycle`, `scale`,
+`data`, `performance`, `backup`, `recovery`, `tls`, `feature-gates`,
+`exposure`, `status`, `upgrade`; plus cross-cutting `smoke`/`basic`/
+`destructive`/`disruptive`/`slow` and capability `needs-*` labels). Depth is
+controlled by `TEST_DEPTH` (0=Highest … 4=Lowest, default 2=Medium).
+
+See [`test/e2e/README.md`](test/e2e/README.md) for the full env-var table
+(including `E2E_RUN_ID` and the `E2E_UPGRADE_*` upgrade-suite variables),
+helper-package index, troubleshooting, and CNPG dependency policy.
 
 ### Code Review
 

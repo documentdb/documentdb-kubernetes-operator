@@ -1,0 +1,9 @@
+apiVersion: documentdb.io/preview
+kind: Backup
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  cluster:
+    name: ${CLUSTER_NAME}
+  retentionDays: ${RETENTION_DAYS}
