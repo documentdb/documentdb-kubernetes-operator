@@ -84,7 +84,7 @@ webhooks:
     # Fail-closed: reject requests when the webhook is unreachable.
     # Safe because readiness/startup probes keep the pod out of the
     # Service endpoints until the TLS cert is loaded (CNPG pattern).
-    failurePolicy: Fail
+    failurePolicy: {{ .Values.cnpg.webhookFailurePolicy | default "Fail" }}
     rules:
       - apiGroups:
           - documentdb.io

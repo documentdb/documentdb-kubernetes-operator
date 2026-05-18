@@ -1,7 +1,9 @@
+{{- if .Values.cnpg.install }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cnpg-system
+  name: {{ include "documentdb-chart.cnpgNamespace" . }}
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
     app.kubernetes.io/managed-by: "Helm"
+{{- end }}

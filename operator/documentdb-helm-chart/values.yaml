@@ -23,9 +23,9 @@ serviceAccount:
   automount: true
   annotations: {}
   name: "documentdb-operator"
-  
+
 # WAL Replica feature flag
-walReplica: false  # Set to true to deploy the WAL replica plugin
+walReplica: false # Set to true to deploy the WAL replica plugin
 
 image:
   documentdbk8soperator:
@@ -37,8 +37,10 @@ image:
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
-cloudnative-pg:
+cnpg:
+  install: true
   namespaceOverride: cnpg-system
+  webhookFailurePolicy: Fail
   additionalEnv:
     - name: ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES
       value: "true"

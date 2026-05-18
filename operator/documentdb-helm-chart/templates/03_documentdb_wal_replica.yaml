@@ -11,7 +11,7 @@ metadata:
     cnpg.io/pluginServerSecret: walreplica-server-tls
     cnpg.io/pluginPort: "9090"
   name: wal-replica
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
 spec:
   ports:
   - port: 9090
@@ -26,7 +26,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: walreplica-client
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
 spec:
   secretName: walreplica-client-tls
   commonName: "walreplica-client"
@@ -48,7 +48,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: walreplica-server
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
 spec:
   secretName: walreplica-server-tls
   commonName: "wal-replica"
@@ -75,7 +75,7 @@ metadata:
   labels:
     app: wal-replica
   name: wal-replica
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
 spec:
   replicas: 1
   selector:
@@ -90,7 +90,7 @@ spec:
     spec:
       serviceAccountName: wal-replica-manager
       containers:
-      - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"  
+      - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"
         imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
         ports:
@@ -132,7 +132,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: wal-replica-manager
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
 
 ---
 
@@ -171,7 +171,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: wal-replica-manager
-  namespace: cnpg-system
+  namespace: {{ include "documentdb-chart.cnpgNamespace" . }}
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
     app.kubernetes.io/managed-by: kustomize
