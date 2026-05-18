@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Security
+- **Bumped CloudNative-PG dependency from chart 0.27.0 (app 1.28.0) to 0.28.1 (app 1.29.1)** to pick up the fix for [CVE-2026-44477 / GHSA-423p-g724-fr39](https://github.com/cloudnative-pg/cloudnative-pg/security/advisories/GHSA-423p-g724-fr39): a privilege-escalation vulnerability in the CNPG metrics exporter that could allow a low-privilege PostgreSQL user to escalate to superuser and execute arbitrary commands in the database pod. Operators upgrading via `helm upgrade` will get the patched CNPG operator automatically.
+
 ### Major Features
 - **Gateway OTLP metrics in the per-pod sidecar**: when `spec.monitoring.enabled=true`, the OTel Collector sidecar now exposes an OTLP/gRPC receiver on `127.0.0.1:4317` and the documentdb-gateway is configured (via `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_METRICS_ENABLED`) to push its `db_client_*` metrics there. The sidecar's existing prometheus exporter re-exports them alongside the existing `documentdb.postgres.up` sqlquery output, with per-pod attribution added by the collector's resource processor. No new CRD fields; this turns on automatically wherever monitoring was already enabled.
 - **Two-Phase Extension Upgrade**: New `spec.schemaVersion` field separates binary upgrades (`spec.documentDBVersion`) from irreversible schema migrations (`ALTER EXTENSION UPDATE`). The default behavior gives you a rollback-safe window — update the binary first, validate, then finalize the schema. Set `schemaVersion: "auto"` for single-step upgrades in development environments. See the [upgrade guide](docs/operator-public-documentation/preview/operations/upgrades.md) for details.
@@ -11,6 +14,18 @@
 - **Removed `spec.monitoring.kubeletstats` (preview API)**: The per-`DocumentDB` toggle for kubelet-sourced container metrics has been removed. Use your platform's existing node-level metrics collector, or apply the reference DaemonSet in `documentdb-playground/telemetry/container-metrics/` if your cluster does not already collect kubelet metrics. This removes the per-tenant `nodes/stats` privilege grant, removes the kubeletstats-specific `bind` permission added for the earlier sidecar design, and stops injecting `K8S_NODE_NAME` into the sidecar. Migration: drop `spec.monitoring.kubeletstats: {}` from your `DocumentDB` resources.
 - **Validating webhook added**: A new `ValidatingWebhookConfiguration` enforces that `spec.schemaVersion` never exceeds the binary version and blocks `spec.documentDBVersion` rollbacks below the committed schema version. This requires [cert-manager](https://cert-manager.io/) to be installed in the cluster (it is already a prerequisite for the sidecar injector). Existing clusters upgrading to this release will have the webhook activated automatically via `helm upgrade`.
 - **Removed `Disabled` TLS gateway mode**: The `spec.tls.gateway.mode: Disabled` option has been removed to eliminate the security risk of plaintext Mongo wire protocol traffic. Previously, `Disabled` mode served connections in plaintext, contradicting the `Disabled` tab in `tls.md` which described the mode as a self-signed bootstrap. Empty or unset mode now defaults to `SelfSigned`, and the controller fails closed (also defaulting to `SelfSigned`) if a legacy `Disabled` value is encountered on a stored object. Users with `mode: Disabled` should remove this setting or explicitly set `mode: SelfSigned` — the gateway will automatically use a cert-manager generated self-signed certificate. See [issue #356](https://github.com/documentdb/documentdb-kubernetes-operator/issues/356) for details.
+
+### Testing infrastructure
+- **Unified E2E test suite ([#346](https://github.com/documentdb/documentdb-kubernetes-operator/pull/346))**: The four legacy end-to-end workflows (`test-integration.yml`, `test-E2E.yml`, `test-backup-and-restore.yml`, `test-upgrade-and-rollback.yml`) and their bash / JavaScript (mongosh) / Python (pymongo) glue have been replaced by a single Go / Ginkgo v2 / Gomega suite under `test/e2e/`. Specs are organised by CRD operation (lifecycle, scale, data, performance, backup, tls, feature gates, exposure, status, upgrade), reuse CloudNative-PG's `tests/utils` packages as a library, and speak the Mongo wire protocol via `go.mongodb.org/mongo-driver/v2`.
+
+### Breaking changes for contributors
+- **Local E2E invocation changed.** Tests are now run via `ginkgo` against an already-provisioned cluster, not via `npm test` / bash scripts. Typical invocation:
+  ```bash
+  cd test/e2e
+  ginkgo -r --label-filter=smoke ./tests/...
+  ```
+  Label selection replaces per-workflow entry points; depth is controlled by `TEST_DEPTH` (0=Highest … 4=Lowest). See [`test/e2e/README.md`](test/e2e/README.md) for prereqs, the full env-var table (including `E2E_RUN_ID` and the `E2E_UPGRADE_*` upgrade-suite variables), and troubleshooting.
+- **Design rationale** for the migration — scope, fixture tiers, parallelism model, CNPG reuse strategy — is documented in [`docs/designs/e2e-test-suite.md`](docs/designs/e2e-test-suite.md).
 
 ## [0.2.0] - 2026-03-25
 

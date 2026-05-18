@@ -50,7 +50,7 @@ func baseCluster(name, namespace string) *cnpgv1.Cluster {
 					{
 						Name: "documentdb",
 						ImageVolumeSource: corev1.ImageVolumeSource{
-							Reference: "ghcr.io/documentdb/documentdb:0.109.0",
+							Reference: "ghcr.io/documentdb/documentdb:0.110.0",
 						},
 					},
 				},
@@ -65,7 +65,7 @@ func baseCluster(name, namespace string) *cnpgv1.Cluster {
 					Name:    util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
 					Enabled: pointer.Bool(true),
 					Parameters: map[string]string{
-						"gatewayImage":               "ghcr.io/documentdb/gateway:0.109.0",
+						"gatewayImage":               "ghcr.io/documentdb/gateway:0.110.0",
 						"documentDbCredentialSecret": "documentdb-credentials",
 					},
 				},

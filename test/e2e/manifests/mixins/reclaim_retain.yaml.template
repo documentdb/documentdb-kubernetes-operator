@@ -1,0 +1,11 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  resource:
+    storage:
+      pvcSize: ${STORAGE_SIZE}
+      storageClass: ${STORAGE_CLASS}
+      persistentVolumeReclaimPolicy: Retain

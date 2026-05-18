@@ -6,7 +6,7 @@ replicaCount: 1
 # which determines the default documentdb extension and gateway image tags at runtime.
 # This version is INDEPENDENT of Chart.appVersion (which controls operator/sidecar image tags).
 # When empty, the operator falls back to its compiled-in defaults (see constants.go).
-documentDbVersion: "0.109.0"
+documentDbVersion: "0.110.0"
 
 # Gateway image pull policy for the gateway sidecar container.
 # Valid values: Always, IfNotPresent, Never. Defaults to IfNotPresent if not set.

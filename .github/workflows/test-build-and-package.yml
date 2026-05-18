@@ -9,9 +9,9 @@ on:
         default: '0.1.0'
         type: string
       documentdb_ref:
-        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages'
+        description: 'DocumentDB repo ref (tag, branch, or commit SHA) for building packages. Empty = derive from chart documentDbVersion.'
         required: false
-        default: 'main'
+        default: ''
         type: string
     outputs:
       image_tag:
@@ -34,34 +34,118 @@ env:
   CHART_VERSION: ${{ inputs.version }}-test-${{ github.run_id }}
 
 jobs:
-  # Read the extension version from the built deb package (source of truth).
-  # Runs after build-packages so the actual compiled version is used, not values.yaml.
+  # Probe the upstream container registry for documentdb/gateway images at the
+  # chart's pinned documentDbVersion. If both already exist, downstream jobs
+  # skip the expensive source build and instead pull the released images.
+  probe-images:
+    name: Probe Released DocumentDB Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.probe.outputs.mode }}
+      version: ${{ steps.probe.outputs.version }}
+      ext_image_tag: ${{ steps.probe.outputs.ext_image_tag }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Probe documentdb + gateway images
+      id: probe
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        # If caller pinned a specific upstream documentdb_ref, always build from
+        # source (the registry images may not match the requested ref).
+        INPUT_REF="${{ inputs.documentdb_ref }}"
+        VALUES_FILE="operator/documentdb-helm-chart/values.yaml"
+        VERSION=$(grep -E '^documentDbVersion:' "$VALUES_FILE" \
+          | sed -E 's/^documentDbVersion:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
+        if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::failed to parse documentDbVersion from $VALUES_FILE (got '$VERSION')"
+          exit 1
+        fi
+        EXT_TAG="${VERSION}-test-${{ github.run_id }}"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "ext_image_tag=$EXT_TAG" >> "$GITHUB_OUTPUT"
+
+        if [[ -n "$INPUT_REF" ]]; then
+          echo "Caller pinned documentdb_ref=$INPUT_REF → forcing build mode."
+          echo "mode=build" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        OWNER="${{ github.repository_owner }}"
+        # Use the GitHub Packages REST API (works with the workflow's
+        # GITHUB_TOKEN — no anonymous registry token dance required).
+        # Package names are URL-encoded: documentdb-kubernetes-operator/<img>
+        # -> documentdb-kubernetes-operator%2F<img>.
+        probe_image() {
+          local img="$1"
+          local pkg="documentdb-kubernetes-operator%2F${img}"
+          local count
+          # Try org endpoint first, fall back to user endpoint.
+          count=$(gh api "/orgs/${OWNER}/packages/container/${pkg}/versions" \
+              --jq "[.[] | select(.metadata.container.tags[]? == \"${VERSION}\")] | length" 2>/dev/null) \
+            || count=$(gh api "/users/${OWNER}/packages/container/${pkg}/versions" \
+              --jq "[.[] | select(.metadata.container.tags[]? == \"${VERSION}\")] | length" 2>/dev/null) \
+            || count=0
+          [[ "${count:-0}" -gt 0 ]]
+        }
+
+        DOC_OK=0; GW_OK=0
+        echo "Probing ghcr.io/${OWNER}/documentdb-kubernetes-operator/documentdb:${VERSION}..."
+        if probe_image documentdb; then DOC_OK=1; echo "  ✓ documentdb:${VERSION} present"; else echo "  ✗ documentdb:${VERSION} missing"; fi
+        echo "Probing ghcr.io/${OWNER}/documentdb-kubernetes-operator/gateway:${VERSION}..."
+        if probe_image gateway; then GW_OK=1; echo "  ✓ gateway:${VERSION} present"; else echo "  ✗ gateway:${VERSION} missing"; fi
+
+        if [[ $DOC_OK -eq 1 && $GW_OK -eq 1 ]]; then
+          echo "Both images present → registry mode (skip source build)."
+          echo "mode=registry" >> "$GITHUB_OUTPUT"
+        else
+          echo "At least one image missing → build mode (build from upstream source)."
+          echo "mode=build" >> "$GITHUB_OUTPUT"
+        fi
+
+  # Compute the extension image tag downstream jobs use. In build mode this is
+  # derived from the compiled deb filename (source of truth); in registry mode
+  # it is the chart's documentDbVersion plus the test run-id suffix.
   read-extension-version:
     name: Read Extension Version
-    needs: [build-packages]
+    needs: [probe-images, build-packages]
+    if: |
+      always() &&
+      needs.probe-images.result == 'success' &&
+      (needs.build-packages.result == 'success' || needs.build-packages.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
       ext_image_tag: ${{ steps.read.outputs.ext_image_tag }}
     steps:
     - name: Download packages (amd64)
+      if: needs.probe-images.outputs.mode == 'build'
       uses: actions/download-artifact@v4
       with:
         name: build-packages-amd64
         path: packages/
-    - name: Extract version from deb filename
+    - name: Compute extension image tag
       id: read
       run: |
-        DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
-        echo "Found deb: $DEB_FILE"
-        # deb filename format: deb13-postgresql-18-documentdb_0.111-0_amd64.deb
-        # Extract version: strip prefix up to 'documentdb_', then take chars before '_<arch>'
-        EXT_VER=$(echo "$DEB_FILE" | sed -n 's/.*documentdb_\([0-9]*\.[0-9]*\)-[0-9]*_.*/\1.0/p')
-        if [[ -z "$EXT_VER" ]]; then
-          echo "::error::Could not extract version from deb filename: $DEB_FILE"
-          exit 1
+        set -euo pipefail
+        if [[ "${{ needs.probe-images.outputs.mode }}" == "registry" ]]; then
+          EXT_TAG="${{ needs.probe-images.outputs.ext_image_tag }}"
+          echo "Registry mode: ext_image_tag=$EXT_TAG (from chart documentDbVersion)"
+        else
+          DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+          echo "Found deb: $DEB_FILE"
+          # deb filename format: deb13-postgresql-18-documentdb_0.111-0_amd64.deb
+          # Extract version: strip prefix up to 'documentdb_', then take chars before '_<arch>'
+          EXT_VER=$(echo "$DEB_FILE" | sed -n 's/.*documentdb_\([0-9]*\.[0-9]*\)-[0-9]*_.*/\1.0/p')
+          if [[ -z "$EXT_VER" ]]; then
+            echo "::error::Could not extract version from deb filename: $DEB_FILE"
+            exit 1
+          fi
+          EXT_TAG="${EXT_VER}-test-${{ github.run_id }}"
+          echo "Build mode: extension version=$EXT_VER → image tag: $EXT_TAG"
         fi
-        EXT_TAG="${EXT_VER}-test-${{ github.run_id }}"
-        echo "Extension version: $EXT_VER → image tag: $EXT_TAG"
         echo "ext_image_tag=$EXT_TAG" >> "$GITHUB_OUTPUT"
 
   build-operator:
@@ -158,6 +242,8 @@ jobs:
 
   build-packages:
     name: Build DocumentDB Packages (${{ matrix.arch }})
+    needs: [probe-images]
+    if: needs.probe-images.outputs.mode == 'build'
     timeout-minutes: 60
     strategy:
       matrix:
@@ -170,21 +256,66 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       DOCUMENTDB_REPO: documentdb/documentdb
-      DOCUMENTDB_REPO_REF: ${{ inputs.documentdb_ref || 'main' }}
     steps:
+    - name: Checkout operator repo (read chart documentDbVersion)
+      uses: actions/checkout@v4
+      with:
+        path: operator-checkout
+
+    - name: Determine DocumentDB ref
+      # Pin the documentdb source build to the chart's default documentDbVersion
+      # (formatted as the upstream tag, e.g. 0.109.0 -> v0.109-0). This keeps the
+      # CI build in lock-step with the version the operator chart actually ships,
+      # and avoids picking up unstable upstream main where regression tests can
+      # flip success/fail per SHA. Callers can still override via the
+      # documentdb_ref input.
+      id: dbref
+      shell: bash
+      run: |
+        set -euo pipefail
+        INPUT_REF="${{ inputs.documentdb_ref }}"
+        if [[ -n "$INPUT_REF" ]]; then
+          REF="$INPUT_REF"
+          echo "Using caller-provided documentdb_ref: $REF"
+        else
+          VALUES_FILE="operator-checkout/operator/documentdb-helm-chart/values.yaml"
+          VERSION=$(grep -E '^documentDbVersion:' "$VALUES_FILE" \
+            | sed -E 's/^documentDbVersion:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: failed to parse documentDbVersion from $VALUES_FILE (got '$VERSION')" >&2
+            exit 1
+          fi
+          REF="v${VERSION%.*}-${VERSION##*.}"
+          echo "Derived documentdb ref from chart documentDbVersion=$VERSION -> $REF"
+        fi
+        echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
     - name: Checkout documentdb source
       uses: actions/checkout@v4
       with:
         repository: ${{ env.DOCUMENTDB_REPO }}
-        ref: ${{ env.DOCUMENTDB_REPO_REF }}
+        ref: ${{ steps.dbref.outputs.ref }}
 
     - name: Build extension deb (PG18)
       run: ./packaging/build_packages.sh --os deb13 --pg 18 --output-dir packages
 
     - name: Build gateway deb
       # Gateway is a pure Rust binary; PG version is a passthrough and does not affect the output.
-      # Using pg 17 matches the upstream documentdb repo convention (gateway built once, not per-PG).
-      run: ./packaging/gateway/build_gateway_packages.sh --os deb13 --pg 17 --output-dir packages
+      # Using pg 18 matches the upstream documentdb repo convention (gateway built once, not per-PG).
+      # The script was relocated upstream from ./packaging/build_gateway_packages.sh (older
+      # tags, e.g. v0.109-0) to ./packaging/gateway/build_gateway_packages.sh (main).
+      # Probe for either path so this step works against both the chart-pinned tag and main.
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -x ./packaging/gateway/build_gateway_packages.sh ]]; then
+          ./packaging/gateway/build_gateway_packages.sh --os deb13 --pg 18 --output-dir packages
+        elif [[ -x ./packaging/build_gateway_packages.sh ]]; then
+          ./packaging/build_gateway_packages.sh --os deb13 --pg 18 --output-dir packages
+        else
+          echo "ERROR: gateway packaging script not found at packaging/gateway/build_gateway_packages.sh or packaging/build_gateway_packages.sh" >&2
+          exit 1
+        fi
 
     - name: Upload packages
       uses: actions/upload-artifact@v4
@@ -209,9 +340,16 @@ jobs:
   build-documentdb:
     name: Build DocumentDB Images
     timeout-minutes: 30
-    needs: [build-packages, read-extension-version]
+    needs: [probe-images, build-packages, read-extension-version]
+    if: |
+      always() &&
+      needs.probe-images.result == 'success' &&
+      (needs.build-packages.result == 'success' || needs.build-packages.result == 'skipped') &&
+      needs.read-extension-version.result == 'success'
     env:
       EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
+      MODE: ${{ needs.probe-images.outputs.mode }}
+      DOC_VERSION: ${{ needs.probe-images.outputs.version }}
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -225,43 +363,55 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout code
+      if: env.MODE == 'build'
       uses: actions/checkout@v4
 
     - name: Download packages
+      if: env.MODE == 'build'
       uses: actions/download-artifact@v4
       with:
         name: build-packages-${{ matrix.arch }}
         path: packages/
 
     - name: Set up Docker Buildx
+      if: env.MODE == 'build'
       uses: docker/setup-buildx-action@v3
 
-    - name: Build documentdb Docker image for ${{ matrix.arch }}
+    - name: Prepare documentdb image for ${{ matrix.arch }}
       run: |
         set -euo pipefail
-        echo "Building documentdb Docker image for ${{ matrix.arch }} architecture..."
-        DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
-        if [[ -z "$DEB_FILE" ]]; then
-          echo "ERROR: No DocumentDB extension .deb found in packages/" >&2
-          ls -la packages/ >&2
-          exit 1
+        TARGET="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${EXT_IMAGE_TAG}-${{ matrix.arch }}"
+        if [[ "$MODE" == "registry" ]]; then
+          SOURCE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${DOC_VERSION}"
+          echo "Registry mode: pulling $SOURCE for ${{ matrix.arch }}..."
+          docker pull --platform linux/${{ matrix.arch }} "$SOURCE"
+          docker tag "$SOURCE" "$TARGET"
+          echo "✓ documentdb image retagged from registry: $TARGET"
+        else
+          echo "Build mode: building documentdb Docker image for ${{ matrix.arch }}..."
+          DEB_FILE=$(ls packages/ | grep -E 'postgresql.*documentdb.*\.deb' | grep -v dbgsym | head -1)
+          if [[ -z "$DEB_FILE" ]]; then
+            echo "::error::No DocumentDB extension .deb found in packages/"
+            ls -la packages/ >&2
+            exit 1
+          fi
+          echo "Using deb: $DEB_FILE"
+          docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            --build-arg PG_MAJOR=18 \
+            --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
+            --tag "$TARGET" \
+            --load \
+            -f .github/dockerfiles/Dockerfile_extension .
+          echo "✓ documentdb Docker image built: $TARGET"
         fi
-        echo "Using deb: $DEB_FILE"
-        docker buildx build \
-          --platform linux/${{ matrix.arch }} \
-          --build-arg PG_MAJOR=18 \
-          --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
-          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} \
-          --load \
-          -f .github/dockerfiles/Dockerfile_extension .
-        
-        echo "✓ DocumentDB Docker image built successfully for ${{ matrix.arch }}"
 
     - name: Save documentdb Docker image as artifact
       run: |
-        echo "Saving documentdb ${{ matrix.arch }} Docker image as tar file..."
-        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} > documentdb-${{ matrix.arch }}-image.tar
-        echo "✓ DocumentDB ${{ matrix.arch }} Docker image saved to tar file"
+        set -euo pipefail
+        TARGET="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${EXT_IMAGE_TAG}-${{ matrix.arch }}"
+        docker save "$TARGET" > documentdb-${{ matrix.arch }}-image.tar
+        echo "✓ DocumentDB ${{ matrix.arch }} image saved to tar file"
 
     - name: Upload documentdb Docker image artifact
       uses: actions/upload-artifact@v4
@@ -273,9 +423,16 @@ jobs:
   build-gateway:
     name: Build Gateway Images
     timeout-minutes: 30
-    needs: [build-packages, read-extension-version]
+    needs: [probe-images, build-packages, read-extension-version]
+    if: |
+      always() &&
+      needs.probe-images.result == 'success' &&
+      (needs.build-packages.result == 'success' || needs.build-packages.result == 'skipped') &&
+      needs.read-extension-version.result == 'success'
     env:
       EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
+      MODE: ${{ needs.probe-images.outputs.mode }}
+      DOC_VERSION: ${{ needs.probe-images.outputs.version }}
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -289,21 +446,25 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
     - name: Checkout code
+      if: env.MODE == 'build'
       uses: actions/checkout@v4
 
     - name: Download packages
+      if: env.MODE == 'build'
       uses: actions/download-artifact@v4
       with:
         name: build-packages-${{ matrix.arch }}
         path: packages/
 
     - name: Download gateway runtime files
+      if: env.MODE == 'build'
       uses: actions/download-artifact@v4
       with:
         name: build-gateway-runtime-files
         path: gateway-runtime/
 
     - name: Prepare gateway build context
+      if: env.MODE == 'build'
       run: |
         set -e
         mkdir -p gateway-context/packages gateway-context/scripts gateway-context/pg_documentdb_gw
@@ -314,33 +475,43 @@ jobs:
         ls gateway-context/packages/*.deb || { echo "ERROR: Gateway deb not found"; exit 1; }
 
     - name: Set up Docker Buildx
+      if: env.MODE == 'build'
       uses: docker/setup-buildx-action@v3
 
-    - name: Build gateway Docker image for ${{ matrix.arch }}
+    - name: Prepare gateway image for ${{ matrix.arch }}
       run: |
         set -euo pipefail
-        echo "Building gateway Docker image for ${{ matrix.arch }} architecture..."
-        GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
-        if [[ -z "$GW_DEB" ]]; then
-          echo "ERROR: No gateway .deb found in gateway-context/packages/" >&2
-          ls -la gateway-context/packages/ >&2
-          exit 1
+        TARGET="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${EXT_IMAGE_TAG}-${{ matrix.arch }}"
+        if [[ "$MODE" == "registry" ]]; then
+          SOURCE="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${DOC_VERSION}"
+          echo "Registry mode: pulling $SOURCE for ${{ matrix.arch }}..."
+          docker pull --platform linux/${{ matrix.arch }} "$SOURCE"
+          docker tag "$SOURCE" "$TARGET"
+          echo "✓ gateway image retagged from registry: $TARGET"
+        else
+          echo "Build mode: building gateway Docker image for ${{ matrix.arch }}..."
+          GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
+          if [[ -z "$GW_DEB" ]]; then
+            echo "::error::No gateway .deb found in gateway-context/packages/"
+            ls -la gateway-context/packages/ >&2
+            exit 1
+          fi
+          echo "Using deb: $GW_DEB"
+          docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            --build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB \
+            --tag "$TARGET" \
+            --load \
+            -f .github/dockerfiles/Dockerfile_gateway_deb gateway-context
+          echo "✓ gateway Docker image built: $TARGET"
         fi
-        echo "Using deb: $GW_DEB"
-        docker buildx build \
-          --platform linux/${{ matrix.arch }} \
-          --build-arg GATEWAY_DEB_REL_PATH=packages/$GW_DEB \
-          --tag ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} \
-          --load \
-          -f .github/dockerfiles/Dockerfile_gateway_deb gateway-context
-        
-        echo "✓ Gateway Docker image built successfully for ${{ matrix.arch }}"
 
     - name: Save gateway Docker image as artifact
       run: |
-        echo "Saving gateway ${{ matrix.arch }} Docker image as tar file..."
-        docker save ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ env.EXT_IMAGE_TAG }}-${{ matrix.arch }} > gateway-${{ matrix.arch }}-image.tar
-        echo "✓ Gateway ${{ matrix.arch }} Docker image saved to tar file"
+        set -euo pipefail
+        TARGET="ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${EXT_IMAGE_TAG}-${{ matrix.arch }}"
+        docker save "$TARGET" > gateway-${{ matrix.arch }}-image.tar
+        echo "✓ Gateway ${{ matrix.arch }} image saved to tar file"
 
     - name: Upload gateway Docker image artifact
       uses: actions/upload-artifact@v4
@@ -354,6 +525,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [build-operator, build-sidecar, build-packages, build-documentdb, build-gateway, read-extension-version]
+    if: |
+      always() &&
+      needs.build-operator.result == 'success' &&
+      needs.build-sidecar.result == 'success' &&
+      (needs.build-packages.result == 'success' || needs.build-packages.result == 'skipped') &&
+      needs.build-documentdb.result == 'success' &&
+      needs.build-gateway.result == 'success' &&
+      needs.read-extension-version.result == 'success'
     env:
       EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
     outputs:
@@ -492,6 +671,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [consolidate-images]
+    if: always() && needs.consolidate-images.result == 'success'
     strategy:
       matrix:
         arch: [amd64, arm64]
