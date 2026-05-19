@@ -47,13 +47,15 @@ image:
 # Defaults are conservative and aim to be compatible with Pod Security Admission's
 # `restricted` profile. Override any field per component as needed.
 operator:
+  # Requests-only by convention: scheduler reserves capacity for the
+  # operator, but no memory ceiling so a single operator can manage
+  # fleets of any size without OOMKill. Set limits explicitly if your
+  # environment requires Burstable→Guaranteed QoS or enforces
+  # LimitRange.
   resources:
     requests:
       cpu: 100m
       memory: 128Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi
   podSecurityContext:
     runAsNonRoot: true
     seccompProfile:
@@ -76,13 +78,11 @@ operator:
   priorityClassName: ""
 
 sidecarInjector:
+  # See operator.resources comment — requests-only by convention.
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
   podSecurityContext:
     runAsNonRoot: true
     seccompProfile:
@@ -100,13 +100,11 @@ sidecarInjector:
   priorityClassName: ""
 
 walReplicaPlugin:
+  # See operator.resources comment — requests-only by convention.
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
   podSecurityContext:
     runAsNonRoot: true
     seccompProfile:
