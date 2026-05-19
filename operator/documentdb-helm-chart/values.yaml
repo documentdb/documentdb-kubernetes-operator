@@ -37,6 +37,22 @@ image:
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
+# Job that applies the chart's CRDs on every install/upgrade. See
+# templates/00_crd_upgrade.yaml for the rationale (Helm 3 does not upgrade
+# files in crds/ on `helm upgrade`).
+crdUpgradeJob:
+  enabled: true
+  image:
+    # Image must include both kubectl and a POSIX shell. alpine/k8s is a
+    # widely used, multi-arch image with both. Pin the tag to a version
+    # matching the cluster's control plane minor where possible.
+    repository: alpine/k8s
+    tag: "1.30.5"
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 120
+
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:
