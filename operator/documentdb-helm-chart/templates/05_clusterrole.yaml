@@ -9,35 +9,37 @@ rules:
 - apiGroups: ["documentdb.io"] # documentdb.io permissions
   resources: ["dbs", "dbs/status", "dbs/finalizers"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["apps"]
-  resources: ["statefulsets", "deployments"]
+# Core API resources the operator creates / reconciles in user namespaces.
+# `pods/exec` (create) is needed for the documentdb_controller exec path;
+# plain `pods` is read-only because we only Get the target pod for exec.
+- apiGroups: [""]
+  resources: ["services", "serviceaccounts", "configmaps", "persistentvolumeclaims", "pods/exec"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["services", "pods", "endpoints", "leases", "serviceaccounts", "configmaps", "persistentvolumeclaims", "pods/exec"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["metrics.k8s.io"]
   resources: ["pods"]
   verbs: ["get", "list", "watch"]
-- apiGroups: ["rbac.authorization.k8s.io"]
+- apiGroups: ["rbac.authorization.k8s.io"] # namespaced RBAC created by util.go (Roles/RoleBindings only)
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["coordination.k8s.io"]
+- apiGroups: ["coordination.k8s.io"] # leader election
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["networking.fleet.azure.com"] # fleet permissions for multi-cluster services
   resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Secrets: certificate_controller reads cert-manager-issued TLS secrets to
+# stamp into Cluster spec; no controller writes Secrets. Read-only.
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["batch"]
-  resources: ["jobs"]
-  verbs: ["create", "get", "list", "watch", "update", "delete"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["postgresql.cnpg.io"]
   resources: ["clusters", "publications", "subscriptions", "clusters/status"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# cert-manager: only namespaced Issuer is reconciled by certificate_controller.
+# ClusterIssuer is referenced by name in CR spec but resolved by cert-manager
+# itself, not by the operator client.
 - apiGroups: ["cert-manager.io"]
-  resources: ["certificates", "certificates/status", "certificates/finalizers", "issuers", "clusterissuers"]
+  resources: ["certificates", "certificates/status", "certificates/finalizers", "issuers"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
 # Backup permissions

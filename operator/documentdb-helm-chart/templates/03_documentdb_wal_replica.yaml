@@ -143,15 +143,19 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
 rules:
+# wal-replica plugin source lives in the cnpg-i-wal-replica repo; we cannot
+# grep its exact verb usage from here. Below is the previous grant minus
+# rules that are obviously dead in any controller-runtime-based plugin
+# (`""/leases` is the wrong API group — leases live in coordination.k8s.io,
+# and `""/endpoints` was never referenced). The remaining rules should be
+# audited and tightened once the plugin's RBAC markers are wired to ship
+# alongside the chart. Tracked in #381.
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["services", "pods", "endpoints", "leases", "serviceaccounts", "configmaps"]
+  resources: ["services", "pods", "serviceaccounts", "configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["metrics.k8s.io"]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
