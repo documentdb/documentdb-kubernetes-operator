@@ -2,22 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: documentdb-operator
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  namespace: {{ include "documentdb-operator.namespace" . }}
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "operator") | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
+        {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "operator") | nindent 8 }}
     spec:
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "documentdb-operator.serviceAccountName" . }}
       containers:
       - name: documentdb-operator
         image: "{{ .Values.image.documentdbk8soperator.repository }}:{{ .Values.image.documentdbk8soperator.tag | default .Chart.AppVersion }}"

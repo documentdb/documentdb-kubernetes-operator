@@ -3,13 +3,14 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: wal-replica
     cnpg.io/pluginName: cnpg-i-wal-replica.documentdb.io
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
   annotations:
     cnpg.io/pluginClientSecret: walreplica-client-tls
     cnpg.io/pluginServerSecret: walreplica-server-tls
     cnpg.io/pluginPort: "9090"
+  # Name hardcoded: CNPG-I plugin Services in cnpg-system are shared infrastructure
+  # discovered by name; templating the name would require coordinated config in CNPG.
   name: wal-replica
   namespace: cnpg-system
 spec:
@@ -18,7 +19,7 @@ spec:
     protocol: TCP
     targetPort: 9090
   selector:
-    app: wal-replica
+    {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
 
 ---
 
@@ -73,20 +74,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: wal-replica
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
   name: wal-replica
   namespace: cnpg-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: wal-replica
-  strategy: {}
+      {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "wal-replica") | nindent 6 }}
   template:
     metadata:
-      creationTimestamp: null
       labels:
-        app: wal-replica
+        {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "wal-replica") | nindent 8 }}
     spec:
       serviceAccountName: wal-replica-manager
       containers:
@@ -122,8 +121,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
   name: wal-replica-manager-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -141,7 +139,7 @@ kind: ClusterRole
 metadata:
   name: wal-replica-manager
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
 rules: # TODO trim this down to what's actually needed
 - apiGroups: ["apps"]
   resources: ["deployments"]
@@ -173,6 +171,5 @@ metadata:
   name: wal-replica-manager
   namespace: cnpg-system
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "wal-replica") | nindent 4 }}
 {{- end }}

@@ -6,9 +6,10 @@ metadata:
     cnpg.io/pluginPort: "9090"
     cnpg.io/pluginServerSecret: sidecarinjector-server-tls
   labels:
-    app: sidecar-injector
     cnpg.io/pluginName: cnpg-i-sidecar-injector.documentdb.io
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "sidecar-injector") | nindent 4 }}
+  # Name hardcoded: CNPG-I plugin Services in cnpg-system are shared infrastructure
+  # discovered by name; templating the name would require coordinated config in CNPG.
   name: sidecar-injector
   namespace: cnpg-system
 spec:
@@ -17,26 +18,24 @@ spec:
     protocol: TCP
     targetPort: 9090
   selector:
-    app: sidecar-injector
+    {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "sidecar-injector") | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: sidecar-injector
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "sidecar-injector") | nindent 4 }}
   name: sidecar-injector
   namespace: cnpg-system
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: sidecar-injector
-  strategy: {}
+      {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "sidecar-injector") | nindent 6 }}
   template:
     metadata:
-      creationTimestamp: null
       labels:
-        app: sidecar-injector
+        {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "sidecar-injector") | nindent 8 }}
     spec:
       containers:
       - args:

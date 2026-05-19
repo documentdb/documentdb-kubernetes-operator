@@ -3,12 +3,11 @@ kind: ClusterRoleBinding
 metadata:
   name: documentdb-operator-cluster-rolebinding
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 subjects:
 - kind: ServiceAccount
-  name: {{ .Values.serviceAccount.name }}
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  name: {{ include "documentdb-operator.serviceAccountName" . }}
+  namespace: {{ include "documentdb-operator.namespace" . }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

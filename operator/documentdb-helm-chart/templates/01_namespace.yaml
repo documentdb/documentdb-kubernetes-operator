@@ -3,5 +3,5 @@ kind: Namespace
 metadata:
   name: cnpg-system
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    app.kubernetes.io/name: {{ include "documentdb-operator.name" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}

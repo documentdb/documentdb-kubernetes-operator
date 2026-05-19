@@ -3,8 +3,7 @@ kind: ClusterRole
 metadata:
   name: documentdb-operator-cluster-role
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 rules:
 - apiGroups: ["documentdb.io"] # documentdb.io permissions
   resources: ["dbs", "dbs/status", "dbs/finalizers"]

@@ -1,4 +1,4 @@
-{{- $ns := .Values.namespace | default .Release.Namespace -}}
+{{- $ns := include "documentdb-operator.namespace" . -}}
 # Self-signed Issuer for webhook TLS certificates in the operator namespace.
 # The sidecar injector uses a separate Issuer in cnpg-system; this one is for the operator.
 apiVersion: cert-manager.io/v1
@@ -7,8 +7,7 @@ metadata:
   name: documentdb-operator-selfsigned-issuer
   namespace: {{ $ns }}
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 spec:
   selfSigned: {}
 ---
@@ -19,8 +18,7 @@ metadata:
   name: documentdb-webhook-cert
   namespace: {{ $ns }}
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 spec:
   commonName: documentdb-webhook
   dnsNames:
@@ -38,38 +36,36 @@ spec:
     - server auth
 ---
 # Service fronting the operator's webhook server on port 9443.
-# NOTE: The service name is hardcoded because the operator currently assumes
-# a single installation per cluster. If multi-instance support is needed,
-# template the name using a fullname helper and update the
-# ValidatingWebhookConfiguration's clientConfig.service.name to match.
+# NOTE: The service name is hardcoded because the operator's ValidatingWebhookConfiguration
+# (also hardcoded below) registers this exact service name in clientConfig. CNPG uses the
+# same convention (`cnpg-webhook-service`) for the same reason. This means the chart is
+# effectively single-install-per-cluster — a second release in the same cluster would
+# overwrite the Service and the ValidatingWebhookConfiguration. Templating these requires
+# a coordinated change to make the operator binary read its webhook name from config.
 apiVersion: v1
 kind: Service
 metadata:
   name: documentdb-webhook-service
   namespace: {{ $ns }}
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
 spec:
   ports:
     - port: 443
       protocol: TCP
       targetPort: 9443
   selector:
-    app: {{ .Release.Name }}
+    {{- include "documentdb-operator.selectorLabels" (dict "root" $ "component" "operator") | nindent 4 }}
 ---
 # ValidatingWebhookConfiguration for DocumentDB resources.
 # cert-manager injects the CA bundle automatically via the annotation.
-# NOTE: This is a cluster-scoped resource with a hardcoded name. Multiple
-# Helm releases would overwrite each other. If multi-instance support is
-# needed, template the name and the clientConfig.service references.
+# NOTE: Cluster-scoped resource with a hardcoded name — see Service comment above.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: documentdb-validating-webhook
   labels:
-    app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: "Helm"
+    {{- include "documentdb-operator.labels" (dict "root" $ "component" "operator") | nindent 4 }}
   annotations:
     cert-manager.io/inject-ca-from: {{ $ns }}/documentdb-webhook-cert
 webhooks:

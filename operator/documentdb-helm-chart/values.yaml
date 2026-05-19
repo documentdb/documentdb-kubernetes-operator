@@ -22,7 +22,9 @@ serviceAccount:
   create: true
   automount: true
   annotations: {}
-  name: "documentdb-operator"
+  # Service account name. Defaults to `documentdb-operator`. Override only
+  # if you need a fixed external name (e.g., AKS workload-identity binding).
+  name: ""
   
 # WAL Replica feature flag
 walReplica: false  # Set to true to deploy the WAL replica plugin
