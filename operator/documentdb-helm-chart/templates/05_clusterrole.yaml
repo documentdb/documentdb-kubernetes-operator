@@ -10,14 +10,17 @@ rules:
   resources: ["dbs", "dbs/status", "dbs/finalizers"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # Core API resources the operator creates / reconciles in user namespaces.
-# `pods/exec` (create) is needed for the documentdb_controller exec path;
 # `pods,services,endpoints` need full CRUD because EnsureServiceAccount\
 # RoleAndRoleBinding (documentdb_controller.go) creates per-CR Roles
 # granting these to the CNPG cluster's SA. K8s RBAC escalation requires
 # the grantor (this operator) to already hold every verb being granted.
 - apiGroups: [""]
-  resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims", "pods/exec"]
+  resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# `pods/exec` is a POST-only subresource; only `create` is meaningful.
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
 - apiGroups: ["rbac.authorization.k8s.io"] # namespaced RBAC created by util.go (Roles/RoleBindings only)
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -35,12 +38,13 @@ rules:
 - apiGroups: ["postgresql.cnpg.io"]
   resources: ["clusters", "publications", "subscriptions", "clusters/status"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# cert-manager: only namespaced Issuer is reconciled by certificate_controller.
-# ClusterIssuer is referenced by name in CR spec but resolved by cert-manager
-# itself, not by the operator client.
+# cert-manager: certificate_controller only Get/Create namespaced Certificates
+# and Issuers, and Owns() them (which requires watch). It never Updates,
+# Patches, Deletes, or sets Finalizers on cert-manager objects. ClusterIssuer
+# is referenced by name in CR spec but resolved by cert-manager itself.
 - apiGroups: ["cert-manager.io"]
-  resources: ["certificates", "certificates/status", "certificates/finalizers", "issuers"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  resources: ["certificates", "issuers"]
+  verbs: ["get", "list", "watch", "create"]
 
 # Backup permissions
 - apiGroups: ["documentdb.io"]
