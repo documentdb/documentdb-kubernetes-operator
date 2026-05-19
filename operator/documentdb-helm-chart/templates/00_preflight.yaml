@@ -1,0 +1,20 @@
+{{/*
+Preflight: the operator chart unconditionally creates cert-manager.io/v1
+Issuer and Certificate resources for the validating webhook, sidecar
+injector, and wal-replica plugin. If cert-manager is not installed in the
+cluster, the install will "succeed" from Helm's perspective but the
+operator will never become ready (webhook TLS Secret is never issued, the
+readiness probe never passes).
+
+Fail loudly at install/upgrade time so the user gets an actionable error
+instead of a stuck pod.
+
+This check can be disabled by setting `certManager.preflightCheck=false`
+for advanced users who manage cert-manager out-of-band or are templating
+the chart offline (e.g., GitOps render pipelines).
+*/}}
+{{- if .Values.certManager.preflightCheck -}}
+{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1") -}}
+{{- fail "cert-manager (cert-manager.io/v1) is required but was not found in the cluster. Install cert-manager (https://cert-manager.io/docs/installation/) before installing this chart, or set certManager.preflightCheck=false to skip this check." -}}
+{{- end -}}
+{{- end -}}

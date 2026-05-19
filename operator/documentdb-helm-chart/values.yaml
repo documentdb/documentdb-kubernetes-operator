@@ -37,6 +37,16 @@ image:
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
+# cert-manager is a required dependency: the chart creates cert-manager.io/v1
+# Issuer and Certificate resources for the validating webhook and the CNPG
+# plugin sidecars. The preflight check below fails the install with an
+# actionable message if cert-manager is not present in the cluster.
+certManager:
+  # Set to false only if you template the chart offline (e.g., GitOps render
+  # pipelines) or manage cert-manager out-of-band and the API discovery is
+  # unreliable. Disabling the check does NOT remove the dependency.
+  preflightCheck: true
+
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:
