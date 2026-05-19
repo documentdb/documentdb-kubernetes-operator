@@ -142,16 +142,16 @@ metadata:
   name: wal-replica-manager
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-rules: # TODO trim this down to what's actually needed
+rules:
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["services", "pods", "endpoints", "leases", "serviceaccounts", "configmaps", "namespaces"]
+  resources: ["services", "pods", "endpoints", "leases", "serviceaccounts", "configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["pods"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
