@@ -11,13 +11,13 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # Core API resources the operator creates / reconciles in user namespaces.
 # `pods/exec` (create) is needed for the documentdb_controller exec path;
-# plain `pods` is read-only because we only Get the target pod for exec.
+# `pods,services,endpoints` need full CRUD because EnsureServiceAccount\
+# RoleAndRoleBinding (documentdb_controller.go) creates per-CR Roles
+# granting these to the CNPG cluster's SA. K8s RBAC escalation requires
+# the grantor (this operator) to already hold every verb being granted.
 - apiGroups: [""]
-  resources: ["services", "serviceaccounts", "configmaps", "persistentvolumeclaims", "pods/exec"]
+  resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims", "pods/exec"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
 - apiGroups: ["rbac.authorization.k8s.io"] # namespaced RBAC created by util.go (Roles/RoleBindings only)
   resources: ["roles", "rolebindings"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
