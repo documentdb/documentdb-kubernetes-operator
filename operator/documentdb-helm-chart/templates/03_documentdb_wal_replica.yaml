@@ -125,6 +125,20 @@ spec:
         ports:
         - containerPort: 9090
           protocol: TCP
+        {{- if .Values.pluginProbes.enabled }}
+        readinessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: {{ .Values.pluginProbes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.pluginProbes.periodSeconds }}
+          failureThreshold: {{ .Values.pluginProbes.failureThreshold }}
+        livenessProbe:
+          tcpSocket:
+            port: 9090
+          initialDelaySeconds: {{ .Values.pluginProbes.initialDelaySeconds }}
+          periodSeconds: {{ .Values.pluginProbes.periodSeconds }}
+          failureThreshold: {{ .Values.pluginProbes.failureThreshold }}
+        {{- end }}
         args:
         - receivewal
         - --server-cert=/server/tls.crt
