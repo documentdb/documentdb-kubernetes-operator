@@ -27,16 +27,100 @@ serviceAccount:
 # WAL Replica feature flag
 walReplica: false  # Set to true to deploy the WAL replica plugin
 
+# Image pull secrets used by all operator components (operator, sidecar injector, wal-replica).
+# Each entry must be a Kubernetes Secret reference: [{ name: my-registry-secret }, ...]
+imagePullSecrets: []
+
 image:
   documentdbk8soperator:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/operator
-    pullPolicy: Always
+    # Pinned image tags use IfNotPresent to avoid unnecessary registry pulls on pod restart.
+    pullPolicy: IfNotPresent
   sidecarinjector:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
+
+# Per-component pod-level configuration: resources, security contexts, and scheduling.
+# Defaults are conservative and aim to be compatible with Pod Security Admission's
+# `restricted` profile. Override any field per component as needed.
+operator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    # The operator image (operator/src/Dockerfile) runs as the Alpine `manager`
+    # user, which is uid 100. We pin runAsUser explicitly so Kubernetes can
+    # verify the user is non-root without depending on the image's USER directive.
+    # If the operator Dockerfile is changed to use a different uid, update this
+    # value in lockstep with the appVersion bump.
+    runAsUser: 100
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+sidecarInjector:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+walReplicaPlugin:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:

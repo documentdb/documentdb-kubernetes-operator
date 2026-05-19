@@ -81,18 +81,47 @@ spec:
   selector:
     matchLabels:
       app: wal-replica
-  strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: wal-replica
     spec:
       serviceAccountName: wal-replica-manager
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"  
         imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
+        {{- with .Values.walReplicaPlugin.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - containerPort: 9090
           protocol: TCP
@@ -107,7 +136,10 @@ spec:
           name: server
         - mountPath: /client
           name: client
-        resources: {}
+        {{- with .Values.walReplicaPlugin.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
       volumes:
       - name: server
         secret:
@@ -123,7 +155,7 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/managed-by: "Helm"
   name: wal-replica-manager-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -174,5 +206,5 @@ metadata:
   namespace: cnpg-system
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/managed-by: "Helm"
 {{- end }}

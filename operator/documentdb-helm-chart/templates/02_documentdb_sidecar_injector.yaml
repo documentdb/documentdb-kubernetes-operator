@@ -31,13 +31,38 @@ spec:
   selector:
     matchLabels:
       app: sidecar-injector
-  strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: sidecar-injector
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sidecarInjector.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - args:
         - plugin
@@ -48,6 +73,10 @@ spec:
         image: "{{ .Values.image.sidecarinjector.repository }}:{{ .Values.image.sidecarinjector.tag | default .Chart.AppVersion }}"
         imagePullPolicy: "{{ .Values.image.sidecarinjector.pullPolicy }}"
         name: cnpg-i-sidecar-injector
+        {{- with .Values.sidecarInjector.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         env:
         {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
@@ -56,7 +85,10 @@ spec:
         ports:
         - containerPort: 9090
           protocol: TCP
-        resources: {}
+        {{- with .Values.sidecarInjector.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         volumeMounts:
         - mountPath: /server
           name: server
