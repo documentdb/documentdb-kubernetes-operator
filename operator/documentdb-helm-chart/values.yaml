@@ -112,6 +112,13 @@ walReplicaPlugin:
     seccompProfile:
       type: RuntimeDefault
   containerSecurityContext:
+    # Must match the USER directive in the wal-replica plugin image's
+    # Dockerfile. Pinned numerically (not by name) so kubelet's
+    # runAsNonRoot check can verify it without consulting /etc/passwd.
+    # Aligned with sidecarInjector (both are CNPG-I plugins); update in
+    # lockstep with the eventual wal-replica Dockerfile.
+    runAsUser: 10001
+    runAsGroup: 10001
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
