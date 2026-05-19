@@ -29,6 +29,19 @@ walReplica: false  # Set to true to deploy the WAL replica plugin
 
 # Image pull secrets used by all operator components (operator, sidecar injector, wal-replica).
 # Each entry must be a Kubernetes Secret reference: [{ name: my-registry-secret }, ...]
+#
+# IMPORTANT: imagePullSecrets are namespace-scoped. This chart deploys pods into TWO
+# namespaces by default: the release namespace (operator) and `cnpg-system`
+# (sidecar-injector and, when enabled, wal-replica). If you use a private registry
+# you must create the same pull secret in BOTH namespaces (or in every namespace
+# referenced by your overrides). The chart does not create the secret for you;
+# create it out-of-band before `helm install`. Example:
+#   kubectl create secret docker-registry my-registry-secret \
+#     --docker-server=... --docker-username=... --docker-password=... \
+#     -n documentdb-operator
+#   kubectl create secret docker-registry my-registry-secret \
+#     --docker-server=... --docker-username=... --docker-password=... \
+#     -n cnpg-system
 imagePullSecrets: []
 
 image:
