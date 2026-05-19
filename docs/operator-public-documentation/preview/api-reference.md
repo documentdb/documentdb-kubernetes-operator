@@ -154,11 +154,11 @@ _Appears in:_
 | `instancesPerNode` _integer_ | InstancesPerNode is the number of DocumentDB instances per node. Range: 1-3. |  | Maximum: 3 <br />Minimum: 1 <br /> |
 | `resource` _[Resource](#resource)_ | Resource specifies the storage resources for DocumentDB. |  |  |
 | `documentDBVersion` _string_ | DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).<br />When set, this overrides the default versions for image.documentDB and image.gateway.<br />Individual image fields under spec.image take precedence over this version. |  |  |
-| `image` _[ImageSpec](#imagespec)_ | Image groups container image settings for the DocumentDB stack<br />(extension image, gateway image, PostgreSQL image, and image mode).<br />All fields are optional; sensible defaults are applied when omitted. |  | Optional: \{\} <br /> |
+| `image` _[ImageSpec](#imagespec)_ | Image groups container image settings for the DocumentDB stack<br />(extension image, gateway image, PostgreSQL image).<br />All fields are optional; sensible defaults are applied when omitted. |  | Optional: \{\} <br /> |
 | `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#localobjectreference-v1-core) array_ | ImagePullSecrets is an optional list of references to secrets in the same namespace<br />to use for pulling any of the images used by this cluster. Passed through to the<br />underlying CloudNative-PG cluster. |  | Optional: \{\} <br /> |
 | `documentDbCredentialSecret` _string_ | DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials<br />for the DocumentDB gateway (expects keys `username` and `password`). If omitted,<br />a default secret name `documentdb-credentials` is used.<br />NOTE: Immutable today; will be relaxed in a future release to support credential rotation. |  |  |
 | `clusterReplication` _[ClusterReplication](#clusterreplication)_ | ClusterReplication configures cross-cluster replication for DocumentDB. |  |  |
-| `postgres` _[PostgresSpec](#postgresspec)_ | Postgres groups PostgreSQL process-level tuning (UID/GID, preload libraries,<br />custom post-init SQL). All fields are optional; defaults are preserved when omitted. |  | Optional: \{\} <br /> |
+| `postgres` _[PostgresSpec](#postgresspec)_ | Postgres groups PostgreSQL process-level tuning (UID/GID, custom post-init SQL).<br />All fields are optional; defaults are preserved when omitted. |  | Optional: \{\} <br /> |
 | `plugins` _[PluginsSpec](#pluginsspec)_ | Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).<br />All fields are optional; defaults are preserved when omitted. |  | Optional: \{\} <br /> |
 | `exposeViaService` _[ExposeViaService](#exposeviaservice)_ | ExposeViaService configures how to expose DocumentDB via a Kubernetes service.<br />This can be a LoadBalancer or ClusterIP service. |  |  |
 | `environment` _string_ | Environment specifies the cloud environment for deployment<br />This determines cloud-specific service annotations for LoadBalancer services |  | Enum: [eks aks gke] <br /> |
@@ -252,10 +252,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `documentDB` _string_ | DocumentDB is the container image for the DocumentDB extension layer.<br />In layered mode this image is mounted into the PostgreSQL container via<br />CNPG's ImageVolumeSource so that the extension files are available<br />alongside an upstream PostgreSQL image.<br />In combined mode this field is ignored. |  | Optional: \{\} <br /> |
+| `documentDB` _string_ | DocumentDB is the container image for the DocumentDB extension layer.<br />This image is mounted into the PostgreSQL container via CNPG's<br />ImageVolumeSource so that the extension files are available alongside<br />an upstream PostgreSQL image. |  | Optional: \{\} <br /> |
 | `gateway` _string_ | Gateway is the container image for the DocumentDB Gateway sidecar. |  | Optional: \{\} <br /> |
-| `postgres` _string_ | Postgres is the container image for the PostgreSQL server.<br />In layered mode (default) this is a vanilla CNPG-compatible PostgreSQL image.<br />In combined mode this image is expected to already bundle the DocumentDB<br />extension binaries; the operator will not inject an Extensions stanza.<br />Must use trixie (Debian 13) base to match the extension's GLIBC requirements<br />when running in layered mode. | ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie | Optional: \{\} <br /> |
-| `mode` _string_ | Mode controls how the DocumentDB extension is provisioned into the<br />PostgreSQL container.<br />  - layered (default): the operator mounts spec.image.documentDB as an<br />    ImageVolumeSource via CNPG's Extensions stanza. Use this with<br />    upstream-compatible CNPG PostgreSQL images.<br />  - combined: the operator assumes spec.image.postgres already contains<br />    the DocumentDB extension binaries. No Extensions stanza is emitted<br />    and spec.postgres.preloadLibraries is used verbatim. | layered | Enum: [layered combined] <br />Optional: \{\} <br /> |
+| `postgres` _string_ | Postgres is the container image for the PostgreSQL server.<br />Must be an upstream CNPG-compatible PostgreSQL image (the operator<br />adds the DocumentDB extension via an ImageVolume mount), and must<br />use trixie (Debian 13) base to match the extension's GLIBC<br />requirements. | ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie | Optional: \{\} <br /> |
 
 
 #### IssuerRef
@@ -376,7 +375,6 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `uid` _integer_ | UID is the numeric user ID under which the PostgreSQL server process runs.<br />When set, GID must also be set. |  | Optional: \{\} <br /> |
 | `gid` _integer_ | GID is the numeric group ID under which the PostgreSQL server process runs.<br />When set, UID must also be set. |  | Optional: \{\} <br /> |
-| `preloadLibraries` _string array_ | PreloadLibraries overrides the shared_preload_libraries list for the<br />PostgreSQL server. Only honored when spec.image.mode is "combined";<br />in layered mode the operator manages the preload libraries itself. |  | Optional: \{\} <br /> |
 | `postInitSQL` _string array_ | PostInitSQL is an ordered list of SQL statements executed after the<br />cluster is initialized. These statements run AFTER the operator's<br />mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE<br />documentdb, ALTER ROLE documentdb), so they can safely reference the<br />documentdb extension and role. |  | Optional: \{\} <br /> |
 
 

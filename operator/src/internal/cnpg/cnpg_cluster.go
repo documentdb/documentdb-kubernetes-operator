@@ -214,17 +214,6 @@ func parsePullPolicy(value string) corev1.PullPolicy {
 	}
 }
 
-// isCombinedImageMode reports whether spec.image.mode is explicitly set to
-// "combined". In combined mode the operator assumes the PostgreSQL image
-// already bundles the DocumentDB extension, so it skips the CNPG Extensions
-// stanza and the default AdditionalLibraries list.
-func isCombinedImageMode(documentdb *dbpreview.DocumentDB) bool {
-	if documentdb == nil || documentdb.Spec.Image == nil {
-		return false
-	}
-	return documentdb.Spec.Image.Mode == dbpreview.ImageModeCombined
-}
-
 // imagePostgres returns spec.image.postgres or empty string when unset.
 // Nil-safe.
 func imagePostgres(documentdb *dbpreview.DocumentDB) string {
@@ -287,17 +276,12 @@ func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbprevie
 }
 
 // buildPostgresConfiguration returns the cnpgv1.PostgresConfiguration block
-// for the cluster, branching on spec.image.mode.
+// for the cluster.
 //
-// In layered mode (default) the operator declares the DocumentDB extension
-// via CNPG's Extensions stanza, sets a fixed AdditionalLibraries list, and
-// applies a small set of operator-managed GUCs.
-//
-// In combined mode the operator emits no Extensions block, uses
-// spec.postgres.preloadLibraries verbatim (operator-managed GUC defaults
-// still apply for replication slots and pg_cron's database setting), and
-// leaves it to the caller to ship a fat PostgreSQL image that contains the
-// extension binaries.
+// The operator declares the DocumentDB extension via CNPG's Extensions
+// stanza (mounted from spec.image.documentDB as an ImageVolumeSource),
+// sets a fixed AdditionalLibraries list, and applies a small set of
+// operator-managed GUCs.
 func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource) cnpgv1.PostgresConfiguration {
 	params := map[string]string{
 		"cron.database_name":    "postgres",
@@ -313,18 +297,6 @@ func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImage
 		"host all all 0.0.0.0/0 trust",
 		"host all all ::0/0 trust",
 		"host replication all all trust",
-	}
-
-	if isCombinedImageMode(documentdb) {
-		var preload []string
-		if documentdb.Spec.Postgres != nil {
-			preload = documentdb.Spec.Postgres.PreloadLibraries
-		}
-		return cnpgv1.PostgresConfiguration{
-			AdditionalLibraries: preload,
-			Parameters:          params,
-			PgHBA:               pgHBA,
-		}
 	}
 
 	return cnpgv1.PostgresConfiguration{

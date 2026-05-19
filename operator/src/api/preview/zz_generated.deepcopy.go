@@ -548,11 +548,6 @@ func (in *PostgresSpec) DeepCopyInto(out *PostgresSpec) {
 		*out = new(int64)
 		**out = **in
 	}
-	if in.PreloadLibraries != nil {
-		in, out := &in.PreloadLibraries, &out.PreloadLibraries
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	if in.PostInitSQL != nil {
 		in, out := &in.PostInitSQL, &out.PostInitSQL
 		*out = make([]string, len(*in))

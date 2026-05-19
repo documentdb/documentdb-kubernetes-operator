@@ -687,60 +687,6 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(cluster.Spec.PostgresUID).To(Equal(int64(1001)))
 		Expect(cluster.Spec.PostgresGID).To(Equal(int64(1002)))
 	})
-
-	Context("combined image mode", func() {
-		It("omits Extensions, honors preloadLibraries, and keeps operator-managed GUCs", func() {
-			req := ctrl.Request{}
-			req.Name = "test-cluster"
-			req.Namespace = "default"
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					InstancesPerNode: 1,
-					Image: &dbpreview.ImageSpec{
-						Mode:     dbpreview.ImageModeCombined,
-						Postgres: "registry.example/fat-postgres:18",
-					},
-					Postgres: &dbpreview.PostgresSpec{
-						PreloadLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb", "auto_explain"},
-					},
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					},
-				},
-			}
-
-			cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
-			Expect(cluster.Spec.ImageName).To(Equal("registry.example/fat-postgres:18"))
-			Expect(cluster.Spec.PostgresConfiguration.Extensions).To(BeEmpty())
-			Expect(cluster.Spec.PostgresConfiguration.AdditionalLibraries).To(Equal(
-				[]string{"pg_cron", "pg_documentdb_core", "pg_documentdb", "auto_explain"}))
-			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("cron.database_name", "postgres"))
-			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("max_replication_slots", "10"))
-			Expect(cluster.Spec.PostgresConfiguration.PgHBA).To(HaveLen(3))
-		})
-
-		It("emits no AdditionalLibraries when spec.postgres is nil", func() {
-			req := ctrl.Request{}
-			req.Name = "test-cluster"
-			req.Namespace = "default"
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					InstancesPerNode: 1,
-					Image: &dbpreview.ImageSpec{
-						Mode:     dbpreview.ImageModeCombined,
-						Postgres: "registry.example/fat-postgres:18",
-					},
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					},
-				},
-			}
-
-			cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
-			Expect(cluster.Spec.PostgresConfiguration.Extensions).To(BeEmpty())
-			Expect(cluster.Spec.PostgresConfiguration.AdditionalLibraries).To(BeEmpty())
-		})
-	})
 })
 
 // Standard Go tests for additional coverage

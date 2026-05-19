@@ -9,21 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Image mode constants for ImageSpec.Mode.
-const (
-	// ImageModeLayered (default) uses CNPG's Extensions configuration with
-	// pg_documentdb_core + pg_documentdb shipped via an ImageVolumeSource.
-	// Use this with images that contain only the extension layer.
-	ImageModeLayered = "layered"
-
-	// ImageModeCombined treats the PostgreSQL image itself as a fat image
-	// that already bundles the DocumentDB extension binaries.
-	// In this mode the operator does NOT inject an Extensions stanza or
-	// the default AdditionalLibraries list; callers must specify their
-	// own postgres.preloadLibraries.
-	ImageModeCombined = "combined"
-)
-
 // Feature gate constants. PascalCase names following the Kubernetes feature gate convention.
 const (
 	// FeatureGateChangeStreams enables change stream support by setting wal_level=logical.
@@ -51,7 +36,7 @@ type DocumentDBSpec struct {
 	DocumentDBVersion string `json:"documentDBVersion,omitempty"`
 
 	// Image groups container image settings for the DocumentDB stack
-	// (extension image, gateway image, PostgreSQL image, and image mode).
+	// (extension image, gateway image, PostgreSQL image).
 	// All fields are optional; sensible defaults are applied when omitted.
 	// +optional
 	Image *ImageSpec `json:"image,omitempty"`
@@ -73,8 +58,8 @@ type DocumentDBSpec struct {
 	// ClusterReplication configures cross-cluster replication for DocumentDB.
 	ClusterReplication *ClusterReplication `json:"clusterReplication,omitempty"`
 
-	// Postgres groups PostgreSQL process-level tuning (UID/GID, preload libraries,
-	// custom post-init SQL). All fields are optional; defaults are preserved when omitted.
+	// Postgres groups PostgreSQL process-level tuning (UID/GID, custom post-init SQL).
+	// All fields are optional; defaults are preserved when omitted.
 	// +optional
 	Postgres *PostgresSpec `json:"postgres,omitempty"`
 
@@ -159,10 +144,9 @@ type DocumentDBSpec struct {
 // environment variables, and built-in defaults in that order.
 type ImageSpec struct {
 	// DocumentDB is the container image for the DocumentDB extension layer.
-	// In layered mode this image is mounted into the PostgreSQL container via
-	// CNPG's ImageVolumeSource so that the extension files are available
-	// alongside an upstream PostgreSQL image.
-	// In combined mode this field is ignored.
+	// This image is mounted into the PostgreSQL container via CNPG's
+	// ImageVolumeSource so that the extension files are available alongside
+	// an upstream PostgreSQL image.
 	// +optional
 	DocumentDB string `json:"documentDB,omitempty"`
 
@@ -171,30 +155,13 @@ type ImageSpec struct {
 	Gateway string `json:"gateway,omitempty"`
 
 	// Postgres is the container image for the PostgreSQL server.
-	// In layered mode (default) this is a vanilla CNPG-compatible PostgreSQL image.
-	// In combined mode this image is expected to already bundle the DocumentDB
-	// extension binaries; the operator will not inject an Extensions stanza.
-	// Must use trixie (Debian 13) base to match the extension's GLIBC requirements
-	// when running in layered mode.
+	// Must be an upstream CNPG-compatible PostgreSQL image (the operator
+	// adds the DocumentDB extension via an ImageVolume mount), and must
+	// use trixie (Debian 13) base to match the extension's GLIBC
+	// requirements.
 	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
 	// +optional
 	Postgres string `json:"postgres,omitempty"`
-
-	// Mode controls how the DocumentDB extension is provisioned into the
-	// PostgreSQL container.
-	//
-	//   - layered (default): the operator mounts spec.image.documentDB as an
-	//     ImageVolumeSource via CNPG's Extensions stanza. Use this with
-	//     upstream-compatible CNPG PostgreSQL images.
-	//
-	//   - combined: the operator assumes spec.image.postgres already contains
-	//     the DocumentDB extension binaries. No Extensions stanza is emitted
-	//     and spec.postgres.preloadLibraries is used verbatim.
-	//
-	// +kubebuilder:validation:Enum=layered;combined
-	// +kubebuilder:default=layered
-	// +optional
-	Mode string `json:"mode,omitempty"`
 }
 
 // PostgresSpec groups PostgreSQL process-level tuning.
@@ -211,12 +178,6 @@ type PostgresSpec struct {
 	// When set, UID must also be set.
 	// +optional
 	GID *int64 `json:"gid,omitempty"`
-
-	// PreloadLibraries overrides the shared_preload_libraries list for the
-	// PostgreSQL server. Only honored when spec.image.mode is "combined";
-	// in layered mode the operator manages the preload libraries itself.
-	// +optional
-	PreloadLibraries []string `json:"preloadLibraries,omitempty"`
 
 	// PostInitSQL is an ordered list of SQL statements executed after the
 	// cluster is initialized. These statements run AFTER the operator's
