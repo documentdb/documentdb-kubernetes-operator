@@ -118,7 +118,7 @@ spec:
       - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"  
         imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
-        {{- with .Values.walReplicaPlugin.securityContext }}
+        {{- with .Values.walReplicaPlugin.containerSecurityContext }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}

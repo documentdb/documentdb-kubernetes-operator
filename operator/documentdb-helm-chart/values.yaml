@@ -65,7 +65,7 @@ operator:
     runAsGroup: 101
     seccompProfile:
       type: RuntimeDefault
-  securityContext:
+  containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
@@ -89,7 +89,7 @@ sidecarInjector:
     runAsGroup: 10001
     seccompProfile:
       type: RuntimeDefault
-  securityContext:
+  containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
@@ -111,7 +111,7 @@ walReplicaPlugin:
     runAsNonRoot: true
     seccompProfile:
       type: RuntimeDefault
-  securityContext:
+  containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]

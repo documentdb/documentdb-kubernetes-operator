@@ -73,7 +73,7 @@ spec:
         image: "{{ .Values.image.sidecarinjector.repository }}:{{ .Values.image.sidecarinjector.tag | default .Chart.AppVersion }}"
         imagePullPolicy: "{{ .Values.image.sidecarinjector.pullPolicy }}"
         name: cnpg-i-sidecar-injector
-        {{- with .Values.sidecarInjector.securityContext }}
+        {{- with .Values.sidecarInjector.containerSecurityContext }}
         securityContext:
           {{- toYaml . | nindent 10 }}
         {{- end }}
