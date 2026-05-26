@@ -1562,13 +1562,15 @@
 <p>All three pods (<code>cert-manager</code>, <code>cert-manager-cainjector</code>, <code>cert-manager-webhook</code>) should show <code>Running</code>.</p>
 <h2 id="install-the-documentdb-operator">Install the DocumentDB operator<a class="headerlink" href="#install-the-documentdb-operator" title="Permanent link">&para;</a></h2>
 <p>The operator Helm chart automatically installs the <a href="https://cloudnative-pg.io/">CloudNativePG operator</a> as a dependency.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>repo<span class="w"> </span>add<span class="w"> </span>documentdb<span class="w"> </span>https://documentdb.github.io/documentdb-kubernetes-operator
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>helm<span class="w"> </span>repo<span class="w"> </span>update
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--wait
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--wait
 </code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Pin production installs</p>
+<p>Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from <a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">GitHub Releases</a> and add <code>--version &lt;release-version&gt;</code>.</p>
+</div>
 <p>Verify:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
 </code></pre></div>

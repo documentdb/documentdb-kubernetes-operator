@@ -791,18 +791,18 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-update-the-helm-repository" class="md-nav__link">
+  <a href="#step-1-choose-a-target-version" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Update the Helm Repository
+      Step 1: Choose a Target Version
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-review-available-versions" class="md-nav__link">
+  <a href="#step-2-review-the-release-notes" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Review Available Versions
+      Step 2: Review the Release Notes
     </span>
   </a>
   
@@ -1423,18 +1423,18 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-update-the-helm-repository" class="md-nav__link">
+  <a href="#step-1-choose-a-target-version" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Update the Helm Repository
+      Step 1: Choose a Target Version
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-review-available-versions" class="md-nav__link">
+  <a href="#step-2-review-the-release-notes" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Review Available Versions
+      Step 2: Review the Release Notes
     </span>
   </a>
   
@@ -1609,25 +1609,25 @@
 <p class="admonition-title">Info</p>
 <p>The operator Helm chart bundles <a href="https://cloudnative-pg.io/">CloudNative-PG</a> as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.</p>
 </div>
-<h3 id="step-1-update-the-helm-repository">Step 1: Update the Helm Repository<a class="headerlink" href="#step-1-update-the-helm-repository" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>helm<span class="w"> </span>repo<span class="w"> </span>update<span class="w"> </span>documentdb
+<h3 id="step-1-choose-a-target-version">Step 1: Choose a Target Version<a class="headerlink" href="#step-1-choose-a-target-version" title="Permanent link">&para;</a></h3>
+<p>The DocumentDB operator Helm chart is published as an OCI artifact at <code>oci://ghcr.io/documentdb/documentdb-operator</code>. OCI registries do not support <code>helm repo update</code> or <code>helm search repo</code>, so available chart versions are listed on the GitHub Releases page:</p>
+<p><a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">https://github.com/documentdb/documentdb-kubernetes-operator/releases</a></p>
+<p>Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Set this to the release tag you are upgrading to.</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span>&lt;release-version&gt;
 </code></pre></div>
-<h3 id="step-2-review-available-versions">Step 2: Review Available Versions<a class="headerlink" href="#step-2-review-available-versions" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>helm<span class="w"> </span>search<span class="w"> </span>repo<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span>--versions
-</code></pre></div>
+<h3 id="step-2-review-the-release-notes">Step 2: Review the Release Notes<a class="headerlink" href="#step-2-review-the-release-notes" title="Permanent link">&para;</a></h3>
+<p>Open the GitHub release page for <code>${TARGET_VERSION}</code> to review breaking changes, new features, and any required migration steps before proceeding.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Per the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/designs/release-strategy.md">release strategy</a>, each minor version is supported for three months after the next minor release. Plan to upgrade within this window.</p>
 </div>
 <h3 id="step-3-apply-updated-crds">Step 3: Apply Updated CRDs<a class="headerlink" href="#step-3-apply-updated-crds" title="Permanent link">&para;</a></h3>
 <p>Helm only installs CRDs on initial <code>helm install</code> — it does <strong>not</strong> update them on <code>helm upgrade</code>. If the new operator version introduces CRD schema changes, you must apply them manually first:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Set this to the release tag you are upgrading to (e.g., 0.2.0)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">0</span>.2.0
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>--server-side<span class="w"> </span>--force-conflicts<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_scheduledbackups.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>--server-side<span class="w"> </span>--force-conflicts<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_backups.yaml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/<span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span>/operator/documentdb-helm-chart/crds/documentdb.io_scheduledbackups.yaml
 </code></pre></div>
 <p>Server-side apply (<code>--server-side --force-conflicts</code>) is required because the DocumentDB CRD is too large for the <code>last-applied-configuration</code> annotation used by client-side <code>kubectl apply</code>.</p>
 <div class="admonition warning">
@@ -1635,32 +1635,34 @@
 <p>Always use CRDs from the <strong>same version</strong> as the Helm chart you are installing. Using CRDs from <code>main</code> or a different release may introduce schema mismatches.</p>
 </div>
 <h3 id="step-4-upgrade-the-operator">Step 4: Upgrade the Operator<a class="headerlink" href="#step-4-upgrade-the-operator" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--wait
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--wait
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>Add <code>--atomic</code> to automatically roll back the release if the upgrade fails:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--atomic
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="si">${</span><span class="nv">TARGET_VERSION</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--atomic
 </code></pre></div>
 </div>
 <h3 id="step-5-verify-the-upgrade">Step 5: Verify the Upgrade<a class="headerlink" href="#step-5-verify-the-upgrade" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Check operator deployment</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Check operator logs for errors</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>--tail<span class="o">=</span><span class="m">50</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Check operator deployment</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Check operator logs for errors</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span>deployment/documentdb-operator<span class="w"> </span>--tail<span class="o">=</span><span class="m">50</span>
 </code></pre></div>
 <h3 id="operator-rollback">Operator Rollback<a class="headerlink" href="#operator-rollback" title="Permanent link">&para;</a></h3>
 <p>If the new operator version causes issues, roll back to the previous Helm release:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># List release history</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>helm<span class="w"> </span><span class="nb">history</span><span class="w"> </span>documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Rollback to the previous revision</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>helm<span class="w"> </span>rollback<span class="w"> </span>documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># List release history</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>helm<span class="w"> </span><span class="nb">history</span><span class="w"> </span>documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Rollback to the previous revision</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>helm<span class="w"> </span>rollback<span class="w"> </span>documentdb-operator<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1731,8 +1733,8 @@
 <li><strong>Check the <a href="https://github.com/documentdb/documentdb/releases">DocumentDB release notes</a></strong> — review for breaking changes or new features.</li>
 <li>
 <p><strong>Verify DocumentDB cluster health</strong> — ensure all instances are running and healthy:</p>
-<p><div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>my-cluster
+<p><div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>my-cluster
 </code></pre></div>
 3. <strong>Back up the DocumentDB cluster</strong> — create an on-demand <a href="../backup-and-restore/">backup</a> before upgrading.</p>
 </li>
@@ -1743,30 +1745,30 @@
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p><strong>Step 1: Update the binary version.</strong> The schema stays unchanged — this is safe to roll back.</p>
-<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="c1"># schemaVersion is not set — schema stays at current version</span>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="c1"># schemaVersion is not set — schema stays at current version</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
 </code></pre></div>
 <p><strong>Step 2: Validate.</strong> Confirm the cluster is healthy and the new binary works as expected.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Watch the rolling restart</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Check cluster status</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Verify the schema version has NOT changed</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Watch the rolling restart</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Check cluster status</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># Verify the schema version has NOT changed</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
 </code></pre></div>
 <p><strong>Step 3: Finalize the schema.</strong> Once you're confident the new binary is stable, commit the schema migration:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;schemaVersion&quot;:&quot;&lt;new-version&gt;&quot;}}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;schemaVersion&quot;:&quot;&lt;new-version&gt;&quot;}}&#39;</span>
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
@@ -1777,23 +1779,23 @@
 <p>Keep the binary always one version ahead of the schema. This ensures you can roll back at any time because the running binary has already been validated with the current schema.</p>
 <p><strong>Example:</strong> Your cluster is at binary <code>0.110.0</code> with schema <code>0.110.0</code>. A new version <code>0.111.0</code> is available.</p>
 <p><strong>Step 1: Upgrade the binary and finalize the <em>previous</em> schema together.</strong></p>
-<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to new version</span>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.110.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to current (previous) version</span>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to new version</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.110.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to current (previous) version</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
 </code></pre></div>
 <p>Now the binary is <code>0.111.0</code> and the schema is <code>0.110.0</code>. Each new binary version is backward-compatible with the previous schema version, so this is safe.</p>
 <p><strong>Step 2: Validate.</strong> Run your tests. If something goes wrong, revert <code>documentDBVersion</code> to <code>0.110.0</code> — the schema is still at <code>0.110.0</code>, so rollback is safe.</p>
 <p><strong>On the next upgrade</strong> (e.g., <code>0.112.0</code>), repeat the pattern:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.112.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to next version</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to previous binary version</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.112.0&quot;</span><span class="w">     </span><span class="c1"># upgrade binary to next version</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;0.111.0&quot;</span><span class="w">          </span><span class="c1"># finalize schema to previous binary version</span>
 </code></pre></div>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
@@ -1802,16 +1804,16 @@
 </div>
 <div class="tabbed-block">
 <p>Update both the binary and schema in one step:</p>
-<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">documentDBVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&lt;new-version&gt;&quot;</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">schemaVersion</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;auto&quot;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
 </code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -1821,14 +1823,14 @@
 </div>
 </div>
 <h3 id="monitoring-the-upgrade">Monitoring the Upgrade<a class="headerlink" href="#monitoring-the-upgrade" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Watch the rolling restart</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Check DocumentDB cluster status</span>
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a><span class="c1"># Check the current schema version</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Watch the rolling restart</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-w
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Check DocumentDB cluster status</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Check the current schema version</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
 </code></pre></div>
 <h3 id="rollback-and-recovery">Rollback and Recovery<a class="headerlink" href="#rollback-and-recovery" title="Permanent link">&para;</a></h3>
 <p>Two rules govern rollback:</p>
@@ -1841,11 +1843,11 @@
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p>If <code>status.schemaVersion</code> still shows the <strong>previous</strong> version, the schema migration has not run yet. You can safely roll back by reverting <code>spec.documentDBVersion</code> to any version that is ≥ <code>status.schemaVersion</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Verify the schema version is unchanged</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Verify the schema version is unchanged</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.schemaVersion}&#39;</span>
 </code></pre></div>
 <p>If the schema version is unchanged, revert <code>spec.documentDBVersion</code> in your manifest and reapply:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>documentdb.yaml
 </code></pre></div>
 </div>
 <div class="tabbed-block">
@@ -1881,14 +1883,14 @@
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Extension Image Override</label><label for="__tabbed_3_2">Gateway Image Override</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">documentDBImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">documentDBImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the database extension image while keeping the gateway at the version set by <code>documentDBVersion</code>.</p>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">gatewayImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">gatewayImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the gateway sidecar image while keeping the extension at the version set by <code>documentDBVersion</code>.</p>
 </div>
