@@ -33,12 +33,12 @@ graph TB
     subgraph pod["DocumentDB pod"]
         pg["postgres"]
         gateway["documentdb-gateway"]
-        sidecar["OpenTelemetry Collector sidecar"]
+        sidecar["OTel Collector sidecar"]
         pg --> sidecar
         gateway -- "local OTLP when supported by the gateway image" --> sidecar
     end
 
-    otlp["OTLP backend or central Collector"]
+    otlp["OTLP backend / Collector"]
     prometheus["Prometheus"]
 
     sidecar -- "OTLP push" --> otlp
