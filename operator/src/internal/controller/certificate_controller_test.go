@@ -10,8 +10,10 @@ import (
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	v1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -143,6 +145,92 @@ func TestEnsureSelfSignedCert(t *testing.T) {
 	require.Zero(t, res.RequeueAfter)
 	require.True(t, ddb.Status.TLS.Ready)
 	require.NotEmpty(t, ddb.Status.TLS.SecretName)
+}
+
+func TestEnsurePostgresCertificatesDefaults(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-pg", "default")
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+		Postgres: &v1.CertificatesConfiguration{},
+	}
+	r := buildCertificateReconciler(t, ddb)
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	issuer := &cmapi.Issuer{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-selfsigned", Namespace: "default"}, issuer))
+	require.NotNil(t, issuer.Spec.SelfSigned)
+
+	serverIssuer := &cmapi.Issuer{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-server-issuer", Namespace: "default"}, serverIssuer))
+	require.NotNil(t, serverIssuer.Spec.CA)
+	require.Equal(t, "ddb-pg-postgres-ca", serverIssuer.Spec.CA.SecretName)
+
+	clientIssuer := &cmapi.Issuer{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-client-issuer", Namespace: "default"}, clientIssuer))
+	require.NotNil(t, clientIssuer.Spec.CA)
+	require.Equal(t, "ddb-pg-postgres-ca", clientIssuer.Spec.CA.SecretName)
+
+	caCert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-ca", Namespace: "default"}, caCert))
+	require.Equal(t, "ddb-pg-postgres-ca", caCert.Spec.SecretName)
+	require.True(t, caCert.Spec.IsCA)
+	require.Contains(t, caCert.Spec.Usages, cmapi.UsageCertSign)
+	require.Contains(t, caCert.Spec.Usages, cmapi.UsageCRLSign)
+
+	serverCert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-server", Namespace: "default"}, serverCert))
+	require.Equal(t, "ddb-pg-postgres-server", serverCert.Spec.SecretName)
+	require.Equal(t, "ddb-pg-postgres-server-issuer", serverCert.Spec.IssuerRef.Name)
+	require.Contains(t, serverCert.Spec.DNSNames, "ddb-pg-rw.default.svc")
+	require.Contains(t, serverCert.Spec.Usages, cmapi.UsageServerAuth)
+
+	replicationCert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-replication", Namespace: "default"}, replicationCert))
+	require.Equal(t, "ddb-pg-postgres-replication", replicationCert.Spec.SecretName)
+	require.Equal(t, "ddb-pg-postgres-client-issuer", replicationCert.Spec.IssuerRef.Name)
+	require.Equal(t, "streaming_replica", replicationCert.Spec.CommonName)
+	require.Contains(t, replicationCert.Spec.Usages, cmapi.UsageClientAuth)
+}
+
+func TestEnsurePostgresCertificatesWhenPostgresTLSIsPresent(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-pg-provided", "default")
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+		Postgres: &v1.CertificatesConfiguration{},
+	}
+	r := buildCertificateReconciler(t, ddb)
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	replicationCert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-provided-postgres-replication", Namespace: "default"}, replicationCert))
+	require.Equal(t, "ddb-pg-provided-postgres-replication", replicationCert.Spec.SecretName)
+}
+
+func TestEnsurePostgresCertificatesOmittedSkipsPostgresResources(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-pg-omitted", "default")
+	r := buildCertificateReconciler(t, ddb)
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	postgresIssuer := &cmapi.Issuer{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-omitted-postgres-selfsigned", Namespace: "default"}, postgresIssuer)
+	require.True(t, errors.IsNotFound(err))
+
+	postgresCert := &cmapi.Certificate{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-omitted-postgres-ca", Namespace: "default"}, postgresCert)
+	require.True(t, errors.IsNotFound(err))
+
+	gatewayIssuer := &cmapi.Issuer{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-omitted-gateway-selfsigned", Namespace: "default"}, gatewayIssuer))
 }
 
 // TestEmptyModeDefaultsToSelfSigned verifies that when mode is empty,

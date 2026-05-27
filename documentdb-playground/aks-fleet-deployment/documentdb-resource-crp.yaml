@@ -16,8 +16,8 @@ stringData:
   username: default_user
   password: {{DOCUMENTDB_PASSWORD}}
 
+## Cert-manager resources for cross-region replication TLS
 ---
-
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -48,7 +48,39 @@ spec:
     name: selfsigned-cross-region-issuer
     kind: Issuer
     group: cert-manager.io
-
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cross-region-server-cert
+  namespace: documentdb-preview-ns
+  labels:
+    cnpg.io/reload: ""
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cross-region-server-cert
+  namespace: documentdb-preview-ns
+spec:
+  secretName: cross-region-server-cert
+  usages:
+    - server auth
+  dnsNames:
+    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns.svc
+    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns
+    - documentdb-preview-bb8b4c62e10c285b-rw
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns.svc
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw
+    - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns.svc
+    - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns
+    - documentdb-preview-8377bf145d2df796-rw
+    - *.fleet-system.svc
+  issuerRef:
+    name: selfsigned-cross-region-issuer
+    kind: Issuer
+    group: cert-manager.io
 ---
 
 apiVersion: documentdb.io/preview
@@ -65,8 +97,6 @@ spec:
   environment: aks
   clusterReplication:
     highAvailability: true
-    replicationTLSSecret: cross-region-client-cert
-    clientCASecret: cross-region-client-cert
     crossCloudNetworkingStrategy: AzureFleet
     primary: {{PRIMARY_CLUSTER}}
     clusterList:
@@ -74,6 +104,12 @@ spec:
   exposeViaService:
     serviceType: LoadBalancer
   logLevel: info
+  tls:
+    postgres:
+      replicationTLSSecret: cross-region-client-cert
+      clientCASecret: cross-region-client-cert
+      serverTLSSecret: cross-region-server-cert
+      serverCASecret: cross-region-server-cert
 
 ---
 
@@ -114,6 +150,10 @@ spec:
       version: v1
       kind: Secret
       name: cross-region-client-cert
+    - group: ""
+      version: v1
+      kind: Secret
+      name: cross-region-server-cert
   policy:
     placementType: PickAll
     affinity:

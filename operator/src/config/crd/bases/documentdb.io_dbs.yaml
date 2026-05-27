@@ -1091,16 +1091,6 @@ spec:
                 description: ClusterReplication configures cross-cluster replication
                   for DocumentDB.
                 properties:
-                  clientCASecret:
-                    description: |-
-                      ClientCASecret is the name of a Kubernetes Secret containing the CA certificate
-                      used to verify the streaming_replica client certificate. The secret must contain
-                      a "ca.crt" key. When specified, the operator references this secret in
-                      clusters participating in replication.
-                      NOTE: It needs to be the same for all clusters
-                    maxLength: 253
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
-                    type: string
                   clusterList:
                     description: ClusterList is the list of clusters participating
                       in replication.
@@ -1140,16 +1130,6 @@ spec:
                     type: boolean
                   primary:
                     description: Primary is the name of the primary cluster for replication.
-                    type: string
-                  replicationTLSSecret:
-                    description: |-
-                      ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates
-                      for the streaming_replica user used in physical replication. The secret must contain
-                      "tls.crt" and "tls.key" keys. When specified, the operator references this secret in
-                      clusters participating in replication.
-                      NOTE: It needs to be the same for all clusters
-                    maxLength: 253
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                 required:
                 - clusterList
@@ -1540,6 +1520,52 @@ spec:
                   postgres:
                     description: Postgres configures TLS for the Postgres server (placeholder
                       for future phases).
+                    properties:
+                      clientCASecret:
+                        description: |-
+                          The secret containing the Client CA certificate. If not defined, a new secret will be created
+                          with a self-signed CA and will be used to generate all the client certificates.<br />
+                          <br />
+                          Contains:<br />
+                          <br />
+                          - `ca.crt`: CA that should be used to validate the client certificates,
+                          used as `ssl_ca_file` of all the instances.<br />
+                          - `ca.key`: key used to generate client certificates, if ReplicationTLSSecret is provided,
+                          this can be omitted.<br />
+                        type: string
+                      replicationTLSSecret:
+                        description: |-
+                          The secret of type kubernetes.io/tls containing the client certificate to authenticate as
+                          the `streaming_replica` user.
+                          If not defined, ClientCASecret must provide also `ca.key`, and a new secret will be
+                          created using the provided CA.
+                        type: string
+                      serverAltDNSNames:
+                        description: The list of the server alternative DNS names
+                          to be added to the generated server TLS certificates, when
+                          required.
+                        items:
+                          type: string
+                        type: array
+                      serverCASecret:
+                        description: |-
+                          The secret containing the Server CA certificate. If not defined, a new secret will be created
+                          with a self-signed CA and will be used to generate the TLS certificate ServerTLSSecret.<br />
+                          <br />
+                          Contains:<br />
+                          <br />
+                          - `ca.crt`: CA that should be used to validate the server certificate,
+                          used as `sslrootcert` in client connection strings.<br />
+                          - `ca.key`: key used to generate Server SSL certs, if ServerTLSSecret is provided,
+                          this can be omitted.<br />
+                        type: string
+                      serverTLSSecret:
+                        description: |-
+                          The secret of type kubernetes.io/tls containing the server TLS certificate and key that will be set as
+                          `ssl_cert_file` and `ssl_key_file` so that clients can connect to postgres securely.
+                          If not defined, ServerCASecret must provide also `ca.key` and a new secret will be
+                          created using the provided CA.
+                        type: string
                     type: object
                 type: object
             required:

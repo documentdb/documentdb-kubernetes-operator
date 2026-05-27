@@ -105,8 +105,6 @@ func GetReplicationContext(ctx context.Context, client client.Client, documentdb
 		PrimaryCNPGClusterName:       primaryCluster,
 		Environment:                  environment,
 		StorageClass:                 storageClass,
-		ReplicationTLSSecret:         documentdb.Spec.ClusterReplication.ReplicationTLSSecret,
-		ClientCASecret:               documentdb.Spec.ClusterReplication.ClientCASecret,
 		state:                        replicationState,
 		FleetMemberName:              self.Name,
 		OtherFleetMemberNames:        others,

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 # Define variables (allow env overrides)
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
@@ -112,10 +112,10 @@ done <<< "$MEMBER_CLUSTER_NAMES"
 ######### KUBEFLEET SETUP #########
 
 kubeDir=$(mktemp -d)
-git clone https://github.com/kubefleet-dev/kubefleet.git $kubeDir
-pushd $kubeDir
+git clone https://github.com/kubefleet-dev/kubefleet.git "$kubeDir"
+pushd "$kubeDir"
 # Set up HUB_CLUSTER as the hub
-kubectl config use-context $HUB_CLUSTER
+kubectl config use-context "$HUB_CLUSTER"
 
 # Install cert manager on hub cluster
 helm repo add jetstack https://charts.jetstack.io 
@@ -132,6 +132,10 @@ kubectl get pods -n cert-manager -o wide || true
 
 export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
 export TAG="v0.3.0"
+# Keep chart templates aligned with image tags to avoid unsupported flags.
+git fetch --tags --quiet
+git checkout --detach "$TAG"
+
 # Install the helm chart for running Fleet agents on the hub cluster.
 helm upgrade --install hub-agent ./charts/hub-agent/ \
         --set image.pullPolicy=Always \
@@ -156,17 +160,32 @@ chmod +x ./hack/membership/joinMC.sh
 HUB_CA=$(kubectl config view --raw -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.certificate-authority-data}")
 sed -i "s/--set namespace=fleet-system/--namespace=fleet-system --create-namespace --set config.hubCA=$HUB_CA/" hack/membership/joinMC.sh
 
-./hack/membership/joinMC.sh  $TAG $HUB_CLUSTER $MEMBER_CLUSTER_NAMES
+./hack/membership/joinMC.sh "$TAG" "$HUB_CLUSTER" $MEMBER_CLUSTER_NAMES
+
+# Ensure each generated member hub-access service account can watch hub resources.
+for sa in $(kubectl --context "$HUB_CLUSTER" get sa -n connect-to-fleet -o json | jq -r '.items[].metadata.name | select(test("-hub-cluster-access$"))'); do
+  kubectl --context "$HUB_CLUSTER" create clusterrolebinding "${sa}-hub-agent-role" \
+    --clusterrole=hub-agent-role \
+    --serviceaccount=connect-to-fleet:"$sa" \
+    --dry-run=client -o yaml | kubectl --context "$HUB_CLUSTER" apply -f -
+
+  kubectl --context "$HUB_CLUSTER" create clusterrolebinding "${sa}-hub-net-role" \
+    --clusterrole=hub-net-controller-manager-role \
+    --serviceaccount=connect-to-fleet:"$sa" \
+    --dry-run=client -o yaml | kubectl --context "$HUB_CLUSTER" apply -f -
+done
 popd
 
 fleetNetworkingDir=$(mktemp -d)
-git clone https://github.com/Azure/fleet-networking.git $fleetNetworkingDir
-pushd $fleetNetworkingDir
+git clone https://github.com/Azure/fleet-networking.git "$fleetNetworkingDir"
+pushd "$fleetNetworkingDir"
 # Set up HUB_CLUSTER as the hub
 NETWORKING_TAG="v0.3.30"
+git fetch --tags --quiet
+git checkout --detach "$NETWORKING_TAG"
 
 # Install the helm chart for running Fleet agents on the hub cluster.
-kubectl config use-context $HUB_CLUSTER
+kubectl config use-context "$HUB_CLUSTER"
 helm install hub-net-controller-manager ./charts/hub-net-controller-manager/ \
   --set fleetSystemNamespace=fleet-system-hub \
   --set leaderElectionNamespace=fleet-system-hub \
@@ -176,7 +195,7 @@ HUB_CLUSTER_ADDRESS=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$H
 HUB_CA=$(kubectl config view --raw -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER\")].cluster.certificate-authority-data}")
 
 while read -r MEMBER_CLUSTER; do
-  kubectl config use-context $MEMBER_CLUSTER
+  kubectl config use-context "$MEMBER_CLUSTER"
 
   kubectl apply -f config/crd/*
 
@@ -192,7 +211,7 @@ while read -r MEMBER_CLUSTER; do
     --set image.pullPolicy=Always \
     --set refreshtoken.pullPolicy=Always \
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
-    --set config.memberClusterName=$MEMBER_CLUSTER \
+    --set config.memberClusterName="$MEMBER_CLUSTER" \
     --set enableV1Beta1APIs=true \
     --namespace fleet-system \
     --create-namespace \
@@ -206,7 +225,7 @@ while read -r MEMBER_CLUSTER; do
     --set image.pullPolicy=Always \
     --set refreshtoken.pullPolicy=Always \
     --set config.hubURL=$HUB_CLUSTER_ADDRESS \
-    --set config.memberClusterName=$MEMBER_CLUSTER \
+    --set config.memberClusterName="$MEMBER_CLUSTER" \
     --set enableV1Beta1APIs=true \
     --namespace fleet-system \
     --create-namespace \

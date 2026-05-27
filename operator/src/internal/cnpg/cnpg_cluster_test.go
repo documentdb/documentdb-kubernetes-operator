@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	v1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -188,6 +189,27 @@ var _ = Describe("getDefaultBootstrapConfiguration", func() {
 		Expect(result.InitDB.PostInitSQL[0]).To(Equal("CREATE EXTENSION documentdb CASCADE"))
 		Expect(result.InitDB.PostInitSQL[3]).To(Equal("SELECT 1"))
 		Expect(result.InitDB.PostInitSQL[4]).To(Equal("SELECT 2"))
+	})
+})
+
+var _ = Describe("BuildPostgresCertificatesConfiguration", func() {
+	It("fills all missing Postgres certificate fields with deterministic names", func() {
+		tls := &dbpreview.TLSConfiguration{Postgres: &v1.CertificatesConfiguration{}}
+
+		result := BuildPostgresCertificatesConfiguration("docdb", "docdb-cnpg", "default", tls)
+
+		Expect(result).ToNot(BeNil())
+		Expect(result.ServerCASecret).To(Equal("docdb-postgres-ca"))
+		Expect(result.ClientCASecret).To(Equal("docdb-postgres-ca"))
+		Expect(result.ServerTLSSecret).To(Equal("docdb-postgres-server"))
+		Expect(result.ReplicationTLSSecret).To(Equal("docdb-postgres-replication"))
+		Expect(result.ServerAltDNSNames).To(BeEmpty())
+	})
+
+	It("returns nil when Postgres TLS is omitted", func() {
+		result := BuildPostgresCertificatesConfiguration("docdb", "docdb-cnpg", "default", nil)
+
+		Expect(result).To(BeNil())
 	})
 })
 

@@ -327,24 +327,6 @@ type ClusterReplication struct {
 	ClusterList []MemberCluster `json:"clusterList"`
 	// Whether or not to have replicas on the primary cluster.
 	HighAvailability bool `json:"highAvailability,omitempty"`
-	// ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates
-	// for the streaming_replica user used in physical replication. The secret must contain
-	// "tls.crt" and "tls.key" keys. When specified, the operator references this secret in
-	// clusters participating in replication.
-	// NOTE: It needs to be the same for all clusters
-	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
-	// +kubebuilder:validation:MaxLength=253
-	ReplicationTLSSecret string `json:"replicationTLSSecret,omitempty"`
-	// ClientCASecret is the name of a Kubernetes Secret containing the CA certificate
-	// used to verify the streaming_replica client certificate. The secret must contain
-	// a "ca.crt" key. When specified, the operator references this secret in
-	// clusters participating in replication.
-	// NOTE: It needs to be the same for all clusters
-	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
-	// +kubebuilder:validation:MaxLength=253
-	ClientCASecret string `json:"clientCASecret,omitempty"`
 }
 
 type MemberCluster struct {
@@ -375,8 +357,8 @@ type TLSConfiguration struct {
 	// Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only).
 	Gateway *GatewayTLS `json:"gateway,omitempty"`
 
-	// Postgres configures TLS for the Postgres server (placeholder for future phases).
-	Postgres *PostgresTLS `json:"postgres,omitempty"`
+	// Postgres configures TLS for the Postgres server.
+	Postgres *cnpgv1.CertificatesConfiguration `json:"postgres,omitempty"`
 
 	// GlobalEndpoints configures TLS for global endpoints (placeholder for future phases).
 	GlobalEndpoints *GlobalEndpointsTLS `json:"globalEndpoints,omitempty"`
@@ -396,9 +378,6 @@ type GatewayTLS struct {
 	// Provided secret reference when Mode=Provided.
 	Provided *ProvidedTLS `json:"provided,omitempty"`
 }
-
-// PostgresTLS acts as a placeholder for future Postgres TLS settings.
-type PostgresTLS struct{}
 
 // GlobalEndpointsTLS acts as a placeholder for future global endpoint TLS settings.
 type GlobalEndpointsTLS struct{}

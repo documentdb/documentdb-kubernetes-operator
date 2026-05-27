@@ -105,5 +105,19 @@ spec:
       name: wal-replica-manager-binding
   policy:
     placementType: PickAll
+    affinity:
+      clusterAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          clusterSelectorTerms:
+            - labelSelector:
+                matchExpressions:
+                  - key: documentdb.io/fleet-hub
+                    operator: DoesNotExist
+            - labelSelector:
+                matchExpressions:
+                  - key: documentdb.io/fleet-hub
+                    operator: NotIn
+                    values:
+                      - "true"
   strategy:
     type: RollingUpdate

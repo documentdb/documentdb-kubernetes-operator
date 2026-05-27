@@ -116,6 +116,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource),
 				Bootstrap:             getBootstrapConfiguration(documentdb, isPrimaryRegion, log),
 				LogLevel:              cmp.Or(documentdb.Spec.LogLevel, "info"),
+				Certificates:          BuildPostgresCertificatesConfiguration(documentdb.Name, req.Name, req.Namespace, documentdb.Spec.TLS),
 				Backup: &cnpgv1.BackupConfiguration{
 					VolumeSnapshot: &cnpgv1.VolumeSnapshotConfiguration{
 						SnapshotOwnerReference: "backup", // Set owner reference to 'backup' so that snapshots are deleted when Backup resource is deleted
@@ -357,9 +358,8 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.Documen
 // operator-managed GUCs.
 func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource) cnpgv1.PostgresConfiguration {
 	pgHBA := []string{
-		"host all all 0.0.0.0/0 trust",
-		"host all all ::0/0 trust",
-		"host replication all all trust",
+		"host all all localhost trust",
+		"hostssl replication streaming_replica all cert",
 	}
 
 	return cnpgv1.PostgresConfiguration{
@@ -376,4 +376,47 @@ func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImage
 		Parameters:          MergeParameters(documentdb, parseMemoryToBytes(documentdb.Spec.Resource.Memory)),
 		PgHBA:               pgHBA,
 	}
+}
+
+// Use all provided certificates, but for any missing field generate operator-managed
+// cert-manager certificates instead of relying on CNPG-generated certs.
+// The operator always manages ServerTLSSecret, so ServerAltDNSNames are not needed at the CNPG cluster level;
+// DNS names come from the Certificate resource itself (managed by certificate_controller).
+func BuildPostgresCertificatesConfiguration(documentdbName, cnpgClusterName, namespace string, tls *dbpreview.TLSConfiguration) *cnpgv1.CertificatesConfiguration {
+	if !PostgresTLSEnabled(tls) {
+		return nil
+	}
+
+	configuration := tls.Postgres;
+
+	if configuration.ServerCASecret == "" {
+		configuration.ServerCASecret = PostgresCASecretName(documentdbName)
+	}
+	if configuration.ServerTLSSecret == "" {
+		configuration.ServerTLSSecret = PostgresServerTLSSecretName(documentdbName)
+	}
+	if configuration.ReplicationTLSSecret == "" {
+		configuration.ReplicationTLSSecret = PostgresReplicationTLSSecretName(documentdbName)
+	}
+	if configuration.ClientCASecret == "" {
+		configuration.ClientCASecret = PostgresCASecretName(documentdbName)
+	}
+
+	return configuration
+}
+
+func PostgresTLSEnabled(tls *dbpreview.TLSConfiguration) bool {
+	return tls != nil && tls.Postgres != nil
+}
+
+func PostgresCASecretName(documentdbName string) string {
+	return documentdbName + "-postgres-ca"
+}
+
+func PostgresServerTLSSecretName(documentdbName string) string {
+	return documentdbName + "-postgres-server"
+}
+
+func PostgresReplicationTLSSecretName(documentdbName string) string {
+	return documentdbName + "-postgres-replication"
 }

@@ -156,7 +156,7 @@ spec:
 #### Securing replication with TLS
 
 Cross-Kubernetes-cluster streaming replication flows over the network between
-member Kubernetes clusters, so the operator secures it with mutual TLS instead
+member Kubernetes clusters, so the operator secures it with TLS instead
 of password or trust-based authentication. Each replica connects to the primary
 as the dedicated `streaming_replica` PostgreSQL role and presents a client
 certificate that the primary verifies against a shared certificate authority (CA).
@@ -172,10 +172,10 @@ Each member Kubernetes cluster must use the same replication certificate and CA,
 so any replica can authenticate to any primary after a failover. Put the cert into
 a Kubernetes Secret, then pass the name in using the following fields.
 
-| Field | Type | Required | Description |
+| Field | Type | Description |
 | --- | --- | --- | --- |
-| `replicationTLSSecret` | string | Yes for secure multi-region | Name of a Kubernetes Secret that contains the `streaming_replica` client certificate and key. Must contain `tls.crt` and `tls.key`. Must be the same name in every member Kubernetes cluster. |
-| `clientCASecret` | string | Optional | Name of a Kubernetes Secret that contains the CA certificate (`ca.crt`) used to verify the client certificate. If omitted, the operator falls back to the CA embedded in `replicationTLSSecret`. Must be the same name in every member Kubernetes cluster. |
+| `replicationTLSSecret` | string | Name of a Kubernetes Secret that contains the `streaming_replica` client certificate and key. Must contain `tls.crt` and `tls.key`. Must be the same name and value in every member Kubernetes cluster. |
+| `clientCASecret` | string | Name of a Kubernetes Secret that contains the CA certificate (`ca.crt`) used to verify the client certificate. If omitted, the CNPG operator falls back to it's own generated CA, and replication will fail. Must be the same name and value in every member Kubernetes cluster. |
 
 The operator looks up the secrets by name in the DocumentDB namespace on each member
 Kubernetes cluster. Both the secret name and the certificate material must match

@@ -107,6 +107,15 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		Self:    replicationContext.CNPGClusterName,
 	}
 
+	// If we are multi-cluster and no certs are provided, trust that the cluster is running in a secure environment and allow replication without TLS
+	// (probably istio or some other service mesh)
+	if !cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
+		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}
+	}
+
 	if replicationContext.IsAzureFleetNetworking() {
 		// need to create services for each of the other clusters
 		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{
@@ -139,49 +148,41 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		},
 	}
 	for clusterName, serviceName := range replicationContext.GenerateExternalClusterServices(documentdb.Name, documentdb.Namespace, replicationContext.IsAzureFleetNetworking()) {
-		externalCluster := cnpgv1.ExternalCluster{
-			Name: clusterName,
-			ConnectionParameters: map[string]string{
-				"host":   serviceName,
-				"port":   "5432",
-				"dbname": "postgres",
-				"user":   "streaming_replica",
-			},
+		connectionParameters := map[string]string{
+			"host":   serviceName,
+			"port":   "5432",
+			"dbname": "postgres",
+			"user":   "streaming_replica",
+		}
+		if cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
+			connectionParameters["sslmode"] = "verify-full"
 		}
 
-		// Add certificates to external connections
-		if replicationContext.ReplicationTLSSecret != "" {
-			externalCluster.ConnectionParameters["sslmode"] = "require"
+		externalCluster := cnpgv1.ExternalCluster{
+			Name:                 clusterName,
+			ConnectionParameters: connectionParameters,
+		}
+		if cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
 			externalCluster.SSLCert = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: replicationContext.ReplicationTLSSecret,
+					Name: cnpgCluster.Spec.Certificates.ReplicationTLSSecret,
 				},
 				Key: "tls.crt",
 			}
 			externalCluster.SSLKey = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: replicationContext.ReplicationTLSSecret,
+					Name: cnpgCluster.Spec.Certificates.ReplicationTLSSecret,
 				},
 				Key: "tls.key",
 			}
+			externalCluster.SSLRootCert = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: cnpgCluster.Spec.Certificates.ServerCASecret,
+				},
+				Key: "ca.crt",
+			}
 		}
 		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, externalCluster)
-	}
-
-	// Add certificate configuration for incoming connections
-	if replicationContext.ReplicationTLSSecret != "" {
-		cnpgCluster.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
-			ReplicationTLSSecret: replicationContext.ReplicationTLSSecret,
-		}
-		if replicationContext.ClientCASecret != "" {
-			cnpgCluster.Spec.Certificates.ClientCASecret = replicationContext.ClientCASecret
-		}
-	} else {
-		// If we don't have a cert AND we're multi-regional, we just need to trust (for now)
-		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
-			"host all all localhost trust",
-			"host replication streaming_replica all trust",
-		}
 	}
 
 	return nil
