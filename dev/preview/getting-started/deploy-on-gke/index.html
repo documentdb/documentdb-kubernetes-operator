@@ -6,25 +6,27 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Complete guide for deploying the DocumentDB Kubernetes Operator on Google Kubernetes Engine (GKE)">
       
       
       
-        <link rel="prev" href="../high-availability/local-ha/">
+      
+        <link rel="prev" href="../deploy-on-eks/">
       
       
-        <link rel="next" href="../multi-region-deployment/overview/">
+        <link rel="next" href="../connecting-to-documentdb/">
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
     
     
       
-        <title>Advanced Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>Deploy on Google Kubernetes Engine - DocumentDB-Kubernetes-Operator</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
       
       
 
@@ -43,7 +45,7 @@
       
     
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -62,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#advanced-configuration" class="md-skip">
+        <a href="#understanding-the-configuration" class="md-skip">
           Skip to content
         </a>
       
@@ -80,7 +82,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Advanced Configuration
+              Deploy on Google Kubernetes Engine
             
           </span>
         </div>
@@ -187,7 +189,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../" class="md-tabs__link">
           
   
   Preview
@@ -220,7 +222,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -295,7 +297,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -313,6 +315,8 @@
                 
   
   
+    
+  
   
   
     
@@ -327,11 +331,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_2" checked>
         
           
           <label class="md-nav__link" for="__nav_1_2" id="__nav_1_2_label" tabindex="">
@@ -345,7 +349,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_1_2">
             <span class="md-nav__icon md-icon"></span>
             Getting Started
@@ -359,7 +363,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/before-you-start/" class="md-nav__link">
+      <a href="../before-you-start/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -380,7 +384,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart-kind/" class="md-nav__link">
+      <a href="../quickstart-kind/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -401,7 +405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart-k3s/" class="md-nav__link">
+      <a href="../quickstart-k3s/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -422,7 +426,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/deploy-on-aks/" class="md-nav__link">
+      <a href="../deploy-on-aks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -443,7 +447,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/deploy-on-eks/" class="md-nav__link">
+      <a href="../deploy-on-eks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -461,10 +465,28 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../getting-started/deploy-on-gke/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Deploy on GKE
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   <span class="md-ellipsis">
@@ -473,6 +495,132 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#understanding-the-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Understanding the configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Understanding the configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gke-load-balancer-annotation" class="md-nav__link">
+    <span class="md-ellipsis">
+      GKE load balancer annotation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage class
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#monitoring-and-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Monitoring and troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cost-and-security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost and security considerations
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cost and security considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cost-optimization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost optimization
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security-baseline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Security baseline
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardening-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hardening examples
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      Additional resources
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -485,7 +633,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/connecting-to-documentdb/" class="md-nav__link">
+      <a href="../connecting-to-documentdb/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -557,7 +705,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/overview/" class="md-nav__link">
+      <a href="../../architecture/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -629,7 +777,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/storage/" class="md-nav__link">
+      <a href="../../configuration/storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -650,7 +798,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/networking/" class="md-nav__link">
+      <a href="../../configuration/networking/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -671,7 +819,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../configuration/tls/" class="md-nav__link">
+      <a href="../../configuration/tls/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -743,7 +891,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/upgrades/" class="md-nav__link">
+      <a href="../../operations/upgrades/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -764,7 +912,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/failover/" class="md-nav__link">
+      <a href="../../operations/failover/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -785,7 +933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/backup-and-restore/" class="md-nav__link">
+      <a href="../../operations/backup-and-restore/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -806,7 +954,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/restore-deleted-cluster/" class="md-nav__link">
+      <a href="../../operations/restore-deleted-cluster/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -827,7 +975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/maintenance/" class="md-nav__link">
+      <a href="../../operations/maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -899,7 +1047,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../high-availability/overview/" class="md-nav__link">
+      <a href="../../high-availability/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -920,7 +1068,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../high-availability/local-ha/" class="md-nav__link">
+      <a href="../../high-availability/local-ha/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -946,30 +1094,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  <span class="md-ellipsis">
-    Advanced Configuration
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../advanced-configuration/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -978,119 +1106,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#table-of-contents" class="md-nav__link">
-    <span class="md-ellipsis">
-      Table of Contents
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="High Availability">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#multi-instance-setup" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Instance Setup
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#recommended-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      Recommended Settings
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scheduling" class="md-nav__link">
-    <span class="md-ellipsis">
-      Scheduling
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#security" class="md-nav__link">
-    <span class="md-ellipsis">
-      Security
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Security">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rbac" class="md-nav__link">
-    <span class="md-ellipsis">
-      RBAC
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#secrets-management" class="md-nav__link">
-    <span class="md-ellipsis">
-      Secrets Management
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#additional-resources" class="md-nav__link">
-    <span class="md-ellipsis">
-      Additional Resources
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1146,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../multi-region-deployment/overview/" class="md-nav__link">
+      <a href="../../multi-region-deployment/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1167,7 +1182,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../multi-region-deployment/setup/" class="md-nav__link">
+      <a href="../../multi-region-deployment/setup/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1188,7 +1203,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../multi-region-deployment/failover-procedures/" class="md-nav__link">
+      <a href="../../multi-region-deployment/failover-procedures/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1217,7 +1232,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../faq/" class="md-nav__link">
+      <a href="../../faq/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1281,7 +1296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../kubectl-plugin/" class="md-nav__link">
+      <a href="../../kubectl-plugin/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1310,7 +1325,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api-reference/" class="md-nav__link">
+      <a href="../../api-reference/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1348,8 +1363,6 @@
   
   
   
-    
-  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1358,37 +1371,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#table-of-contents" class="md-nav__link">
+  <a href="#understanding-the-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      Table of Contents
+      Understanding the configuration
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#high-availability" class="md-nav__link">
-    <span class="md-ellipsis">
-      High Availability
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="High Availability">
+    <nav class="md-nav" aria-label="Understanding the configuration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#multi-instance-setup" class="md-nav__link">
+  <a href="#gke-load-balancer-annotation" class="md-nav__link">
     <span class="md-ellipsis">
-      Multi-Instance Setup
+      GKE load balancer annotation
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#recommended-settings" class="md-nav__link">
+  <a href="#storage-class" class="md-nav__link">
     <span class="md-ellipsis">
-      Recommended Settings
+      Storage class
     </span>
   </a>
   
@@ -1400,37 +1404,61 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#scheduling" class="md-nav__link">
+  <a href="#monitoring-and-troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
-      Scheduling
+      Monitoring and troubleshooting
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Monitoring and troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#common-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common issues
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#security" class="md-nav__link">
+  <a href="#cost-and-security-considerations" class="md-nav__link">
     <span class="md-ellipsis">
-      Security
+      Cost and security considerations
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Security">
+    <nav class="md-nav" aria-label="Cost and security considerations">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rbac" class="md-nav__link">
+  <a href="#cost-optimization" class="md-nav__link">
     <span class="md-ellipsis">
-      RBAC
+      Cost optimization
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#secrets-management" class="md-nav__link">
+  <a href="#security-baseline" class="md-nav__link">
     <span class="md-ellipsis">
-      Secrets Management
+      Security baseline
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardening-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hardening examples
     </span>
   </a>
   
@@ -1444,7 +1472,7 @@
         <li class="md-nav__item">
   <a href="#additional-resources" class="md-nav__link">
     <span class="md-ellipsis">
-      Additional Resources
+      Additional resources
     </span>
   </a>
   
@@ -1468,72 +1496,122 @@
   
 
 
-<h1 id="advanced-configuration">Advanced Configuration<a class="headerlink" href="#advanced-configuration" title="Permanent link">&para;</a></h1>
-<p>This section covers advanced configuration options for the DocumentDB Kubernetes Operator.</p>
-<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="#high-availability">High Availability</a></li>
-<li><a href="#scheduling">Scheduling</a></li>
-<li><a href="#security">Security</a></li>
-</ul>
-<h2 id="high-availability">High Availability<a class="headerlink" href="#high-availability" title="Permanent link">&para;</a></h2>
-<p>Deploy multiple instances for automatic failover and read scalability.</p>
-<h3 id="multi-instance-setup">Multi-Instance Setup<a class="headerlink" href="#multi-instance-setup" title="Permanent link">&para;</a></h3>
-<p>Set <code>instancesPerNode</code> to 3 to create a primary with two replicas:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-ha</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">premium-ssd</span>
+  <h1>Deploy on GKE</h1>
+
+<p>Learn how to deploy the DocumentDB Kubernetes Operator on GKE.</p>
+<h2 id="understanding-the-configuration">Understanding the configuration<a class="headerlink" href="#understanding-the-configuration" title="Permanent link">&para;</a></h2>
+<h3 id="gke-load-balancer-annotation">GKE load balancer annotation<a class="headerlink" href="#gke-load-balancer-annotation" title="Permanent link">&para;</a></h3>
+<p>When using GKE, set the <code>DocumentDB</code> <code>spec.environment</code> field to <code>gke</code>.
+Supported values are <code>aks</code>, <code>eks</code>, and <code>gke</code>. If you omit this field, the
+operator doesn't apply cloud-specific service annotations. For field details,
+see the <a href="../../api-reference/">API reference</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gke&quot;</span>
 </code></pre></div>
-<h3 id="recommended-settings">Recommended Settings<a class="headerlink" href="#recommended-settings" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Minimum instances</strong>: 3 for production workloads</li>
-<li><strong>Storage class</strong>: Use premium SSDs for production</li>
-<li><strong>Resource requests</strong>: Set appropriate CPU and memory limits</li>
-</ul>
-<hr />
-<h2 id="scheduling">Scheduling<a class="headerlink" href="#scheduling" title="Permanent link">&para;</a></h2>
-<p>Configure pod affinity for a documentdb cluster's database pods. This replicates
-the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io/docs/1.28/scheduling/">https://cloudnative-pg.io/docs/1.28/scheduling/</a></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">affinity</span><span class="p">:</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+<p>When <code>spec.environment: "gke"</code> is set, the operator adds Google Cloud-specific
+service annotations:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">annotations</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">cloud.google.com/load-balancer-type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;External&quot;</span>
 </code></pre></div>
-<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
-<p>Security best practices for DocumentDB deployments.</p>
-<h3 id="rbac">RBAC<a class="headerlink" href="#rbac" title="Permanent link">&para;</a></h3>
-<p>The operator requires specific permissions to manage DocumentDB resources. The Helm chart automatically creates the necessary RBAC rules.</p>
-<h3 id="secrets-management">Secrets Management<a class="headerlink" href="#secrets-management" title="Permanent link">&para;</a></h3>
-<p>Retrieve credentials from the Kubernetes Secret you created:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Decode username</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.username}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># Decode password</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>kubectl<span class="w"> </span>get<span class="w"> </span>secret<span class="w"> </span>documentdb-credentials<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.password}&#39;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>base64<span class="w"> </span>-d
+<p>This annotation tells GKE to provision an external Google Cloud load balancer
+for the gateway Service so that it's reachable from outside the Kubernetes
+cluster. For details on the underlying behavior and additional annotations you
+can layer on top, see
+<a href="https://cloud.google.com/kubernetes-engine/docs/concepts/service-parameters">GKE Service parameters</a>
+and
+<a href="https://cloud.google.com/kubernetes-engine/docs/concepts/service-load-balancer">Configure load balancing</a>.</p>
+<h3 id="storage-class">Storage class<a class="headerlink" href="#storage-class" title="Permanent link">&para;</a></h3>
+<p>GKE provisions the
+<a href="https://cloud.google.com/kubernetes-engine/docs/concepts/persistent-volumes#pd_csi_driver">Compute Engine persistent disk CSI driver</a>
+by default and ships several built-in storage classes. The default class is
+<code>standard-rwo</code>, which is backed by balanced persistent disks. For production
+workloads, use a class that matches your performance and availability
+requirements, such as <code>premium-rwo</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">premium-rwo</span>
 </code></pre></div>
-<p>For production, consider using:</p>
+<table>
+<thead>
+<tr>
+<th>Storage class</th>
+<th>Disk type</th>
+<th>Use case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>standard-rwo</code></td>
+<td><code>pd-balanced</code></td>
+<td>General purpose, balanced cost and performance</td>
+</tr>
+<tr>
+<td><code>premium-rwo</code></td>
+<td><code>pd-ssd</code></td>
+<td>Production workloads requiring SSD performance</td>
+</tr>
+</tbody>
+</table>
+<p>For available classes, see:</p>
 <ul>
-<li>Azure Key Vault for secrets (via Secrets Store CSI driver)</li>
-<li>HashiCorp Vault integration</li>
-<li>External Secrets Operator</li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview#storage_classes">GKE storage classes</a></li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/persistent-volumes#pd_csi_driver">Compute Engine persistent disk CSI driver</a></li>
+<li><a href="../../configuration/storage/">DocumentDB storage configuration</a></li>
 </ul>
-<hr />
-<h2 id="additional-resources">Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<h2 id="monitoring-and-troubleshooting">Monitoring and troubleshooting<a class="headerlink" href="#monitoring-and-troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="common-issues">Common issues<a class="headerlink" href="#common-issues" title="Permanent link">&para;</a></h3>
+<p>If the Service stays in <code>Pending</code>, verify the GKE network configuration and
+load balancer setup:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>-n<span class="w"> </span>documentdb-instance-ns
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>svc<span class="w"> </span>documentdb-service-sample-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-instance-ns
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>gcloud<span class="w"> </span>compute<span class="w"> </span>forwarding-rules<span class="w"> </span>list<span class="w"> </span>--project<span class="w"> </span>PROJECT_ID
+</code></pre></div>
+<p>If PVCs don't bind, verify your storage classes and that the Compute Engine
+persistent disk CSI driver pods are healthy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>storageclass
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pvc<span class="w"> </span>-A
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>pvc<span class="w"> </span>PVC_NAME<span class="w"> </span>-n<span class="w"> </span>NAMESPACE
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>kube-system<span class="w"> </span>-l<span class="w"> </span>k8s-app<span class="o">=</span>gcp-compute-persistent-disk-csi-driver
+</code></pre></div>
+<h2 id="cost-and-security-considerations">Cost and security considerations<a class="headerlink" href="#cost-and-security-considerations" title="Permanent link">&para;</a></h2>
+<h3 id="cost-optimization">Cost optimization<a class="headerlink" href="#cost-optimization" title="Permanent link">&para;</a></h3>
 <ul>
-<li><a href="../configuration/networking/">Networking</a> — Service types, connection methods, and Network Policies</li>
-<li><a href="../configuration/tls/">TLS</a> — Certificate modes, rotation, and troubleshooting</li>
-<li><a href="../configuration/storage/">Storage</a> — PVC sizing, storage classes, and disk encryption</li>
-<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator">GitHub Repository</a></li>
+<li>Use smaller machine types for development workloads, such as <code>e2-small</code></li>
+<li>Use standard storage classes where SSD performance isn't required</li>
+<li>Scale node pools down in non-production environments</li>
+<li>Review <a href="https://cloud.google.com/kubernetes-engine/pricing">GKE pricing</a> for
+  current rates</li>
+</ul>
+<h3 id="security-baseline">Security baseline<a class="headerlink" href="#security-baseline" title="Permanent link">&para;</a></h3>
+<ul>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity">Workload Identity</a>
+  for Google Cloud API access</li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/network-policy">Network policies</a>
+  enabled</li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/using-cmek">Encryption at rest</a>
+  for persistent disks</li>
+<li><a href="../../configuration/tls/">TLS configuration</a> for database traffic</li>
+<li><a href="https://cloud.google.com/iam/docs/best-practices-service-accounts">Least-privilege IAM service accounts</a></li>
+</ul>
+<h3 id="hardening-examples">Hardening examples<a class="headerlink" href="#hardening-examples" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Enable network policy enforcement</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>gcloud<span class="w"> </span>container<span class="w"> </span>clusters<span class="w"> </span>update<span class="w"> </span>CLUSTER_NAME<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--location<span class="w"> </span>REGION_OR_ZONE<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--enable-network-policy
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># Enable Workload Identity</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>gcloud<span class="w"> </span>container<span class="w"> </span>clusters<span class="w"> </span>update<span class="w"> </span>CLUSTER_NAME<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span>--location<span class="w"> </span>REGION_OR_ZONE<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span>--workload-pool<span class="o">=</span>PROJECT_ID.svc.id.goog
+</code></pre></div>
+<h2 id="additional-resources">Additional resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs">GKE documentation</a></li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/security-overview">GKE security best practices</a></li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/network-overview">GKE networking</a></li>
+<li><a href="https://cloud.google.com/kubernetes-engine/docs/concepts/persistent-volumes">GKE persistent storage</a></li>
+<li><a href="../../">DocumentDB preview getting started</a></li>
 </ul>
 
 
@@ -1541,6 +1619,9 @@ the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io
 
 
 
+
+  
+  
 
 
 
@@ -1589,10 +1670,10 @@ the cnpg operator's scheduling framework. See <a href="https://cloudnative-pg.io
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
       
     
   </body>
