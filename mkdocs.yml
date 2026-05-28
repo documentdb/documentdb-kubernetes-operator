@@ -38,6 +38,7 @@ nav:
           - "Quickstart: K3s": preview/getting-started/quickstart-k3s.md
           - Deploy on AKS: preview/getting-started/deploy-on-aks.md
           - Deploy on EKS: preview/getting-started/deploy-on-eks.md
+          - Deploy on GKE: preview/getting-started/deploy-on-gke.md
           - Connecting to DocumentDB: preview/getting-started/connecting-to-documentdb.md
       - Architecture:
           - Overview: preview/architecture/overview.md
