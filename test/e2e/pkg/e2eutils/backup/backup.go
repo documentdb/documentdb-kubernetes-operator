@@ -23,6 +23,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/envsubst"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -200,6 +201,73 @@ func WaitForCompleted(ctx context.Context, c client.Client, ns, name string, tim
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-time.After(DefaultPollInterval):
+		}
+	}
+}
+
+// MarkExpired patches status.expiredAt on the Backup CR via the
+// status subresource so the operator's reconcile loop treats it as
+// expired and garbage-collects it. Used by the expired-backup
+// cleanup spec to fast-forward expiration without waiting out the
+// real retentionDays window.
+//
+// Trigger semantics: the status patch fires a watch event that the
+// Backup controller picks up within seconds, so deletion is
+// event-driven rather than bound to the 1-minute periodic requeue in
+// backup_controller.go.
+//
+// Implementation detail: this must use c.Status().Patch — patching
+// the same field through c.Patch is a silent no-op because Backup
+// declares status as a subresource (see operator/src/api/preview/
+// backup_types.go +kubebuilder:subresource:status).
+//
+// A fresh Get is performed inside the helper so callers can pass a
+// stable (ns, name) without juggling resourceVersion conflicts with
+// the controller's own status writers.
+func MarkExpired(ctx context.Context, c client.Client, ns, name string, when time.Time) error {
+	if c == nil {
+		return errors.New("backup.MarkExpired: client must not be nil")
+	}
+	var current previewv1.Backup
+	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &current); err != nil {
+		return fmt.Errorf("get Backup %s/%s: %w", ns, name, err)
+	}
+	patch := client.MergeFrom(current.DeepCopy())
+	expired := metav1.NewTime(when)
+	current.Status.ExpiredAt = &expired
+	if err := c.Status().Patch(ctx, &current, patch); err != nil {
+		return fmt.Errorf("patch status.expiredAt on Backup %s/%s: %w", ns, name, err)
+	}
+	return nil
+}
+
+// WaitForBackupDeleted polls until the named Backup no longer exists
+// in ns or timeout elapses. Mirrors WaitForPVCDeleted in shape and
+// is used by the expired-backup cleanup spec to assert the operator
+// removed the Backup CR after MarkExpired flipped status.expiredAt
+// into the past.
+func WaitForBackupDeleted(ctx context.Context, c client.Client, ns, name string, timeout time.Duration) error {
+	if c == nil {
+		return errors.New("backup.WaitForBackupDeleted: client must not be nil")
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		var b previewv1.Backup
+		err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &b)
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("polling Backup %s/%s: %w", ns, name, err)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for Backup %s/%s to be deleted (last phase=%q)",
+				timeout, ns, name, b.Status.Phase)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-time.After(DefaultPollInterval):
 		}
 	}
