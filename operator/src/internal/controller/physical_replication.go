@@ -5,6 +5,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,7 +26,19 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	// promotionTokenRevisionAnnotation stores a content hash of the promotion
+	// token currently expected by the operator. It is applied to the ConfigMap
+	// holding the token AND the nginx Pod that serves it; when the two diverge
+	// the Pod is force-recreated so it picks up the freshly-mounted ConfigMap
+	// content without waiting for kubelet's eventually-consistent ConfigMap
+	// volume sync (which can be 30-60s — long enough to make a back-to-back
+	// failover read a STALE token and trigger WAL timeline divergence).
+	promotionTokenRevisionAnnotation = "documentdb.io/promotion-token-revision"
 )
 
 const (
@@ -784,28 +798,51 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 		"app": tokenServiceName,
 	}
 
-	// Create ConfigMap with token and nginx config
+	// Compute a content hash so we can detect when the demotion token has
+	// changed (e.g., during back-to-back failovers) and force-restart the
+	// nginx Pod accordingly. Without this the kubelet's eventually-consistent
+	// ConfigMap volume sync (~30-60s) leaves nginx serving the STALE token,
+	// causing CNPG to fast-forward to the wrong LSN and trigger WAL timeline
+	// divergence on subsequent failovers (issue #375).
+	sum := sha256.Sum256([]byte(token))
+	tokenRevision := hex.EncodeToString(sum[:])
+
+	ownerRefs := []metav1.OwnerReference{
+		{
+			APIVersion:         cluster.APIVersion,
+			Kind:               cluster.Kind,
+			Name:               cluster.Name,
+			UID:                cluster.UID,
+			Controller:         ptr.To(true),
+			BlockOwnerDeletion: ptr.To(true),
+		},
+	}
+
+	// Create or update the ConfigMap with the current token. Using
+	// CreateOrUpdate ensures the existing resourceVersion is preserved on
+	// update, avoiding silent conflict-failures that would leave the OLD
+	// token in place (the previous implementation built a fresh ConfigMap
+	// object with no resourceVersion and called Update directly, which the
+	// API server rejects with a conflict error — so subsequent failovers
+	// kept reading the prior failover's token).
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenServiceName,
 			Namespace: clusterNN.Namespace,
 		},
-		Data: map[string]string{
-			"index.html": token,
-		},
 	}
-
-	err := r.Client.Create(ctx, configMap)
-	if err != nil {
-		if errors.IsAlreadyExists(err) {
-			configMap.Data["index.html"] = token
-			err = r.Client.Update(ctx, configMap)
-			if err != nil {
-				return false, fmt.Errorf("failed to update token ConfigMap: %w", err)
-			}
-		} else {
-			return false, fmt.Errorf("failed to create token ConfigMap: %w", err)
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+		if configMap.Annotations == nil {
+			configMap.Annotations = map[string]string{}
 		}
+		configMap.Annotations[promotionTokenRevisionAnnotation] = tokenRevision
+		configMap.OwnerReferences = ownerRefs
+		configMap.Data = map[string]string{
+			"index.html": token,
+		}
+		return nil
+	}); err != nil {
+		return false, fmt.Errorf("failed to create or update token ConfigMap: %w", err)
 	}
 
 	// When not using cross-cloud networking, just transfer with the configmap
@@ -813,12 +850,43 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 		return true, nil
 	}
 
+	// Ensure the nginx Pod is serving the CURRENT token revision. If the Pod
+	// exists with a stale revision annotation (or none), delete it so that
+	// the recreated Pod mounts the freshly-updated ConfigMap immediately,
+	// rather than waiting for kubelet's ConfigMap volume sync to propagate
+	// the change (which is too slow for rapid back-to-back failovers).
+	existingPod := &corev1.Pod{}
+	getPodErr := r.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: clusterNN.Namespace}, existingPod)
+	if getPodErr == nil {
+		existingRevision := existingPod.GetAnnotations()[promotionTokenRevisionAnnotation]
+		if existingRevision != tokenRevision {
+			log.Log.Info("Promotion-token Pod has stale revision; force-recreating to pick up new ConfigMap content",
+				"pod", tokenServiceName,
+				"namespace", clusterNN.Namespace,
+				"existingRevision", existingRevision,
+				"newRevision", tokenRevision,
+			)
+			deletePropagation := metav1.DeletePropagationForeground
+			if err := r.Client.Delete(ctx, existingPod, &client.DeleteOptions{
+				PropagationPolicy: &deletePropagation,
+			}); err != nil && !errors.IsNotFound(err) {
+				return false, fmt.Errorf("failed to delete stale promotion-token Pod: %w", err)
+			}
+			// Requeue: wait for the Pod to be fully deleted before recreating.
+			return false, nil
+		}
+	} else if !errors.IsNotFound(getPodErr) {
+		return false, fmt.Errorf("failed to get existing promotion-token Pod: %w", getPodErr)
+	}
+
 	// Create nginx Pod
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tokenServiceName,
-			Namespace: clusterNN.Namespace,
-			Labels:    labels,
+			Name:            tokenServiceName,
+			Namespace:       clusterNN.Namespace,
+			Labels:          labels,
+			Annotations:     map[string]string{promotionTokenRevisionAnnotation: tokenRevision},
+			OwnerReferences: ownerRefs,
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -854,7 +922,7 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 		},
 	}
 
-	err = r.Client.Create(ctx, pod)
+	err := r.Client.Create(ctx, pod)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return false, fmt.Errorf("failed to create nginx Pod: %w", err)
 	}
@@ -862,9 +930,10 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 	// Create Service
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tokenServiceName,
-			Namespace: clusterNN.Namespace,
-			Labels:    labels,
+			Name:            tokenServiceName,
+			Namespace:       clusterNN.Namespace,
+			Labels:          labels,
+			OwnerReferences: ownerRefs,
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: labels,
@@ -887,18 +956,9 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 	if replicationContext.IsAzureFleetNetworking() {
 		serviceExport := &fleetv1alpha1.ServiceExport{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      tokenServiceName,
-				Namespace: clusterNN.Namespace,
-				OwnerReferences: []metav1.OwnerReference{
-					{
-						APIVersion:         cluster.APIVersion,
-						Kind:               cluster.Kind,
-						Name:               cluster.Name,
-						UID:                cluster.UID,
-						Controller:         ptr.To(true),
-						BlockOwnerDeletion: ptr.To(true),
-					},
-				},
+				Name:            tokenServiceName,
+				Namespace:       clusterNN.Namespace,
+				OwnerReferences: ownerRefs,
 			},
 		}
 

@@ -7,6 +7,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,7 @@ func buildDocumentDBReconciler(objs ...runtime.Object) *DocumentDBReconciler {
 	Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 	Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+	Expect(fleetv1alpha1.AddToScheme(scheme)).To(Succeed())
 
 	builder := fake.NewClientBuilder().WithScheme(scheme)
 	if len(objs) > 0 {
@@ -544,5 +546,104 @@ var _ = Describe("Physical Replication", func() {
 		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.ExternalClusters).To(HaveLen(3))
 		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
+	})
+
+	Describe("ensureTokenServiceResources", func() {
+		const namespace = "documentdb-preview-ns"
+		const clusterName = "documentdb-preview"
+		const tokenServiceName = "promotion-token"
+
+		mkCluster := func(token string) *cnpgv1.Cluster {
+			return &cnpgv1.Cluster{
+				TypeMeta: metav1.TypeMeta{APIVersion: "postgresql.cnpg.io/v1", Kind: "Cluster"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: namespace,
+					UID:       types.UID("cluster-uid"),
+				},
+				Status: cnpgv1.ClusterStatus{DemotionToken: token},
+			}
+		}
+
+		azureFleetCtx := &util.ReplicationContext{
+			CrossCloudNetworkingStrategy: util.AzureFleet,
+		}
+
+		It("updates the ConfigMap with the latest token across consecutive failovers", func() {
+			ctx := context.Background()
+			reconciler := buildDocumentDBReconciler(mkCluster("token-v1"))
+			clusterNN := types.NamespacedName{Name: clusterName, Namespace: namespace}
+
+			done, err := reconciler.ensureTokenServiceResources(ctx, clusterNN, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(done).To(BeTrue())
+
+			cm := &corev1.ConfigMap{}
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, cm)).To(Succeed())
+			Expect(cm.Data["index.html"]).To(Equal("token-v1"))
+			firstRevision := cm.Annotations[promotionTokenRevisionAnnotation]
+			Expect(firstRevision).ToNot(BeEmpty())
+
+			// Simulate back-to-back failover by changing the demotion token
+			// and re-running the loop. This is the regression scenario: the
+			// previous Update path silently failed with a conflict because
+			// resourceVersion was missing, leaving the OLD token in place.
+			cnpgCluster := &cnpgv1.Cluster{}
+			Expect(reconciler.Client.Get(ctx, clusterNN, cnpgCluster)).To(Succeed())
+			cnpgCluster.Status.DemotionToken = "token-v2"
+			Expect(reconciler.Client.Status().Update(ctx, cnpgCluster)).To(Succeed())
+
+			_, err = reconciler.ensureTokenServiceResources(ctx, clusterNN, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, cm)).To(Succeed())
+			Expect(cm.Data["index.html"]).To(Equal("token-v2"),
+				"ConfigMap must reflect the new demotion token after a back-to-back failover")
+			Expect(cm.Annotations[promotionTokenRevisionAnnotation]).ToNot(Equal(firstRevision))
+		})
+
+		It("deletes the stale nginx Pod when the token revision changes", func() {
+			ctx := context.Background()
+			reconciler := buildDocumentDBReconciler(mkCluster("token-v1"))
+			clusterNN := types.NamespacedName{Name: clusterName, Namespace: namespace}
+
+			// First call creates Pod with revision-v1
+			_, err := reconciler.ensureTokenServiceResources(ctx, clusterNN, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+			podV1 := &corev1.Pod{}
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, podV1)).To(Succeed())
+			revV1 := podV1.Annotations[promotionTokenRevisionAnnotation]
+			Expect(revV1).ToNot(BeEmpty())
+
+			// Rotate the token
+			cnpgCluster := &cnpgv1.Cluster{}
+			Expect(reconciler.Client.Get(ctx, clusterNN, cnpgCluster)).To(Succeed())
+			cnpgCluster.Status.DemotionToken = "token-v2"
+			Expect(reconciler.Client.Status().Update(ctx, cnpgCluster)).To(Succeed())
+
+			// Second call should detect the stale Pod and delete it, requeueing
+			done, err := reconciler.ensureTokenServiceResources(ctx, clusterNN, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(done).To(BeFalse(), "stale Pod deletion must requeue, not signal ready")
+
+			err = reconciler.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, podV1)
+			Expect(errors.IsNotFound(err)).To(BeTrue(),
+				"stale promotion-token Pod must be deleted so the recreated Pod picks up the fresh ConfigMap")
+
+			// Third call recreates the Pod with the NEW revision
+			_, err = reconciler.ensureTokenServiceResources(ctx, clusterNN, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+			podV2 := &corev1.Pod{}
+			Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: namespace}, podV2)).To(Succeed())
+			Expect(podV2.Annotations[promotionTokenRevisionAnnotation]).ToNot(Equal(revV1))
+		})
+
+		It("returns false without error when the demotion token is not yet available", func() {
+			ctx := context.Background()
+			reconciler := buildDocumentDBReconciler(mkCluster(""))
+			done, err := reconciler.ensureTokenServiceResources(ctx, types.NamespacedName{Name: clusterName, Namespace: namespace}, azureFleetCtx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(done).To(BeFalse())
+		})
 	})
 })
