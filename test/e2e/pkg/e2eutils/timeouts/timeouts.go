@@ -50,6 +50,10 @@ const (
 	// replication is typically sub-second, but end-to-end propagation
 	// through the gateway layer can take longer on busy CI runners.
 	DataSync Op = "dataSync"
+	// Failover waits for a promotion/failover operation to complete.
+	// This includes the time for the replica to become the new primary,
+	// CNPG to update cluster roles, and the cluster to reach Ready.
+	Failover Op = "failover"
 )
 
 // UnknownOpFallback is returned by For when an Op is not in the
@@ -69,6 +73,7 @@ var documentDBDefaults = map[Op]time.Duration{
 	ServiceReady:      2 * time.Minute,
 	ReplicationReady:  10 * time.Minute,
 	DataSync:          3 * time.Minute,
+	Failover:          10 * time.Minute,
 }
 
 // cnpgAlias maps selected DocumentDB ops to their CNPG counterparts.
@@ -109,7 +114,7 @@ func PollInterval(op Op) time.Duration {
 	case MongoConnect, ServiceReady, DataSync:
 		return 2 * time.Second
 	case DocumentDBReady, DocumentDBUpgrade, InstanceScale,
-		PVCResize, BackupComplete, RestoreComplete:
+		PVCResize, BackupComplete, RestoreComplete, Failover:
 		return 10 * time.Second
 	default:
 		return 5 * time.Second
