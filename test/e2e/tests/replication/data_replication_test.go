@@ -88,7 +88,37 @@ var _ = Describe("DocumentDB replication — data replication validation",
 				timeouts.PollInterval(timeouts.ReplicationReady),
 			).Should(Succeed(), "replica should reach Ready")
 
-			By("connecting to the primary gateway")
+			By("verifying primary CNPG Cluster has correct ReplicaCluster config")
+		primaryCNPG := findCNPGCluster(ctx, c, ns, primaryName)
+		Expect(primaryCNPG).ToNot(BeNil(), "CNPG Cluster for primary should exist")
+		Expect(primaryCNPG.Spec.ReplicaCluster).ToNot(BeNil(),
+			"primary CNPG Cluster should have ReplicaCluster config")
+		Expect(primaryCNPG.Spec.ReplicaCluster.Primary).To(
+			Equal(primaryCNPG.Spec.ReplicaCluster.Self),
+			"primary CNPG Cluster should be self-designated as primary")
+		Expect(primaryCNPG.Spec.ExternalClusters).ToNot(BeEmpty(),
+			"primary CNPG Cluster should have ExternalClusters")
+
+		By("verifying replica CNPG Cluster has correct ReplicaCluster config")
+		replicaCNPG := findCNPGCluster(ctx, c, ns, replicaName)
+		Expect(replicaCNPG).ToNot(BeNil(), "CNPG Cluster for replica should exist")
+		Expect(replicaCNPG.Spec.ReplicaCluster).ToNot(BeNil(),
+			"replica CNPG Cluster should have ReplicaCluster config")
+		Expect(replicaCNPG.Spec.ReplicaCluster.Primary).ToNot(
+			Equal(replicaCNPG.Spec.ReplicaCluster.Self),
+			"replica CNPG Cluster primary should differ from self")
+		Expect(replicaCNPG.Spec.Bootstrap).ToNot(BeNil(),
+			"replica CNPG Cluster should have Bootstrap config")
+		Expect(replicaCNPG.Spec.Bootstrap.PgBaseBackup).ToNot(BeNil(),
+			"replica should bootstrap via pg_basebackup")
+		expectedSource := cnpgClusterName(replicaName, primaryName)
+		Expect(replicaCNPG.Spec.Bootstrap.PgBaseBackup.Source).To(
+			Equal(expectedSource),
+			"replica pg_basebackup source should reference the external cluster entry for the primary")
+		Expect(replicaCNPG.Spec.ExternalClusters).ToNot(BeEmpty(),
+			"replica CNPG Cluster should have ExternalClusters")
+
+		By("connecting to the primary gateway")
 			primaryHandle, err = emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, primaryName)
 			Expect(err).ToNot(HaveOccurred(), "connect to primary gateway")
 

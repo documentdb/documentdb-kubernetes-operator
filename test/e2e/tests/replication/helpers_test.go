@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -140,6 +141,28 @@ func createReplicationBridgeServices(ctx context.Context, c client.Client, ns, p
 		primaryExpected+"-rw",
 		fmt.Sprintf("%s-rw.%s.svc.cluster.local", replicaActual, ns),
 	)
+}
+
+// findCNPGCluster discovers the CNPG Cluster backing a DocumentDB CR.
+// In replication mode, the CNPG cluster name is a hash-based derivative
+// of the DocumentDB name (via generateCNPGClusterName), so we list all
+// CNPG Clusters in the namespace and match by the documentdb ownership
+// label.
+func findCNPGCluster(ctx context.Context, c client.Client, ns, ddName string) *cnpgv1.Cluster {
+	var list cnpgv1.ClusterList
+	err := c.List(ctx, &list, client.InNamespace(ns))
+	if err != nil {
+		Fail(fmt.Sprintf("listing CNPG clusters in %s: %v", ns, err))
+	}
+	for i := range list.Items {
+		cluster := &list.Items[i]
+		for _, ref := range cluster.OwnerReferences {
+			if ref.Kind == "DocumentDB" && ref.Name == ddName {
+				return cluster
+			}
+		}
+	}
+	return nil
 }
 
 func createExternalNameService(ctx context.Context, c client.Client, ns, name, externalName string) {
