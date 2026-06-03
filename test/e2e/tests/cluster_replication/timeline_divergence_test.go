@@ -1,4 +1,4 @@
-package replication
+package clusterreplication
 
 // Tests for https://github.com/documentdb/documentdb-kubernetes-operator/issues/375
 // "Multi-cloud failover: WAL timeline divergence after promotion leaves replica unrecoverable"
@@ -41,7 +41,7 @@ import (
 
 var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline divergence",
 	Ordered, ContinueOnFailure,
-	Label(e2e.ReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
+	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
 		const (
 			primaryName = "td-primary"
@@ -60,14 +60,14 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			e2e.SkipUnlessLevel(e2e.Medium)
 			ctx = context.Background()
 			c = e2e.SuiteEnv().Client
-			ns = namespaces.NamespaceForSpec(e2e.ReplicationLabel + "-timeline")
+			ns = namespaces.NamespaceForSpec(e2e.ClusterReplicationLabel + "-timeline")
 			createNamespace(ctx, c, ns)
 			createCredentialSecret(ctx, c, ns)
 
 			By("creating the primary DocumentDB CR")
 			primaryDD, err := documentdb.Create(ctx, c, ns, primaryName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars: mergeVars(baseVars(), replicationVars(
 					primaryName, primaryName, replicaName,
 				)),
@@ -90,7 +90,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			By("creating the replica DocumentDB CR")
 			replicaDD, err := documentdb.Create(ctx, c, ns, replicaName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars: mergeVars(baseVars(), replicationVars(
 					primaryName, primaryName, replicaName,
 				)),
@@ -103,8 +103,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			By("waiting for the replica to become Ready")
 			replicaKey := types.NamespacedName{Namespace: ns, Name: replicaName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, replicaKey),
-				timeouts.For(timeouts.ReplicationReady),
-				timeouts.PollInterval(timeouts.ReplicationReady),
+				timeouts.For(timeouts.ClusterReplicationReady),
+				timeouts.PollInterval(timeouts.ClusterReplicationReady),
 			).Should(Succeed(), "replica should reach Ready")
 		})
 
@@ -318,7 +318,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 
 var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on replica",
 	Ordered,
-	Label(e2e.ReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
+	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
 		const (
 			primaryName    = "ip-primary"
@@ -335,7 +335,7 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			e2e.SkipUnlessLevel(e2e.Medium)
 			ctx = context.Background()
 			c = e2e.SuiteEnv().Client
-			ns = namespaces.NamespaceForSpec(e2e.ReplicationLabel + "-instances")
+			ns = namespaces.NamespaceForSpec(e2e.ClusterReplicationLabel + "-instances")
 			createNamespace(ctx, c, ns)
 			createCredentialSecret(ctx, c, ns)
 
@@ -348,7 +348,7 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			By("creating the primary DocumentDB CR with instancesPerNode=3")
 			primaryDD, err := documentdb.Create(ctx, c, ns, primaryName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars:   vars,
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
@@ -369,7 +369,7 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			By("creating the replica DocumentDB CR with instancesPerNode=3")
 			replicaDD, err := documentdb.Create(ctx, c, ns, replicaName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars:   vars,
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
@@ -380,8 +380,8 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			By("waiting for the replica to become Ready")
 			replicaKey := types.NamespacedName{Namespace: ns, Name: replicaName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, replicaKey),
-				timeouts.For(timeouts.ReplicationReady),
-				timeouts.PollInterval(timeouts.ReplicationReady),
+				timeouts.For(timeouts.ClusterReplicationReady),
+				timeouts.PollInterval(timeouts.ClusterReplicationReady),
 			).Should(Succeed(), "replica should reach Ready")
 		})
 

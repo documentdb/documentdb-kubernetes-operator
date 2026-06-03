@@ -40,11 +40,11 @@ const (
 	// ServiceReady waits for a LoadBalancer / ClusterIP to acquire an
 	// address and begin routing.
 	ServiceReady Op = "serviceReady"
-	// ReplicationReady waits for a replicated DocumentDB pair (primary +
+	// ClusterReplicationReady waits for a replicated DocumentDB pair (primary +
 	// replica) to reach a fully streaming state. This is longer than
 	// DocumentDBReady because the replica must pg_basebackup from the
 	// primary before it can start streaming.
-	ReplicationReady Op = "replicationReady"
+	ClusterReplicationReady Op = "clusterReplicationReady"
 	// DataSync waits for data written to the primary DocumentDB to
 	// replicate and become visible on a replica. PostgreSQL streaming
 	// replication is typically sub-second, but end-to-end propagation
@@ -71,7 +71,7 @@ var documentDBDefaults = map[Op]time.Duration{
 	RestoreComplete:   15 * time.Minute,
 	MongoConnect:      30 * time.Second,
 	ServiceReady:      2 * time.Minute,
-	ReplicationReady:  10 * time.Minute,
+	ClusterReplicationReady:  10 * time.Minute,
 	DataSync:          3 * time.Minute,
 	Failover:          10 * time.Minute,
 }

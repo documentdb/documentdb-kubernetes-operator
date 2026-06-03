@@ -1,4 +1,4 @@
-package replication
+package clusterreplication
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 
 var _ = Describe("DocumentDB replication — data replication validation",
 	Ordered,
-	Label(e2e.ReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
+	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
 		const (
 			primaryName = "repl-primary"
@@ -41,14 +41,14 @@ var _ = Describe("DocumentDB replication — data replication validation",
 			e2e.SkipUnlessLevel(e2e.Medium)
 			ctx = context.Background()
 			c = e2e.SuiteEnv().Client
-			ns = namespaces.NamespaceForSpec(e2e.ReplicationLabel + "-data")
+			ns = namespaces.NamespaceForSpec(e2e.ClusterReplicationLabel + "-data")
 			createNamespace(ctx, c, ns)
 			createCredentialSecret(ctx, c, ns)
 
 			By("creating the primary DocumentDB CR")
 			primaryDD, err := documentdb.Create(ctx, c, ns, primaryName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars: mergeVars(baseVars(), replicationVars(
 					primaryName, primaryName, replicaName,
 				)),
@@ -71,7 +71,7 @@ var _ = Describe("DocumentDB replication — data replication validation",
 			By("creating the replica DocumentDB CR")
 			replicaDD, err := documentdb.Create(ctx, c, ns, replicaName, documentdb.CreateOptions{
 				Base:   "documentdb",
-				Mixins: []string{"replication"},
+				Mixins: []string{"cluster-replication"},
 				Vars: mergeVars(baseVars(), replicationVars(
 					primaryName, primaryName, replicaName,
 				)),
@@ -84,8 +84,8 @@ var _ = Describe("DocumentDB replication — data replication validation",
 			By("waiting for the replica to become Ready")
 			replicaKey := types.NamespacedName{Namespace: ns, Name: replicaName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, replicaKey),
-				timeouts.For(timeouts.ReplicationReady),
-				timeouts.PollInterval(timeouts.ReplicationReady),
+				timeouts.For(timeouts.ClusterReplicationReady),
+				timeouts.PollInterval(timeouts.ClusterReplicationReady),
 			).Should(Succeed(), "replica should reach Ready")
 
 			By("verifying primary CNPG Cluster has correct ReplicaCluster config")

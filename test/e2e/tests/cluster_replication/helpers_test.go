@@ -1,4 +1,4 @@
-package replication
+package clusterreplication
 
 import (
 	"context"
@@ -65,7 +65,7 @@ func mergeVars(maps ...map[string]string) map[string]string {
 // createNamespace creates the namespace with ownership labels and
 // registers cleanup via DeferCleanup.
 func createNamespace(ctx context.Context, c client.Client, ns string) {
-	if err := fixtures.CreateLabeledNamespace(ctx, c, ns, "replication"); err != nil {
+	if err := fixtures.CreateLabeledNamespace(ctx, c, ns, "cluster-replication"); err != nil {
 		Fail("create namespace " + ns + ": " + err.Error())
 	}
 	DeferCleanup(func(ctx SpecContext) {
