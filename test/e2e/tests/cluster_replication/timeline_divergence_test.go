@@ -143,8 +143,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(2)), "replica should have seed data")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed())
 
 			// Close handles before failover
@@ -179,8 +179,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 					"replica CNPG should be self-designated as primary",
 				)
 			},
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "replica should become primary")
 
 			Eventually(func(g Gomega) {
@@ -192,8 +192,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 					"original primary should no longer be self-designated",
 				)
 			},
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "original primary should become replica")
 		})
 
@@ -206,8 +206,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			By("waiting for the new primary (replica CR) to reach Ready")
 			replicaKey := types.NamespacedName{Namespace: ns, Name: replicaName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, replicaKey),
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "new primary should reach Ready")
 
 			By("checking that promotionToken is cleared on the new primary's CNPG cluster")
@@ -250,15 +250,15 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 					"original primary should be self-designated again",
 				)
 			},
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "original primary should become primary again")
 
 			By("waiting for the restored primary to reach Ready")
 			primaryKey := types.NamespacedName{Namespace: ns, Name: primaryName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, primaryKey),
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "restored primary should reach Ready")
 		})
 
@@ -298,8 +298,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 					"demoted node should replicate data from restored primary; "+
 						"issue #375: WAL timeline divergence leaves it unable to reconnect")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed())
 
 			By("verifying document content on the demoted node")

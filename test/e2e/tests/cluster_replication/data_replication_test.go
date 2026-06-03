@@ -159,8 +159,8 @@ var _ = Describe("DocumentDB replication — data replication validation",
 				g.Expect(cnt).To(Equal(int64(seed.SmallDatasetSize)),
 					"replica should have all replicated documents")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed(), "data should replicate from primary to replica")
 		})
 
@@ -185,8 +185,8 @@ var _ = Describe("DocumentDB replication — data replication validation",
 				g.Expect(got["message"]).To(Equal("hello from primary"))
 				g.Expect(got["value"]).To(Equal(int32(42)))
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed(), "document content should replicate faithfully")
 		})
 
@@ -205,8 +205,8 @@ var _ = Describe("DocumentDB replication — data replication validation",
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(1)))
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed())
 
 			By("updating the document on the primary")
@@ -223,8 +223,8 @@ var _ = Describe("DocumentDB replication — data replication validation",
 				g.Expect(got["status"]).To(Equal("updated"),
 					"replica should reflect the updated value")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed(), "updates should replicate from primary to replica")
 		})
 	})

@@ -126,8 +126,8 @@ var _ = Describe("DocumentDB replication — failover promotion",
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(3)), "replica should have all 3 docs before failover")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed())
 
 			// Close handles — the gateway connections may break during failover
@@ -164,8 +164,8 @@ var _ = Describe("DocumentDB replication — failover promotion",
 					"replica CNPG cluster should be self-designated as primary after promotion",
 				)
 			},
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "replica should become CNPG primary")
 
 			By("waiting for the original primary CNPG cluster to become a replica")
@@ -178,15 +178,15 @@ var _ = Describe("DocumentDB replication — failover promotion",
 					"original primary CNPG cluster should no longer be self-designated as primary",
 				)
 			},
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "original primary should become CNPG replica")
 
 			By("waiting for the new primary (replica CR) to reach Ready")
 			replicaKey := types.NamespacedName{Namespace: ns, Name: replicaName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, replicaKey),
-				timeouts.For(timeouts.Failover),
-				timeouts.PollInterval(timeouts.Failover),
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
 			).Should(Succeed(), "new primary should reach Ready after promotion")
 		})
 
@@ -205,8 +205,8 @@ var _ = Describe("DocumentDB replication — failover promotion",
 				g.Expect(cnt).To(Equal(int64(3)),
 					"new primary should have all 3 pre-failover documents")
 			},
-				timeouts.For(timeouts.DataSync),
-				timeouts.PollInterval(timeouts.DataSync),
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 			).Should(Succeed())
 
 			By("verifying document content fidelity")
@@ -272,8 +272,8 @@ var _ = Describe("DocumentDB replication — failover promotion",
 					g.Expect(err).ToNot(HaveOccurred())
 					g.Expect(cnt).To(Equal(int64(2)), "demoted replica should receive docs from new primary")
 				},
-					timeouts.For(timeouts.DataSync),
-					timeouts.PollInterval(timeouts.DataSync),
+					timeouts.For(timeouts.ClusterReplicationDataSync),
+					timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
 				).Should(Succeed())
 
 				By("verifying document content on the demoted replica")

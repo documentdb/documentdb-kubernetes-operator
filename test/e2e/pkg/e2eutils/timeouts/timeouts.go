@@ -45,15 +45,17 @@ const (
 	// DocumentDBReady because the replica must pg_basebackup from the
 	// primary before it can start streaming.
 	ClusterReplicationReady Op = "clusterReplicationReady"
-	// DataSync waits for data written to the primary DocumentDB to
-	// replicate and become visible on a replica. PostgreSQL streaming
-	// replication is typically sub-second, but end-to-end propagation
-	// through the gateway layer can take longer on busy CI runners.
-	DataSync Op = "dataSync"
-	// Failover waits for a promotion/failover operation to complete.
-	// This includes the time for the replica to become the new primary,
-	// CNPG to update cluster roles, and the cluster to reach Ready.
-	Failover Op = "failover"
+	// ClusterReplicationDataSync waits for data written to the primary
+	// DocumentDB to replicate and become visible on a replica in a
+	// cross-cluster replication setup. PostgreSQL streaming replication
+	// is typically sub-second, but end-to-end propagation through the
+	// gateway layer can take longer on busy CI runners.
+	ClusterReplicationDataSync Op = "clusterReplicationDataSync"
+	// ClusterReplicationFailover waits for a cross-cluster promotion/
+	// failover operation to complete. This includes the time for the
+	// replica to become the new primary, CNPG to update cluster roles,
+	// and the cluster to reach Ready.
+	ClusterReplicationFailover Op = "clusterReplicationFailover"
 )
 
 // UnknownOpFallback is returned by For when an Op is not in the
@@ -72,8 +74,8 @@ var documentDBDefaults = map[Op]time.Duration{
 	MongoConnect:      30 * time.Second,
 	ServiceReady:      2 * time.Minute,
 	ClusterReplicationReady:  10 * time.Minute,
-	DataSync:          3 * time.Minute,
-	Failover:          10 * time.Minute,
+	ClusterReplicationDataSync:     3 * time.Minute,
+	ClusterReplicationFailover:     10 * time.Minute,
 }
 
 // cnpgAlias maps selected DocumentDB ops to their CNPG counterparts.
@@ -111,10 +113,10 @@ func For(op Op) time.Duration {
 // 10-second poll to reduce API-server churn during long waits.
 func PollInterval(op Op) time.Duration {
 	switch op {
-	case MongoConnect, ServiceReady, DataSync:
+	case MongoConnect, ServiceReady, ClusterReplicationDataSync:
 		return 2 * time.Second
 	case DocumentDBReady, DocumentDBUpgrade, InstanceScale,
-		PVCResize, BackupComplete, RestoreComplete, Failover:
+		PVCResize, BackupComplete, RestoreComplete, ClusterReplicationFailover:
 		return 10 * time.Second
 	default:
 		return 5 * time.Second
