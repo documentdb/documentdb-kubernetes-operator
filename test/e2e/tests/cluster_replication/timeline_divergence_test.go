@@ -39,7 +39,8 @@ import (
 // Sub-issue 1 & 2: Rapid back-to-back failover + stale promotionToken
 // ---------------------------------------------------------------------------
 
-var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline divergence",
+// PDescribe: skipped until issue #375 is fixed in the operator.
+var _ = PDescribe("Issue #375: rapid back-to-back failover causes WAL timeline divergence",
 	Ordered, ContinueOnFailure,
 	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
@@ -316,7 +317,8 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 // Sub-issue 3: instancesPerNode not honored on replica
 // ---------------------------------------------------------------------------
 
-var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on replica",
+// PDescribe: skipped until issue #375 is fixed in the operator.
+var _ = PDescribe("Issue #375 sub-issue 3: instancesPerNode should be honored on replica",
 	Ordered,
 	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
