@@ -242,46 +242,46 @@ var _ = Describe("DocumentDB replication — failover promotion",
 			Expect(doc["msg"]).To(Equal("after failover"))
 		})
 
-			It("post-failover: replication continues from new primary to demoted replica", func() {
-				const coll = "fo_reverse_repl"
+		It("post-failover: replication continues from new primary to demoted replica", func() {
+			const coll = "fo_reverse_repl"
 
-				By("ensuring we have a connection to the new primary")
-				if replicaHandle == nil {
-					var err error
-					replicaHandle, err = emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, replicaName)
-					Expect(err).ToNot(HaveOccurred(), "connect to new primary gateway")
-				}
+			By("ensuring we have a connection to the new primary")
+			if replicaHandle == nil {
+				var err error
+				replicaHandle, err = emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, replicaName)
+				Expect(err).ToNot(HaveOccurred(), "connect to new primary gateway")
+			}
 
-				By("writing data on the new primary (originally the replica)")
-				docs := []interface{}{
-					bson.M{"_id": "rev-1", "origin": "new-primary", "direction": "reverse"},
-					bson.M{"_id": "rev-2", "origin": "new-primary", "direction": "reverse"},
-				}
-				_, err := replicaHandle.Client().Database(testDB).Collection(coll).InsertMany(ctx, docs)
-				Expect(err).ToNot(HaveOccurred(), "write to new primary for post-failover replication test")
+			By("writing data on the new primary (originally the replica)")
+			docs := []interface{}{
+				bson.M{"_id": "rev-1", "origin": "new-primary", "direction": "reverse"},
+				bson.M{"_id": "rev-2", "origin": "new-primary", "direction": "reverse"},
+			}
+			_, err := replicaHandle.Client().Database(testDB).Collection(coll).InsertMany(ctx, docs)
+			Expect(err).ToNot(HaveOccurred(), "write to new primary for post-failover replication test")
 
-				By("connecting to the old primary (now a replica)")
-				var primaryHandle2 *emongo.Handle
-				primaryHandle2, err = emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, primaryName)
-				Expect(err).ToNot(HaveOccurred(), "connect to old primary (now replica) gateway")
-				defer func() { _ = primaryHandle2.Close(ctx) }()
+			By("connecting to the old primary (now a replica)")
+			var primaryHandle2 *emongo.Handle
+			primaryHandle2, err = emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, primaryName)
+			Expect(err).ToNot(HaveOccurred(), "connect to old primary (now replica) gateway")
+			defer func() { _ = primaryHandle2.Close(ctx) }()
 
-				By("waiting for replication: data written on new primary appears on demoted replica")
-				Eventually(func(g Gomega) {
-					cnt, err := emongo.Count(ctx, primaryHandle2.Client(), testDB, coll, nil)
-					g.Expect(err).ToNot(HaveOccurred())
-					g.Expect(cnt).To(Equal(int64(2)), "demoted replica should receive docs from new primary")
-				},
-					timeouts.For(timeouts.ClusterReplicationDataSync),
-					timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
-				).Should(Succeed())
+			By("waiting for replication: data written on new primary appears on demoted replica")
+			Eventually(func(g Gomega) {
+				cnt, err := emongo.Count(ctx, primaryHandle2.Client(), testDB, coll, nil)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(cnt).To(Equal(int64(2)), "demoted replica should receive docs from new primary")
+			},
+				timeouts.For(timeouts.ClusterReplicationDataSync),
+				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
+			).Should(Succeed())
 
-				By("verifying document content on the demoted replica")
-				var doc bson.M
-				err = primaryHandle2.Client().Database(testDB).Collection(coll).
-					FindOne(ctx, bson.M{"_id": "rev-1"}).Decode(&doc)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(doc["origin"]).To(Equal("new-primary"))
-				Expect(doc["direction"]).To(Equal("reverse"))
-			})
+			By("verifying document content on the demoted replica")
+			var doc bson.M
+			err = primaryHandle2.Client().Database(testDB).Collection(coll).
+				FindOne(ctx, bson.M{"_id": "rev-1"}).Decode(&doc)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(doc["origin"]).To(Equal("new-primary"))
+			Expect(doc["direction"]).To(Equal("reverse"))
+		})
 	})

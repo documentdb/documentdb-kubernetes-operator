@@ -321,8 +321,8 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
 		const (
-			primaryName    = "ip-primary"
-			replicaName    = "ip-replica"
+			primaryName      = "ip-primary"
+			replicaName      = "ip-replica"
 			desiredInstances = 3
 		)
 		var (
