@@ -3018,6 +3018,241 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(updatedCluster.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("new-tls-secret"))
 			Expect(updatedCluster.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
 		})
+		It("should use localhost in ConnectionString when ServiceType is ClusterIP", func() {
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "1Gi",
+						},
+					},
+					ExposeViaService: dbpreview.ExposeViaService{
+						ServiceType: "ClusterIP",
+					},
+				},
+			}
+
+			// Pre-create the ClusterIP service so UpsertService finds it
+			serviceName := util.DOCUMENTDB_SERVICE_PREFIX + documentDBName
+			existingService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serviceName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type:      corev1.ServiceTypeClusterIP,
+					ClusterIP: "10.96.100.50",
+					Ports: []corev1.ServicePort{
+						{Name: "gateway", Protocol: corev1.ProtocolTCP, Port: util.GetPortFor(util.GATEWAY_PORT)},
+					},
+				},
+			}
+
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					Phase:          "Cluster in healthy state",
+					CurrentPrimary: documentDBName + "-1",
+					TargetPrimary:  documentDBName + "-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster, existingService).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+
+			sqlExecutor := func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+				if strings.Contains(cmd, "pg_roles") {
+					return "(1 row)", nil
+				}
+				if strings.Contains(cmd, "pg_available_extensions") {
+					return " default_version | installed_version\n" +
+						"-----------------+-------------------\n" +
+						" 0.110-0         | 0.110-0\n(1 row)", nil
+				}
+				return "", nil
+			}
+
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: sqlExecutor,
+			}
+
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify the connection string uses localhost, not the ClusterIP
+			updatedDB := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updatedDB)).To(Succeed())
+			Expect(updatedDB.Status.ConnectionString).To(ContainSubstring("@localhost:"))
+			Expect(updatedDB.Status.ConnectionString).ToNot(ContainSubstring("@10.96.100.50:"))
+		})
+
+		It("should use actual IP in ConnectionString when ServiceType is LoadBalancer", func() {
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "1Gi",
+						},
+					},
+					ExposeViaService: dbpreview.ExposeViaService{
+						ServiceType: "LoadBalancer",
+					},
+				},
+			}
+
+			// Pre-create the LoadBalancer service with an external IP
+			serviceName := util.DOCUMENTDB_SERVICE_PREFIX + documentDBName
+			existingService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      serviceName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeLoadBalancer,
+					Ports: []corev1.ServicePort{
+						{Name: "gateway", Protocol: corev1.ProtocolTCP, Port: util.GetPortFor(util.GATEWAY_PORT)},
+					},
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{IP: "52.183.10.20"},
+						},
+					},
+				},
+			}
+
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name: util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					Phase:          "Cluster in healthy state",
+					CurrentPrimary: documentDBName + "-1",
+					TargetPrimary:  documentDBName + "-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster, existingService).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+
+			sqlExecutor := func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+				if strings.Contains(cmd, "pg_roles") {
+					return "(1 row)", nil
+				}
+				if strings.Contains(cmd, "pg_available_extensions") {
+					return " default_version | installed_version\n" +
+						"-----------------+-------------------\n" +
+						" 0.110-0         | 0.110-0\n(1 row)", nil
+				}
+				return "", nil
+			}
+
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: sqlExecutor,
+			}
+
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify the connection string uses the LoadBalancer external IP
+			updatedDB := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updatedDB)).To(Succeed())
+			Expect(updatedDB.Status.ConnectionString).To(ContainSubstring("@52.183.10.20:"))
+			Expect(updatedDB.Status.ConnectionString).ToNot(ContainSubstring("@localhost:"))
+		})
 	})
 
 	Describe("validateK8sVersion", func() {
