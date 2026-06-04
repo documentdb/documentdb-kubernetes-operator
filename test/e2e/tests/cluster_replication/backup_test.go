@@ -42,7 +42,6 @@ var _ = Describe("DocumentDB cluster-replication backup",
 			e2e.SkipUnlessLevel(e2e.Medium)
 			ctx = context.Background()
 			c = e2e.SuiteEnv().Client
-			skipUnlessCSISnapshotsUsable(ctx, c)
 			ns = namespaces.NamespaceForSpec("cluster-replication-backup")
 			createNamespace(ctx, c, ns)
 			createCredentialSecret(ctx, c, ns)
