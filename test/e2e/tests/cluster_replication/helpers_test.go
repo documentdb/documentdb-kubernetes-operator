@@ -17,6 +17,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 )
@@ -179,4 +180,34 @@ func createExternalNameService(ctx context.Context, c client.Client, ns, name, e
 	}
 	err := c.Create(ctx, svc)
 	Expect(err).ToNot(HaveOccurred(), "create bridge service "+name)
+}
+
+// backupBaseVars returns base variables with CSI-backed storage class.
+// Backup tests require VolumeSnapshot support, so "csi-hostpath-sc" is
+// used instead of the default "standard" class.
+func backupBaseVars() map[string]string {
+	vars := baseVars()
+	vars["STORAGE_CLASS"] = "csi-hostpath-sc"
+	if v := os.Getenv("E2E_CSI_STORAGE_CLASS"); v != "" {
+		vars["STORAGE_CLASS"] = v
+	}
+	return vars
+}
+
+// skipUnlessCSISnapshotsUsable is the pre-flight for backup specs.
+// It verifies that the VolumeSnapshot CRD is installed and that at
+// least one VolumeSnapshotClass exists. It Skips — rather than Fails —
+// so running on a cluster without CSI snapshot support produces a
+// clear message instead of deep backup-controller errors.
+func skipUnlessCSISnapshotsUsable(ctx context.Context, c client.Client) {
+	hasCRD, err := clusterprobe.HasVolumeSnapshotCRD(ctx, c)
+	Expect(err).NotTo(HaveOccurred(), "probe VolumeSnapshot CRD")
+	if !hasCRD {
+		Skip("VolumeSnapshot CRD not installed — backup specs require the external snapshotter")
+	}
+	hasClass, err := clusterprobe.HasUsableSnapshotClass(ctx, c)
+	Expect(err).NotTo(HaveOccurred(), "probe VolumeSnapshotClass")
+	if !hasClass {
+		Skip("no VolumeSnapshotClass found — backup specs require at least one CSI snapshot class")
+	}
 }
