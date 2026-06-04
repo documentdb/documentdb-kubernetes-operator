@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 var _ = Describe("Backup Controller", func() {
@@ -74,8 +75,11 @@ var _ = Describe("Backup Controller", func() {
 			}
 			Expect(fakeClient.Create(ctx, cluster)).To(Succeed())
 
-			// Call under test
-			res, err := reconciler.createCNPGBackup(ctx, backup, cluster)
+			// Call under test (no replication, so CNPGClusterName == cluster name)
+			replicationContext := &util.ReplicationContext{
+				CNPGClusterName: clusterName,
+			}
+			res, err := reconciler.createCNPGBackup(ctx, backup, cluster, replicationContext)
 			Expect(err).ToNot(HaveOccurred())
 			// controller uses a 5s requeue
 			Expect(res.RequeueAfter).To(Equal(5 * time.Second))
