@@ -3,15 +3,13 @@ package clusterreplication
 // Tests for https://github.com/documentdb/documentdb-kubernetes-operator/issues/375
 // "Multi-cloud failover: WAL timeline divergence after promotion leaves replica unrecoverable"
 //
-// These tests are designed to REPRODUCE the reported bugs and are expected to FAIL
-// until the operator is fixed. The three sub-issues tested:
+// Regression tests for three sub-issues:
 //
-//  1. Rapid back-to-back failovers cause WAL timeline divergence on the demoted node,
-//     leaving it unable to reconnect via WAL streaming.
-//  2. After a successful promotion, the new primary's CNPG cluster retains a stale
-//     promotionToken, causing CNPG to report "Cluster is unrecoverable".
-//  3. spec.instancesPerNode is only applied to the primary CNPG cluster; the replica
-//     always gets 1 instance regardless of the configured value.
+//  1. Rapid back-to-back failovers cause WAL timeline divergence on the demoted node.
+//     The operator should recover replication after failovers.
+//  2. After a successful promotion, the new primary's CNPG cluster must have its
+//     promotionToken cleared. (Fixed: operator now clears stale tokens.)
+//  3. spec.instancesPerNode must be honored on both primary and replica CNPG clusters.
 
 import (
 	"context"
@@ -39,8 +37,7 @@ import (
 // Sub-issue 1 & 2: Rapid back-to-back failover + stale promotionToken
 // ---------------------------------------------------------------------------
 
-// PDescribe: skipped until issue #375 is fixed in the operator.
-var _ = PDescribe("Issue #375: rapid back-to-back failover causes WAL timeline divergence",
+var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline divergence",
 	Ordered, ContinueOnFailure,
 	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
@@ -212,12 +209,16 @@ var _ = PDescribe("Issue #375: rapid back-to-back failover causes WAL timeline d
 			).Should(Succeed(), "new primary should reach Ready")
 
 			By("checking that promotionToken is cleared on the new primary's CNPG cluster")
-			cnpg := findCNPGCluster(ctx, c, ns, replicaName)
-			Expect(cnpg).ToNot(BeNil(), "new primary CNPG cluster should exist")
-			Expect(cnpg.Spec.ReplicaCluster).ToNot(BeNil())
-			Expect(cnpg.Spec.ReplicaCluster.PromotionToken).To(BeEmpty(),
-				"promotionToken should be cleared after successful promotion, "+
-					"but the operator leaves it populated (issue #375 sub-issue 2)")
+			Eventually(func(g Gomega) {
+				cnpg := findCNPGCluster(ctx, c, ns, replicaName)
+				g.Expect(cnpg).ToNot(BeNil(), "new primary CNPG cluster should exist")
+				g.Expect(cnpg.Spec.ReplicaCluster).ToNot(BeNil())
+				g.Expect(cnpg.Spec.ReplicaCluster.PromotionToken).To(BeEmpty(),
+					"promotionToken should be cleared after successful promotion")
+			},
+				timeouts.For(timeouts.ClusterReplicationFailover),
+				timeouts.PollInterval(timeouts.ClusterReplicationFailover),
+			).Should(Succeed(), "promotionToken should be cleared")
 		})
 
 		// Sub-issue 1: rapid back-to-back failover
@@ -289,15 +290,11 @@ var _ = PDescribe("Issue #375: rapid back-to-back failover causes WAL timeline d
 			Expect(err).ToNot(HaveOccurred(), "connect to demoted node gateway")
 
 			By("waiting for replication: data on restored primary should appear on the demoted node")
-			// Issue #375: this will FAIL because the demoted node has WAL timeline
-			// divergence and cannot reconnect to the new primary via streaming replication.
-			// The WAL receiver exits with FATAL and pg_stat_wal_receiver is empty.
 			Eventually(func(g Gomega) {
 				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(3)),
-					"demoted node should replicate data from restored primary; "+
-						"issue #375: WAL timeline divergence leaves it unable to reconnect")
+					"demoted node should replicate data from restored primary")
 			},
 				timeouts.For(timeouts.ClusterReplicationDataSync),
 				timeouts.PollInterval(timeouts.ClusterReplicationDataSync),
@@ -317,8 +314,7 @@ var _ = PDescribe("Issue #375: rapid back-to-back failover causes WAL timeline d
 // Sub-issue 3: instancesPerNode not honored on replica
 // ---------------------------------------------------------------------------
 
-// PDescribe: skipped until issue #375 is fixed in the operator.
-var _ = PDescribe("Issue #375 sub-issue 3: instancesPerNode should be honored on replica",
+var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on replica",
 	Ordered,
 	Label(e2e.ClusterReplicationLabel, e2e.BasicLabel), e2e.MediumLevelLabel,
 	func() {
@@ -395,14 +391,10 @@ var _ = PDescribe("Issue #375 sub-issue 3: instancesPerNode should be honored on
 		})
 
 		It("replica CNPG cluster should have the requested number of instances", func() {
-			// Issue #375 sub-issue 3: the replica always gets 1 instance regardless
-			// of spec.instancesPerNode. The operator only applies instancesPerNode
-			// to the primary CNPG cluster.
 			cnpg := findCNPGCluster(ctx, c, ns, replicaName)
 			Expect(cnpg).ToNot(BeNil(), "replica CNPG cluster should exist")
 			Expect(cnpg.Spec.Instances).To(Equal(desiredInstances),
-				"replica CNPG cluster should have %d instances (issue #375 sub-issue 3: "+
-					"operator only applies instancesPerNode to primary)", desiredInstances)
+				"replica CNPG cluster should have %d instances", desiredInstances)
 		})
 	})
 
