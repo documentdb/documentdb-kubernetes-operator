@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: namespace
+templates:
+  - 01_namespace.yaml
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  - it: should create the cnpg-system namespace
+    asserts:
+      - isKind:
+          of: Namespace
+      - equal:
+          path: metadata.name
+          value: cnpg-system
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: documentdb-operator
