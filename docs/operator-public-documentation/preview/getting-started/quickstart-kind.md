@@ -71,13 +71,14 @@ All three pods (`cert-manager`, `cert-manager-cainjector`, `cert-manager-webhook
 The operator Helm chart automatically installs the [CloudNativePG operator](https://cloudnative-pg.io/) as a dependency.
 
 ```bash
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-helm install documentdb-operator documentdb/documentdb-operator \
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --namespace documentdb-operator \
   --create-namespace \
   --wait
 ```
+
+!!! tip "Pin production installs"
+    Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) and add `--version <release-version>`.
 
 Verify:
 

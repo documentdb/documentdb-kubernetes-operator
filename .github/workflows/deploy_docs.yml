@@ -44,6 +44,12 @@ jobs:
         run: mike deploy dev --push --update-aliases
 
       # On release: deploy versioned docs and update "latest" alias
+      - name: Stamp release version into docs
+        if: github.event_name == 'release'
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          find docs/operator-public-documentation -name '*.md' -exec sed -i "s|<release-version>|${VERSION}|g" {} +
+
       - name: Deploy release docs
         if: github.event_name == 'release'
         run: |

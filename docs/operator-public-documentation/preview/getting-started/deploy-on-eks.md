@@ -82,14 +82,9 @@ flowchart TB
     aws sts get-caller-identity
     ```
 
-### Helm Repository Setup
+### Helm Chart Distribution
 
-The DocumentDB operator Helm chart is available from the public GitHub Pages repository.
-
-```bash
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-```
+The DocumentDB operator Helm chart is published as an OCI artifact to the GitHub Container Registry. There is no `helm repo add` step — install with `helm install ... oci://ghcr.io/documentdb/documentdb-operator`. For production or repeatable installs, add `--version <release-version>` using a version from <https://github.com/documentdb/documentdb-kubernetes-operator/releases>.
 
 ## Quick Start with Playground Scripts
 
@@ -308,12 +303,7 @@ kubectl apply -f documentdb-storage-class.yaml
 ### Step 6: Install DocumentDB Operator
 
 ```bash
-# Add the Helm repository
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-
-# Install the operator
-helm install documentdb-operator documentdb/documentdb-operator \
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
     --namespace documentdb-operator \
     --create-namespace \
     --wait
@@ -321,6 +311,9 @@ helm install documentdb-operator documentdb/documentdb-operator \
 # Verify installation
 kubectl get pods -n documentdb-operator
 ```
+
+!!! tip "Pin production installs"
+    This quickstart installs the latest stable chart. For production or repeatable installs, add `--version <release-version>`.
 
 ### Step 7: Deploy DocumentDB instance
 
@@ -558,9 +551,9 @@ kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager
 
 ### Helm chart authentication issues
 
-**Symptom:** Unable to pull the DocumentDB operator Helm chart from the public repository
+**Symptom:** Unable to pull the DocumentDB operator Helm chart from GHCR
 
-If the public Helm repository is unavailable or you encounter authentication errors, you can use GitHub Container Registry (GHCR) with a Personal Access Token as a fallback:
+The operator chart is distributed through GitHub Container Registry (GHCR) as an OCI artifact. Public pulls should work anonymously, but if your network, Helm registry config, or GHCR policy requires authentication, log in with a Personal Access Token:
 
 ```bash
 # Create a GitHub Personal Access Token with read:packages scope
@@ -570,6 +563,7 @@ If the public Helm repository is unavailable or you encounter authentication err
 # Set credentials
 export GITHUB_USERNAME="your-github-username"
 export GITHUB_TOKEN="ghp_xxxxxxxxxxxxxxxxxxxx"
+export DOCUMENTDB_VERSION=<release-version>
 
 # Authenticate with GitHub Container Registry
 echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
@@ -579,6 +573,7 @@ echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
 # Install using OCI registry
 helm install documentdb-operator \
     oci://ghcr.io/documentdb/documentdb-operator \
+    --version ${DOCUMENTDB_VERSION} \
     --namespace documentdb-operator \
     --create-namespace \
     --wait
