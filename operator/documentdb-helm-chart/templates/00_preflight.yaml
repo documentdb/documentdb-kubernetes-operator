@@ -1,20 +1,51 @@
 {{/*
-Preflight: the operator chart unconditionally creates cert-manager.io/v1
-Issuer and Certificate resources for the validating webhook, sidecar
-injector, and wal-replica plugin. If cert-manager is not installed in the
-cluster, the install will "succeed" from Helm's perspective but the
-operator will never become ready (webhook TLS Secret is never issued, the
-readiness probe never passes).
+Preflight checks
+=================
+Validate that required cluster-level dependencies are present before
+rendering the chart. Each check uses Helm's API discovery
+(.Capabilities.APIVersions) and fires during install, upgrade, and
+template (without explicit --api-versions). Checks that default to
+"true" protect against the most common silent-failure scenario; opt-in
+checks cover dependencies that are only needed for specific features or
+are normally provided by a subchart.
 
-Fail loudly at install/upgrade time so the user gets an actionable error
-instead of a stuck pod.
+Individual checks can be disabled for offline templating (GitOps render
+pipelines) or advanced configurations where the dependency is managed
+out-of-band.
+*/}}
 
-This check can be disabled by setting `certManager.preflightCheck=false`
-for advanced users who manage cert-manager out-of-band or are templating
-the chart offline (e.g., GitOps render pipelines).
+{{/* --- cert-manager (required) ---
+The chart unconditionally creates cert-manager.io/v1 Issuer and Certificate
+resources for the validating webhook, sidecar injector, and wal-replica
+plugin. Without cert-manager the install "succeeds" but the operator never
+becomes ready (webhook TLS Secret is never issued).
 */}}
 {{- if .Values.certManager.preflightCheck -}}
-{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1") -}}
-{{- fail "cert-manager (cert-manager.io/v1) is required but was not found in the cluster. Install cert-manager (https://cert-manager.io/docs/installation/) before installing this chart, or set certManager.preflightCheck=false to skip this check." -}}
+{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1/Certificate") -}}
+{{- fail "cert-manager is required but was not found in the cluster (cert-manager.io/v1/Certificate CRD is missing). Install cert-manager (https://cert-manager.io/docs/installation/) before installing this chart, or set certManager.preflightCheck=false to skip this check." -}}
+{{- end -}}
+{{- end -}}
+
+{{/* --- CloudNative-PG CRDs (opt-in, default false) ---
+CNPG CRDs are normally installed by the bundled cloudnative-pg subchart, so
+this check defaults to off. Enable it when you manage CRDs externally (e.g.,
+helm install --skip-crds) to catch a missing CNPG CRD set before the
+operator starts.
+*/}}
+{{- if .Values.cnpgCrds.preflightCheck -}}
+{{- if not (.Capabilities.APIVersions.Has "postgresql.cnpg.io/v1/Cluster") -}}
+{{- fail "CloudNative-PG CRDs are required but were not found in the cluster (postgresql.cnpg.io/v1/Cluster CRD is missing). If you used --skip-crds, install CNPG CRDs manually (https://cloudnative-pg.io/documentation/current/installation_upgrade/), or set cnpgCrds.preflightCheck=false to skip this check." -}}
+{{- end -}}
+{{- end -}}
+
+{{/* --- VolumeSnapshot CRDs (opt-in, default false) ---
+The operator's backup controller requires VolumeSnapshot support. This check
+is opt-in because not every deployment uses backups. When enabled, it
+verifies the CRDs are registered; note that a CSI driver with snapshot
+support and a VolumeSnapshotClass are also required at runtime.
+*/}}
+{{- if .Values.volumeSnapshots.preflightCheck -}}
+{{- if not (.Capabilities.APIVersions.Has "snapshot.storage.k8s.io/v1/VolumeSnapshot") -}}
+{{- fail "VolumeSnapshot CRDs are required for DocumentDB backup functionality but were not found in the cluster (snapshot.storage.k8s.io/v1/VolumeSnapshot CRD is missing). Install the CSI snapshot controller and CRDs (https://github.com/kubernetes-csi/external-snapshotter), or set volumeSnapshots.preflightCheck=false to skip this check. Note: a CSI driver with snapshot support and a VolumeSnapshotClass are also required for backups." -}}
 {{- end -}}
 {{- end -}}

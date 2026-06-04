@@ -37,15 +37,35 @@ image:
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: Always
+# ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+# These checks run during helm install/upgrade and abort with an actionable
+# error when a required cluster-level dependency is missing. Disable
+# individual checks for offline templating (GitOps) or when the dependency
+# is managed out-of-band.
+
 # cert-manager is a required dependency: the chart creates cert-manager.io/v1
 # Issuer and Certificate resources for the validating webhook and the CNPG
-# plugin sidecars. The preflight check below fails the install with an
-# actionable message if cert-manager is not present in the cluster.
+# plugin sidecars. The preflight check fails the install with an actionable
+# message if cert-manager is not present in the cluster.
 certManager:
   # Set to false only if you template the chart offline (e.g., GitOps render
   # pipelines) or manage cert-manager out-of-band and the API discovery is
   # unreliable. Disabling the check does NOT remove the dependency.
   preflightCheck: true
+
+# CloudNative-PG CRDs are normally installed by the bundled subchart, so
+# this check defaults to false. Enable it when you manage CNPG CRDs
+# externally (e.g., helm install --skip-crds).
+cnpgCrds:
+  preflightCheck: false
+
+# VolumeSnapshot CRDs are required only for backup functionality. Enable
+# this check if you plan to use DocumentDB backups. Note: a CSI snapshot
+# controller/driver and VolumeSnapshotClass are also required at runtime.
+volumeSnapshots:
+  preflightCheck: false
 
 cloudnative-pg:
   namespaceOverride: cnpg-system

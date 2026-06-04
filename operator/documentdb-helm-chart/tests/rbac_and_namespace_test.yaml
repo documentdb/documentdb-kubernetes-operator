@@ -1,0 +1,176 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: RBAC resources
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # ServiceAccount (04)
+  # -------------------------------------------------------------------
+  - it: should create a ServiceAccount with default name
+    templates:
+      - 04_serviceaccount.yaml
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: documentdb-operator
+      - equal:
+          path: metadata.namespace
+          value: documentdb-operator
+
+  - it: should use custom service account name when overridden
+    templates:
+      - 04_serviceaccount.yaml
+    set:
+      serviceAccount.name: "my-sa"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-sa
+
+  - it: should use custom namespace for service account
+    templates:
+      - 04_serviceaccount.yaml
+    set:
+      namespace: custom-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-ns
+
+  # -------------------------------------------------------------------
+  # ClusterRole (05)
+  # -------------------------------------------------------------------
+  - it: should create a ClusterRole with correct name
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: documentdb-operator-cluster-role
+
+  - it: should include documentdb.io API group permissions
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["dbs", "dbs/status", "dbs/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include CNPG cluster permissions
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["postgresql.cnpg.io"]
+            resources: ["clusters", "publications", "subscriptions", "clusters/status"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include cert-manager permissions
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["cert-manager.io"]
+            resources: ["certificates", "certificates/status", "certificates/finalizers", "issuers", "clusterissuers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include backup-related permissions
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["backups", "backups/status", "backups/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["scheduledbackups", "scheduledbackups/status", "scheduledbackups/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include VolumeSnapshotClass permissions
+    templates:
+      - 05_clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotclasses"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # -------------------------------------------------------------------
+  # ClusterRoleBinding (07)
+  # -------------------------------------------------------------------
+  - it: should create a ClusterRoleBinding referencing the correct role
+    templates:
+      - 07_clusterrolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: documentdb-operator-cluster-role
+
+  - it: should bind to the default service account
+    templates:
+      - 07_clusterrolebinding.yaml
+    asserts:
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: documentdb-operator
+      - equal:
+          path: subjects[0].namespace
+          value: documentdb-operator
+
+  - it: should bind to custom service account and namespace
+    templates:
+      - 07_clusterrolebinding.yaml
+    set:
+      serviceAccount.name: "my-sa"
+      namespace: "my-ns"
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: my-sa
+      - equal:
+          path: subjects[0].namespace
+          value: my-ns
+
+  # -------------------------------------------------------------------
+  # Namespace (01)
+  # -------------------------------------------------------------------
+  - it: should create the cnpg-system namespace
+    templates:
+      - 01_namespace.yaml
+    asserts:
+      - isKind:
+          of: Namespace
+      - equal:
+          path: metadata.name
+          value: cnpg-system
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: documentdb-operator

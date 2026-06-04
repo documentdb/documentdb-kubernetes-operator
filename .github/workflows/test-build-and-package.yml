@@ -720,7 +720,7 @@ jobs:
         helm dependency update documentdb-chart-${{ matrix.arch }}
         
         echo "Validating chart..."
-        helm lint documentdb-chart-${{ matrix.arch }}
+        helm lint documentdb-chart-${{ matrix.arch }} --set certManager.preflightCheck=false
         
         echo "Packaging chart with version ${{ env.CHART_VERSION }}-${{ matrix.arch }} for ${{ matrix.arch }}..."
         helm package documentdb-chart-${{ matrix.arch }} --version ${{ env.CHART_VERSION }}-${{ matrix.arch }}

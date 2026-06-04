@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: sidecar injector
+templates:
+  - 02_documentdb_sidecar_injector.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # Document count
+  # -------------------------------------------------------------------
+  - it: should render 5 documents (Service, Deployment, 2 Certificates, Issuer)
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  # -------------------------------------------------------------------
+  # Service
+  # -------------------------------------------------------------------
+  - it: should create a Service for sidecar-injector in cnpg-system
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: sidecar-injector
+      - equal:
+          path: metadata.namespace
+          value: cnpg-system
+      - equal:
+          path: spec.ports[0].port
+          value: 9090
+
+  - it: should have CNPG plugin annotations on the Service
+    documentIndex: 0
+    asserts:
+      - isNotEmpty:
+          path: metadata.annotations["cnpg.io/pluginPort"]
+      - isNotEmpty:
+          path: metadata.annotations["cnpg.io/pluginClientSecret"]
+      - isNotEmpty:
+          path: metadata.annotations["cnpg.io/pluginServerSecret"]
+
+  # -------------------------------------------------------------------
+  # Deployment
+  # -------------------------------------------------------------------
+  - it: should create a Deployment for sidecar-injector
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: sidecar-injector
+      - equal:
+          path: metadata.namespace
+          value: cnpg-system
+
+  - it: should use default sidecar image with appVersion tag
+    documentIndex: 1
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0\.2\.0
+
+  - it: should use a custom sidecar image tag when set
+    set:
+      image.sidecarinjector.tag: "custom-tag"
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:custom-tag"
+
+  - it: should pass DOCUMENTDB_VERSION env var when set
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_VERSION
+            value: "0.110.0"
+
+  - it: should have empty env when documentDbVersion is empty
+    set:
+      documentDbVersion: ""
+    documentIndex: 1
+    asserts:
+      - isEmpty:
+          path: spec.template.spec.containers[0].env
+
+  - it: should mount TLS server and client volumes
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /server
+            name: server
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /client
+            name: client
+
+  # -------------------------------------------------------------------
+  # cert-manager Certificates
+  # -------------------------------------------------------------------
+  - it: should create a client Certificate
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: sidecarinjector-client
+      - equal:
+          path: spec.secretName
+          value: sidecarinjector-client-tls
+      - equal:
+          path: spec.usages[0]
+          value: client auth
+
+  - it: should create a server Certificate with correct DNS name
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: sidecarinjector-server
+      - equal:
+          path: spec.secretName
+          value: sidecarinjector-server-tls
+      - contains:
+          path: spec.dnsNames
+          content: sidecar-injector
+
+  # -------------------------------------------------------------------
+  # cert-manager Issuer
+  # -------------------------------------------------------------------
+  - it: should create a self-signed Issuer in cnpg-system
+    documentIndex: 4
+    asserts:
+      - isKind:
+          of: Issuer
+      - equal:
+          path: metadata.name
+          value: selfsigned-issuer
+      - equal:
+          path: metadata.namespace
+          value: cnpg-system
+      - isNotNull:
+          path: spec.selfSigned
