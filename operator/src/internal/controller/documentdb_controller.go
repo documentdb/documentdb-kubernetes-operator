@@ -271,7 +271,13 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Update connection string if primary and service IP available
 		if replicationContext.IsPrimary() && documentDbServiceIp != "" {
 			trustTLS := documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready
-			newConnStr := util.GenerateConnectionString(documentdb, documentDbServiceIp, trustTLS)
+			// For ClusterIP services, use "localhost" in the connection string since users
+			// connect via kubectl port-forward rather than directly to the cluster IP.
+			connectionHost := documentDbServiceIp
+			if documentdb.Spec.ExposeViaService.ServiceType == "ClusterIP" {
+				connectionHost = "localhost"
+			}
+			newConnStr := util.GenerateConnectionString(documentdb, connectionHost, trustTLS)
 			if documentdb.Status.ConnectionString != newConnStr {
 				documentdb.Status.ConnectionString = newConnStr
 				statusChanged = true
