@@ -55,18 +55,6 @@ certManager:
   # unreliable. Disabling the check does NOT remove the dependency.
   preflightCheck: true
 
-# CloudNative-PG CRDs are normally installed by the bundled subchart, so
-# this check defaults to false. Enable it when you manage CNPG CRDs
-# externally (e.g., helm install --skip-crds).
-cnpgCrds:
-  preflightCheck: false
-
-# VolumeSnapshot CRDs are required only for backup functionality. Enable
-# this check if you plan to use DocumentDB backups. Note: a CSI snapshot
-# controller/driver and VolumeSnapshotClass are also required at runtime.
-volumeSnapshots:
-  preflightCheck: false
-
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:
