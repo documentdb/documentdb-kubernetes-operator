@@ -94,7 +94,7 @@ func cnpgClusterName(docdbName, memberName string) string {
 	const maxLen = 50
 	h := fnv.New64a()
 	h.Write([]byte(memberName))
-	maxPrefix := maxLen - 9 // dash + 16-char hex
+	maxPrefix := maxLen - 9 // dash + 8-char hex (truncated by maxLen cap)
 	name := fmt.Sprintf("%.*s-%x", maxPrefix, docdbName, h.Sum64())
 	if len(name) > maxLen {
 		name = name[:maxLen]
@@ -146,8 +146,8 @@ func createReplicationBridgeServices(ctx context.Context, c client.Client, ns, p
 // findCNPGCluster discovers the CNPG Cluster backing a DocumentDB CR.
 // In replication mode, the CNPG cluster name is a hash-based derivative
 // of the DocumentDB name (via generateCNPGClusterName), so we list all
-// CNPG Clusters in the namespace and match by the documentdb ownership
-// label.
+// CNPG Clusters in the namespace and match by OwnerReferences
+// (Kind=="DocumentDB" && Name==ddName).
 func findCNPGCluster(ctx context.Context, c client.Client, ns, ddName string) *cnpgv1.Cluster {
 	var list cnpgv1.ClusterList
 	err := c.List(ctx, &list, client.InNamespace(ns))

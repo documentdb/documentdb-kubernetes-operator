@@ -406,10 +406,11 @@ var _ = PDescribe("Issue #375 sub-issue 3: instancesPerNode should be honored on
 		})
 	})
 
-// assertCNPGClusterStreamingReplication is a diagnostic helper that checks
-// whether the CNPG cluster's replica is in streaming replication state.
-// Useful for understanding the state after failover.
-func assertCNPGClusterStreamingReplication(ctx context.Context, c client.Client, ns, ddName string) func(g Gomega) {
+// assertCNPGContinuousArchivingHealthy is a diagnostic helper that checks
+// whether the CNPG cluster's ContinuousArchiving condition is True.
+// This is a necessary (but not sufficient) indicator that WAL shipping
+// is functioning; it does not verify streaming replication directly.
+func assertCNPGContinuousArchivingHealthy(ctx context.Context, c client.Client, ns, ddName string) func(g Gomega) {
 	return func(g Gomega) {
 		cnpg := findCNPGCluster(ctx, c, ns, ddName)
 		g.Expect(cnpg).ToNot(BeNil())

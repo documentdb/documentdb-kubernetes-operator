@@ -116,7 +116,8 @@ func PollInterval(op Op) time.Duration {
 	case MongoConnect, ServiceReady, ClusterReplicationDataSync:
 		return 2 * time.Second
 	case DocumentDBReady, DocumentDBUpgrade, InstanceScale,
-		PVCResize, BackupComplete, RestoreComplete, ClusterReplicationFailover:
+		PVCResize, BackupComplete, RestoreComplete,
+		ClusterReplicationReady, ClusterReplicationFailover:
 		return 10 * time.Second
 	default:
 		return 5 * time.Second
