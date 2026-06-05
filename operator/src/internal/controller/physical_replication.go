@@ -815,8 +815,13 @@ func (r *DocumentDBReconciler) ensureTokenServiceResources(ctx context.Context, 
 	err := r.Client.Create(ctx, configMap)
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			configMap.Data["index.html"] = token
-			err = r.Client.Update(ctx, configMap)
+			// Fetch the existing ConfigMap to get its resourceVersion for update
+			existing := &corev1.ConfigMap{}
+			if getErr := r.Client.Get(ctx, types.NamespacedName{Name: tokenServiceName, Namespace: clusterNN.Namespace}, existing); getErr != nil {
+				return false, fmt.Errorf("failed to get existing token ConfigMap: %w", getErr)
+			}
+			existing.Data["index.html"] = token
+			err = r.Client.Update(ctx, existing)
 			if err != nil {
 				return false, fmt.Errorf("failed to update token ConfigMap: %w", err)
 			}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -12,10 +13,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/internal/cnpg"
@@ -652,5 +655,74 @@ var _ = Describe("Physical Replication", func() {
 		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
 		Expect(updated.Spec.ExternalClusters).To(HaveLen(3))
 		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
+	})
+
+	It("updates existing ConfigMap with correct token on second failover", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		// CNPG Cluster with a new DemotionToken (from second demotion)
+		cluster := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: namespace,
+			},
+			Status: cnpgv1.ClusterStatus{
+				DemotionToken: "new-token-second-failover",
+			},
+		}
+
+		// Pre-existing ConfigMap from first failover (has resourceVersion set by API server)
+		existingCM := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "promotion-token",
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				"index.html": "old-token-first-failover",
+			},
+		}
+
+		scheme := runtime.NewScheme()
+		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
+		Expect(corev1.AddToScheme(scheme)).To(Succeed())
+
+		// Interceptor that enforces resourceVersion on ConfigMap Update,
+		// simulating real API server behavior.
+		fakeClient := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(cluster, existingCM).
+			WithStatusSubresource(cluster).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+					if cm, ok := obj.(*corev1.ConfigMap); ok && cm.Name == "promotion-token" {
+						if cm.ResourceVersion == "" {
+							return errors.NewConflict(
+								schema.GroupResource{Group: "", Resource: "configmaps"},
+								cm.Name,
+								fmt.Errorf("resourceVersion must be specified for an update"),
+							)
+						}
+					}
+					return c.Update(ctx, obj, opts...)
+				},
+			}).
+			Build()
+
+		reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+		replicationContext := &util.ReplicationContext{} // None strategy
+
+		result, err := reconciler.ensureTokenServiceResources(ctx,
+			types.NamespacedName{Name: "test-cluster", Namespace: namespace},
+			replicationContext)
+
+		Expect(err).ToNot(HaveOccurred(), "should succeed by fetching existing ConfigMap before update")
+		Expect(result).To(BeTrue())
+
+		// Verify ConfigMap was actually updated with the new token
+		updatedCM := &corev1.ConfigMap{}
+		Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "promotion-token", Namespace: namespace}, updatedCM)).To(Succeed())
+		Expect(updatedCM.Data["index.html"]).To(Equal("new-token-second-failover"),
+			"ConfigMap should contain the new demotion token")
 	})
 })
