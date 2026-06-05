@@ -94,13 +94,14 @@ kubectl get pods -n cert-manager
 ## Install the DocumentDB operator
 
 ```bash
-helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator
-helm repo update
-helm install documentdb-operator documentdb/documentdb-operator \
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --namespace documentdb-operator \
   --create-namespace \
   --wait
 ```
+
+!!! tip "Pin production installs"
+    Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) and add `--version <release-version>`.
 
 Verify:
 

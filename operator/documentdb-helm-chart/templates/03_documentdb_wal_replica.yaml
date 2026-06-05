@@ -81,18 +81,47 @@ spec:
   selector:
     matchLabels:
       app: wal-replica
-  strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: wal-replica
     spec:
       serviceAccountName: wal-replica-manager
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.walReplicaPlugin.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - image: "{{ .Values.image.walreplica.repository }}:{{ .Values.image.walreplica.tag | default .Chart.AppVersion }}"  
         imagePullPolicy: "{{ .Values.image.walreplica.pullPolicy }}"
         name: cnpg-i-wal-replica
+        {{- with .Values.walReplicaPlugin.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - containerPort: 9090
           protocol: TCP
@@ -107,7 +136,10 @@ spec:
           name: server
         - mountPath: /client
           name: client
-        resources: {}
+        {{- with .Values.walReplicaPlugin.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
       volumes:
       - name: server
         secret:
@@ -123,7 +155,7 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/managed-by: "Helm"
   name: wal-replica-manager-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -142,15 +174,19 @@ metadata:
   name: wal-replica-manager
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-rules: # TODO trim this down to what's actually needed
+rules:
+# wal-replica plugin source lives in the cnpg-i-wal-replica repo; we cannot
+# grep its exact verb usage from here. Below is the previous grant minus
+# rules that are obviously dead in any controller-runtime-based plugin
+# (`""/leases` is the wrong API group — leases live in coordination.k8s.io,
+# and `""/endpoints` was never referenced). The remaining rules should be
+# audited and tightened once the plugin's RBAC markers are wired to ship
+# alongside the chart. Tracked in #381.
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
-  resources: ["services", "pods", "endpoints", "leases", "serviceaccounts", "configmaps", "namespaces"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["metrics.k8s.io"]
-  resources: ["pods"]
+  resources: ["services", "pods", "endpoints", "serviceaccounts", "configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings"]
@@ -174,5 +210,5 @@ metadata:
   namespace: cnpg-system
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
-    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/managed-by: "Helm"
 {{- end }}

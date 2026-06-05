@@ -23,20 +23,122 @@ serviceAccount:
   automount: true
   annotations: {}
   name: "documentdb-operator"
-
+  
 # WAL Replica feature flag
 walReplica: false  # Set to true to deploy the WAL replica plugin
+
+# Image pull secrets used by all operator components (operator, sidecar injector, wal-replica).
+# Each entry must be a Kubernetes Secret reference: [{ name: my-registry-secret }, ...]
+#
+# IMPORTANT: imagePullSecrets are namespace-scoped. This chart deploys pods into TWO
+# namespaces by default: the release namespace (operator) and `cnpg-system`
+# (sidecar-injector and, when enabled, wal-replica). If you use a private registry
+# you must create the same pull secret in BOTH namespaces (or in every namespace
+# referenced by your overrides). The chart does not create the secret for you;
+# create it out-of-band before `helm install`. Example:
+#   kubectl create secret docker-registry my-registry-secret \
+#     --docker-server=... --docker-username=... --docker-password=... \
+#     -n documentdb-operator
+#   kubectl create secret docker-registry my-registry-secret \
+#     --docker-server=... --docker-username=... --docker-password=... \
+#     -n cnpg-system
+imagePullSecrets: []
 
 image:
   documentdbk8soperator:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/operator
-    pullPolicy: Always
+    # Pinned image tags use IfNotPresent to avoid unnecessary registry pulls on pod restart.
+    pullPolicy: IfNotPresent
   sidecarinjector:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   walreplica:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
+
+# Per-component pod-level configuration: resources, security contexts, and scheduling.
+# Defaults are conservative and aim to be compatible with Pod Security Admission's
+# `restricted` profile. Override any field per component as needed.
+operator:
+  # Requests-only by convention: scheduler reserves capacity for the
+  # operator, but no memory ceiling so a single operator can manage
+  # fleets of any size without OOMKill. Set limits explicitly if your
+  # environment requires Burstable→Guaranteed QoS or enforces
+  # LimitRange.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    # The operator image (operator/src/Dockerfile) runs as the Alpine `manager`
+    # user, which is uid 100. We pin runAsUser explicitly so Kubernetes can
+    # verify the user is non-root without depending on the image's USER directive.
+    # If the operator Dockerfile is changed to use a different uid, update this
+    # value in lockstep with the appVersion bump.
+    runAsUser: 100
+    runAsGroup: 101
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+sidecarInjector:
+  # See operator.resources comment — requests-only by convention.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
+walReplicaPlugin:
+  # See operator.resources comment — requests-only by convention.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    # Must match the USER directive in the wal-replica plugin image's
+    # Dockerfile. Pinned numerically (not by name) so kubelet's
+    # runAsNonRoot check can verify it without consulting /etc/passwd.
+    # Aligned with sidecarInjector (both are CNPG-I plugins); update in
+    # lockstep with the eventual wal-replica Dockerfile.
+    runAsUser: 10001
+    runAsGroup: 10001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  priorityClassName: ""
+
 cloudnative-pg:
   namespaceOverride: cnpg-system
   additionalEnv:

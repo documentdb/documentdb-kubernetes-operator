@@ -183,7 +183,7 @@ jobs:
       # scenarios. If any of the *_IMAGE values are left unset the
       # upgrade specs Skip at runtime (see test/e2e/tests/upgrade/).
       E2E_UPGRADE: ${{ matrix.group == 'upgrade' && '1' || '' }}
-      E2E_UPGRADE_PREVIOUS_CHART: ${{ vars.E2E_UPGRADE_PREVIOUS_CHART || 'oci://ghcr.io/documentdb/charts/documentdb-operator' }}
+      E2E_UPGRADE_PREVIOUS_CHART: ${{ vars.E2E_UPGRADE_PREVIOUS_CHART || 'oci://ghcr.io/documentdb/documentdb-operator' }}
       E2E_UPGRADE_PREVIOUS_VERSION: ${{ vars.E2E_UPGRADE_PREVIOUS_VERSION || '' }}
       E2E_UPGRADE_CURRENT_CHART: ${{ vars.E2E_UPGRADE_CURRENT_CHART || '' }}
       E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE: ${{ vars.E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE || '' }}

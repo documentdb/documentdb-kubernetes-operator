@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-CLUSTER_NAME="documentdb-cluster"
+CLUSTER_NAME="${CLUSTER_NAME:-documentdb-contrib-cluster}"
 REGION="us-west-2"
 K8S_VERSION="${K8S_VERSION:-1.35}"
 NODE_TYPE="${NODE_TYPE:-m7g.large}"
@@ -28,6 +28,13 @@ OPERATOR_CHART_VERSION="0.1.0"
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
 DEPLOY_INSTANCE="${DEPLOY_INSTANCE:-false}"
+
+# Logging and observability configuration
+# LOG_RETENTION_DAYS: CloudWatch log group retention (allowed values: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, ...)
+# CONTROL_PLANE_LOG_TYPES: comma-separated EKS control plane log types to enable
+#   (valid: api, audit, authenticator, controllerManager, scheduler). Keep small to control cost.
+LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-3}"
+CONTROL_PLANE_LOG_TYPES="${CONTROL_PLANE_LOG_TYPES:-api,authenticator}"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -81,6 +88,14 @@ while [[ $# -gt 0 ]]; do
             CLUSTER_TAGS="$2"
             shift 2
             ;;
+        --log-retention)
+            LOG_RETENTION_DAYS="$2"
+            shift 2
+            ;;
+        --control-plane-log-types)
+            CONTROL_PLANE_LOG_TYPES="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -89,7 +104,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-instance       Skip DocumentDB instance deployment (default)"
             echo "  --install-operator    Install DocumentDB operator"
             echo "  --deploy-instance     Deploy DocumentDB instance"
-            echo "  --cluster-name NAME   EKS cluster name (default: documentdb-cluster)"
+            echo "  --cluster-name NAME   EKS cluster name (default: documentdb-contrib-cluster)"
             echo "  --region REGION       AWS region (default: us-west-2)"
             echo "  --github-username     GitHub username for operator installation"
             echo "  --github-token        GitHub token for operator installation"
@@ -100,6 +115,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --spot                Use Spot-backed managed nodes (DEV/TEST ONLY - can be terminated)"
             echo "  --tags TAGS           Cost allocation tags as key=value pairs (comma-separated)"
             echo "                        (default: project=documentdb-playground,environment=dev,managed-by=eksctl)"
+            echo ""
+            echo "Logging / observability options:"
+            echo "  --log-retention DAYS           CloudWatch retention in days (default: 3)"
+            echo "                                 Valid: 1,3,5,7,14,30,60,90,120,150,180,365,400,545,731,1827,3653"
+            echo "  --control-plane-log-types LST  Comma-separated EKS control-plane log types (default: api,authenticator)"
+            echo "                                 Valid: api,audit,authenticator,controllerManager,scheduler"
             echo ""
             echo "  -h, --help           Show this help message"
             echo ""
@@ -144,36 +165,85 @@ error() {
     exit 1
 }
 
+error_no_exit() {
+    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ❌ $1${NC}"
+}
+
 # Check prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
-    
+
     # Check AWS CLI
     if ! command -v aws &> /dev/null; then
         error "AWS CLI not found. Please install AWS CLI first."
     fi
-    
+
     # Check eksctl
     if ! command -v eksctl &> /dev/null; then
         error "eksctl not found. Please install eksctl first."
     fi
-    
+
     # Check kubectl
     if ! command -v kubectl &> /dev/null; then
         error "kubectl not found. Please install kubectl first."
     fi
-    
+
     # Check Helm
     if ! command -v helm &> /dev/null; then
         error "Helm not found. Please install Helm first."
     fi
-    
+
     # Check AWS credentials
     if ! aws sts get-caller-identity &> /dev/null; then
         error "AWS credentials not configured. Please run 'aws configure' first."
     fi
-    
+
+    # Optional but recommended: mongosh for endpoint validation. Mirrors the DocumentDB
+    # troubleshooting best practice of verifying local client tooling before blaming the server.
+    if ! command -v mongosh &> /dev/null; then
+        warn "mongosh not found. Install with: brew install mongosh (macOS) or see https://www.mongodb.com/docs/mongodb-shell/install/"
+        warn "Local connection validation (kubectl port-forward + mongosh) won't work until mongosh is installed."
+    fi
+
     success "All prerequisites met"
+}
+
+# Show CloudFormation stack events for eksctl-managed stacks
+show_cloudformation_events() {
+    local status_filter="$1"  # "CREATE_FAILED" or "CREATE_COMPLETE"
+    local stacks
+    stacks=$(aws cloudformation list-stacks --region "$REGION" \
+        --stack-status-filter CREATE_COMPLETE CREATE_FAILED ROLLBACK_COMPLETE ROLLBACK_IN_PROGRESS \
+        --query "StackSummaries[?starts_with(StackName, 'eksctl-${CLUSTER_NAME}')].StackName" \
+        --output text 2>/dev/null)
+
+    if [ -z "$stacks" ]; then
+        warn "No CloudFormation stacks found for cluster $CLUSTER_NAME"
+        return
+    fi
+
+    for stack in $stacks; do
+        log "CloudFormation stack: $stack"
+        if [ "$status_filter" == "CREATE_FAILED" ]; then
+            local failures
+            failures=$(aws cloudformation describe-stack-events --region "$REGION" \
+                --stack-name "$stack" \
+                --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
+                --output table 2>/dev/null)
+            if [ -n "$failures" ] && ! echo "$failures" | grep -q "^$"; then
+                error_no_exit "Failed resources in $stack:"
+                echo "$failures"
+            else
+                success "No failures in $stack"
+            fi
+        else
+            local stack_status
+            stack_status=$(aws cloudformation describe-stacks --region "$REGION" \
+                --stack-name "$stack" \
+                --query "Stacks[0].StackStatus" --output text 2>/dev/null)
+            log "  Status: $stack_status"
+        fi
+    done
 }
 
 # Create EKS cluster
@@ -195,6 +265,7 @@ create_cluster() {
         warn "============================================================"
     fi
 
+    # 2 AZs is the minimum EKS supports, reduced from eksctl default of 3 for cost reasons.
     local EKSCTL_ARGS=(
         --name "$CLUSTER_NAME"
         --region "$REGION"
@@ -214,12 +285,186 @@ create_cluster() {
         EKSCTL_ARGS+=(--node-type "$NODE_TYPE")
     fi
 
-    eksctl create cluster "${EKSCTL_ARGS[@]}"
+    eksctl create cluster "${EKSCTL_ARGS[@]}" --zones "${REGION}a,${REGION}b"
+    local exit_code=$?
 
-    if [ $? -eq 0 ]; then
+    log "Retrieving CloudFormation stack events..."
+    if [ $exit_code -eq 0 ]; then
+        show_cloudformation_events "CREATE_COMPLETE"
         success "EKS cluster created successfully"
     else
+        show_cloudformation_events "CREATE_FAILED"
         error "Failed to create EKS cluster"
+    fi
+}
+
+# Enable EKS control plane logging to CloudWatch
+# https://docs.aws.amazon.com/prescriptive-guidance/latest/amazon-eks-observability-best-practices/logging-best-practices.html
+enable_control_plane_logging() {
+    log "Enabling EKS control plane logging: $CONTROL_PLANE_LOG_TYPES"
+    eksctl utils update-cluster-logging \
+        --region "$REGION" \
+        --cluster "$CLUSTER_NAME" \
+        --enable-types "$CONTROL_PLANE_LOG_TYPES" \
+        --approve \
+        && success "Control plane logging enabled" \
+        || warn "Failed to enable control plane logging (continuing)"
+}
+
+# Install Amazon CloudWatch Observability EKS add-on (managed collector for Container Insights)
+install_cloudwatch_observability_addon() {
+    log "Installing Amazon CloudWatch Observability EKS add-on..."
+
+    # Pod identity agent is required to create pod identity associations.
+    local POD_IDENTITY_STATUS
+    POD_IDENTITY_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "eks-pod-identity-agent" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || true)
+    if [ -z "$POD_IDENTITY_STATUS" ] || [ "$POD_IDENTITY_STATUS" = "None" ]; then
+        log "Installing eks-pod-identity-agent add-on (required for CloudWatch agent IAM)..."
+        eksctl create addon \
+            --cluster "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --name eks-pod-identity-agent >/dev/null 2>&1 \
+            || warn "Failed to install eks-pod-identity-agent add-on (continuing)"
+    fi
+
+    # Grant CloudWatch agent permission through pod identity (recommended least-privilege path).
+    local CW_ASSOC_COUNT
+    CW_ASSOC_COUNT=$(aws eks list-pod-identity-associations \
+        --cluster-name "$CLUSTER_NAME" \
+        --region "$REGION" \
+        --query "length(associations[?namespace=='amazon-cloudwatch' && serviceAccount=='cloudwatch-agent'])" \
+        --output text 2>/dev/null || echo "0")
+    if [ "$CW_ASSOC_COUNT" = "0" ]; then
+        log "Creating pod identity association for amazon-cloudwatch/cloudwatch-agent..."
+        eksctl create podidentityassociation \
+            --cluster "$CLUSTER_NAME" \
+            --region "$REGION" \
+            --namespace amazon-cloudwatch \
+            --service-account-name cloudwatch-agent \
+            --create-service-account \
+            --permission-policy-arns arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy >/dev/null 2>&1 \
+            || warn "Failed to create pod identity association for cloudwatch-agent"
+    fi
+
+    local ADDON_NAME="amazon-cloudwatch-observability"
+    local ADDON_STATUS
+    ADDON_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || true)
+
+    if [ -n "$ADDON_STATUS" ] && [ "$ADDON_STATUS" != "None" ]; then
+        log "CloudWatch Observability add-on already exists (status=$ADDON_STATUS); updating to latest compatible version"
+        aws eks update-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name "$ADDON_NAME" \
+            --region "$REGION" \
+            --resolve-conflicts OVERWRITE >/dev/null 2>&1 \
+            || warn "Failed to update add-on (continuing with existing installation)"
+    else
+        aws eks create-addon \
+            --cluster-name "$CLUSTER_NAME" \
+            --addon-name "$ADDON_NAME" \
+            --region "$REGION" \
+            --resolve-conflicts OVERWRITE >/dev/null 2>&1 \
+            || warn "Failed to create add-on (it may already exist or require IAM setup)"
+    fi
+
+    log "Waiting for CloudWatch Observability add-on to become ACTIVE..."
+    if aws eks wait addon-active \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" 2>/dev/null; then
+        success "CloudWatch Observability add-on is ACTIVE"
+    else
+        warn "Add-on did not become ACTIVE in time; checking current status"
+    fi
+
+    local FINAL_STATUS
+    FINAL_STATUS=$(aws eks describe-addon \
+        --cluster-name "$CLUSTER_NAME" \
+        --addon-name "$ADDON_NAME" \
+        --region "$REGION" \
+        --query 'addon.status' \
+        --output text 2>/dev/null || echo "UNKNOWN")
+    log "Add-on status: $FINAL_STATUS"
+
+    # The add-on manages collector deployment details internally.
+    # Namespace/components can vary by add-on/EKS version, so this is best-effort visibility.
+    if kubectl get ns amazon-cloudwatch >/dev/null 2>&1; then
+        kubectl get pods -n amazon-cloudwatch || true
+    else
+        warn "amazon-cloudwatch namespace not found yet (collector may still be reconciling)"
+    fi
+}
+
+# Set CloudWatch log group retention for cost control.
+# Log groups may not exist yet (collector creates them lazily on first log);
+# we retry for up to ~3 minutes per group.
+set_log_retention() {
+    log "Setting CloudWatch log retention to $LOG_RETENTION_DAYS days..."
+    local groups=(
+        "/aws/eks/${CLUSTER_NAME}/cluster"
+        "/aws/containerinsights/${CLUSTER_NAME}/application"
+        "/aws/containerinsights/${CLUSTER_NAME}/dataplane"
+        "/aws/containerinsights/${CLUSTER_NAME}/host"
+        "/aws/containerinsights/${CLUSTER_NAME}/performance"
+    )
+    for group in "${groups[@]}"; do
+        local set=false
+        for i in {1..6}; do
+            # Add-on collectors can create groups lazily; proactively create if missing.
+            aws logs create-log-group --log-group-name "$group" --region "$REGION" >/dev/null 2>&1 || true
+            if aws logs put-retention-policy \
+                --log-group-name "$group" \
+                --retention-in-days "$LOG_RETENTION_DAYS" \
+                --region "$REGION" 2>/dev/null; then
+                success "Retention set on $group: ${LOG_RETENTION_DAYS}d"
+                set=true
+                break
+            fi
+            sleep 30
+        done
+        if [ "$set" = false ]; then
+            warn "Log group $group not created yet; will need manual retention: aws logs put-retention-policy --log-group-name $group --retention-in-days $LOG_RETENTION_DAYS --region $REGION"
+        fi
+    done
+}
+
+# Create VPC endpoints for cost optimization (S3 Gateway endpoint is free)
+create_vpc_endpoints() {
+    log "Creating VPC endpoints for cost optimization..."
+
+    VPC_ID=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" \
+        --query 'cluster.resourcesVpcConfig.vpcId' --output text)
+
+    if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+        warn "Could not determine VPC ID. Skipping VPC endpoint creation."
+        return 0
+    fi
+
+    ROUTE_TABLE_IDS=$(aws ec2 describe-route-tables --region "$REGION" \
+        --filters "Name=vpc-id,Values=$VPC_ID" \
+        --query 'RouteTables[].RouteTableId' --output text)
+
+    # S3 Gateway Endpoint (free - reduces NAT Gateway data transfer costs)
+    if aws ec2 describe-vpc-endpoints --region "$REGION" \
+        --filters "Name=vpc-id,Values=$VPC_ID" "Name=service-name,Values=com.amazonaws.$REGION.s3" \
+        --query 'VpcEndpoints[0].VpcEndpointId' --output text 2>/dev/null | grep -q "vpce-"; then
+        warn "S3 VPC endpoint already exists. Skipping creation."
+    else
+        aws ec2 create-vpc-endpoint \
+            --vpc-id "$VPC_ID" \
+            --service-name "com.amazonaws.$REGION.s3" \
+            --route-table-ids $ROUTE_TABLE_IDS \
+            --region "$REGION" 2>/dev/null && success "S3 Gateway VPC endpoint created (free)" || warn "Could not create S3 VPC endpoint"
     fi
 }
 
@@ -432,33 +677,63 @@ install_documentdb_operator() {
         warn "DocumentDB operator already installed. Skipping installation."
         return 0
     fi
-
-    # Install from the GHCR OCI Helm chart. The chart is published only to OCI;
-    # the previously documented public Helm repository (gh-pages) has been retired.
-    # GHCR allows anonymous pulls of public charts; if your environment requires
-    # authentication, set GITHUB_USERNAME and GITHUB_TOKEN (with read:packages scope)
-    # before running this script and we will run `helm registry login` for you.
-    if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_USERNAME:-}" ]; then
-        log "Authenticating with GitHub Container Registry..."
-        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-            error "Failed to authenticate with GitHub Container Registry. Please verify GITHUB_TOKEN and GITHUB_USERNAME."
-        fi
-    fi
-
-    OCI_CHART="oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
-    log "Installing DocumentDB operator from ${OCI_CHART} (version ${OPERATOR_CHART_VERSION})..."
-    if helm install documentdb-operator \
-        "$OCI_CHART" \
-        --version "$OPERATOR_CHART_VERSION" \
+    
+    # Try public Helm repository first (no authentication required)
+    log "Adding DocumentDB public Helm repository..."
+    helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
+    helm repo update documentdb
+    
+    log "Installing DocumentDB operator from public Helm repository..."
+    if helm install documentdb-operator documentdb/documentdb-operator \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
-        --timeout 10m; then
-        success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        --timeout 10m 2>/dev/null; then
+        success "DocumentDB operator installed successfully from public Helm repository"
     else
-        error "Failed to install DocumentDB operator. Please verify:
-- The chart version ${OPERATOR_CHART_VERSION} exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
-- If your network requires authentication, set GITHUB_USERNAME and GITHUB_TOKEN (read:packages scope) and re-run"
+        # Fallback to OCI registry with GitHub authentication
+        warn "Public Helm repository installation failed. Falling back to OCI registry..."
+        
+        # Check for GitHub authentication
+        if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
+            error "DocumentDB operator installation requires GitHub authentication as fallback.
+
+Please set the following environment variables:
+  export GITHUB_USERNAME='your-github-username'
+  export GITHUB_TOKEN='your-github-token'
+
+To create a GitHub token:
+1. Go to https://github.com/settings/tokens
+2. Generate a new token with 'read:packages' scope
+3. Export the token as shown above
+
+Then run the script again with --install-operator"
+        fi
+        
+        # Authenticate with GitHub Container Registry
+        log "Authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
+        fi
+        
+        # Install DocumentDB operator from OCI registry
+        log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+        helm install documentdb-operator \
+            oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
+            --version ${OPERATOR_CHART_VERSION} \
+            --namespace documentdb-operator \
+            --create-namespace \
+            --wait \
+            --timeout 10m
+
+        if [ $? -eq 0 ]; then
+            success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        else
+            error "Failed to install DocumentDB operator. Please verify:
+- Your GitHub token has 'read:packages' scope
+- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
+- The chart version ${OPERATOR_CHART_VERSION} exists"
+        fi
     fi
     
     # Wait for operator to be ready
@@ -542,6 +817,43 @@ EOF
     log "📝 AWS LoadBalancer annotations are automatically applied by the operator based on environment: eks"
 }
 
+# Run DocumentDB post-deploy diagnostics (adapted from DocumentDB troubleshooting best practices).
+# Uses kubectl logs intentionally since CloudWatch may not have flushed recent lines yet.
+diagnose_documentdb() {
+    if [ "$DEPLOY_INSTANCE" != "true" ]; then
+        return 0
+    fi
+
+    log "Running DocumentDB diagnostics..."
+
+    # 1. Verify pods are running (k8s equivalent of 'docker ps' / 'systemctl status')
+    log "Checking DocumentDB pods..."
+    kubectl get pods -n documentdb-instance-ns -o wide || true
+
+    # 2. Recent operator logs (k8s equivalent of 'docker logs' / 'journalctl')
+    log "Recent operator logs (tail 20):"
+    kubectl logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator --tail=20 2>/dev/null || warn "Operator logs unavailable"
+
+    # 3. Recent instance pod logs
+    log "Recent DocumentDB instance logs (tail 20):"
+    kubectl logs -n documentdb-instance-ns sample-documentdb-1 --tail=20 2>/dev/null || warn "Instance pod not found or not ready"
+
+    # 4. Verify service endpoint
+    log "Checking DocumentDB service..."
+    kubectl get svc -n documentdb-instance-ns documentdb-service-sample-documentdb 2>/dev/null || warn "Service not found"
+
+    # 5. Ping test via in-cluster mongosh (validate endpoint independently of app code)
+    log "Testing DocumentDB connectivity via in-cluster mongosh..."
+    if kubectl run mongosh-diag-$RANDOM --rm -i --restart=Never --quiet \
+        --image=mongo:7 -n documentdb-instance-ns -- \
+        mongosh "mongodb://docdbadmin:SecurePassword123!@documentdb-service-sample-documentdb:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true" \
+        --quiet --eval "db.runCommand({ping: 1})" 2>/dev/null | grep -q "ok.*1"; then
+        success "DocumentDB ping succeeded"
+    else
+        warn "DocumentDB ping failed -- see troubleshooting guide in summary"
+    fi
+}
+
 # Print summary
 print_summary() {
     echo ""
@@ -556,13 +868,19 @@ print_summary() {
     echo "Tags: $CLUSTER_TAGS"
     echo "Operator Installed: $INSTALL_OPERATOR"
     echo "Instance Deployed: $DEPLOY_INSTANCE"
+    echo "Log Retention: $LOG_RETENTION_DAYS days"
+    echo "Control Plane Log Types: $CONTROL_PLANE_LOG_TYPES"
     echo ""
     echo "✅ Components installed:"
     echo "  - EKS cluster with managed nodes ($NODE_TYPE)"
+    echo "  - S3 Gateway VPC endpoint (cost optimization)"
     echo "  - EBS CSI driver"
     echo "  - AWS Load Balancer Controller"
     echo "  - cert-manager"
     echo "  - DocumentDB storage class"
+    echo "  - EKS control plane logging ($CONTROL_PLANE_LOG_TYPES) -> CloudWatch"
+    echo "  - Amazon CloudWatch Observability add-on -> CloudWatch"
+    echo "  - CloudWatch log retention: $LOG_RETENTION_DAYS days"
     if [ "$INSTALL_OPERATOR" == "true" ]; then
         echo "  - DocumentDB operator"
     fi
@@ -570,9 +888,17 @@ print_summary() {
         echo "  - DocumentDB instance (sample-documentdb)"
     fi
     echo ""
+    echo "📊 CloudWatch Log Groups (retention: ${LOG_RETENTION_DAYS}d):"
+    echo "  - /aws/eks/$CLUSTER_NAME/cluster                       (control plane)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/application     (pod stdout/stderr)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/dataplane       (system pods, kubelet)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/host            (node OS logs)"
+    echo "  - /aws/containerinsights/$CLUSTER_NAME/performance     (container insights performance)"
+    echo ""
     echo "💡 Next steps:"
     echo "  - Verify cluster: kubectl get nodes"
     echo "  - Check all pods: kubectl get pods --all-namespaces"
+    echo "  - Verify add-on: aws eks describe-addon --cluster-name $CLUSTER_NAME --region $REGION --addon-name amazon-cloudwatch-observability"
     if [ "$INSTALL_OPERATOR" == "true" ]; then
         echo "  - Check operator: kubectl get pods -n documentdb-operator"
     fi
@@ -581,6 +907,39 @@ print_summary() {
         echo "  - Check service status: kubectl get svc -n documentdb-instance-ns"
         echo "  - Wait for LoadBalancer IP: kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns -w"
         echo "  - Once IP is assigned, connect: mongodb://docdbadmin:SecurePassword123!@<EXTERNAL-IP>:10260/"
+        echo ""
+        echo "🔎 Troubleshooting (adapted from DocumentDB troubleshooting best practices):"
+        echo ""
+        echo "  1. Verify instance is running (k8s equivalent of 'docker ps' / 'systemctl status'):"
+        echo "     kubectl get pods -n documentdb-instance-ns"
+        echo ""
+        echo "  2. Check logs (PRIMARY path via CloudWatch; observability add-on ships pod logs here):"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION --since 1h --follow"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION \\"
+        echo "         --filter-pattern '{ \$.kubernetes.namespace_name = \"documentdb-operator\" }' --since 1h"
+        echo "     aws logs tail /aws/containerinsights/$CLUSTER_NAME/application --region $REGION \\"
+        echo "         --filter-pattern '{ \$.kubernetes.pod_name = \"sample-documentdb-1\" }' --since 1h"
+        echo "     aws logs tail /aws/eks/$CLUSTER_NAME/cluster --region $REGION --since 1h    # control plane"
+        echo ""
+        echo "  3. Check logs (FALLBACK via kubectl -- real-time streaming or if CloudWatch broken):"
+        echo "     kubectl logs -n documentdb-operator -l app.kubernetes.io/name=documentdb-operator -f"
+        echo "     kubectl logs -n documentdb-instance-ns sample-documentdb-1 -f"
+        echo ""
+        echo "  4. Verify CloudWatch Observability add-on health (if CloudWatch logs are missing):"
+        echo "     aws eks describe-addon --cluster-name $CLUSTER_NAME --region $REGION --addon-name amazon-cloudwatch-observability"
+        echo "     kubectl get pods -n amazon-cloudwatch"
+        echo ""
+        echo "  5. Verify local client tooling works (k8s equivalent of 'python -c import pymongo'):"
+        echo "     which mongosh && mongosh --version"
+        echo "     which kubectl && kubectl version --client"
+        echo ""
+        echo "  6. Validate the endpoint independently of your application code:"
+        echo "     kubectl port-forward -n documentdb-instance-ns svc/documentdb-service-sample-documentdb 10260:10260 &"
+        echo "     mongosh \"mongodb://docdbadmin:SecurePassword123!@localhost:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true\""
+        echo ""
+        echo "  7. TLS / certificate errors:"
+        echo "     - For self-signed certs (default): keep tlsAllowInvalidCertificates=true in the connection string"
+        echo "     - For trusted certs: export CA and pass tlsCAFile=/path/to/ca.pem instead"
     fi
     echo ""
     echo "⚠️  IMPORTANT: Run './delete-cluster.sh' when done to avoid AWS charges!"
@@ -599,20 +958,31 @@ main() {
     log "  Tags: $CLUSTER_TAGS"
     log "  Install Operator: $INSTALL_OPERATOR"
     log "  Deploy Instance: $DEPLOY_INSTANCE"
+    log "  Log Retention (days): $LOG_RETENTION_DAYS"
+    log "  Control Plane Log Types: $CONTROL_PLANE_LOG_TYPES"
     echo ""
     
     # Execute setup steps
     check_prerequisites
     create_cluster
+    enable_control_plane_logging
+    create_vpc_endpoints
     install_ebs_csi
     install_load_balancer_controller
     install_cert_manager
     create_storage_class
-    
+
+    # Logging/observability pipeline
+    install_cloudwatch_observability_addon
+    set_log_retention
+
     # Optional components
     install_documentdb_operator
     deploy_documentdb_instance
-    
+
+    # Post-deploy diagnostics (no-op if --skip-instance)
+    diagnose_documentdb
+
     # Show summary
     print_summary
 }
