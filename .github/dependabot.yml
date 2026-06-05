@@ -1,0 +1,72 @@
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /operator/src
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      go-stdlib-and-x:
+        patterns:
+          - "golang.org/x/*"
+          - "stdlib"
+
+  - package-ecosystem: gomod
+    directory: /documentdb-kubectl-plugin
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      go-stdlib-and-x:
+        patterns:
+          - "golang.org/x/*"
+          - "stdlib"
+
+  - package-ecosystem: gomod
+    directory: /operator/cnpg-plugins/sidecar-injector
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      go-stdlib-and-x:
+        patterns:
+          - "golang.org/x/*"
+          - "stdlib"
+
+  - package-ecosystem: gomod
+    directory: /test/e2e
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      go-stdlib-and-x:
+        patterns:
+          - "golang.org/x/*"
+          - "stdlib"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
