@@ -47,6 +47,49 @@ var _ = Describe("Backup Controller", func() {
 	})
 
 	Describe("createCNPGBackup", func() {
+		It("returns error and sets phase to Failed when CreateCNPGBackup fails", func() {
+			// Use a scheme without DocumentDB types so SetControllerReference fails
+			brokenScheme := runtime.NewScheme()
+			Expect(cnpgv1.AddToScheme(brokenScheme)).To(Succeed())
+
+			backup := &dbpreview.Backup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      backupName,
+					Namespace: backupNamespace,
+				},
+				Spec: dbpreview.BackupSpec{
+					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
+				},
+			}
+
+			cluster := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: backupNamespace,
+				},
+			}
+
+			// Need full scheme for the fake client (status patch) but broken scheme for reconciler
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(backup).
+				WithStatusSubresource(&dbpreview.Backup{}).
+				Build()
+
+			reconciler := &BackupReconciler{
+				Client:   fakeClient,
+				Scheme:   brokenScheme, // missing DocumentDB types → SetControllerReference fails
+				Recorder: recorder,
+			}
+
+			replicationContext := &util.ReplicationContext{
+				CNPGClusterName: clusterName,
+			}
+			res, err := reconciler.createCNPGBackup(ctx, backup, cluster, replicationContext)
+			Expect(err).ToNot(HaveOccurred()) // SetBackupPhaseFailed handles it
+			Expect(res.RequeueAfter).To(BeNumerically(">", 0))
+		})
+
 		It("creates a CNPG Backup with expected spec and owner reference and requeues", func() {
 			// fake client + reconciler
 			fakeClient := fake.NewClientBuilder().
