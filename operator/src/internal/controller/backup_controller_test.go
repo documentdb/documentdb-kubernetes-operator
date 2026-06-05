@@ -8,13 +8,16 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -40,6 +43,7 @@ var _ = Describe("Backup Controller", func() {
 		// register both preview and CNPG types used by the controller
 		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
+		Expect(snapshotv1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	Describe("createCNPGBackup", func() {
@@ -263,5 +267,69 @@ var _ = Describe("Backup Controller", func() {
 			Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, updated)).To(Succeed())
 			Expect(string(updated.Status.Phase)).To(Equal(string(cnpgv1.BackupPhaseRunning)))
 		})
+	})
+
+	Describe("Reconcile", func() {
+			It("creates CNPG Backup using ReplicationContext.CNPGClusterName when no CNPG Backup exists", func() {
+				backup := &dbpreview.Backup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      backupName,
+						Namespace: backupNamespace,
+					},
+					Spec: dbpreview.BackupSpec{
+						Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
+					},
+					Status: dbpreview.BackupStatus{
+						Phase: cnpgv1.BackupPhasePending,
+					},
+				}
+
+				// DocumentDB cluster without replication (IsPrimary() and EndpointEnabled() are true)
+				cluster := &dbpreview.DocumentDB{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      clusterName,
+						Namespace: backupNamespace,
+					},
+				}
+
+				// Pre-existing default VolumeSnapshotClass so ensureVolumeSnapshotClass succeeds
+				vsc := &snapshotv1.VolumeSnapshotClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "default-snapclass",
+						Annotations: map[string]string{
+							"snapshot.storage.kubernetes.io/is-default-class": "true",
+						},
+					},
+					Driver:         "fake.csi.driver",
+					DeletionPolicy: snapshotv1.VolumeSnapshotContentDelete,
+				}
+
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(backup, cluster, vsc).
+					WithStatusSubresource(&dbpreview.Backup{}).
+					Build()
+
+				reconciler := &BackupReconciler{
+					Client:   fakeClient,
+					Scheme:   scheme,
+					Recorder: recorder,
+				}
+
+				res, err := reconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      backupName,
+						Namespace: backupNamespace,
+					},
+				})
+				Expect(err).ToNot(HaveOccurred())
+				Expect(res.RequeueAfter).To(Equal(5 * time.Second))
+
+				// Verify a CNPG Backup was created with cluster name matching the DocumentDB name
+				// (no replication → CNPGClusterName == DocumentDB name)
+				cnpgBackup := &cnpgv1.Backup{}
+				Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, cnpgBackup)).To(Succeed())
+				Expect(cnpgBackup.Spec.Cluster.Name).To(Equal(clusterName))
+			})
 	})
 })
