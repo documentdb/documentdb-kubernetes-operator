@@ -107,7 +107,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.114.0
+          image: otel/opentelemetry-collector-contrib:0.149.0
           args: ["--config=/etc/collector/collector.yaml"]
           env:
             - name: K8S_NODE_NAME
