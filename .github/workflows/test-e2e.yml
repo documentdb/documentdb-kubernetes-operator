@@ -119,6 +119,7 @@ jobs:
             {"architecture":"amd64","runner":"ubuntu-22.04","group":"tls","default_filter":"tls","procs":"auto","paths":"./tests/tls"},
             {"architecture":"amd64","runner":"ubuntu-22.04","group":"feature","default_filter":"feature-gates || exposure || status","procs":"auto","paths":"./tests/feature_gates ./tests/exposure ./tests/status"},
             {"architecture":"amd64","runner":"ubuntu-22.04","group":"upgrade","default_filter":"upgrade","procs":"1","paths":"./tests/upgrade"},
+            {"architecture":"amd64","runner":"ubuntu-22.04","group":"cluster-replication","default_filter":"cluster-replication","procs":"1","paths":"./tests/cluster_replication"},
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"smoke","default_filter":"smoke","procs":"auto","paths":"./tests/lifecycle"},
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"lifecycle","default_filter":"lifecycle","procs":"auto","paths":"./tests/lifecycle"},
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"scale","default_filter":"scale","procs":"2","paths":"./tests/scale"},
@@ -126,7 +127,8 @@ jobs:
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"backup","default_filter":"backup","procs":"2","paths":"./tests/backup"},
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"tls","default_filter":"tls","procs":"auto","paths":"./tests/tls"},
             {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"feature","default_filter":"feature-gates || exposure || status","procs":"auto","paths":"./tests/feature_gates ./tests/exposure ./tests/status"},
-            {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"upgrade","default_filter":"upgrade","procs":"1","paths":"./tests/upgrade"}
+            {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"upgrade","default_filter":"upgrade","procs":"1","paths":"./tests/upgrade"},
+            {"architecture":"arm64","runner":"ubuntu-22.04-arm","group":"cluster-replication","default_filter":"cluster-replication","procs":"1","paths":"./tests/cluster_replication"}
           ]'
           perf='[
             {"architecture":"amd64","runner":"ubuntu-22.04","group":"performance","default_filter":"performance","procs":"1","paths":"./tests/performance"},

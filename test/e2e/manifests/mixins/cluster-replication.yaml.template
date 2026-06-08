@@ -1,0 +1,12 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  clusterReplication:
+    crossCloudNetworkingStrategy: "None"
+    primary: "${REPL_PRIMARY}"
+    clusterList:
+      - name: "${REPL_MEMBER_1}"
+      - name: "${REPL_MEMBER_2}"

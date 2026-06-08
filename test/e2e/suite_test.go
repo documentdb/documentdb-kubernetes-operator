@@ -108,7 +108,7 @@ func allAreaLabels() []string {
 	return []string{
 		LifecycleLabel, ScaleLabel, DataLabel, PerformanceLabel,
 		BackupLabel, RecoveryLabel, TLSLabel, FeatureLabel,
-		ExposureLabel, StatusLabel, UpgradeLabel,
+		ExposureLabel, StatusLabel, UpgradeLabel, ClusterReplicationLabel,
 	}
 }
 
