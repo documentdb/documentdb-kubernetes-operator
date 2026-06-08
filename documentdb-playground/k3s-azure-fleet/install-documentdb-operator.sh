@@ -157,12 +157,15 @@ for region in "${K3S_REGION_ARRAY[@]}"; do
     --scripts 'which helm || (curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash)' \
     --query 'value[0].message' -o tsv 2>/dev/null | awk '/^\[stdout\]/{flag=1; next} /^\[stderr\]/{flag=0} flag'
 
-  # Step 2b: Install CNPG from upstream release manifest
+  # Step 2b: Install CloudNative-PG from upstream release manifest.
+  # Keep this version in lockstep with the cnpg subchart pulled in by the
+  # AKS-hub Helm chart (currently 1.29.1 as bundled by chart 0.28.1); a
+  # version skew between the hub and k3s members causes interop bugs.
   echo "  Installing CloudNative-PG..."
   az vm run-command invoke -g "$RESOURCE_GROUP" -n "$VM_NAME" --command-id RunShellScript \
     --scripts '
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/main/releases/cnpg-1.27.1.yaml 2>&1 | tail -3
+kubectl apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/main/releases/cnpg-1.29.1.yaml 2>&1 | tail -3
 echo "Waiting for CNPG..."
 kubectl -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=120s 2>&1 || true
 echo "CNPG ready"
