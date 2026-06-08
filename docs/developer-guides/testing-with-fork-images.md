@@ -6,7 +6,7 @@ It covers two independent image tracks — pick whichever you actually changed:
 
 | Track | What it ships | Repo to fork & build from | Workflow to run |
 |---|---|---|---|
-| **Operator track** | `operator`, `sidecar`, optional `wal-replica` | This repo (`documentdb/documentdb-kubernetes-operator`) | [`RELEASE - Build Operator Candidate Images`](../../.github/workflows/build_operator_images.yml) |
+| **Operator track** | `operator`, `sidecar` | This repo (`documentdb/documentdb-kubernetes-operator`) | [`RELEASE - Build Operator Candidate Images`](../../.github/workflows/build_operator_images.yml) |
 | **Database track** | `documentdb` (extension), `gateway` | Upstream [`documentdb/documentdb`](https://github.com/documentdb/documentdb) **then** this repo | DocumentDB release pipeline → [`RELEASE - Build DocumentDB Candidate Images`](../../.github/workflows/build_documentdb_images.yml) |
 
 If your change is purely Go controller code, skip Step 1 entirely and use the upstream `0.110.0` (or any released) database images.
@@ -17,9 +17,10 @@ If your change is purely Go controller code, skip Step 1 entirely and use the up
 
 - A fork of [`documentdb/documentdb-kubernetes-operator`](https://github.com/documentdb/documentdb-kubernetes-operator) with Actions enabled
 - (If changing the database) a fork of [`documentdb/documentdb`](https://github.com/documentdb/documentdb) with Actions enabled
-- A Kubernetes cluster with cert-manager installed (`v1.13.2+`) and Kubernetes `1.35+`
-- `kubectl`, `helm 3.x`, `git`
-- GHCR packages on your fork should be **public** (default for public forks). Otherwise create a `dockerconfigjson` pull secret and reference it via `imagePullSecrets`.
+- A Kubernetes cluster with cert-manager installed (`v1.19+`, aligned with the [version compatibility matrix in AGENTS.md](../../AGENTS.md#version-compatibility-matrix)) and Kubernetes `1.35+`
+- A Kubernetes node runtime backed by `containerd` or `CRI-O`. The operator requires the `ImageVolume` feature (GA in Kubernetes 1.35) to mount the DocumentDB extension image, which the legacy Docker runtime does not support.
+- `kubectl`, `helm 3.x`, `git`, `curl`, `jq`
+- GHCR packages on your fork must be **public** for the Helm install below to pull without auth (forks of public repos default to public, but double-check on `https://github.com/<your-gh-user>?tab=packages`). If you must keep them private, create a `dockerconfigjson` pull secret in the `documentdb-operator` namespace and pass `--set imagePullSecrets[0].name=<secret>` to `helm upgrade`; otherwise pods will fail with `ImagePullBackOff` at startup.
 
 ---
 
@@ -33,21 +34,21 @@ Skip this step if you don't need to change the DocumentDB extension or gateway.
     - Per-arch `.deb` assets attached to that release: `deb13-postgresql-18-documentdb_<MAJOR>.<MINOR>-<PATCH>_amd64.deb` and `_arm64.deb`.
     - A `documentdb-local` GHCR image: `ghcr.io/<your-gh-user>/documentdb/documentdb-local:pg17-<MAJOR>.<MINOR>.<PATCH>`.
 
-    The operator-side workflow probes for these exact paths in [its verify steps](../../.github/workflows/build_documentdb_images.yml#L72-L88).
+    The operator-side workflow probes for these exact paths in [its verify steps](../../.github/workflows/build_documentdb_images.yml) (`Verify public extension release assets` and `Verify public gateway source image`).
 
 3. **In your operator fork**, run **Actions → `RELEASE - Build DocumentDB Candidate Images` → Run workflow**. Provide these inputs:
     - `version`: `0.110.0` (or whatever you released in step 2)
     - `documentdb_extension_github_repo`: `<your-gh-user>/documentdb`
     - `documentdb_gateway_image_repo`: `ghcr.io/<your-gh-user>/documentdb/documentdb-local`
 
-4. After the run finishes, your fork has:
+4. After the run finishes, your fork has the candidate tag (and per-arch variants):
 
     ```text
-    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb:0.110.0
-    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/gateway:0.110.0
+    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb:<version>-build-<run_id>-<attempt>-<sha>
+    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/gateway:<version>-build-<run_id>-<attempt>-<sha>
     ```
 
-    (The actual published tag is the `image_tag` output computed by the workflow — usually `<version>-build-<run_id>-<attempt>-<sha>`. The workflow also retags it with the bare `<version>` for convenience; check the run summary.)
+    The workflow only publishes this computed `image_tag` (printed at the top of the run summary as `candidate_version`); it does **not** retag to the bare `<version>`. The bare-version retag is performed by [`release_documentdb_images.yml`](../../.github/workflows/release_documentdb_images.yml), which is the GA promotion path and should not be run for fork testing. Use the candidate tag from the run summary directly in Step 3.
 
 ---
 
@@ -79,12 +80,11 @@ Skip this step if you don't need to change the DocumentDB extension or gateway.
 
 ## Step 3 — Install the local Helm chart against your fork's images
 
-The Helm chart in this repo (`operator/documentdb-helm-chart/`) lets you point each image at your fork via `--set` flags.
+The Helm chart in this repo (`operator/documentdb-helm-chart/`) lets you point the **operator** and **sidecar** images at your fork via `--set` flags. The chart does **not** redirect the `documentdb` and `gateway` container repositories — those default to `ghcr.io/documentdb/documentdb-kubernetes-operator/{documentdb,gateway}:<documentDbVersion>` and can only be overridden per-instance on the `DocumentDB` CR via `spec.documentDBImage` / `spec.gatewayImage` (see the [Deploy a test DocumentDB instance](#deploy-a-test-documentdb-instance) section below).
 
 ```bash
 GH_USER=<your-gh-user>
-OP_TAG=0.2.0-tls-test-1-test            # from Step 2
-DB_TAG=0.110.0                          # from Step 1, or upstream e.g. 0.110.0
+OP_TAG=0.2.0-tls-test-1-test            # operator/sidecar tag from Step 2
 
 cd operator/documentdb-helm-chart
 helm dependency update
@@ -98,10 +98,10 @@ helm upgrade --install documentdb-operator . \
   --wait --timeout 10m
 ```
 
-> **Helm doesn't auto-update CRDs**, so reapply them whenever the API types change:
+> **Helm doesn't auto-update CRDs**, so reapply them whenever the API types change. From inside `operator/documentdb-helm-chart` (where the previous command left you):
 >
 > ```bash
-> kubectl apply -f operator/documentdb-helm-chart/crds/
+> kubectl apply -f ./crds/
 > ```
 
 Verify rollout:
@@ -113,7 +113,36 @@ kubectl get pods -n cnpg-system
 
 ### Deploy a test DocumentDB instance
 
-```yaml
+Create a namespace and credentials Secret first (the operator expects keys `username` and `password`; the default Secret name is `documentdb-credentials` — see [quickstart-kind.md](../operator-public-documentation/preview/getting-started/quickstart-kind.md#create-credentials) for the canonical example):
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-test
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-test
+type: Opaque
+stringData:
+  username: dev_user
+  password: DevPassword123
+EOF
+```
+
+Then apply the test DocumentDB cluster, substituting the candidate tag you noted from the Step 1.4 run summary into `DB_TAG`:
+
+```bash
+GH_USER=<your-gh-user>
+DB_TAG=<version>-build-<run_id>-<attempt>-<sha>   # candidate_version from the Step 1.4 run summary
+                                                  # If you skipped Step 1, use an upstream tag (for example, 0.110.0)
+                                                  # and point the images at ghcr.io/documentdb/...
+
+kubectl apply -f - <<EOF
 apiVersion: documentdb.io/preview
 kind: DocumentDB
 metadata:
@@ -123,13 +152,14 @@ spec:
   nodeCount: 1
   instancesPerNode: 1
   documentDbCredentialSecret: documentdb-credentials
-  documentDBImage: ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/documentdb:0.110.0
-  gatewayImage:    ghcr.io/<your-gh-user>/documentdb-kubernetes-operator/gateway:0.110.0
+  documentDBImage: ghcr.io/${GH_USER}/documentdb-kubernetes-operator/documentdb:${DB_TAG}
+  gatewayImage:    ghcr.io/${GH_USER}/documentdb-kubernetes-operator/gateway:${DB_TAG}
   resource:
     storage:
       pvcSize: 5Gi
   exposeViaService:
     serviceType: ClusterIP
+EOF
 ```
 
 Inspect status:
@@ -157,7 +187,7 @@ Push a fresh tag (for example `0.2.0-tls-test-2`), rerun the operator build work
     ```
 - **Full reinstall**: `helm uninstall documentdb-operator -n documentdb-operator` then rerun the `helm upgrade --install` block above.
 
-If the CRD changed between iterations, reapply: `kubectl apply -f operator/documentdb-helm-chart/crds/`.
+If the CRD changed between iterations, reapply (from inside `operator/documentdb-helm-chart`): `kubectl apply -f ./crds/`. If you're running from the repo root instead, use `kubectl apply -f operator/documentdb-helm-chart/crds/`.
 
 ---
 
