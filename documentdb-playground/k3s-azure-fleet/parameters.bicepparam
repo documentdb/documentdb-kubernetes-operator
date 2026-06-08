@@ -9,7 +9,7 @@ param k3sRegions = [
 
 param aksVmSize = 'Standard_DS2_v2'
 
-param vmSize = 'Standard_D2s_v3'
+param vmSize = 'Standard_D2s_v7'
 
 // SSH key will be provided at deployment time
 param sshPublicKey = ''

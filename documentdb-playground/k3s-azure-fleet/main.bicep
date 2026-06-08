@@ -12,7 +12,7 @@ param k3sRegions array = ['eastus2', 'uksouth']
 param resourceGroupName string = resourceGroup().name
 
 @description('VM size for k3s nodes')
-param vmSize string = 'Standard_D2s_v3'
+param vmSize string = 'Standard_D2s_v7'
 
 @description('AKS node VM size')
 param aksVmSize string = 'Standard_DS2_v2'

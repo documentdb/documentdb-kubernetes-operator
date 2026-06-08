@@ -17,6 +17,7 @@ RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-k3s-fleet-rg}"
 HUB_REGION="${HUB_REGION:-westus3}"
 K3S_REGIONS="${K3S_REGIONS_CSV:-eastus2,uksouth}"
 AKS_K8S_VERSION="${AKS_K8S_VERSION:-1.35.0}"
+VM_SIZE="${VM_SIZE:-Standard_D2s_v7}"  # k3s VM SKU (must be available in K3S_REGIONS)
 
 # Convert comma-separated to array
 IFS=',' read -ra K3S_REGION_ARRAY <<< "$K3S_REGIONS"
@@ -143,6 +144,7 @@ if [ "$SKIP_BICEP" = "false" ]; then
         --parameters sshPublicKey="$SSH_PUBLIC_KEY" \
         --parameters istioCerts="$ISTIO_CERTS_JSON" \
         --parameters kubernetesVersion="$AKS_K8S_VERSION" \
+        --parameters vmSize="$VM_SIZE" \
         --output none
     
     echo "✓ Infrastructure deployed"
