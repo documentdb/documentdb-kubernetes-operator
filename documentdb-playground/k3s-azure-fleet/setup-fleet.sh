@@ -62,10 +62,18 @@ pushd "$KUBFLEET_DIR" > /dev/null
 FLEET_TAG=$(curl -s "https://api.github.com/repos/kubefleet-dev/kubefleet/tags" | jq -r '.[0].name')
 echo "Using KubeFleet version: $FLEET_TAG"
 
+# Check out the chart at the same tag as the image to avoid main-branch flag drift
+# (main passes --enable-admission-policy-manager which v0.3.1 binary doesn't recognize)
+git checkout --quiet "$FLEET_TAG"
+
 # Switch to hub context
 kubectl config use-context "$HUB_CLUSTER_NAME"
 
 # Install hub-agent on the hub cluster
+echo ""
+echo "Creating fleet-system-hub namespace (chart references but doesn't create it)..."
+kubectl create namespace fleet-system-hub --dry-run=client -o yaml | kubectl apply -f -
+
 echo ""
 echo "Installing KubeFleet hub-agent on $HUB_CLUSTER_NAME..."
 export REGISTRY="ghcr.io/kubefleet-dev/kubefleet"
@@ -87,13 +95,42 @@ helm upgrade --install hub-agent ./charts/hub-agent/ \
 
 echo "✓ Hub-agent installed"
 
+# Extract hub cluster CA — needed to patch the member-agent helm release after joinMC.sh
+# (kubefleet joinMC.sh has a known bug: it never sets config.hubCA, so the chart default
+#  placeholder "<certificate-authority-data>" reaches the pod and breaks base64-decoding.)
+echo ""
+echo "Extracting hub CA from kubeconfig..."
+HUB_CA=$(kubectl config view --raw -o jsonpath="{.clusters[?(@.name==\"$HUB_CLUSTER_NAME\")].cluster.certificate-authority-data}")
+if [ -z "$HUB_CA" ]; then
+  echo "ERROR: failed to extract hub CA — is the AKS kubeconfig populated?"
+  exit 1
+fi
+echo "  ✓ extracted ${#HUB_CA} bytes of base64-encoded CA"
+
 # Join member clusters using KubeFleet's script
-# Known issue: joinMC.sh passes extra args to `kubectl config use-context`.
+# Known issues:
+#   1. joinMC.sh passes extra args to `kubectl config use-context`.
+#   2. joinMC.sh never sets config.hubCA — we patch that below with a helm upgrade.
 # If a member fails to join, see README troubleshooting for manual join steps.
 echo ""
 echo "Joining member clusters to fleet..."
 chmod +x ./hack/membership/joinMC.sh
 ./hack/membership/joinMC.sh "$TAG" "$HUB_CLUSTER_NAME" "${ALL_MEMBERS[@]}"
+
+# Workaround: patch each member-agent install with the real hub CA so the
+# token refresher can actually talk to the hub API server.
+echo ""
+echo "Patching member-agent installs with proper hubCA (kubefleet joinMC.sh workaround)..."
+for member in "${ALL_MEMBERS[@]}"; do
+  echo "  -> $member"
+  helm upgrade --kube-context "$member" --install member-agent ./charts/member-agent/ \
+    --namespace fleet-system \
+    --create-namespace \
+    --reuse-values \
+    --set config.hubCA="$HUB_CA" \
+    > /dev/null
+done
+echo "  ✓ member-agent hubCA patched on ${#ALL_MEMBERS[@]} cluster(s)"
 
 popd > /dev/null
 
