@@ -72,7 +72,7 @@ For available classes, see
 
 - [AKS storage classes](https://learn.microsoft.com/azure/aks/concepts-storage#storage-classes)
 - [Azure Disk CSI driver on AKS](https://learn.microsoft.com/azure/aks/azure-disk-csi)
-- [DocumentDB storage configuration](../advanced-configuration/README.md#storage-configuration)
+- [DocumentDB storage configuration](../configuration/storage.md)
 
 ## Monitoring and troubleshooting
 
@@ -111,7 +111,7 @@ kubectl get pods -n kube-system | grep csi-azuredisk
   enabled
 - [Encryption at rest](https://learn.microsoft.com/azure/aks/enable-host-encryption)
   on managed disks
-- [TLS configuration](../advanced-configuration/README.md#tls-configuration)
+- [TLS configuration](../configuration/tls.md)
   for database traffic
 - [Azure RBAC integration](https://learn.microsoft.com/azure/aks/manage-azure-rbac)
 

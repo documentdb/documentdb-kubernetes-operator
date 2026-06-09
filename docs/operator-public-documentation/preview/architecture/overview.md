@@ -309,7 +309,7 @@ flowchart LR
     NEW_PVC --> NEW_CLUSTER
 ```
 
-For backup configuration, see [Backup and Restore](../backup-and-restore.md).
+For backup configuration, see [Backup and Restore](../operations/backup-and-restore.md).
 
 ## Dependencies
 
