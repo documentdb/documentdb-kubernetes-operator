@@ -59,11 +59,11 @@ nav:
       - Monitoring:
           - Overview: preview/monitoring/overview.md
           - Metrics Reference: preview/monitoring/metrics.md
-      - Multi-Region Deployment:
+      - Multi-region deployment:
           - Overview: preview/multi-region-deployment/overview.md
-          - Setup Guide: preview/multi-region-deployment/setup.md
-          - Failover Procedures: preview/multi-region-deployment/failover-procedures.md
-          - Multi-Cloud Differences: preview/multi-region-deployment/multi-cloud.md
+          - Setup guide: preview/multi-region-deployment/setup.md
+          - Failover procedures: preview/multi-region-deployment/failover-procedures.md
+          - Multi-cloud differences: preview/multi-region-deployment/multi-cloud.md
       - FAQ: preview/faq.md
       - Tools:
           - Kubectl Plugin: preview/kubectl-plugin.md

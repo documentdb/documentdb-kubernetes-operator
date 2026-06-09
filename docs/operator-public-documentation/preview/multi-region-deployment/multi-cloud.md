@@ -40,6 +40,27 @@ each member Kubernetes cluster.
 - [Deploy on EKS](../getting-started/deploy-on-eks.md)
 - [Deploy on GKE](../getting-started/deploy-on-gke.md)
 
+Use the `clusterList[].environment` variables to indicate which Kubernetes clusters
+use certain cloud providers for automatic additions from those guides.
+
+```yaml title="documentdb.yaml"
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  clusterReplication:
+    primary: member-eastus2-cluster
+    clusterList:
+      - name: aws-cluster
+        environment: eks
+      - name: azure-cluster
+        environment: aks
+      - name: gcp-cluster
+        environment: gke
+```
+
 ### Networking becomes the primary design decision
 
 In a single cloud provider, you can usually rely on a cohesive private
@@ -146,3 +167,4 @@ steps:
 ## Next steps
 
 - [Multi-region failover procedures](failover-procedures.md)
+- [Multi-cloud playground](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/multi-cloud-deployment/README.md)

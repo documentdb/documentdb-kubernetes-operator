@@ -94,7 +94,7 @@ Use cloud-native VNet/VPC peering for direct Kubernetes cluster-to-cluster commu
 DocumentDB replication requires these ports between Kubernetes clusters:
 
 | Port | Protocol | Purpose                                  |
-|      |          |                                          |
+|------|----------|------------------------------------------|
 | 5432 | TCP      | PostgreSQL streaming replication         |
 | 443  | TCP      | Kubernetes API (for KubeFleet, optional) |
 
