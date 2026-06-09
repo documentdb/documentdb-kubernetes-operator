@@ -44,7 +44,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   
   if ! kubectl config get-contexts "$cluster" &>/dev/null; then
     echo "  ✗ Context not found"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
     continue
   fi
   
@@ -54,7 +54,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo "✓"
   else
     echo "✗ Not found"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
     continue
   fi
   
@@ -65,7 +65,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo "✓ (Status: $STATUS)"
   else
     echo "✗ Not found"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
     continue
   fi
   
@@ -98,7 +98,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     fi
   else
     echo "✗ Not found"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
   fi
   
   # Check secret
@@ -107,7 +107,7 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
     echo "✓"
   else
     echo "✗ Not found"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
   fi
   
   # Check operator
@@ -116,10 +116,10 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   OPERATOR_DESIRED=$(kubectl --context "$cluster" get deploy documentdb-operator -n documentdb-operator -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
   if [ "$OPERATOR_READY" = "$OPERATOR_DESIRED" ] && [ "$OPERATOR_READY" != "0" ]; then
     echo "✓ ($OPERATOR_READY/$OPERATOR_DESIRED)"
-    ((PASSED++))
+    PASSED=$((PASSED+1))
   else
     echo "✗ ($OPERATOR_READY/$OPERATOR_DESIRED)"
-    ((FAILED++))
+    FAILED=$((FAILED+1))
   fi
   
   echo ""
