@@ -79,6 +79,9 @@ func PatchInstances(ctx context.Context, c client.Client, ns, name string, want 
 // and may set any fields; the diff against the pre-mutation object is
 // sent to the API server.
 func PatchSpec(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, mutate func(*previewv1.DocumentDBSpec)) error {
+	if c == nil {
+		return errors.New("PatchSpec: client must not be nil")
+	}
 	if dd == nil || mutate == nil {
 		return errors.New("PatchSpec: dd and mutate must not be nil")
 	}

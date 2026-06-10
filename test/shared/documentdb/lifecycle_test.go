@@ -75,6 +75,14 @@ var _ = Describe("Shared lifecycle helpers", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(after.Spec.LogLevel).To(Equal("debug"))
 		})
+
+		It("returns an error when the client is nil", func() {
+			dd := &previewv1.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"},
+			}
+			err := PatchSpec(ctx, nil, dd, func(*previewv1.DocumentDBSpec) {})
+			Expect(err).To(MatchError(ContainSubstring("client must not be nil")))
+		})
 	})
 
 	Describe("IsHealthy", func() {
