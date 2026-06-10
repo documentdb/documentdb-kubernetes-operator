@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Package mongo provides thin helpers for the DocumentDB E2E suite to
 // connect to a DocumentDB gateway endpoint using the official
 // mongo-driver/v2 client. It is intentionally minimal: URI construction
