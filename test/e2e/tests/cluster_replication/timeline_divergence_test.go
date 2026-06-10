@@ -28,7 +28,9 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -72,7 +74,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, primaryDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, primaryDD, 3*time.Minute)
 			})
 
 			By("waiting for the primary to become Ready")
@@ -95,7 +97,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, replicaDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, replicaDD, 3*time.Minute)
 			})
 
 			By("waiting for the replica to become Ready")
@@ -137,7 +139,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			Expect(err).ToNot(HaveOccurred(), "connect to replica gateway")
 
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(2)), "replica should have seed data")
 			},
@@ -156,13 +158,13 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			By(fmt.Sprintf("patching both CRs to set primary=%s", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := documentdb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddoc.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = documentdb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddoc.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica to promote")
@@ -231,13 +233,13 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			// Promote back to original primary WITHOUT waiting for
 			// replication health — this is the trigger for timeline divergence
 			replicaDD := getDD(ctx, ns, replicaName)
-			err := documentdb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddoc.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = primaryName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica to demote (rapid switchback)")
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err = documentdb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddoc.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = primaryName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary to promote (rapid switchback)")
@@ -291,7 +293,7 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 
 			By("waiting for replication: data on restored primary should appear on the demoted node")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(3)),
 					"demoted node should replicate data from restored primary")
@@ -351,7 +353,7 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, primaryDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, primaryDD, 3*time.Minute)
 			})
 
 			By("waiting for the primary to become Ready")
@@ -372,7 +374,7 @@ var _ = Describe("Issue #375 sub-issue 3: instancesPerNode should be honored on 
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, replicaDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, replicaDD, 3*time.Minute)
 			})
 
 			By("waiting for the replica to become Ready")

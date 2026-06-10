@@ -15,7 +15,9 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -64,7 +66,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, primaryDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, primaryDD, 3*time.Minute)
 			})
 
 			By("waiting for the primary to become Ready")
@@ -87,7 +89,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, replicaDD, 3*time.Minute)
+				_ = shareddoc.Delete(ctx, c, replicaDD, 3*time.Minute)
 			})
 
 			By("waiting for the replica to become Ready")
@@ -157,19 +159,19 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 
 			docs := seed.SmallDataset()
 			By(fmt.Sprintf("seeding %d documents into primary %s.%s", len(docs), testDB, coll))
-			n, err := emongo.Seed(ctx, primaryHandle.Client(), testDB, coll, docs)
+			n, err := sharedmongo.Seed(ctx, primaryHandle.Client(), testDB, coll, docs)
 			Expect(err).ToNot(HaveOccurred(), "seed primary")
 			Expect(n).To(Equal(seed.SmallDatasetSize), "all documents should be accepted")
 
 			By("verifying documents appear on the primary")
-			cnt, err := emongo.Count(ctx, primaryHandle.Client(), testDB, coll, nil)
+			cnt, err := sharedmongo.Count(ctx, primaryHandle.Client(), testDB, coll, nil)
 			Expect(err).ToNot(HaveOccurred(), "count on primary")
 			Expect(cnt).To(Equal(int64(seed.SmallDatasetSize)),
 				"primary should have all seeded documents")
 
 			By("waiting for documents to replicate to the replica")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred(), "count on replica")
 				g.Expect(cnt).To(Equal(int64(seed.SmallDatasetSize)),
 					"replica should have all replicated documents")
@@ -215,7 +217,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 
 			By("waiting for the insert to replicate")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll,
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll,
 					bson.M{"_id": "upd-1"})
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(1)))
@@ -263,7 +265,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 
 			By("waiting for data to replicate before failover")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(3)),
 					"replica should have all 3 docs before failover")
@@ -283,13 +285,13 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			By(fmt.Sprintf("patching both DocumentDB CRs to set primary=%s", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := documentdb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddoc.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary CR to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = documentdb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddoc.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica CR to promote")
@@ -341,7 +343,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 
 			By("verifying all pre-failover documents are present")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
+				cnt, err := sharedmongo.Count(ctx, replicaHandle.Client(), testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(3)),
 					"new primary should have all 3 pre-failover documents")
@@ -419,7 +421,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 
 			By("waiting for replication from new primary to demoted replica")
 			Eventually(func(g Gomega) {
-				cnt, err := emongo.Count(ctx, oldPrimaryHandle.Client(),
+				cnt, err := sharedmongo.Count(ctx, oldPrimaryHandle.Client(),
 					testDB, coll, nil)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(cnt).To(Equal(int64(2)),
