@@ -51,7 +51,7 @@ metadata:
   namespace: documentdb-preview-ns
 spec:
   clusterReplication:
-    primary: member-eastus2-cluster
+    primary: azure-cluster
     clusterList:
       - name: aws-cluster
         environment: eks
