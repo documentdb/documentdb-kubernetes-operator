@@ -124,6 +124,8 @@ Losing an acknowledged write or observing a checksum mismatch is a Tier-1 failur
 | **Degraded** | Operator pod restart, write timeout inside an expected disruption window | Log and continue if recovery within budget |
 | **Warning** | Memory trending up, reconcile latency rising | Log only |
 
+A Fatal failure does **not** auto-recreate the cluster — the preserved state is what makes post-mortem possible. Recovery is manual: a maintainer reviews the journal/logs (alerted via the monitor described above), files the bug, and re-provisions the long-haul cluster as a separate operation.
+
 ---
 
 ## Learnings from Other Projects
