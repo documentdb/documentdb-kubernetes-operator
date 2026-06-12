@@ -15,7 +15,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -66,7 +66,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = shareddoc.Delete(ctx, c, primaryDD, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, primaryDD, 3*time.Minute)
 			})
 
 			By("waiting for the primary to become Ready")
@@ -89,7 +89,7 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = shareddoc.Delete(ctx, c, replicaDD, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, replicaDD, 3*time.Minute)
 			})
 
 			By("waiting for the replica to become Ready")
@@ -285,13 +285,13 @@ var _ = Describe("DocumentDB cluster replication — data replication & failover
 			By(fmt.Sprintf("patching both DocumentDB CRs to set primary=%s", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := shareddoc.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary CR to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = shareddoc.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica CR to promote")

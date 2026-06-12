@@ -16,7 +16,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -57,7 +57,7 @@ var _ = Describe("DocumentDB cluster-replication backup",
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating primary DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = shareddoc.Delete(ctx, c, primaryDD, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, primaryDD, 3*time.Minute)
 			})
 
 			By("waiting for the primary to become Ready")
@@ -80,7 +80,7 @@ var _ = Describe("DocumentDB cluster-replication backup",
 			})
 			Expect(err).ToNot(HaveOccurred(), "creating replica DocumentDB")
 			DeferCleanup(func(ctx SpecContext) {
-				_ = shareddoc.Delete(ctx, c, replicaDD, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, replicaDD, 3*time.Minute)
 			})
 
 			By("waiting for the replica to become Ready")
@@ -159,13 +159,13 @@ var _ = Describe("DocumentDB cluster-replication backup",
 			By(fmt.Sprintf("patching both CRs to promote %s as primary", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := shareddoc.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).NotTo(HaveOccurred(), "patch primary CR to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = shareddoc.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).NotTo(HaveOccurred(), "patch replica CR to promote")

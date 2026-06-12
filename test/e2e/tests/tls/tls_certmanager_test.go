@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	shareddoc "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -82,7 +82,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			key := types.NamespacedName{Namespace: cluster.NamespaceName, Name: cluster.DD.Name}
 			var tlsSecretName string
 			Eventually(func(g Gomega) bool {
-				dd, err := shareddoc.Get(ctx, env.Client, key)
+				dd, err := shareddb.Get(ctx, env.Client, key)
 				g.Expect(err).NotTo(HaveOccurred())
 				if dd.Status.TLS == nil {
 					return false
