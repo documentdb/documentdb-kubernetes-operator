@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+# Preflight check unit tests — run with:
+#   helm unittest operator/documentdb-helm-chart
+suite: preflight checks
+templates:
+  - 00_preflight.yaml
+
+tests:
+  # -----------------------------------------------------------------------
+  # cert-manager (default: enabled)
+  # -----------------------------------------------------------------------
+  - it: should fail when cert-manager CRDs are absent (default)
+    asserts:
+      - failedTemplate:
+          errorPattern: cert-manager is required but was not found
+
+  - it: should pass when cert-manager CRDs are present
+    capabilities:
+      apiVersions:
+        - cert-manager.io/v1/Certificate
+        - cert-manager.io/v1/Issuer
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should pass when cert-manager check is disabled
+    set:
+      certManager.preflightCheck: false
+    asserts:
+      - hasDocuments:
+          count: 0

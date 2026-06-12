@@ -56,6 +56,24 @@ image:
     repository: ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica
     pullPolicy: IfNotPresent
 
+# ---------------------------------------------------------------------------
+# Preflight checks
+# ---------------------------------------------------------------------------
+# These checks run during helm install/upgrade and abort with an actionable
+# error when a required cluster-level dependency is missing. Disable
+# individual checks for offline templating (GitOps) or when the dependency
+# is managed out-of-band.
+
+# cert-manager is a required dependency: the chart creates cert-manager.io/v1
+# Issuer and Certificate resources for the validating webhook and the CNPG
+# plugin sidecars. The preflight check fails the install with an actionable
+# message if cert-manager is not present in the cluster.
+certManager:
+  # Set to false only if you template the chart offline (e.g., GitOps render
+  # pipelines) or manage cert-manager out-of-band and the API discovery is
+  # unreliable. Disabling the check does NOT remove the dependency.
+  preflightCheck: true
+
 # Per-component pod-level configuration: resources, security contexts, and scheduling.
 # Defaults are conservative and aim to be compatible with Pod Security Admission's
 # `restricted` profile. Override any field per component as needed.

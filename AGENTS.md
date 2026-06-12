@@ -119,6 +119,18 @@ make test-e2e
 go test ./...
 ```
 
+#### Helm Chart Tests
+
+```bash
+# Install helm-unittest plugin (one-time setup)
+helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.1.0
+
+# Run helm unit tests
+cd operator/documentdb-helm-chart
+helm dependency update .
+helm unittest .
+```
+
 ### Linting & Verification
 
 ```bash

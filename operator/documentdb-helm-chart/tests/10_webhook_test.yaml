@@ -1,0 +1,153 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: webhook configuration
+templates:
+  - 10_documentdb_webhook.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # Document count (Issuer + Certificate + Service + VWC = 4)
+  # -------------------------------------------------------------------
+  - it: should render 4 documents
+    asserts:
+      - hasDocuments:
+          count: 4
+
+  # -------------------------------------------------------------------
+  # Self-signed Issuer
+  # -------------------------------------------------------------------
+  - it: should create a self-signed Issuer in the operator namespace
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Issuer
+      - equal:
+          path: metadata.name
+          value: documentdb-operator-selfsigned-issuer
+      - equal:
+          path: metadata.namespace
+          value: documentdb-operator
+      - isNotNull:
+          path: spec.selfSigned
+
+  # -------------------------------------------------------------------
+  # Webhook TLS Certificate
+  # -------------------------------------------------------------------
+  - it: should create a Certificate for the webhook
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: documentdb-webhook-cert
+      - equal:
+          path: spec.secretName
+          value: documentdb-webhook-tls
+      - equal:
+          path: spec.issuerRef.name
+          value: documentdb-operator-selfsigned-issuer
+
+  - it: should include correct DNS names for webhook cert
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: documentdb-webhook-service.documentdb-operator.svc
+      - contains:
+          path: spec.dnsNames
+          content: documentdb-webhook-service.documentdb-operator.svc.cluster.local
+
+  - it: should use custom namespace in DNS names when overridden
+    set:
+      namespace: my-ns
+    documentIndex: 1
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: documentdb-webhook-service.my-ns.svc
+      - contains:
+          path: spec.dnsNames
+          content: documentdb-webhook-service.my-ns.svc.cluster.local
+
+  # -------------------------------------------------------------------
+  # Webhook Service
+  # -------------------------------------------------------------------
+  - it: should create a Service on port 443 targeting 9443
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: documentdb-webhook-service
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 9443
+
+  # -------------------------------------------------------------------
+  # ValidatingWebhookConfiguration
+  # -------------------------------------------------------------------
+  - it: should create a ValidatingWebhookConfiguration
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: ValidatingWebhookConfiguration
+      - equal:
+          path: metadata.name
+          value: documentdb-validating-webhook
+
+  - it: should have cert-manager CA injection annotation
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: documentdb-operator/documentdb-webhook-cert
+
+  - it: should use custom namespace in CA injection annotation
+    set:
+      namespace: my-ns
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: my-ns/documentdb-webhook-cert
+
+  - it: should use fail-closed failure policy
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Fail
+
+  - it: should validate documentdb.io resources on CREATE and UPDATE
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: webhooks[0].rules[0].apiGroups[0]
+          value: documentdb.io
+      - contains:
+          path: webhooks[0].rules[0].operations
+          content: CREATE
+      - contains:
+          path: webhooks[0].rules[0].operations
+          content: UPDATE
+
+  # -------------------------------------------------------------------
+  # Labels
+  # -------------------------------------------------------------------
+  - it: should have standard labels on all resources
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: documentdb-operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"
