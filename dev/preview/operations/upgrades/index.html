@@ -1998,13 +1998,15 @@
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">documentDBImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="nt">documentDB</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the database extension image while keeping the gateway at the version set by <code>documentDBVersion</code>.</p>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">gatewayImage</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="nt">gateway</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;&quot;</span>
 </code></pre></div>
 <p>This overrides only the gateway sidecar image while keeping the extension at the version set by <code>documentDBVersion</code>.</p>
 </div>
