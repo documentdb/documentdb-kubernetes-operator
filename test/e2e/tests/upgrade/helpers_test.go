@@ -30,8 +30,8 @@ const (
 	envNewDocumentDBImage = "E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE"
 
 	// Optional gateway image overrides for the image-upgrade spec.
-	// When unset the spec patches only spec.documentDBImage and leaves
-	// spec.gatewayImage as-is (operator uses its default gateway). The
+	// When unset the spec patches only spec.image.documentDB and leaves
+	// spec.image.gateway as-is (operator uses its default gateway). The
 	// gateway image has an independent release cadence from the
 	// extension image; setting these to the same value as the
 	// documentdb env vars is INCORRECT under the layered-image

@@ -83,7 +83,7 @@ Expect(e2e.CheckOperatorUnchanged()).To(Succeed(),
 //     (single key: spec.featureGates.ChangeStreams: true).
 //  2. Gate the spec behind a `needs-changestream-image` capability
 //     label (mirrors `needs-cert-manager`) and a preflight check that
-//     skips when the current documentDBImage cannot handle it.
+//     skips when the current spec.image.documentDB cannot handle it.
 //  3. Layer a best-effort mongo-driver `Watch` smoke on top of the
 //     existing wal_level assertion so both the operator and extension
 //     contracts are covered.
