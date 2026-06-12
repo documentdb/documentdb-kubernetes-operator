@@ -62,9 +62,9 @@ tests:
   - it: should use default sidecar image with appVersion tag
     documentIndex: 1
     asserts:
-      - matchRegex:
+      - equal:
           path: spec.template.spec.containers[0].image
-          pattern: ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0\.2\.0
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.2.0"
 
   - it: should use a custom sidecar image tag when set
     set:

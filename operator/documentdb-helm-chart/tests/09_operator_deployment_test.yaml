@@ -44,9 +44,9 @@ tests:
   # -------------------------------------------------------------------
   - it: should use the default operator image with appVersion tag
     asserts:
-      - matchRegex:
+      - equal:
           path: spec.template.spec.containers[0].image
-          pattern: ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0\.2\.0
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0"
 
   - it: should use a custom image tag when set
     set:
