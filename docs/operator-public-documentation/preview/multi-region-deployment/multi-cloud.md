@@ -71,9 +71,9 @@ replication traffic, service discovery, and operational access.
 
 Common approaches include:
 
-- **Istio multi-Kubernetes-cluster mesh:** Use east-west gateways, shared trust,
+- **Cross Kubernetes cluster mesh:** Use east-west gateways, shared trust,
   remote secrets, and mesh service discovery to route replication traffic across
-  providers.
+  providers. Tools like Istio can manage this automatically.
 - **Site-to-site VPNs:** Connect cloud networks with VPN tunnels when your
   organization needs private IP connectivity but doesn't have one native
   provider network that spans every Kubernetes cluster.
@@ -84,11 +84,13 @@ Common approaches include:
   only when private connectivity isn't available, and pair them with TLS,
   firewall restrictions, and tightly scoped access.
 
-The playground uses Istio as the reference approach because it works across AKS,
-GKE, and EKS without requiring one provider's private networking model to cover
+The playground uses Istio as the reference approach because it works easily across
+AKS, GKE, and EKS without requiring one provider's private networking model to cover
 all member Kubernetes clusters. For implementation details, see the
 [multi-cloud deployment playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment)
 and the upstream [Istio multi-primary multi-network documentation](https://istio.io/latest/docs/setup/install/multicluster/multi-primary_multi-network/).
+For high throughput production situations, consult with networking professionals
+to select the most performant tools for your needs.
 
 For operator-level networking configuration, including the
 `crossCloudNetworkingStrategy` field, see the
@@ -109,9 +111,9 @@ configured consistently across providers.
 
 ### Identity and permissions are provider-specific
 
-Multi-region deployments within one provider often share one IAM model. In a
-multi-cloud deployment, each provider has its own identity system, permission
-model, audit trail, and credential refresh behavior.
+Multi-region deployments within one provider often share one IAM (Identity and
+Access Management) model. In a multi-cloud deployment, each provider has its own
+identity system, permission model, audit trail, and credential refresh behavior.
 
 Plan for:
 
@@ -148,6 +150,8 @@ DocumentDB cluster health, monitor:
 - Cross-provider latency and packet loss.
 - Provider load balancer health.
 - DNS record propagation and client resolution.
+- Basic connectivity between database nodes and the application layer.
+- Application gateway selection, to avoid unintended cross-cloud latency.
 
 For a playground observability example, see the
 [multi-cloud telemetry folder](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment/telemetry).
