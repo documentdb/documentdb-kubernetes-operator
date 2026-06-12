@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: pod disruption budget
+templates:
+  - 11_pdb.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # Feature gate (podDisruptionBudget.enabled)
+  # -------------------------------------------------------------------
+  - it: should not render PDB when disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render PDB when enabled
+    set:
+      podDisruptionBudget.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # -------------------------------------------------------------------
+  # Metadata
+  # -------------------------------------------------------------------
+  - it: should create a PodDisruptionBudget with correct metadata
+    set:
+      podDisruptionBudget.enabled: true
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - isAPIVersion:
+          of: policy/v1
+      - equal:
+          path: metadata.name
+          value: documentdb-operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+
+  - it: should use release namespace when values.namespace is empty
+    set:
+      podDisruptionBudget.enabled: true
+      namespace: ""
+    release:
+      namespace: my-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-ns
+
+  - it: should use custom namespace when set
+    set:
+      podDisruptionBudget.enabled: true
+      namespace: custom-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-ns
+
+  # -------------------------------------------------------------------
+  # Selector
+  # -------------------------------------------------------------------
+  - it: should select pods by release name
+    set:
+      podDisruptionBudget.enabled: true
+    release:
+      name: my-release
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: my-release
+
+  # -------------------------------------------------------------------
+  # minAvailable / maxUnavailable
+  # -------------------------------------------------------------------
+  - it: should set minAvailable by default
+    set:
+      podDisruptionBudget.enabled: true
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - notExists:
+          path: spec.maxUnavailable
+
+  - it: should use maxUnavailable when set (and minAvailable cleared)
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: ""
+      podDisruptionBudget.maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable
+
+  - it: should support percentage for minAvailable
+    set:
+      podDisruptionBudget.enabled: true
+      podDisruptionBudget.minAvailable: "50%"
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: "50%"

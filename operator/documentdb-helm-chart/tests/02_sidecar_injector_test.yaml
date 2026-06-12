@@ -155,3 +155,61 @@ tests:
           value: cnpg-system
       - isNotNull:
           path: spec.selfSigned
+
+  # -------------------------------------------------------------------
+  # Plugin probes
+  # -------------------------------------------------------------------
+  - it: should render TCP readiness and liveness probes by default
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 9090
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 9090
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
+
+  - it: should omit probes when pluginProbes.enabled is false
+    set:
+      pluginProbes.enabled: false
+    documentIndex: 1
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+
+  - it: should use custom probe settings when overridden
+    set:
+      pluginProbes.initialDelaySeconds: 15
+      pluginProbes.periodSeconds: 30
+      pluginProbes.failureThreshold: 5
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 15
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
