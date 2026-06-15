@@ -52,7 +52,7 @@ func baseDocumentDB(name, ns string) *dbpreview.DocumentDB {
 			NodeCount:        1,
 			InstancesPerNode: 1,
 			Resource:         dbpreview.Resource{Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"}},
-			DocumentDBImage:  "test-image",
+			Image:            &dbpreview.ImageSpec{DocumentDB: "test-image"},
 			ExposeViaService: dbpreview.ExposeViaService{ServiceType: "ClusterIP"},
 		},
 	}

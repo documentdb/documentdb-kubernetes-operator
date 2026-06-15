@@ -19,4 +19,5 @@ spec:
   exposeViaService:
     serviceType: LoadBalancer
   environment: eks
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

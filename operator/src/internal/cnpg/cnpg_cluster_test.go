@@ -160,18 +160,33 @@ var _ = Describe("getBootstrapConfiguration", func() {
 
 var _ = Describe("getDefaultBootstrapConfiguration", func() {
 	It("returns a bootstrap configuration with InitDB", func() {
-		result := getDefaultBootstrapConfiguration()
+		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
 		Expect(result).ToNot(BeNil())
 		Expect(result.InitDB).ToNot(BeNil())
 		Expect(result.Recovery).To(BeNil())
 	})
 
-	It("includes required PostInitSQL statements", func() {
-		result := getDefaultBootstrapConfiguration()
+	It("includes required PostInitSQL statements by default", func() {
+		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
 		Expect(result.InitDB.PostInitSQL).To(HaveLen(3))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE EXTENSION documentdb CASCADE"))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'"))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS"))
+	})
+
+	It("appends spec.postgres.postInitSQL after operator-required statements", func() {
+		db := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Postgres: &dbpreview.PostgresSpec{
+					PostInitSQL: []string{"SELECT 1", "SELECT 2"},
+				},
+			},
+		}
+		result := getDefaultBootstrapConfiguration(db)
+		Expect(result.InitDB.PostInitSQL).To(HaveLen(5))
+		Expect(result.InitDB.PostInitSQL[0]).To(Equal("CREATE EXTENSION documentdb CASCADE"))
+		Expect(result.InitDB.PostInitSQL[3]).To(Equal("SELECT 1"))
+		Expect(result.InitDB.PostInitSQL[4]).To(Equal("SELECT 2"))
 	})
 })
 
@@ -186,7 +201,9 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		documentdb := &dbpreview.DocumentDB{
 			Spec: dbpreview.DocumentDBSpec{
 				InstancesPerNode: 3,
-				PostgresImage:    "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
 				Resource: dbpreview.Resource{
 					Storage: dbpreview.StorageConfiguration{
 						PvcSize: "10Gi",
@@ -617,6 +634,58 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(pluginParams).NotTo(HaveKey("monitoringEnabled"))
 		Expect(pluginParams).NotTo(HaveKey("otelCollectorImage"))
 		Expect(pluginParams).NotTo(HaveKey("otelConfigMapName"))
+	})
+
+	It("propagates spec.imagePullSecrets to the CNPG cluster spec", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{Name: "registry-creds"},
+					{Name: ""},
+					{Name: "private-pull"},
+				},
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(cluster.Spec.ImagePullSecrets).To(HaveLen(2))
+		Expect(cluster.Spec.ImagePullSecrets[0].Name).To(Equal("registry-creds"))
+		Expect(cluster.Spec.ImagePullSecrets[1].Name).To(Equal("private-pull"))
+	})
+
+	It("propagates spec.postgres.uid and gid to PostgresUID/PostgresGID", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
+				Postgres: &dbpreview.PostgresSpec{
+					UID: ptr.To(int64(1001)),
+					GID: ptr.To(int64(1002)),
+				},
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(cluster.Spec.PostgresUID).To(Equal(int64(1001)))
+		Expect(cluster.Spec.PostgresGID).To(Equal(int64(1002)))
 	})
 })
 

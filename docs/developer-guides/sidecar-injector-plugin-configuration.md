@@ -42,7 +42,8 @@ spec:
     storage:
       pvcSize: "10Gi"
   # Explicitly specify gateway image
-  gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+  image:
+    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
   exposeViaService:
     serviceType: "ClusterIP"
 ```
@@ -111,7 +112,8 @@ spec:
   resource:
     storage:
       pvcSize: "10Gi"
-  gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+  image:
+    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
 ```
 
 ### Advanced Configuration (All Parameters)
@@ -127,8 +129,10 @@ spec:
   resource:
     storage:
       pvcSize: "20Gi"
-  gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
-  sidecarInjectorPluginName: "cnpg-i-sidecar-injector.documentdb.io"
+  image:
+    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+  plugins:
+    sidecarInjectorName: "cnpg-i-sidecar-injector.documentdb.io"
   exposeViaService:
     serviceType: "LoadBalancer"
 ```

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: cluster role binding
+templates:
+  - 07_clusterrolebinding.yaml
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  - it: should create a ClusterRoleBinding referencing the correct role
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: roleRef.kind
+          value: ClusterRole
+      - equal:
+          path: roleRef.name
+          value: documentdb-operator-cluster-role
+
+  - it: should bind to the default service account
+    asserts:
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+      - equal:
+          path: subjects[0].name
+          value: documentdb-operator
+      - equal:
+          path: subjects[0].namespace
+          value: documentdb-operator
+
+  - it: should bind to custom service account and namespace
+    set:
+      serviceAccount.name: "my-sa"
+      namespace: "my-ns"
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: my-sa
+      - equal:
+          path: subjects[0].namespace
+          value: my-ns

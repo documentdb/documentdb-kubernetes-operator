@@ -153,14 +153,13 @@ _Appears in:_
 | `nodeCount` _integer_ | NodeCount is the number of nodes in the DocumentDB cluster. Must be 1. |  | Maximum: 1 <br />Minimum: 1 <br /> |
 | `instancesPerNode` _integer_ | InstancesPerNode is the number of DocumentDB instances per node. Range: 1-3. |  | Maximum: 3 <br />Minimum: 1 <br /> |
 | `resource` _[Resource](#resource)_ | Resource specifies the storage resources for DocumentDB. |  |  |
-| `documentDBVersion` _string_ | DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).<br />When set, this overrides the default versions for documentDBImage and gatewayImage.<br />Individual image fields take precedence over this version. |  |  |
-| `documentDBImage` _string_ | DocumentDBImage is the container image to use for DocumentDB.<br />Changing this is not recommended for most users.<br />If not specified, defaults based on documentDBVersion or operator defaults. |  |  |
-| `gatewayImage` _string_ | GatewayImage is the container image to use for the DocumentDB Gateway sidecar.<br />Changing this is not recommended for most users.<br />If not specified, defaults to a version that matches the DocumentDB operator version. |  |  |
-| `postgresImage` _string_ | PostgresImage is the container image to use for the PostgreSQL server.<br />If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.<br />Must use trixie (Debian 13) base to match the extension's GLIBC requirements. | ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie | Optional: \{\} <br /> |
-| `documentDbCredentialSecret` _string_ | DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials<br />for the DocumentDB gateway (expects keys `username` and `password`). If omitted,<br />a default secret name `documentdb-credentials` is used. |  |  |
+| `documentDBVersion` _string_ | DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).<br />When set, this overrides the default versions for image.documentDB and image.gateway.<br />Individual image fields under spec.image take precedence over this version. |  |  |
+| `image` _[ImageSpec](#imagespec)_ | Image groups container image settings for the DocumentDB stack<br />(extension image, gateway image, PostgreSQL image).<br />All fields are optional; sensible defaults are applied when omitted. |  | Optional: \{\} <br /> |
+| `imagePullSecrets` _[LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.35/#localobjectreference-v1-core) array_ | ImagePullSecrets is an optional list of references to secrets in the same namespace<br />to use for pulling any of the images used by this cluster. Passed through to the<br />underlying CloudNative-PG cluster. |  | Optional: \{\} <br /> |
+| `documentDbCredentialSecret` _string_ | DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials<br />for the DocumentDB gateway (expects keys `username` and `password`). If omitted,<br />a default secret name `documentdb-credentials` is used.<br />NOTE: Immutable today; will be relaxed in a future release to support credential rotation. |  |  |
 | `clusterReplication` _[ClusterReplication](#clusterreplication)_ | ClusterReplication configures cross-cluster replication for DocumentDB. |  |  |
-| `sidecarInjectorPluginName` _string_ | SidecarInjectorPluginName is the name of the sidecar injector plugin to use. |  |  |
-| `walReplicaPluginName` _string_ | WalReplicaPluginName is the name of the wal replica plugin to use. |  |  |
+| `postgres` _[PostgresSpec](#postgresspec)_ | Postgres groups PostgreSQL process-level tuning (UID/GID, custom post-init SQL).<br />All fields are optional; defaults are preserved when omitted. |  | Optional: \{\} <br /> |
+| `plugins` _[PluginsSpec](#pluginsspec)_ | Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).<br />All fields are optional; defaults are preserved when omitted. |  | Optional: \{\} <br /> |
 | `exposeViaService` _[ExposeViaService](#exposeviaservice)_ | ExposeViaService configures how to expose DocumentDB via a Kubernetes service.<br />This can be a LoadBalancer or ClusterIP service. |  |  |
 | `environment` _string_ | Environment specifies the cloud environment for deployment<br />This determines cloud-specific service annotations for LoadBalancer services |  | Enum: [eks aks gke] <br /> |
 | `timeouts` _[Timeouts](#timeouts)_ |  |  |  |
@@ -169,7 +168,26 @@ _Appears in:_
 | `bootstrap` _[BootstrapConfiguration](#bootstrapconfiguration)_ | Bootstrap configures the initialization of the DocumentDB cluster. |  | Optional: \{\} <br /> |
 | `backup` _[BackupConfiguration](#backupconfiguration)_ | Backup configures backup settings for DocumentDB. |  | Optional: \{\} <br /> |
 | `featureGates` _object (keys:string, values:boolean)_ | FeatureGates enables or disables optional DocumentDB features.<br />Keys are PascalCase feature names following the Kubernetes feature gate convention.<br />Example: \{"ChangeStreams": true\}<br />IMPORTANT: When adding a new feature gate, update ALL of the following:<br />1. Add a new FeatureGate* constant in documentdb_types.go<br />2. Add the key name to the XValidation CEL rule's allowed list below<br />3. Add a default entry in the featureGateDefaults map in documentdb_types.go |  | Optional: \{\} <br /> |
+| `schemaVersion` _string_ | SchemaVersion controls the desired schema version for the DocumentDB extension.<br />The operator never changes your database schema unless you ask:<br />  - Set schemaVersion → updates the database schema (irreversible)<br />  - Set schemaVersion: "auto" → schema auto-updates with binary<br />Once the schema has been updated, the operator blocks image rollback below the<br />installed schema version to prevent running an untested binary/schema combination.<br />Values:<br />  - "" (empty, default): Two-phase mode. Image upgrades happen automatically,<br />    but ALTER EXTENSION UPDATE does NOT run. Users must explicitly set this<br />    field to finalize the schema upgrade. This is the safest option for production<br />    as it allows rollback by reverting the image before committing the schema change.<br />  - "auto": Schema automatically updates to match the binary version whenever<br />    the binary is upgraded. This is the simplest mode but provides no rollback<br />    safety window. Only recommended for single-region clusters.<br />  - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.<br />    Must be <= the binary version. |  | Pattern: `^(auto\|[0-9]+\.[0-9]+\.[0-9]+)?$` <br />Optional: \{\} <br /> |
 | `affinity` _[AffinityConfiguration](https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#AffinityConfiguration)_ | Affinity/Anti-affinity rules for Pods (cnpg passthrough) |  | Optional: \{\} <br /> |
+| `monitoring` _[MonitoringSpec](#monitoringspec)_ | Monitoring configures observability via an OTel Collector sidecar. |  | Optional: \{\} <br /> |
+
+
+#### ExporterSpec
+
+
+
+ExporterSpec configures metric export destinations.
+
+
+
+_Appears in:_
+- [MonitoringSpec](#monitoringspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `otlp` _[OTLPExporterSpec](#otlpexporterspec)_ | OTLP configures the OpenTelemetry Protocol exporter. |  | Optional: \{\} <br /> |
+| `prometheus` _[PrometheusExporterSpec](#prometheusexporterspec)_ | Prometheus configures a Prometheus scrape endpoint on the OTel Collector sidecar. |  | Optional: \{\} <br /> |
 
 
 #### ExposeViaService
@@ -201,7 +219,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `mode` _string_ | Mode selects the TLS management strategy. Defaults to SelfSigned if not specified. | SelfSigned | Enum: [SelfSigned CertManager Provided] <br /> |
+| `mode` _string_ | Mode selects the TLS management strategy.<br />Defaults to SelfSigned if not specified. | SelfSigned | Enum: [SelfSigned CertManager Provided] <br /> |
 | `certManager` _[CertManagerTLS](#certmanagertls)_ | CertManager config when Mode=CertManager. |  |  |
 | `provided` _[ProvidedTLS](#providedtls)_ | Provided secret reference when Mode=Provided. |  |  |
 
@@ -217,6 +235,26 @@ GlobalEndpointsTLS acts as a placeholder for future global endpoint TLS settings
 _Appears in:_
 - [TLSConfiguration](#tlsconfiguration)
 
+
+
+#### ImageSpec
+
+
+
+ImageSpec groups container image settings for the DocumentDB stack.
+All fields are optional; the operator falls back to documentDBVersion,
+environment variables, and built-in defaults in that order.
+
+
+
+_Appears in:_
+- [DocumentDBSpec](#documentdbspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `documentDB` _string_ | DocumentDB is the container image for the DocumentDB extension layer.<br />This image is mounted into the PostgreSQL container via CNPG's<br />ImageVolumeSource so that the extension files are available alongside<br />an upstream PostgreSQL image. |  | Optional: \{\} <br /> |
+| `gateway` _string_ | Gateway is the container image for the DocumentDB Gateway sidecar. |  | Optional: \{\} <br /> |
+| `postgres` _string_ | Postgres is the container image for the PostgreSQL server.<br />Must be an upstream CNPG-compatible PostgreSQL image (the operator<br />adds the DocumentDB extension via an ImageVolume mount), and must<br />use trixie (Debian 13) base to match the extension's GLIBC<br />requirements. | ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie | Optional: \{\} <br /> |
 
 
 #### IssuerRef
@@ -255,6 +293,39 @@ _Appears in:_
 | `storageClass` _string_ | StorageClassOverride specifies the storage class for DocumentDB persistent volumes in this member cluster. |  |  |
 
 
+#### MonitoringSpec
+
+
+
+MonitoringSpec configures observability via an OTel Collector sidecar.
+
+
+
+_Appears in:_
+- [DocumentDBSpec](#documentdbspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `enabled` _boolean_ | Enabled turns on the OTel Collector sidecar for metrics collection. |  |  |
+| `exporter` _[ExporterSpec](#exporterspec)_ | Exporter configures where metrics are sent. |  | Optional: \{\} <br /> |
+
+
+#### OTLPExporterSpec
+
+
+
+OTLPExporterSpec configures the OTLP exporter.
+
+
+
+_Appears in:_
+- [ExporterSpec](#exporterspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `endpoint` _string_ | Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector.monitoring:4317"). |  |  |
+
+
 #### PVRecoveryConfiguration
 
 
@@ -271,6 +342,42 @@ _Appears in:_
 | `name` _string_ | Name is the name of the PersistentVolume to recover from.<br />The PV must exist and be in Available or Released state. |  | MinLength: 1 <br /> |
 
 
+#### PluginsSpec
+
+
+
+PluginsSpec groups CNPG plugin configuration.
+
+
+
+_Appears in:_
+- [DocumentDBSpec](#documentdbspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `sidecarInjectorName` _string_ | SidecarInjectorName is the name of the CNPG sidecar injector plugin<br />to use for the gateway and other sidecars. Immutable. |  | Optional: \{\} <br /> |
+| `walReplicaName` _string_ | WalReplicaName is the name of the WAL replica plugin to use for<br />cross-cluster replication. |  | Optional: \{\} <br /> |
+
+
+#### PostgresSpec
+
+
+
+PostgresSpec groups PostgreSQL process-level tuning.
+All fields are optional.
+
+
+
+_Appears in:_
+- [DocumentDBSpec](#documentdbspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `uid` _integer_ | UID is the numeric user ID under which the PostgreSQL server process runs.<br />When set, GID must also be set. |  | Optional: \{\} <br /> |
+| `gid` _integer_ | GID is the numeric group ID under which the PostgreSQL server process runs.<br />When set, UID must also be set. |  | Optional: \{\} <br /> |
+| `postInitSQL` _string array_ | PostInitSQL is an ordered list of SQL statements executed after the<br />cluster is initialized. These statements run AFTER the operator's<br />mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE<br />documentdb, ALTER ROLE documentdb), so they can safely reference the<br />documentdb extension and role. |  | Optional: \{\} <br /> |
+
+
 #### PostgresTLS
 
 
@@ -282,6 +389,22 @@ PostgresTLS acts as a placeholder for future Postgres TLS settings.
 _Appears in:_
 - [TLSConfiguration](#tlsconfiguration)
 
+
+
+#### PrometheusExporterSpec
+
+
+
+PrometheusExporterSpec configures the Prometheus scrape endpoint exporter.
+
+
+
+_Appears in:_
+- [ExporterSpec](#exporterspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `port` _integer_ | Port for the Prometheus scrape endpoint. Defaults to 8888. | 8888 | Maximum: 65535 <br />Minimum: 1024 <br />Optional: \{\} <br /> |
 
 
 #### ProvidedTLS
@@ -382,7 +505,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `pvcSize` _string_ | PvcSize is the size of the persistent volume claim for DocumentDB storage (e.g., "10Gi"). |  |  |
+| `pvcSize` _string_ | PvcSize is the size of the persistent volume claim for DocumentDB storage (e.g., "10Gi"). |  | MinLength: 1 <br /> |
 | `storageClass` _string_ | StorageClass specifies the storage class for DocumentDB persistent volumes.<br />If not specified, the cluster's default storage class will be used. |  |  |
 | `persistentVolumeReclaimPolicy` _string_ | PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when<br />the DocumentDB cluster is deleted.<br />When a DocumentDB cluster is deleted, the following chain of deletions occurs:<br />DocumentDB deletion → CNPG Cluster deletion → PVC deletion → PV deletion (based on this policy)<br />Options:<br />  - Retain (default): The PV is preserved after cluster deletion, allowing manual<br />    data recovery or forensic analysis. Use for production workloads where data<br />    safety is critical. Orphaned PVs must be manually deleted when no longer needed.<br />  - Delete: The PV is automatically deleted when the PVC is deleted. Use for development,<br />    testing, or ephemeral environments where data persistence is not required.<br />WARNING: Setting this to "Delete" means all data will be permanently lost when<br />the DocumentDB cluster is deleted. This cannot be undone. | Retain | Enum: [Retain Delete] <br />Optional: \{\} <br /> |
 

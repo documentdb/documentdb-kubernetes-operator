@@ -1,0 +1,24 @@
+{{/*
+Preflight checks
+=================
+Validate that required cluster-level dependencies are present before
+rendering the chart. Each check uses Helm's API discovery
+(.Capabilities.APIVersions) and fires during install, upgrade, and
+template (without explicit --api-versions).
+
+Individual checks can be disabled for offline templating (GitOps render
+pipelines) or advanced configurations where the dependency is managed
+out-of-band.
+*/}}
+
+{{/* --- cert-manager (required) ---
+The chart unconditionally creates cert-manager.io/v1 Issuer and Certificate
+resources for the validating webhook, sidecar injector, and wal-replica
+plugin. Without cert-manager the install "succeeds" but the operator never
+becomes ready (webhook TLS Secret is never issued).
+*/}}
+{{- if .Values.certManager.preflightCheck -}}
+{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1/Certificate") -}}
+{{- fail "cert-manager is required but was not found in the cluster (cert-manager.io/v1/Certificate CRD is missing). Install cert-manager (https://cert-manager.io/docs/installation/) before installing this chart, or set certManager.preflightCheck=false to skip this check." -}}
+{{- end -}}
+{{- end -}}

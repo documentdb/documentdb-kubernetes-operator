@@ -228,7 +228,7 @@ func RenderCR(baseName, name, ns string, mixins []string, vars map[string]string
 // when merged[VAR] is an empty string. CNPG's envsubst treats empty
 // values as missing, so this lets callers opt fields out of the
 // rendered YAML by leaving the corresponding variable unset. Operator
-// defaults (documentDBImage, gatewayImage, ...) thus fall through to
+// defaults (image.documentDB, image.gateway, ...) thus fall through to
 // server-side defaults instead of being forced to a pinned value.
 func DropEmptyVarLines(data []byte, merged map[string]string) []byte {
 	return dropEmptyVarLines(data, merged)
@@ -237,7 +237,7 @@ func DropEmptyVarLines(data []byte, merged map[string]string) []byte {
 // singleVarLineRe matches a line whose non-whitespace content is a
 // single YAML scalar assignment to a single ${VAR} reference, e.g.:
 //
-//	documentDBImage: ${DOCUMENTDB_IMAGE}
+//	documentDB: ${DOCUMENTDB_IMAGE}
 //
 // Leading whitespace is preserved, the captured group is the bare
 // variable name. Lines with additional text around the reference do
@@ -248,8 +248,8 @@ var singleVarLineRe = regexp.MustCompile(`^\s*[A-Za-z0-9_.\-]+:\s*\$\{([A-Za-z_]
 // `key: ${VAR}` when merged[VAR] is an empty string. CNPG's envsubst
 // treats empty values as missing, so this lets callers opt fields out
 // of the rendered CR by leaving the corresponding variable unset.
-// Fields the operator defaults server-side (e.g. documentDBImage,
-// gatewayImage) thus fall through to operator defaults.
+// Fields the operator defaults server-side (e.g. image.documentDB,
+// image.gateway) thus fall through to operator defaults.
 func dropEmptyVarLines(data []byte, merged map[string]string) []byte {
 	if !bytes.Contains(data, []byte("${")) {
 		return data

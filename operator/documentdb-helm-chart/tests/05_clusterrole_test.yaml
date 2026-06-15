@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: cluster role
+templates:
+  - 05_clusterrole.yaml
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  - it: should create a ClusterRole with correct name
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: documentdb-operator-cluster-role
+
+  - it: should include documentdb.io API group permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["dbs", "dbs/status", "dbs/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include CNPG cluster permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["postgresql.cnpg.io"]
+            resources: ["clusters", "publications", "subscriptions", "clusters/status"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include cert-manager permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["cert-manager.io"]
+            resources: ["certificates", "issuers"]
+            verbs: ["get", "list", "watch", "create"]
+
+  - it: should include backup-related permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["backups", "backups/status", "backups/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["documentdb.io"]
+            resources: ["scheduledbackups", "scheduledbackups/status", "scheduledbackups/finalizers"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include core resource permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include pods/exec permission (create only)
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods/exec"]
+            verbs: ["create"]
+
+  - it: should include RBAC permissions for roles and rolebindings
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["rbac.authorization.k8s.io"]
+            resources: ["roles", "rolebindings"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include leader election lease permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["coordination.k8s.io"]
+            resources: ["leases"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include fleet multi-cluster service permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["networking.fleet.azure.com"]
+            resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include secrets permissions (read-only)
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["secrets"]
+            verbs: ["get", "list", "watch"]
+
+  - it: should include CNPG backup permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["postgresql.cnpg.io"]
+            resources: ["backups", "backups/status"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include VolumeSnapshotClass permissions
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["snapshot.storage.k8s.io"]
+            resources: ["volumesnapshotclasses"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should include PersistentVolume permissions (no delete)
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["persistentvolumes"]
+            verbs: ["get", "list", "watch", "update", "patch"]
+
+  - it: should include StorageClass permissions (read-only)
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["storage.k8s.io"]
+            resources: ["storageclasses"]
+            verbs: ["get", "list", "watch"]
+
+  - it: should include events permissions (create and patch only)
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["events"]
+            verbs: ["create", "patch"]

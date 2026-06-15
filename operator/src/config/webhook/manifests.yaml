@@ -1,0 +1,26 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-documentdb-io-preview-documentdb
+  failurePolicy: Fail
+  name: vdocumentdb.kb.io
+  rules:
+  - apiGroups:
+    - documentdb.io
+    apiVersions:
+    - preview
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - dbs
+  sideEffects: None
