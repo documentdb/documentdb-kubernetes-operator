@@ -120,6 +120,10 @@ Losing an acknowledged write or observing a checksum mismatch is a Tier-1 failur
 
 **Human-in-the-loop alerts.** The hourly monitor posts a summary to the workflow run and, when configured, to a chat channel. A maintainer reviews the evidence and manually creates a GitHub issue. No auto-filed issues — alert fatigue from transient or infrastructure failures would erode trust in the canary.
 
+### Artifact Retention
+
+Two tiers of evidence are kept: a rolling status summary in a `longhaul-report` ConfigMap polled by the monitor workflow, and a forensics bundle (pod logs, events, CR snapshots, metric samples, the journal) uploaded as a GitHub Actions artifact on every Tier-1 / Tier-2 alert and at end of run. Implementation details — which collectors, sanitization rules, bundle layout — live in `test/longhaul/README.md`.
+
 ### Failure Tiers
 
 | Tier | Example | Action |
