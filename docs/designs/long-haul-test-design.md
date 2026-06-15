@@ -49,6 +49,8 @@ flowchart LR
 | **Journal** | In-process append-only event log shared by all components. | Reproducible event stream for the report. |
 | **Report** | Aggregates the journal into a markdown summary at a configurable interval; raises alerts on threshold breaches. | Markdown report; alert lines. |
 
+**Code reuse.** Where possible, the driver consumes the same helpers as the e2e suite — the Mongo client, DocumentDB lifecycle operations (create / patch / wait-healthy / delete), and TLS plumbing all live in a shared `test/shared` Go module. This keeps long-haul behavior aligned with what e2e exercises and avoids two diverging mongo-driver wrappers.
+
 ### Cluster Topology
 
 The driver supports a **two-cluster** topology so signals become attributable: a **Primary** cluster the scheduler operates on, and a **Baseline** cluster the scheduler leaves alone. Both clusters receive the same data-plane traffic so they form a fair comparison.
