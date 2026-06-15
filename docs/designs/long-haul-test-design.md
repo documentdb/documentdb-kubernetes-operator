@@ -59,6 +59,8 @@ The driver supports a **two-cluster** topology so signals become attributable: a
 | Both degrade | Operator-level bug — leak in the shared operator |
 | Baseline degrades, Primary stable | Infrastructure noise — dismiss |
 
+**Realistic cluster configuration.** Both clusters are deployed with production-style settings: `podAntiAffinity` (one replica per node) and a `PodDisruptionBudget` that keeps a majority of replicas available during voluntary disruptions. Without these, chaos and upgrade operations would surface misconfiguration failures (e.g. quorum lost because all replicas landed on the drained node) instead of the operator/DB bugs we are trying to catch.
+
 ---
 
 ## Lifecycle
