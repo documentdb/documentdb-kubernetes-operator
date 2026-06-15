@@ -11,6 +11,8 @@ set -euo pipefail
 #   ENABLE_AZURE_DNS: Enable Azure DNS creation (default: true)
 #   AZURE_DNS_ZONE_NAME: Azure DNS zone name (default: same as resource group)
 #   AZURE_DNS_PARENT_ZONE_RESOURCE_ID: Azure DNS parent zone resource ID (default: multi-cloud.pgmongo-dev.cosmos.windows-int.net)
+#   HUB_WEBHOOK_VALIDATION_ENABLED: Enable DocumentDB validating webhook on hub (default: false). Only set true
+#                                   if the hub cluster has a running operator (as in it is also a member cluster)
 #
 # Examples:
 #   ./deploy-multi-region.sh
@@ -32,6 +34,7 @@ AZURE_DNS_PARENT_ZONE_RESOURCE_ID="${AZURE_DNS_PARENT_ZONE_RESOURCE_ID:-}"
 AZURE_DNS_ZONE_FULL_NAME="${AZURE_DNS_ZONE_FULL_NAME:-}"
 AZURE_DNS_ZONE_RG="${AZURE_DNS_ZONE_RG:-${RESOURCE_GROUP}}"
 ENABLE_AZURE_DNS="${ENABLE_AZURE_DNS:-true}"
+HUB_WEBHOOK_VALIDATION_ENABLED="${HUB_WEBHOOK_VALIDATION_ENABLED:-false}"
 
 # Set password from argument or environment variable
 DOCUMENTDB_PASSWORD="${1:-${DOCUMENTDB_PASSWORD:-}}"
@@ -121,6 +124,31 @@ fi
 
 echo "Using hub context: $HUB_CONTEXT"
 
+if kubectl --context "$HUB_CONTEXT" get validatingwebhookconfiguration documentdb-validating-webhook &>/dev/null; then
+  WEBHOOK_ENDPOINTS=$(kubectl --context "$HUB_CONTEXT" get endpoints documentdb-webhook-service \
+    -n documentdb-operator \
+    -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
+
+  if [ "$HUB_WEBHOOK_VALIDATION_ENABLED" = "true" ]; then
+    if [ -z "$WEBHOOK_ENDPOINTS" ]; then
+      echo "Warning: DocumentDB validating webhook is enabled on hub but has no endpoints."
+    fi
+    echo "Hub DocumentDB webhook validation is enabled."
+    kubectl --context "$HUB_CONTEXT" patch validatingwebhookconfiguration documentdb-validating-webhook \
+      --type='json' \
+      -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Fail"}]'
+  else
+    if [ -z "$WEBHOOK_ENDPOINTS" ]; then
+      echo "DocumentDB validating webhook is registered on hub but has no endpoints."
+    fi
+    echo "Hub DocumentDB webhook validation is disabled for this Fleet deployment."
+    echo "Setting failurePolicy=Ignore on hub so placement resources can be applied."
+    kubectl --context "$HUB_CONTEXT" patch validatingwebhookconfiguration documentdb-validating-webhook \
+      --type='json' \
+      -p='[{"op":"replace","path":"/webhooks/0/failurePolicy","value":"Ignore"}]'
+  fi
+fi
+
 # Check if resources already exist
 EXISTING_RESOURCES=""
 if kubectl --context "$HUB_CONTEXT" get namespace documentdb-preview-ns &>/dev/null 2>&1; then
@@ -132,7 +160,7 @@ fi
 if kubectl --context "$HUB_CONTEXT" get documentdb documentdb-preview -n documentdb-preview-ns &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}documentdb "
 fi
-if kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp &>/dev/null 2>&1; then
+if kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-namespace-crp &>/dev/null 2>&1; then
   EXISTING_RESOURCES="${EXISTING_RESOURCES}clusterresourceplacement "
 fi
 
@@ -150,7 +178,8 @@ if [ -n "$EXISTING_RESOURCES" ]; then
   case $CHOICE in
     1)
       echo "Deleting existing resources..."
-      kubectl --context "$HUB_CONTEXT" delete clusterresourceplacement documentdb-crp --ignore-not-found=true
+      kubectl --context "$HUB_CONTEXT" delete clusterresourceplacement documentdb-namespace-crp --ignore-not-found=true
+      kubectl --context "$HUB_CONTEXT" delete resourceplacement documentdb-resource-rp -n documentdb-preview-ns --ignore-not-found=true
       kubectl --context "$HUB_CONTEXT" delete namespace documentdb-preview-ns --ignore-not-found=true
       echo "Waiting for namespace deletion to complete..."
       for cluster in "${CLUSTER_ARRAY[@]}"; do
@@ -208,7 +237,7 @@ rm -f "$TEMP_YAML"
 # Check the ClusterResourcePlacement status
 echo ""
 echo "Checking ClusterResourcePlacement status..."
-kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-crp -o wide
+kubectl --context "$HUB_CONTEXT" get clusterresourceplacement documentdb-namespace-crp -o wide
 
 # Wait a bit for propagation
 echo ""
@@ -315,7 +344,7 @@ if [ "$ENABLE_AZURE_DNS" = "true" ]; then
     echo "Creating DNS record: $cluster"
 
     # Create service name by concatenating documentdb-preview with cluster name (max 63 chars)
-    SERVICE_NAME="documentdb-service-documentdb-preview
+    SERVICE_NAME="documentdb-service-documentdb-preview"
     SERVICE_NAME="${SERVICE_NAME:0:63}"
     
     # Get the external IP of the DocumentDB service
@@ -419,7 +448,7 @@ echo "  Username: docdb"
 echo "  Password: $DOCUMENTDB_PASSWORD"
 echo ""
 echo "To monitor the deployment:"
-echo "watch 'kubectl --context $HUB_CONTEXT get clusterresourceplacement documentdb-crp -o wide'"
+echo "watch 'kubectl --context $HUB_CONTEXT get clusterresourceplacement documentdb-namespace-crp -o wide'"
 echo ""
 echo "To check DocumentDB status across all clusters:"
 # Create a space-separated string from the array
