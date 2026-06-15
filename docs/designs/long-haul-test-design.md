@@ -140,6 +140,8 @@ A Fatal failure does **not** auto-recreate the cluster — the preserved state i
 | **CloudNative-PG** | Failover via pod delete + SIGSTOP; pod-level resource sampling | Ginkgo framework (we use a long-lived `Deployment` instead) |
 | **CockroachDB** | Chaos runner; separate workload from disruption; roachstress | Custom roachtest framework (too heavy) |
 | **Vitess** | Background stress goroutine; per-query tracking | No fault injection (we need disruptive ops) |
+| **FoundationDB** | Property-based oracle (acked-write invariants); strict workload/fault separation | Deterministic in-process simulation — requires the entire system written in their Flow actor language; runs in simulated time, so it can't surface accumulation bugs that need real wall-clock cycles |
+| **Antithesis** | Same property-based oracle philosophy applied to unmodified binaries | Deterministic hypervisor — runs in simulated time on a fake network/disk, so it targets rare-interleaving logic bugs rather than the wall-clock accumulation bugs long-haul exists to catch |
 
 **Universal pattern:** Separate workload from disruptions, run concurrently, verify against an acknowledged-write oracle, use per-operation disruption budgets.
 
