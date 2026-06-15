@@ -145,6 +145,6 @@ A Fatal failure does **not** auto-recreate the cluster — the preserved state i
 
 ---
 
-## Open Questions
+## Future Scope
 
-1. Multi-region canary scope — AKS Fleet integration?
+- **Multi-region canary** — extend the Primary/Baseline pattern across regions via AKS Fleet to catch issues that only appear with cross-region replication / failover.
