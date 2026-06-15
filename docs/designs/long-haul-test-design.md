@@ -92,7 +92,8 @@ The scheduler picks operations from these categories with weighted randomization
 - One disruptive op at a time. Overlapping disruptions are non-diagnosable.
 - Per-category cooldown between ops. Lets the cluster stabilize.
 - Steady-state gate — health check must pass before the next op fires.
-- Backup isolation — no topology changes during backup.
+
+**Backup is not isolated.** It runs concurrently with topology changes and chaos so that backup-vs-topology serialization bugs surface here rather than in production — that serialization is the backup feature's job, not the harness's.
 
 Each operation declares an **outage policy**: tolerated write failures during its disruption window and a max recovery time. Breaching the policy is recorded as a Tier-1 failure (see Failure Tiers).
 
