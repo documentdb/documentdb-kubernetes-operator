@@ -17,7 +17,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 )
 
@@ -83,7 +83,7 @@ func createCredentialSecret(ctx context.Context, c client.Client, ns string) {
 // getDD fetches a DocumentDB CR by namespace and name.
 func getDD(ctx context.Context, ns, name string) *previewv1.DocumentDB {
 	c := e2e.SuiteEnv().Client
-	dd, err := documentdb.Get(ctx, c, types.NamespacedName{Namespace: ns, Name: name})
+	dd, err := shareddb.Get(ctx, c, types.NamespacedName{Namespace: ns, Name: name})
 	Expect(err).ToNot(HaveOccurred())
 	return dd
 }

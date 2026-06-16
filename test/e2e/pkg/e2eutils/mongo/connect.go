@@ -25,6 +25,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/portforward"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 // DefaultCredentialSecretName is the secret name the shared fixtures
@@ -175,7 +176,7 @@ func NewFromDocumentDB(
 		return nil, fmt.Errorf("mongo: open port-forward: %w", err)
 	}
 
-	c, err := NewClient(ctx, ClientOptions{
+	c, err := sharedmongo.NewClient(ctx, sharedmongo.ClientOptions{
 		Host:        "127.0.0.1",
 		Port:        strconv.Itoa(lp),
 		User:        user,

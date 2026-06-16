@@ -14,6 +14,7 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -70,7 +71,7 @@ var _ = Describe("DocumentDB lifecycle — update spec.image.documentDB",
 			})
 			Expect(err).ToNot(HaveOccurred())
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: name}
@@ -81,7 +82,7 @@ var _ = Describe("DocumentDB lifecycle — update spec.image.documentDB",
 
 			// Refetch for a fresh resourceVersion before patching.
 			fresh := getDD(ctx, ns, name)
-			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
 				if s.Image == nil {
 					s.Image = &previewv1.ImageSpec{}
 				}

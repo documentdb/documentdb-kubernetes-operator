@@ -12,6 +12,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 )
 
@@ -53,7 +54,7 @@ func connectSharedRO(ctx context.Context) *perfConn {
 	stop := func() {
 		dropCtx, dropCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer dropCancel()
-		_ = mongo.DropDatabase(dropCtx, c, db)
+		_ = sharedmongo.DropDatabase(dropCtx, c, db)
 		closeCtx, closeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer closeCancel()
 		_ = h.Close(closeCtx)

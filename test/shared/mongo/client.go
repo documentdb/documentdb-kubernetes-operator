@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Package mongo provides thin helpers for the DocumentDB E2E suite to
 // connect to a DocumentDB gateway endpoint using the official
 // mongo-driver/v2 client. It is intentionally minimal: URI construction
@@ -116,6 +119,27 @@ func NewClient(_ context.Context, opts ClientOptions) (*mongo.Client, error) {
 			co.SetTLSConfig(tlsCfg)
 		}
 	}
+	c, err := mongo.Connect(co)
+	if err != nil {
+		return nil, fmt.Errorf("mongo: connect: %w", err)
+	}
+	return c, nil
+}
+
+// NewFromURI builds a connected *mongo.Client against an externally
+// supplied mongodb:// URI. Connect time is bounded by
+// DefaultConnectTimeout. The driver's Connect is lazy, so callers who
+// need a post-connect round-trip should call Ping themselves.
+//
+// This helper exists so the long-haul driver can stop calling
+// mongo.Connect(options.Client().ApplyURI(...)) directly, which would
+// silently bypass the connect timeout that NewClient applies for
+// every other caller.
+func NewFromURI(_ context.Context, uri string) (*mongo.Client, error) {
+	if uri == "" {
+		return nil, errors.New("mongo: uri is required")
+	}
+	co := options.Client().ApplyURI(uri).SetConnectTimeout(DefaultConnectTimeout)
 	c, err := mongo.Connect(co)
 	if err != nil {
 		return nil, fmt.Errorf("mongo: connect: %w", err)

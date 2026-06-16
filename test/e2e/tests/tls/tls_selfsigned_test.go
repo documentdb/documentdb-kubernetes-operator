@@ -11,8 +11,8 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
 
@@ -44,7 +44,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			// only fetch whatever the status reports.
 			key := types.NamespacedName{Namespace: cluster.NamespaceName, Name: cluster.DD.Name}
 			Eventually(func(g Gomega) string {
-				dd, err := ddbutil.Get(ctx, env.Client, key)
+				dd, err := shareddb.Get(ctx, env.Client, key)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dd.Status.TLS).NotTo(BeNil(), "status.tls not populated yet")
 				g.Expect(dd.Status.TLS.Ready).To(BeTrue(), "status.tls.ready false")
@@ -54,7 +54,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 
 			// Assert the projected secret looks like a TLS secret.
 			Eventually(func() error {
-				dd, err := ddbutil.Get(ctx, env.Client, key)
+				dd, err := shareddb.Get(ctx, env.Client, key)
 				if err != nil {
 					return err
 				}
@@ -69,7 +69,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			connectCtx, cancelConnect := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
 			defer cancelConnect()
 
-			client, err := mongohelper.NewClient(connectCtx, mongohelper.ClientOptions{
+			client, err := sharedmongo.NewClient(connectCtx, sharedmongo.ClientOptions{
 				Host:        host,
 				Port:        port,
 				User:        tlsCredentialUser,
@@ -81,7 +81,7 @@ var _ = Describe("DocumentDB TLS — self-signed",
 			defer func() { _ = client.Disconnect(ctx) }()
 
 			Eventually(func() error {
-				return mongohelper.Ping(connectCtx, client)
+				return sharedmongo.Ping(connectCtx, client)
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "TLS ping with insecure verify should succeed")
 		})

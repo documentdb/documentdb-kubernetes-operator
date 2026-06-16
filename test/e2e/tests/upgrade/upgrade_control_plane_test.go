@@ -12,9 +12,11 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/helmop"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
@@ -94,7 +96,7 @@ var _ = Describe("DocumentDB upgrade — control plane",
 			})
 			Expect(err).NotTo(HaveOccurred(), "create DocumentDB %s/%s", ns, ddName)
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: ddName}
@@ -107,7 +109,7 @@ var _ = Describe("DocumentDB upgrade — control plane",
 			docs := seed.SmallDataset()
 			handle, err := e2emongo.NewFromDocumentDB(operatorCtx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "connect to DocumentDB gateway")
-			inserted, err := e2emongo.Seed(operatorCtx, handle.Client(), dbName, collName, docs)
+			inserted, err := sharedmongo.Seed(operatorCtx, handle.Client(), dbName, collName, docs)
 			Expect(err).NotTo(HaveOccurred(), "seed %s.%s", dbName, collName)
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			// Explicit close before the helm upgrade: the port-forward
@@ -129,7 +131,7 @@ var _ = Describe("DocumentDB upgrade — control plane",
 			handle2, err := e2emongo.NewFromDocumentDB(operatorCtx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "reconnect to DocumentDB gateway")
 			DeferCleanup(func(ctx SpecContext) { _ = handle2.Close(ctx) })
-			n, err := e2emongo.Count(operatorCtx, handle2.Client(), dbName, collName, bson.M{})
+			n, err := sharedmongo.Count(operatorCtx, handle2.Client(), dbName, collName, bson.M{})
 			Expect(err).NotTo(HaveOccurred(), "count %s.%s", dbName, collName)
 			Expect(n).To(Equal(int64(seed.SmallDatasetSize)),
 				"seeded document count changed across operator upgrade")

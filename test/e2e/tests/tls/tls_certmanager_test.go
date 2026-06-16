@@ -18,8 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -82,7 +82,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			key := types.NamespacedName{Namespace: cluster.NamespaceName, Name: cluster.DD.Name}
 			var tlsSecretName string
 			Eventually(func(g Gomega) bool {
-				dd, err := ddbutil.Get(ctx, env.Client, key)
+				dd, err := shareddb.Get(ctx, env.Client, key)
 				g.Expect(err).NotTo(HaveOccurred())
 				if dd.Status.TLS == nil {
 					return false
@@ -117,7 +117,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			// mixins/tls_certmanager issue.
 			sni := "documentdb-service-" + tlsDocumentDBName + "." + cluster.NamespaceName + ".svc"
 
-			client, err := mongohelper.NewClient(connectCtx, mongohelper.ClientOptions{
+			client, err := sharedmongo.NewClient(connectCtx, sharedmongo.ClientOptions{
 				Host:       host,
 				Port:       port,
 				User:       tlsCredentialUser,
@@ -130,7 +130,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			defer func() { _ = client.Disconnect(ctx) }()
 
 			Eventually(func() error {
-				return mongohelper.Ping(connectCtx, client)
+				return sharedmongo.Ping(connectCtx, client)
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "ping via cert-manager-issued cert should succeed with CA verification")
 
@@ -186,7 +186,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 			Eventually(func(g Gomega) {
 				attemptCtx, cancelAttempt := context.WithTimeout(ctx, timeouts.For(timeouts.MongoConnect))
 				defer cancelAttempt()
-				client2, err := mongohelper.NewClient(attemptCtx, mongohelper.ClientOptions{
+				client2, err := sharedmongo.NewClient(attemptCtx, sharedmongo.ClientOptions{
 					Host:       host,
 					Port:       port,
 					User:       tlsCredentialUser,
@@ -197,7 +197,7 @@ var _ = Describe("DocumentDB TLS — cert-manager",
 				})
 				g.Expect(err).NotTo(HaveOccurred(), "reconnect with renewed CA")
 				defer func() { _ = client2.Disconnect(attemptCtx) }()
-				g.Expect(mongohelper.Ping(attemptCtx, client2)).To(Succeed(),
+				g.Expect(sharedmongo.Ping(attemptCtx, client2)).To(Succeed(),
 					"ping via renewed cert should succeed")
 			}, timeouts.For(timeouts.DocumentDBReady), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "gateway did not start serving the renewed cert (or reconnect kept failing)")

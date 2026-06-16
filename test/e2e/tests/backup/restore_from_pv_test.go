@@ -15,7 +15,9 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
@@ -66,7 +68,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 
 			h, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, sourceName)
 			Expect(err).NotTo(HaveOccurred(), "connect to source DocumentDB")
-			inserted, err := emongo.Seed(ctx, h.Client(), dbName, collName, seed.SmallDataset())
+			inserted, err := sharedmongo.Seed(ctx, h.Client(), dbName, collName, seed.SmallDataset())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			Expect(h.Close(ctx)).To(Succeed())
@@ -74,7 +76,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 			// 2. Delete the source cluster. Default reclaimPolicy is
 			// Retain (per the DocumentDB CRD default), so the PV
 			// persists with the data blocks intact.
-			Expect(documentdb.Delete(ctx, c, src, 3*time.Minute)).To(Succeed())
+			Expect(shareddb.Delete(ctx, c, src, 3*time.Minute)).To(Succeed())
 
 			// 3. Discover the retained PV that belonged to the now-
 			// deleted source cluster. FindRetainedPV matches both
@@ -94,7 +96,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 				"recovery_from_pv.yaml.template",
 				map[string]string{"PV_NAME": pv.Name})
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dst, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, dst, 3*time.Minute)
 			})
 			dstKey := types.NamespacedName{Namespace: ns, Name: recoveryName}
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, dstKey),
@@ -113,7 +115,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 			rh, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, recoveryName)
 			Expect(err).NotTo(HaveOccurred(), "connect to recovery DocumentDB")
 			DeferCleanup(func(ctx SpecContext) { _ = rh.Close(ctx) })
-			n, err := emongo.Count(ctx, rh.Client(), dbName, collName, bson.M{})
+			n, err := sharedmongo.Count(ctx, rh.Client(), dbName, collName, bson.M{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(seed.SmallDatasetSize)),
 				"PV-recovered cluster should contain the full seeded dataset")
