@@ -67,9 +67,9 @@ The driver supports a **two-cluster** topology so signals become attributable: a
 
 ## Lifecycle
 
-The test runs **continuously** — no cycles, no resets. Workload, metrics, operations, and health monitoring all run as long-lived processes. The system accumulates real state (PVC growth, CR history, operator memory) exactly as it would in production.
+The test runs **continuously** — no cycles, no scheduled resets. Workload, metrics, operations, and health monitoring all run as long-lived processes. The system accumulates real state (PVC growth, CR history, operator memory) exactly as it would in production. The cluster is only re-provisioned manually after a Fatal failure (see Failure Tiers).
 
-**Workload runs through upgrades.** No drain, no quiesce. Draining before upgrade hides exactly the upgrade-under-state bugs we're testing.
+**Workload runs through upgrades.** Both operator and DocumentDB upgrades fire while the workload is live — no drain, no quiesce. Draining before upgrade hides exactly the upgrade-under-state bugs we're testing. Downgrades are not exercised because neither path is a supported product transition.
 
 **Baseline gate before upgrades.** Upgrades are triggered by the operator release workflow, but don't fire immediately. The harness enforces a minimum accumulation period (default 48h) since the last upgrade — ensuring we always test "upgrade after accumulated state". If multiple versions arrive while the gate is closed, only the latest executes.
 
