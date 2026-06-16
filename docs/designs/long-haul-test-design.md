@@ -84,7 +84,7 @@ The scheduler picks operations from these categories with weighted randomization
 | **Topology** | scale up, scale down (within CRD bounds for `spec.instancesPerNode`) |
 | **Lifecycle** | DocumentDB version upgrade, operator upgrade |
 | **HA** | controlled failover |
-| **Chaos** | kill primary pod, drain node |
+| **Chaos** | kill primary pod, drain node, kill operator pod |
 | **Data protection** | trigger backup, verify backup |
 
 **Sequencing invariants** (enforced by the scheduler — exact values live in code):
