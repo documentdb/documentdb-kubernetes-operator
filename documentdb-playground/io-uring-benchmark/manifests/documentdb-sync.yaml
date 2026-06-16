@@ -1,0 +1,44 @@
+# DocumentDB variant: io_method = sync  (BASELINE — synchronous I/O, no AIO)
+#
+# This is the control in the io_uring comparison. Apply ONE variant at a time to
+# the same name/namespace so the dataset, PVC, image, and resources stay constant
+# and io_method is the only independent variable.
+#
+# Notes
+# - spec.postgres.parameters.io_method is passed through to the CNPG Cluster's
+#   postgresql.parameters (operator PR #307). io_method is a postmaster-level GUC,
+#   so changing it triggers a CNPG rolling restart.
+# - spec.image.postgres defaults to ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+#   (PostgreSQL 18) which ships liburing; we leave it at the default here.
+# - Memory is intentionally constrained relative to the dataset so reads hit storage
+#   (io_uring only helps real I/O, not page-cache hits). Size the dataset in
+#   scripts/40-load-data.sh to exceed this.
+# - Set spec.resource.storage.storageClass to a fast (NVMe / premium SSD) class for
+#   headline numbers; omitted here to use the cluster default.
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: iouring-bench
+  namespace: iouring-bench
+  labels:
+    app.kubernetes.io/part-of: io-uring-benchmark
+    io-uring-benchmark/io-method: sync
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: iouring-bench-credentials
+  resource:
+    storage:
+      pvcSize: "50Gi"
+      # storageClass: managed-csi-premium   # AKS premium SSD; set a fast class for real numbers
+      persistentVolumeReclaimPolicy: Delete
+    memory: "4Gi"
+    cpu: "2"
+  postgres:
+    parameters:
+      io_method: "sync"
+      track_io_timing: "on"
+  exposeViaService:
+    serviceType: ClusterIP
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

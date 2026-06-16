@@ -1,0 +1,34 @@
+# DocumentDB variant: io_method = worker  (PostgreSQL 18 DEFAULT async I/O)
+#
+# Asynchronous I/O via a pool of dedicated I/O worker processes (io_workers).
+# This is PG18's default and a useful middle point between sync and io_uring.
+#
+# Apply ONE variant at a time — see documentdb-sync.yaml for the full rationale.
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: iouring-bench
+  namespace: iouring-bench
+  labels:
+    app.kubernetes.io/part-of: io-uring-benchmark
+    io-uring-benchmark/io-method: worker
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: iouring-bench-credentials
+  resource:
+    storage:
+      pvcSize: "50Gi"
+      # storageClass: managed-csi-premium
+      persistentVolumeReclaimPolicy: Delete
+    memory: "4Gi"
+    cpu: "2"
+  postgres:
+    parameters:
+      io_method: "worker"
+      io_workers: "3"
+      track_io_timing: "on"
+  exposeViaService:
+    serviceType: ClusterIP
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

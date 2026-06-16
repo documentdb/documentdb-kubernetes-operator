@@ -1,0 +1,65 @@
+# DaemonSet that installs the io_uring seccomp profile onto every node, at the
+# kubelet seccomp root so it can be referenced as a Localhost profile:
+#   /var/lib/kubelet/seccomp/profiles/postgres.json   ->   localhostProfile: profiles/postgres.json
+#
+# The profile content lives in the `io-uring-seccomp-profile` ConfigMap, generated
+# from seccomp/io_uring-seccompprofile.json by the kustomization in this directory
+# (kubectl apply -k seccomp/). It is the upstream CNPG RuntimeDefault-equivalent
+# profile PLUS the io_uring_{setup,enter,register} syscalls (CNPG PR #10446).
+#
+# Use this (Localhost) variant for a hardened, production-like posture. For a quick
+# proof, the Unconfined Kyverno policy needs no node-level profile at all.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: io-uring-seccomp-installer
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: io-uring-benchmark
+    app: io-uring-seccomp-installer
+spec:
+  selector:
+    matchLabels:
+      app: io-uring-seccomp-installer
+  template:
+    metadata:
+      labels:
+        app: io-uring-seccomp-installer
+        app.kubernetes.io/part-of: io-uring-benchmark
+    spec:
+      # The installer only writes a file to the host seccomp dir, then idles.
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-profile
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              install -D -m 0644 /profile/postgres.json /host-seccomp/profiles/postgres.json
+              echo "installed profiles/postgres.json on $(hostname)"
+          volumeMounts:
+            - name: profile
+              mountPath: /profile
+            - name: host-seccomp
+              mountPath: /host-seccomp
+      containers:
+        - name: pause
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "trap 'exit 0' TERM; while true; do sleep 3600 & wait $!; done"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+      volumes:
+        - name: profile
+          configMap:
+            name: io-uring-seccomp-profile
+        - name: host-seccomp
+          hostPath:
+            path: /var/lib/kubelet/seccomp
+            type: DirectoryOrCreate

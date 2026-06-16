@@ -1,0 +1,69 @@
+# Kyverno mutate policy — HARDENED (Localhost profile).
+#
+# Same targeting as the Unconfined variant, but points the postgres pods at a curated
+# Localhost seccomp profile that allows ONLY the extra io_uring syscalls on top of the
+# container runtime's default set. This keeps the seccomp sandbox in place.
+#
+# PREREQUISITE: the profile must already be on every node at
+#   /var/lib/kubelet/seccomp/profiles/postgres.json
+# Install it with the DaemonSet in this playground:
+#   kubectl apply -k seccomp/
+#
+# Requires Kyverno installed. Apply BEFORE deploying the DocumentDB CR. Use EITHER this
+# policy OR the Unconfined one, not both.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: io-uring-relax-seccomp-localhost
+  annotations:
+    policies.kyverno.io/title: Relax seccomp for io_uring (Localhost)
+    policies.kyverno.io/category: io-uring-benchmark
+spec:
+  rules:
+    - name: pod-seccomp-localhost
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["iouring-bench"]
+              selector:
+                matchExpressions:
+                  - key: cnpg.io/cluster
+                    operator: Exists
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              seccompProfile:
+                type: Localhost
+                localhostProfile: profiles/postgres.json
+    - name: container-seccomp-localhost
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["iouring-bench"]
+              selector:
+                matchExpressions:
+                  - key: cnpg.io/cluster
+                    operator: Exists
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    securityContext:
+                      seccompProfile:
+                        type: Localhost
+                        localhostProfile: profiles/postgres.json
+          - list: "request.object.spec.initContainers || `[]`"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    securityContext:
+                      seccompProfile:
+                        type: Localhost
+                        localhostProfile: profiles/postgres.json

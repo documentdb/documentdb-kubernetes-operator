@@ -1,0 +1,88 @@
+# In-cluster benchmark runner for the DocumentDB micro-benchmarks Locust suite.
+#
+# A long-lived pod (not a one-shot Job) so scripts/50-run-matrix.sh can exec into it
+# once per (io_method x workload x selectivity) cell and collect CSVs, all over the
+# in-cluster pod network (no port-forward). It clones documentdb/micro-benchmarks and
+# pip-installs its requirements on first start, then idles.
+#
+# For repeated/CI use, pre-bake an image instead (see Dockerfile) and set `image:` below.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bench-runner
+  namespace: iouring-bench
+  labels:
+    app.kubernetes.io/part-of: io-uring-benchmark
+    app: bench-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bench-runner
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: bench-runner
+        app.kubernetes.io/part-of: io-uring-benchmark
+    spec:
+      containers:
+        - name: runner
+          image: python:3.12-slim
+          env:
+            - name: MICRO_BENCH_REPO
+              value: "https://github.com/documentdb/micro-benchmarks.git"
+            - name: MICRO_BENCH_REF
+              value: "main"
+            - name: GATEWAY_HOST
+              value: "documentdb-service-iouring-bench.iouring-bench.svc.cluster.local"
+            - name: GATEWAY_PORT
+              value: "10260"
+            - name: MONGO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: iouring-bench-credentials
+                  key: username
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: iouring-bench-credentials
+                  key: password
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              echo "[bootstrap] installing OS deps..."
+              apt-get update >/tmp/apt.log 2>&1
+              apt-get install -y --no-install-recommends \
+                git ca-certificates build-essential procps >>/tmp/apt.log 2>&1
+              echo "[bootstrap] cloning ${MICRO_BENCH_REPO} @ ${MICRO_BENCH_REF}..."
+              git clone "${MICRO_BENCH_REPO}" /opt/micro-benchmarks
+              cd /opt/micro-benchmarks
+              git checkout "${MICRO_BENCH_REF}"
+              echo "[bootstrap] installing python deps..."
+              pip install --no-cache-dir -r requirements.txt >/tmp/pip.log 2>&1
+              mkdir -p /results
+              touch /tmp/ready
+              echo "[bootstrap] runner ready."
+              sleep infinity
+          readinessProbe:
+            exec:
+              command: ["cat", "/tmp/ready"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 60
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: results
+          emptyDir: {}

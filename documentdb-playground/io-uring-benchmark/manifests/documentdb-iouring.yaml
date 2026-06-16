@@ -1,0 +1,40 @@
+# DocumentDB variant: io_method = io_uring  (Linux io_uring async I/O)
+#
+# Asynchronous I/O via io_uring. This is the variant under test.
+#
+# REQUIREMENT: io_uring syscalls (io_uring_setup/enter/register) must NOT be blocked
+# by the container seccomp profile. CNPG runs the postgres container with
+# seccompProfile=RuntimeDefault, and modern containerd strips io_uring from
+# RuntimeDefault — postgres then CrashLoops with:
+#     FATAL: could not setup io_uring queue: Operation not permitted
+# The DocumentDB CR has no seccomp field, so relax it OUT OF BAND before deploying
+# this variant:  scripts/20-deploy-seccomp.sh  (Kyverno mutate, Localhost or Unconfined).
+#
+# Apply ONE variant at a time — see documentdb-sync.yaml for the full rationale.
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: iouring-bench
+  namespace: iouring-bench
+  labels:
+    app.kubernetes.io/part-of: io-uring-benchmark
+    io-uring-benchmark/io-method: io_uring
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: iouring-bench-credentials
+  resource:
+    storage:
+      pvcSize: "50Gi"
+      # storageClass: managed-csi-premium
+      persistentVolumeReclaimPolicy: Delete
+    memory: "4Gi"
+    cpu: "2"
+  postgres:
+    parameters:
+      io_method: "io_uring"
+      track_io_timing: "on"
+  exposeViaService:
+    serviceType: ClusterIP
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

@@ -1,0 +1,69 @@
+# Kyverno mutate policy — QUICK START (Unconfined).
+#
+# Relaxes the seccomp profile to Unconfined on every CNPG-managed postgres pod in the
+# iouring-bench namespace (both the initdb Job pods and the running instance pods,
+# matched by the cnpg.io/cluster label). This unblocks io_uring without shipping any
+# node-level profile.
+#
+# The DocumentDB operator does not expose a seccomp field and CNPG sets the postgres
+# CONTAINER's seccompProfile to RuntimeDefault, so we override at the pod level AND at
+# each container/initContainer (strategic-merge by container name).
+#
+# Unconfined removes the seccomp sandbox entirely — fine for a benchmark, but prefer the
+# Localhost variant (kyverno-seccomp-localhost.yaml + the seccomp DaemonSet) for anything
+# resembling production.
+#
+# Requires Kyverno installed in the cluster. Apply BEFORE deploying the DocumentDB CR.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: io-uring-relax-seccomp-unconfined
+  annotations:
+    policies.kyverno.io/title: Relax seccomp for io_uring (Unconfined)
+    policies.kyverno.io/category: io-uring-benchmark
+spec:
+  rules:
+    - name: pod-seccomp-unconfined
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["iouring-bench"]
+              selector:
+                matchExpressions:
+                  - key: cnpg.io/cluster
+                    operator: Exists
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              seccompProfile:
+                type: Unconfined
+    - name: container-seccomp-unconfined
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["iouring-bench"]
+              selector:
+                matchExpressions:
+                  - key: cnpg.io/cluster
+                    operator: Exists
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{ element.name }}"
+                    securityContext:
+                      seccompProfile:
+                        type: Unconfined
+          - list: "request.object.spec.initContainers || `[]`"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{ element.name }}"
+                    securityContext:
+                      seccompProfile:
+                        type: Unconfined
