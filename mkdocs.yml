@@ -46,6 +46,7 @@ nav:
           - Storage: preview/configuration/storage.md
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
+          - PostgreSQL Tuning: postgresql-tuning.md
       - Operations:
           - Upgrades: preview/operations/upgrades.md
           - Failover: preview/operations/failover.md
