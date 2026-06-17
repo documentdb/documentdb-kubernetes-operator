@@ -106,6 +106,17 @@ func tryMetricsClient(config *rest.Config) (metricsv.Interface, bool) {
 	return mc, true
 }
 
+// Clientset returns the underlying typed Kubernetes clientset. Exposed so the
+// rest of the driver (e.g. the report ConfigMap writer) can reuse it instead
+// of building a second clientset against the same REST config.
+func (k *K8sClusterClient) Clientset() kubernetes.Interface { return k.clientset }
+
+// getCR fetches the target DocumentDB CR via the shared typed helper. Wraps
+// the namespaced-name lookup that's otherwise repeated in every method below.
+func (k *K8sClusterClient) getCR(ctx context.Context) (*previewv1.DocumentDB, error) {
+	return shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
+}
+
 // GetClusterHealth queries pod status and CR status to determine cluster health.
 func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth, error) {
 	health := ClusterHealth{Timestamp: time.Now()}
@@ -140,7 +151,7 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 	// Get the DocumentDB CR status via the shared typed helper. Using
 	// shareddb.IsHealthy keeps the readiness predicate consistent with
 	// the e2e suite (single source of truth for ReadyStatus).
-	dd, err := shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
+	dd, err := k.getCR(ctx)
 	if err != nil {
 		return health, fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
@@ -157,7 +168,7 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 // previewv1.DocumentDB gives a zero-value of 0 for omitted ints, so we
 // preserve the original semantics explicitly here.
 func (k *K8sClusterClient) GetInstancesPerNode(ctx context.Context) (int, error) {
-	dd, err := shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
+	dd, err := k.getCR(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
@@ -183,7 +194,7 @@ func (k *K8sClusterClient) ScaleCluster(ctx context.Context, instancesPerNode in
 // GetCurrentDocumentDBImageTag reads status.documentDBImage from the CR
 // and returns the tag portion (after the last colon).
 func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (string, error) {
-	dd, err := shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
+	dd, err := k.getCR(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
@@ -203,7 +214,7 @@ func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (st
 // and schemaVersion="auto" so the operator performs a rolling upgrade.
 // NOTE: the CRD field is documentDBVersion (capital DB), not documentDbVersion.
 func (k *K8sClusterClient) UpgradeDocumentDB(ctx context.Context, version string) error {
-	dd, err := shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
+	dd, err := k.getCR(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}

@@ -57,10 +57,10 @@ type HealthMonitor struct {
 	journal         *journal.Journal
 	steadyStateWait time.Duration
 
-	mu              sync.RWMutex
-	lastHealth      ClusterHealth
-	steadySince     time.Time // time when cluster became healthy
-	healthySamples  int
+	mu             sync.RWMutex
+	lastHealth     ClusterHealth
+	steadySince    time.Time // time when cluster became healthy
+	healthySamples int
 }
 
 // NewHealthMonitor creates a monitor that polls the cluster for health status.

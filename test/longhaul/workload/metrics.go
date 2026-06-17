@@ -35,7 +35,7 @@ func NewMetrics() *Metrics {
 	}
 }
 
-// Snapshot returns a point-in-time copy of all metric values.
+// MetricsSnapshot is a point-in-time copy of all metric values.
 type MetricsSnapshot struct {
 	WriteAttempted    int64
 	WriteAcknowledged int64

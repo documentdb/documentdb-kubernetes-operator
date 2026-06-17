@@ -24,9 +24,6 @@ import (
 	"github.com/documentdb/documentdb-operator/test/longhaul/workload"
 
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
@@ -104,11 +101,18 @@ func run(cfg config.Config) int {
 
 	j.Info("main", "long haul test starting")
 
-	// Initialize real k8s cluster client.
-	clusterClient, k8sClientset, err := initK8sClient(cfg)
+	// Initialize real k8s cluster client. The clientset built inside
+	// K8sClusterClient is reused for ConfigMap operations (reporter) below
+	// instead of building a second one against the same REST config.
+	clusterClient, err := monitor.NewK8sClusterClient(monitor.K8sClientConfig{
+		Namespace:   cfg.Namespace,
+		ClusterName: cfg.ClusterName,
+		Kubeconfig:  os.Getenv("KUBECONFIG"),
+	})
 	if err != nil {
 		log.Fatalf("failed to initialize k8s client: %v", err)
 	}
+	k8sClientset := clusterClient.Clientset()
 	j.Info("main", "k8s client initialized")
 
 	// Start health monitor.
@@ -208,44 +212,6 @@ func buildSummary(metrics *workload.Metrics, leakDetector *monitor.LeakDetector,
 		Events:       j.Events(),
 		FailReason:   failReason,
 	}
-}
-
-// initK8sClient creates the real K8s cluster client and returns the clientset for ConfigMap access.
-func initK8sClient(cfg config.Config) (*monitor.K8sClusterClient, kubernetes.Interface, error) {
-	k8sCfg := monitor.K8sClientConfig{
-		Namespace:   cfg.Namespace,
-		ClusterName: cfg.ClusterName,
-		Kubeconfig:  os.Getenv("KUBECONFIG"),
-	}
-
-	client, err := monitor.NewK8sClusterClient(k8sCfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Build a clientset for the reporter (ConfigMap operations).
-	restConfig, err := buildRESTConfig()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build REST config for clientset: %w", err)
-	}
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create clientset: %w", err)
-	}
-
-	return client, clientset, nil
-}
-
-func buildRESTConfig() (*rest.Config, error) {
-	cfg, err := rest.InClusterConfig()
-	if err == nil {
-		return cfg, nil
-	}
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		kubeconfig = clientcmd.RecommendedHomeFile
-	}
-	return clientcmd.BuildConfigFromFlags("", kubeconfig)
 }
 
 // runMetricsSampling periodically collects pod resource metrics and feeds the leak detector.

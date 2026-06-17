@@ -90,9 +90,9 @@ func (r *CheckpointReporter) emit(ctx context.Context, final bool) {
 	markdown := GenerateMarkdown(summary)
 
 	// Print to stdout with clear delimiter.
-	fmt.Printf("\n%s\n", "=== CHECKPOINT REPORT ===")
+	fmt.Println("\n=== CHECKPOINT REPORT ===")
 	fmt.Println(markdown)
-	fmt.Printf("%s\n\n", "=== END CHECKPOINT ===")
+	fmt.Print("=== END CHECKPOINT ===\n\n")
 
 	// Emit GitHub Actions annotations.
 	EmitAnnotation(summary)
@@ -141,14 +141,14 @@ func (r *CheckpointReporter) emit(ctx context.Context, final bool) {
 	}
 
 	// Also log the summary as JSON for structured log consumers.
-	summaryJSON, _ := json.Marshal(map[string]interface{}{
-		"result":         resultStr,
-		"elapsed":        summary.Duration.String(),
-		"writes":         summary.Metrics.WriteAttempted,
-		"gaps":           summary.Metrics.GapsDetected,
-		"ops":            summary.OpsExecuted,
-		"memory_leak":    summary.LeakAnalysis.HasLeak,
-		"memory_slope":   fmt.Sprintf("%.2f MB/h", summary.LeakAnalysis.MemorySlopeMB),
+	summaryJSON, _ := json.Marshal(map[string]any{
+		"result":          resultStr,
+		"elapsed":         summary.Duration.String(),
+		"writes":          summary.Metrics.WriteAttempted,
+		"gaps":            summary.Metrics.GapsDetected,
+		"ops":             summary.OpsExecuted,
+		"memory_leak":     summary.LeakAnalysis.HasLeak,
+		"memory_slope":    fmt.Sprintf("%.2f MB/h", summary.LeakAnalysis.MemorySlopeMB),
 		"checkpoint_time": time.Now().UTC().Format(time.RFC3339),
 	})
 	log.Printf("[checkpoint] %s", string(summaryJSON))

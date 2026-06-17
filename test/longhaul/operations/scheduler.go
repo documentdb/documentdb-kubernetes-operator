@@ -42,10 +42,10 @@ type Scheduler struct {
 	journal       *journal.Journal
 	cooldown      time.Duration
 
-	mu           sync.Mutex
-	lastOpTime   time.Time
-	opsExecuted  int
-	inProgress   bool
+	mu          sync.Mutex
+	lastOpTime  time.Time
+	opsExecuted int
+	inProgress  bool
 }
 
 // NewScheduler creates an operation scheduler.

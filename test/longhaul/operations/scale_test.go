@@ -56,7 +56,7 @@ var _ = Describe("ScaleUp", func() {
 	DescribeTable("clamps maxInstances to the CRD upper bound",
 		func(in, want int) {
 			s := NewScaleUp(&fakeClient{}, nil, in, time.Second)
-			Expect(s.maxInstances).To(Equal(want))
+			Expect(s.maxInstances()).To(Equal(want))
 		},
 		Entry("1->1", 1, 1),
 		Entry("2->2", 2, 2),
@@ -100,7 +100,7 @@ var _ = Describe("ScaleDown", func() {
 	DescribeTable("clamps minInstances to the CRD lower bound",
 		func(in, want int) {
 			s := NewScaleDown(&fakeClient{}, nil, in, time.Second)
-			Expect(s.minInstances).To(Equal(want))
+			Expect(s.minInstances()).To(Equal(want))
 		},
 		Entry("0 -> 1", 0, 1),
 		Entry("-5 -> 1", -5, 1),
