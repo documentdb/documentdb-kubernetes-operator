@@ -112,7 +112,10 @@ func (u *UpgradeDocumentDB) Execute(ctx context.Context) error {
 		return fmt.Errorf("desired version is empty")
 	}
 
-	running, _ := u.client.GetCurrentDocumentDBImageTag(ctx)
+	running, err := u.client.GetCurrentDocumentDBImageTag(ctx)
+	if err != nil {
+		return fmt.Errorf("read current image tag: %w", err)
+	}
 	if err := u.client.UpgradeDocumentDB(ctx, desired); err != nil {
 		return fmt.Errorf("patch CR: %w", err)
 	}

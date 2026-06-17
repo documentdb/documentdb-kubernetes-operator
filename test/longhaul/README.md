@@ -74,10 +74,12 @@ onto the cluster using a long-lived ServiceAccount-token kubeconfig stored in th
 **Manual path (one-off / local cluster):**
 
 ```bash
-cd test/longhaul
+# Build from the REPOSITORY ROOT (not test/longhaul/) so the replace
+# paths in test/longhaul/go.mod (../shared and ../../operator/src) resolve.
+cd <repo-root>
 
 # 1. Build and push the container image (or use the GHCR image from CI).
-docker build -t <your-registry>/longhaul-test:latest -f Dockerfile .
+docker build -t <your-registry>/longhaul-test:latest -f test/longhaul/Dockerfile .
 docker push <your-registry>/longhaul-test:latest
 
 # 2. Create the MongoDB credentials secret
@@ -88,12 +90,13 @@ kubectl create secret generic longhaul-mongo-credentials \
 # 3. Deploy RBAC and Deployment. deployment.yaml has placeholders
 #    __OWNER__ and __IMAGE_TAG__ that are normally substituted by the
 #    deploy workflow; for a manual apply, sed them yourself or edit
-#    the file in place.
-kubectl apply -f deploy/setup.yaml
-kubectl apply -f deploy/rbac.yaml
+#    the file in place. setup.yaml also has __LONGHAUL_PASSWORD__.
+sed -i "s/__LONGHAUL_PASSWORD__/$(openssl rand -base64 24)/" test/longhaul/deploy/setup.yaml
+kubectl apply -f test/longhaul/deploy/setup.yaml
+kubectl apply -f test/longhaul/deploy/rbac.yaml
 sed -e 's|__OWNER__|<your-registry>|g' \
     -e 's|__IMAGE_TAG__|latest|g' \
-    deploy/deployment.yaml | kubectl apply -f -
+    test/longhaul/deploy/deployment.yaml | kubectl apply -f -
 
 # 4. Monitor progress
 kubectl logs -f deployment/longhaul-test -n documentdb-test-ns
@@ -130,11 +133,15 @@ All configuration is via environment variables.
 | `LONGHAUL_MIN_INSTANCES` | No | `1` | Minimum `spec.instancesPerNode` for scale-down operations (CRD lower bound: 1). |
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
+| `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
 
 ## CI Safety
 
-The long haul test binary is deployed as a Kubernetes Job on a dedicated AKS cluster.
-It does **not** run in any PR-gated CI workflow.
+The long haul test binary is deployed as a Kubernetes Deployment on a dedicated AKS
+cluster. It does **not** run in any PR-gated CI workflow. Because a Deployment
+auto-restarts crashed pods, the source of truth for "did the test pass?" is the
+`longhaul-report` ConfigMap and the GitHub Actions annotations, not the pod
+status.
 
 The config unit tests (`test/longhaul/config/`) run unconditionally and are included in normal
 CI test runs — they are fast (~0.002s) and require no cluster.
@@ -152,22 +159,27 @@ DocumentDB cluster) but answer different questions:
 | Asserts | One behavior per spec, then exits | Continuous invariants over time |
 | Failure mode | `t.Fail` per spec | Journal entry + alert + auto-restart |
 | Cluster | Created + torn down per run | Long-lived dedicated AKS cluster |
-| Operator API | Typed (`previewv1.DocumentDB` via controller-runtime) | Dynamic client (no operator import) |
+| Operator API | Typed (`previewv1.DocumentDB` via controller-runtime) | Typed (`previewv1.DocumentDB` via controller-runtime + `test/shared/documentdb` helpers) |
 
-### Code that could be shared in the future
+### Code that is shared today
 
-The e2e suite has helpers in `test/e2e/pkg/e2eutils/` that this harness will likely consume
-once it grows beyond the current scope:
+The harness consumes the `test/shared/` module (extracted in PR #401):
 
-- `e2eutils/mongo` — `BuildURI` (URL-escapes username/password), TLS-from-CA-bundle, `Handle`
-  with port-forward + secret-backed credentials. The long haul driver currently takes a raw
-  `LONGHAUL_MONGO_URI` string; when it moves to per-secret credentials or in-cluster TLS,
-  these helpers become directly applicable.
-- `e2eutils/operatorhealth` — pod-ready / CRD-ready gating used during e2e setup. The
-  monitor's `isPodReady` could delegate to this when the modules are unified.
+- `test/shared/documentdb` — typed `DocumentDB` CR helpers (`Get`, `IsHealthy`,
+  `PatchInstances`, `PatchSpec`). The monitor's `K8sClusterClient` uses these
+  as the single source of truth for the readiness predicate so longhaul and
+  e2e can't drift on what "healthy" means.
+- `test/shared/mongo` — `NewFromURI` for the data-plane connection.
+
+### Future opportunities
+
+The e2e suite has additional helpers in `test/e2e/pkg/e2eutils/` that this
+harness will likely consume as it grows:
+
+- `e2eutils/mongo` — `BuildURI` (URL-escapes username/password), TLS-from-CA-bundle,
+  `Handle` with port-forward + secret-backed credentials. The long haul driver
+  currently takes a raw `LONGHAUL_MONGO_URI` string; when it moves to per-secret
+  credentials or in-cluster TLS, these helpers become directly applicable.
+- `e2eutils/operatorhealth` — pod-ready / CRD-ready gating used during e2e setup.
+  The monitor's `isPodReady` could delegate to this.
 - `e2eutils/clusterprobe` — CRD presence checks.
-
-A shared `test/shared/` module is **deliberately not introduced yet**: the modules' Go and
-dependency versions differ today, and the only currently-duplicated surface (raw mongo
-connect + ping) is too small to justify the third-module overhead. Revisit this when the
-long haul driver adopts the same connection model as e2e.

@@ -34,6 +34,14 @@ metadata:
 ---
 # Credentials for the DocumentDB cluster.
 # The operator creates the MongoDB user with these credentials.
+#
+# NOTE: This is a placeholder. Before applying, substitute a real password
+# (e.g. `sed -i "s/__LONGHAUL_PASSWORD__/$(openssl rand -base64 24)/" deploy/setup.yaml`)
+# or generate the secret out-of-band:
+#   kubectl create secret generic documentdb-credentials -n documentdb-test-ns \
+#     --type=kubernetes.io/basic-auth \
+#     --from-literal=username=longhaul-user \
+#     --from-literal=password="$(openssl rand -base64 24)"
 apiVersion: v1
 kind: Secret
 metadata:
@@ -42,7 +50,7 @@ metadata:
 type: kubernetes.io/basic-auth
 stringData:
   username: longhaul-user
-  password: LongHaul-T3st-Passw0rd!
+  password: __LONGHAUL_PASSWORD__
 ---
 # DocumentDB cluster for long-haul testing.
 #
@@ -75,4 +83,5 @@ spec:
       pvcSize: 10Gi
   exposeViaService:
     serviceType: LoadBalancer
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

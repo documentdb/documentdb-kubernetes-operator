@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -77,7 +78,11 @@ func (w *Writer) Run(ctx context.Context) {
 }
 
 func (w *Writer) writeOne(ctx context.Context) {
-	seq := w.seq.Add(1)
+	// Compute the next seq without advancing the counter yet — only commit on
+	// success. Each writer has exactly one goroutine (Run), so a plain
+	// Load/Store pair is race-free; atomic.Int64 is retained so external
+	// observers (verifier tests, future debug endpoints) can read it safely.
+	seq := w.seq.Load() + 1
 	payload := fmt.Sprintf("writer=%s seq=%d t=%d", w.id, seq, time.Now().UnixNano())
 	checksum := computeChecksum(w.id, seq, payload)
 
@@ -98,19 +103,40 @@ func (w *Writer) writeOne(ctx context.Context) {
 		//   1. driver sends InsertOne, server commits, ACK is dropped
 		//   2. driver auto-retries the same _id, server returns code 11000
 		//   3. InsertOne returns a duplicate-key error to us
-		// The data is durably committed in case (3), so counting it as a write
-		// failure (and feeding the policy/AllowedWriteFailures gate) would turn
-		// successful writes into spurious FAIL verdicts. Treat dup-key as a
-		// successful, idempotent ACK instead.
+		// The data is durably committed in case (3), so we advance seq and
+		// count it as a successful, idempotent ACK.
 		if mongo.IsDuplicateKeyError(err) {
+			w.seq.Store(seq)
 			w.metrics.WriteAcknowledged.Add(1)
 			return
 		}
+		// For any other error the document was NOT committed. Do NOT advance
+		// seq, otherwise the verifier will see a permanent gap and report
+		// false-positive data loss. The next tick will retry the same seq.
 		w.metrics.WriteFailed.Add(1)
 		w.journal.RecordWriteFailure()
 		return
 	}
+	w.seq.Store(seq)
 	w.metrics.WriteAcknowledged.Add(1)
+}
+
+// Resume seeds the writer's seq counter from the highest seq already persisted
+// for this writer_id. Called on startup so a Deployment-driven restart picks
+// up where the previous pod left off instead of colliding with the existing
+// unique index on (writer_id, seq).
+func (w *Writer) Resume(ctx context.Context) (int64, error) {
+	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
+	var doc WriteDocument
+	err := w.collection.FindOne(ctx, bson.M{"writer_id": w.id}, opts).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	w.seq.Store(doc.Seq)
+	return doc.Seq, nil
 }
 
 // computeChecksum creates a deterministic hash of the write for verification.
@@ -120,12 +146,22 @@ func computeChecksum(writerID string, seq int64, payload string) string {
 	return hex.EncodeToString(hash[:8])
 }
 
-// StartWriters launches n writers and returns a cancel function to stop them.
+// StartWriters launches n writer goroutines and returns the slice of writers.
+// Each writer is seeded from the collection so a restart resumes its seq
+// counter past the previous tip (preventing dup-key collisions on the unique
+// (writer_id, seq) index).
+// The writers run until the supplied context is cancelled; there is no separate
+// stop signal.
 func StartWriters(ctx context.Context, n int, db *mongo.Database, metrics *Metrics, j *journal.Journal) []*Writer {
 	writers := make([]*Writer, n)
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("w%03d", i)
 		writers[i] = NewWriter(id, db, metrics, j)
+		if seq, err := writers[i].Resume(ctx); err != nil {
+			j.Warn("writer", fmt.Sprintf("writer %s resume failed: %v (starting at 0)", id, err))
+		} else if seq > 0 {
+			j.Info("writer", fmt.Sprintf("writer %s resumed at seq=%d", id, seq))
+		}
 		go writers[i].Run(ctx)
 	}
 	return writers

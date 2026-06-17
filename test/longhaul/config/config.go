@@ -32,6 +32,9 @@ const (
 
 	// Observability and reporting.
 	EnvReportInterval = "LONGHAUL_REPORT_INTERVAL"
+
+	// Operational toggles.
+	EnvResetData = "LONGHAUL_RESET_DATA"
 )
 
 // Config holds all configuration for a long haul test run.
@@ -73,6 +76,11 @@ type Config struct {
 
 	// ReportInterval is how often checkpoint reports are generated.
 	ReportInterval time.Duration
+
+	// ResetData controls whether the workload collection is dropped on startup.
+	// Default false so that pod restarts preserve durability history; opt in
+	// for fresh local/dev iterations.
+	ResetData bool
 }
 
 // DefaultConfig returns a Config with safe defaults for local development.
@@ -180,6 +188,10 @@ func LoadFromEnv() (Config, error) {
 			return cfg, fmt.Errorf("invalid %s=%q: %w", EnvReportInterval, v, err)
 		}
 		cfg.ReportInterval = d
+	}
+
+	if v := strings.TrimSpace(strings.ToLower(os.Getenv(EnvResetData))); v != "" {
+		cfg.ResetData = v == "true" || v == "1" || v == "yes"
 	}
 
 	return cfg, nil

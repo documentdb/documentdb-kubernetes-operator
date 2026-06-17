@@ -8,7 +8,7 @@ package operations
 import (
 	"context"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -143,7 +143,7 @@ func (s *Scheduler) selectOperation(ctx context.Context) Operation {
 	}
 
 	// Weighted random selection.
-	r := rand.Intn(totalWeight)
+	r := rand.IntN(totalWeight)
 	for _, c := range candidates {
 		r -= c.weight
 		if r < 0 {

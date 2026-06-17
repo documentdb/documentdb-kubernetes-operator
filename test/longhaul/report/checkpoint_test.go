@@ -19,7 +19,7 @@ var _ = Describe("CheckpointReporter", func() {
 		r := NewCheckpointReporter(nil, "ns", time.Second, func() Summary {
 			return Summary{Result: ResultPass, Duration: time.Minute}
 		})
-		Expect(func() { r.emit(context.Background()) }).NotTo(Panic())
+		Expect(func() { r.emit(context.Background(), false) }).NotTo(Panic())
 	})
 
 	It("creates the ConfigMap on first emit and labels it identifiably", func() {
@@ -28,7 +28,7 @@ var _ = Describe("CheckpointReporter", func() {
 			return Summary{Result: ResultPass, Duration: 2 * time.Hour, OpsExecuted: 5}
 		})
 
-		r.emit(context.Background())
+		r.emit(context.Background(), false)
 
 		cm, err := cs.CoreV1().ConfigMaps("ns").Get(context.Background(), ConfigMapName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -47,7 +47,7 @@ var _ = Describe("CheckpointReporter", func() {
 			return Summary{Result: ResultFail, FailReason: "data loss"}
 		})
 
-		r.emit(context.Background())
+		r.emit(context.Background(), false)
 
 		cm, err := cs.CoreV1().ConfigMaps("ns").Get(context.Background(), ConfigMapName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -63,14 +63,14 @@ var _ = Describe("CheckpointReporter", func() {
 			return Summary{Result: ResultPass, Duration: time.Duration(calls) * time.Hour, OpsExecuted: calls * 10}
 		})
 
-		r.emit(context.Background())
+		r.emit(context.Background(), false)
 		cm1, err := cs.CoreV1().ConfigMaps("ns").Get(context.Background(), ConfigMapName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		report1 := cm1.Data["latest-report"]
 
 		// Fake clientset doesn't bump ResourceVersion automatically, so assert
 		// on content change instead.
-		r.emit(context.Background())
+		r.emit(context.Background(), false)
 		cm2, err := cs.CoreV1().ConfigMaps("ns").Get(context.Background(), ConfigMapName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cm2.Data["latest-report"]).NotTo(Equal(report1))

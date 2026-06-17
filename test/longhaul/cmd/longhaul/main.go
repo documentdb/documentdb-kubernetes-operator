@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 // Package main provides a standalone binary entry point for running
-// long haul tests as a Kubernetes Job (without Ginkgo test framework).
+// long haul tests as a Kubernetes Deployment (without Ginkgo test framework).
+// A Deployment is used (not a Job) so the kubelet auto-restarts the driver
+// pod on crash; the canonical "did the test pass?" signal is the
+// longhaul-report ConfigMap and the GitHub Actions annotations, not the pod
+// exit status.
 package main
 
 import (
@@ -82,9 +86,15 @@ func run(cfg config.Config) int {
 
 	db := mongoClient.Database("longhaul")
 
-	// Drop previous test data to avoid duplicate key conflicts.
-	if err := db.Collection(workload.CollectionName).Drop(ctx); err != nil {
-		log.Fatalf("failed to drop collection: %v", err)
+	// Optionally drop previous test data. Disabled by default so that pod
+	// restarts (Deployment auto-restart on crash) preserve durability
+	// history for post-mortem; opt in with LONGHAUL_RESET_DATA=true for
+	// local/dev iterations or fresh CI runs.
+	if cfg.ResetData {
+		if err := db.Collection(workload.CollectionName).Drop(ctx); err != nil {
+			log.Fatalf("failed to drop collection: %v", err)
+		}
+		log.Println("workload collection dropped (LONGHAUL_RESET_DATA=true)")
 	}
 
 	// Create indexes.
@@ -146,10 +156,14 @@ func run(cfg config.Config) int {
 	// Allow goroutines to flush.
 	time.Sleep(500 * time.Millisecond)
 
-	// Generate final report.
+	// Generate final report. Persist to the report ConfigMap synchronously
+	// here (before os.Exit) so the authoritative verdict reaches the source
+	// of truth that operators consult — the Run() goroutine cannot do this
+	// reliably because os.Exit can kill it mid-Update.
 	summary := buildSummary(metrics, leakDetector, scheduler, j)
 	markdown := report.GenerateMarkdown(summary)
 	fmt.Println("\n" + markdown)
+	reporter.EmitFinal()
 
 	// Emit final GitHub Actions annotation.
 	report.EmitAnnotation(summary)

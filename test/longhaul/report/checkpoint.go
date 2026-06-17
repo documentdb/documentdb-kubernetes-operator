@@ -43,6 +43,9 @@ func NewCheckpointReporter(clientset kubernetes.Interface, namespace string, int
 }
 
 // Run starts the periodic reporting loop. Blocks until context is cancelled.
+// On shutdown, callers should invoke EmitFinal() synchronously — Run no longer
+// emits its own final report because the goroutine can be killed by os.Exit
+// before the K8s Update returns.
 func (r *CheckpointReporter) Run(ctx context.Context) {
 	log.Printf("[checkpoint] periodic reporter started (interval=%s)", r.interval)
 	defer log.Println("[checkpoint] periodic reporter stopped")
@@ -53,21 +56,34 @@ func (r *CheckpointReporter) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			// Final report on exit.
-			r.emit(context.Background())
 			return
 		case <-ticker.C:
-			r.emit(ctx)
+			r.emit(ctx, false)
 		}
 	}
 }
 
-func (r *CheckpointReporter) emit(ctx context.Context) {
+// EmitFinal writes a terminal summary (PASS or FAIL is persisted as itself,
+// not as RUNNING) using a bounded context. Safe to call after the main
+// context has been cancelled. Intended to be called synchronously from main
+// just before exit so the verdict is durable in the ConfigMap.
+func (r *CheckpointReporter) EmitFinal() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	r.emit(ctx, true)
+}
+
+// emit writes the current summary to stdout, GH Actions annotations, and the
+// status ConfigMap. final=true means this is the shutdown emit, in which case
+// PASS is persisted as "PASS" (not "RUNNING") so consumers can distinguish a
+// finished clean run from an in-flight checkpoint.
+func (r *CheckpointReporter) emit(ctx context.Context, final bool) {
 	summary := r.summaryFunc()
 
-	// Mark as RUNNING for intermediate checkpoints (unless already FAIL).
+	// Intermediate PASS checkpoints surface as RUNNING; the final emit
+	// preserves the true PASS/FAIL outcome.
 	resultStr := string(summary.Result)
-	if summary.Result == ResultPass {
+	if summary.Result == ResultPass && !final {
 		resultStr = "RUNNING"
 	}
 
