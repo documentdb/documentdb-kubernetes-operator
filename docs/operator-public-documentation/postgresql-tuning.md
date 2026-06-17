@@ -34,6 +34,12 @@ When `memory` is set, the operator uses **Guaranteed QoS** (requests = limits), 
 
 If `memory` is not specified (or set to `"0"`), no resource limits are applied and static fallback values are used for memory-sensitive parameters.
 
+!!! note
+    Changing `memory` (or `cpu`) triggers a rolling restart of the DocumentDB pods,
+    causing brief downtime. The pod is recreated with the new resource limits, and the
+    memory-aware PostgreSQL parameters (`shared_buffers`, `effective_cache_size`,
+    `work_mem`, `maintenance_work_mem`) are recomputed and applied at the same time.
+
 ## Memory-Aware Defaults
 
 When a memory limit is configured, these parameters are automatically computed:
@@ -99,7 +105,7 @@ These parameters are managed by the operator and **cannot be overridden**:
 | `cron.database_name` | postgres | Required by pg_cron extension |
 | `max_replication_slots` | 10 | Required for CNPG replication |
 | `max_wal_senders` | 10 | Required for CNPG replication |
-| `max_prepared_transactions` | 100 | Required by Citus distributed transactions |
+| `max_prepared_transactions` | 100 | Enables two-phase commit (PREPARE TRANSACTION) for multi-document transactions |
 | `wal_level` | logical | Only when ChangeStreams feature gate is enabled |
 
 !!! warning
