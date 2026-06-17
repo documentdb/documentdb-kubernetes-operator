@@ -6,27 +6,25 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Recover a DocumentDB cluster after accidental deletion by restoring from a VolumeSnapshot backup or by reattaching retained PersistentVolumes.">
       
       
       
-      
-        <link rel="prev" href="../backup-and-restore/">
-      
-      
-        <link rel="next" href="../maintenance/">
+        <link rel="prev" href="../preview/configuration/tls/">
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+        <link rel="next" href="../preview/operations/upgrades/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.19">
     
     
       
-        <title>Restore a Deleted DocumentDB Cluster - DocumentDB-Kubernetes-Operator</title>
+        <title>PostgreSQL Tuning - DocumentDB-Kubernetes-Operator</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.66ac8b77.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.66ac8b77.min.css">
       
       
 
@@ -45,7 +43,7 @@
       
     
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -64,7 +62,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#restore-a-deleted-documentdb-cluster" class="md-skip">
+        <a href="#postgresql-parameter-tuning" class="md-skip">
           Skip to content
         </a>
       
@@ -82,7 +80,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-header__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -102,7 +100,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Restore a Deleted DocumentDB Cluster
+              PostgreSQL Tuning
             
           </span>
         </div>
@@ -189,7 +187,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+        <a href="../preview/" class="md-tabs__link">
           
   
   Preview
@@ -222,7 +220,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
+    <a href=".." title="DocumentDB-Kubernetes-Operator" class="md-nav__button md-logo" aria-label="DocumentDB-Kubernetes-Operator" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
@@ -297,7 +295,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../" class="md-nav__link">
+      <a href="../preview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -361,7 +359,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/before-you-start/" class="md-nav__link">
+      <a href="../preview/getting-started/before-you-start/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -382,7 +380,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart-kind/" class="md-nav__link">
+      <a href="../preview/getting-started/quickstart-kind/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -403,7 +401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart-k3s/" class="md-nav__link">
+      <a href="../preview/getting-started/quickstart-k3s/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -424,7 +422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-aks/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-aks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -445,7 +443,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-eks/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-eks/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -466,7 +464,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/deploy-on-gke/" class="md-nav__link">
+      <a href="../preview/getting-started/deploy-on-gke/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -487,7 +485,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/connecting-to-documentdb/" class="md-nav__link">
+      <a href="../preview/getting-started/connecting-to-documentdb/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -559,146 +557,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+      <a href="../preview/architecture/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
     Overview
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" >
-        
-          
-          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
-            
-  
-  <span class="md-ellipsis">
-    Configuration
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_1_4">
-            <span class="md-nav__icon md-icon"></span>
-            Configuration
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/storage/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Storage
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/networking/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    Networking
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../configuration/tls/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    TLS
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../postgresql-tuning/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    PostgreSQL Tuning
   </span>
   
 
@@ -740,24 +603,24 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+          <label class="md-nav__link" for="__nav_1_4" id="__nav_1_4_label" tabindex="">
             
   
   <span class="md-ellipsis">
-    Operations
+    Configuration
   </span>
   
 
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_1_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1_4">
             <span class="md-nav__icon md-icon"></span>
-            Operations
+            Configuration
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -768,11 +631,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../upgrades/" class="md-nav__link">
+      <a href="../preview/configuration/storage/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Upgrades
+    Storage
   </span>
   
 
@@ -789,11 +652,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../failover/" class="md-nav__link">
+      <a href="../preview/configuration/networking/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Failover
+    Networking
   </span>
   
 
@@ -810,11 +673,11 @@
   
   
     <li class="md-nav__item">
-      <a href="../backup-and-restore/" class="md-nav__link">
+      <a href="../preview/configuration/tls/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
-    Backup and Restore
+    TLS
   </span>
   
 
@@ -844,7 +707,7 @@
           
   
   <span class="md-ellipsis">
-    Restore a Deleted Cluster
+    PostgreSQL Tuning
   </span>
   
 
@@ -855,7 +718,7 @@
         
   
   <span class="md-ellipsis">
-    Restore a Deleted Cluster
+    PostgreSQL Tuning
   </span>
   
 
@@ -877,64 +740,106 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
-      Overview
+      How It Works
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#method-1-restore-from-backup" class="md-nav__link">
+  <a href="#resource-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      Method 1: Restore from Backup
+      Resource Configuration
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#method-2-restore-from-retained-persistentvolume" class="md-nav__link">
+  <a href="#memory-aware-defaults" class="md-nav__link">
     <span class="md-ellipsis">
-      Method 2: Restore from Retained PersistentVolume
+      Memory-Aware Defaults
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Method 2: Restore from Retained PersistentVolume">
+    <nav class="md-nav" aria-label="Memory-Aware Defaults">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-find-the-retained-pv" class="md-nav__link">
+  <a href="#sizing-reference" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Find the Retained PV
+      Sizing Reference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#static-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static Defaults
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Overrides
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protected-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Protected Parameters
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Complete Example
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-not-taking-effect" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters not taking effect
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" class="md-nav__link">
+  <a href="#memory-aware-defaults-showing-static-fallbacks" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Create a New DocumentDB Cluster with PV Recovery
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-3-verify-the-recovery" class="md-nav__link">
-    <span class="md-ellipsis">
-      Step 3: Verify the Recovery
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-4-clean-up-the-source-pv" class="md-nav__link">
-    <span class="md-ellipsis">
-      Step 4: Clean Up the Source PV
+      Memory-aware defaults showing static fallbacks
     </span>
   </a>
   
@@ -954,6 +859,57 @@
 
               
             
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_1_5" id="__nav_1_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Operations
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_1_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1_5">
+            <span class="md-nav__icon md-icon"></span>
+            Operations
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
   
@@ -961,7 +917,91 @@
   
   
     <li class="md-nav__item">
-      <a href="../maintenance/" class="md-nav__link">
+      <a href="../preview/operations/upgrades/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Upgrades
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/failover/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Failover
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/backup-and-restore/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backup and Restore
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/restore-deleted-cluster/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Restore a Deleted Cluster
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../preview/operations/maintenance/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1033,7 +1073,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../high-availability/overview/" class="md-nav__link">
+      <a href="../preview/high-availability/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1054,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../high-availability/local-ha/" class="md-nav__link">
+      <a href="../preview/high-availability/local-ha/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1083,7 +1123,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../advanced-configuration/" class="md-nav__link">
+      <a href="../preview/advanced-configuration/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1147,7 +1187,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../monitoring/overview/" class="md-nav__link">
+      <a href="../preview/monitoring/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1168,7 +1208,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../monitoring/metrics/" class="md-nav__link">
+      <a href="../preview/monitoring/metrics/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1240,7 +1280,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/overview/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/overview/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1261,7 +1301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/setup/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/setup/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1282,7 +1322,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../multi-region-deployment/failover-procedures/" class="md-nav__link">
+      <a href="../preview/multi-region-deployment/failover-procedures/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1311,7 +1351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../faq/" class="md-nav__link">
+      <a href="../preview/faq/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1375,7 +1415,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../kubectl-plugin/" class="md-nav__link">
+      <a href="../preview/kubectl-plugin/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1404,7 +1444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api-reference/" class="md-nav__link">
+      <a href="../preview/api-reference/" class="md-nav__link">
         
   
   <span class="md-ellipsis">
@@ -1452,64 +1492,106 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
-      Overview
+      How It Works
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#method-1-restore-from-backup" class="md-nav__link">
+  <a href="#resource-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      Method 1: Restore from Backup
+      Resource Configuration
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#method-2-restore-from-retained-persistentvolume" class="md-nav__link">
+  <a href="#memory-aware-defaults" class="md-nav__link">
     <span class="md-ellipsis">
-      Method 2: Restore from Retained PersistentVolume
+      Memory-Aware Defaults
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Method 2: Restore from Retained PersistentVolume">
+    <nav class="md-nav" aria-label="Memory-Aware Defaults">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#step-1-find-the-retained-pv" class="md-nav__link">
+  <a href="#sizing-reference" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 1: Find the Retained PV
+      Sizing Reference
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#static-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static Defaults
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Overrides
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#protected-parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      Protected Parameters
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#complete-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      Complete Example
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      Troubleshooting
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameters-not-taking-effect" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parameters not taking effect
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" class="md-nav__link">
+  <a href="#memory-aware-defaults-showing-static-fallbacks" class="md-nav__link">
     <span class="md-ellipsis">
-      Step 2: Create a New DocumentDB Cluster with PV Recovery
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-3-verify-the-recovery" class="md-nav__link">
-    <span class="md-ellipsis">
-      Step 3: Verify the Recovery
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#step-4-clean-up-the-source-pv" class="md-nav__link">
-    <span class="md-ellipsis">
-      Step 4: Clean Up the Source PV
+      Memory-aware defaults showing static fallbacks
     </span>
   </a>
   
@@ -1538,78 +1620,311 @@
   
 
 
-<h1 id="restore-a-deleted-documentdb-cluster">Restore a Deleted DocumentDB Cluster<a class="headerlink" href="#restore-a-deleted-documentdb-cluster" title="Permanent link">&para;</a></h1>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<p>Restoring a deleted DocumentDB cluster recovers your data after accidental or unplanned DocumentDB cluster removal. Acting quickly matters — retained PersistentVolumes preserve data up to the moment of deletion, while backups restore to the point in time they were taken.</p>
-<p>When a DocumentDB cluster is deleted, there are two paths to recovery:</p>
+<h1 id="postgresql-parameter-tuning">PostgreSQL Parameter Tuning<a class="headerlink" href="#postgresql-parameter-tuning" title="Permanent link">&para;</a></h1>
+<p>DocumentDB Kubernetes Operator provides intelligent PostgreSQL parameter tuning with memory-aware defaults, static best-practice values, and full user customization.</p>
+<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<p>The operator manages PostgreSQL parameters through a layered merge system with clear priority:</p>
 <table>
 <thead>
 <tr>
-<th>Method</th>
-<th>Requires</th>
-<th>Data Freshness</th>
+<th>Priority</th>
+<th>Source</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>Backup recovery</strong></td>
-<td>A <code>Backup</code> resource in <code>completed</code> state</td>
-<td>Point-in-time (when backup was taken)</td>
+<td>1 (highest)</td>
+<td><strong>Protected parameters</strong></td>
+<td>Operator-managed values that cannot be overridden</td>
 </tr>
 <tr>
-<td><strong>PersistentVolume recovery</strong></td>
-<td>PV with <code>persistentVolumeReclaimPolicy: Retain</code></td>
-<td>Latest (up to the moment of deletion)</td>
+<td>2</td>
+<td><strong>User overrides</strong></td>
+<td>Values from <code>spec.postgres.parameters</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Memory-aware defaults</strong></td>
+<td>Auto-computed from pod memory limit</td>
+</tr>
+<tr>
+<td>4 (lowest)</td>
+<td><strong>Static defaults</strong></td>
+<td>Best-practice values for all deployments</td>
 </tr>
 </tbody>
 </table>
-<div class="admonition tip">
-<p class="admonition-title">Tip</p>
-<p>PV recovery preserves data up to the moment of deletion, while backup recovery restores to the point in time when the backup was taken. If both are available, PV recovery provides more recent data.</p>
+<h2 id="resource-configuration">Resource Configuration<a class="headerlink" href="#resource-configuration" title="Permanent link">&para;</a></h2>
+<p>Configure CPU and memory for your DocumentDB pods using the <code>spec.resource</code> section:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50Gi&quot;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8Gi&quot;</span><span class="w">    </span><span class="c1"># Pod memory limit (Guaranteed QoS)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4&quot;</span><span class="w">         </span><span class="c1"># Pod CPU limit (Guaranteed QoS)</span>
+</code></pre></div>
+<p>When <code>memory</code> is set, the operator uses <strong>Guaranteed QoS</strong> (requests = limits), as recommended by CloudNative-PG for database workloads. This ensures predictable performance and stable memory for PostgreSQL buffer management.</p>
+<p>If <code>memory</code> is not specified (or set to <code>"0"</code>), no resource limits are applied and static fallback values are used for memory-sensitive parameters.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Changing <code>memory</code> (or <code>cpu</code>) triggers a rolling restart of the DocumentDB pods,
+causing brief downtime. The pod is recreated with the new resource limits, and the
+memory-aware PostgreSQL parameters (<code>shared_buffers</code>, <code>effective_cache_size</code>,
+<code>work_mem</code>, <code>maintenance_work_mem</code>) are recomputed and applied at the same time.</p>
 </div>
-<h2 id="method-1-restore-from-backup">Method 1: Restore from Backup<a class="headerlink" href="#method-1-restore-from-backup" title="Permanent link">&para;</a></h2>
-<p>If you have a <code>Backup</code> resource in <code>completed</code> status, follow the restore procedure in <a href="../backup-and-restore/#restore-from-backup">Backup and Restore — Restore from Backup</a>.</p>
-<h2 id="method-2-restore-from-retained-persistentvolume">Method 2: Restore from Retained PersistentVolume<a class="headerlink" href="#method-2-restore-from-retained-persistentvolume" title="Permanent link">&para;</a></h2>
-<p>Use this method if your deleted DocumentDB cluster had <code>persistentVolumeReclaimPolicy: Retain</code> configured (this is the default). This approach recovers data up to the moment of deletion.</p>
-<h3 id="step-1-find-the-retained-pv">Step 1: Find the Retained PV<a class="headerlink" href="#step-1-find-the-retained-pv" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pv<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;,documentdb.io/namespace<span class="o">=</span>&lt;namespace&gt;
+<h2 id="memory-aware-defaults">Memory-Aware Defaults<a class="headerlink" href="#memory-aware-defaults" title="Permanent link">&para;</a></h2>
+<p>When a memory limit is configured, these parameters are automatically computed:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Formula</th>
+<th>Example (8Gi)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>shared_buffers</code></td>
+<td>25% of memory</td>
+<td>2GB</td>
+</tr>
+<tr>
+<td><code>effective_cache_size</code></td>
+<td>75% of memory</td>
+<td>6GB</td>
+</tr>
+<tr>
+<td><code>work_mem</code></td>
+<td>memory / (max_connections × 4)</td>
+<td>6MB</td>
+</tr>
+<tr>
+<td><code>maintenance_work_mem</code></td>
+<td>min(2GB, 10% of memory)</td>
+<td>819MB</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sizing-reference">Sizing Reference<a class="headerlink" href="#sizing-reference" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Pod Memory</th>
+<th>shared_buffers</th>
+<th>effective_cache_size</th>
+<th>work_mem</th>
+<th>maintenance_work_mem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(not set)</td>
+<td>256MB</td>
+<td>512MB</td>
+<td>16MB</td>
+<td>128MB</td>
+</tr>
+<tr>
+<td>2Gi</td>
+<td>512MB</td>
+<td>1536MB</td>
+<td>4MB</td>
+<td>204MB</td>
+</tr>
+<tr>
+<td>4Gi</td>
+<td>1GB</td>
+<td>3GB</td>
+<td>4MB</td>
+<td>409MB</td>
+</tr>
+<tr>
+<td>8Gi</td>
+<td>2GB</td>
+<td>6GB</td>
+<td>6MB</td>
+<td>819MB</td>
+</tr>
+<tr>
+<td>16Gi</td>
+<td>4GB</td>
+<td>12GB</td>
+<td>13MB</td>
+<td>1638MB</td>
+</tr>
+<tr>
+<td>32Gi</td>
+<td>8GB</td>
+<td>24GB</td>
+<td>27MB</td>
+<td>2GB</td>
+</tr>
+</tbody>
+</table>
+<h2 id="static-defaults">Static Defaults<a class="headerlink" href="#static-defaults" title="Permanent link">&para;</a></h2>
+<p>These best-practice values are applied to all clusters regardless of memory:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max_connections</code></td>
+<td>300</td>
+<td>DocumentDB gateway is connection-heavy</td>
+</tr>
+<tr>
+<td><code>random_page_cost</code></td>
+<td>1.1</td>
+<td>Optimized for SSD storage (typical in cloud)</td>
+</tr>
+<tr>
+<td><code>effective_io_concurrency</code></td>
+<td>200</td>
+<td>Modern SSD parallelism</td>
+</tr>
+<tr>
+<td><code>checkpoint_completion_target</code></td>
+<td>0.9</td>
+<td>Spread checkpoint I/O</td>
+</tr>
+<tr>
+<td><code>wal_buffers</code></td>
+<td>16MB</td>
+<td>Adequate for most workloads</td>
+</tr>
+<tr>
+<td><code>min_wal_size</code></td>
+<td>256MB</td>
+<td>Prevent excessive WAL recycling</td>
+</tr>
+<tr>
+<td><code>max_wal_size</code></td>
+<td>2GB</td>
+<td>Limit checkpoint distance</td>
+</tr>
+<tr>
+<td><code>autovacuum_vacuum_scale_factor</code></td>
+<td>0.1</td>
+<td>More aggressive vacuum triggers</td>
+</tr>
+<tr>
+<td><code>autovacuum_analyze_scale_factor</code></td>
+<td>0.05</td>
+<td>More frequent statistics updates</td>
+</tr>
+<tr>
+<td><code>autovacuum_vacuum_cost_delay</code></td>
+<td>2ms</td>
+<td>Reduce vacuum I/O throttling</td>
+</tr>
+<tr>
+<td><code>autovacuum_max_workers</code></td>
+<td>4</td>
+<td>Parallel autovacuum</td>
+</tr>
+</tbody>
+</table>
+<h2 id="user-overrides">User Overrides<a class="headerlink" href="#user-overrides" title="Permanent link">&para;</a></h2>
+<p>Override any non-protected parameter via <code>spec.postgres.parameters</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">postgres</span><span class="p">:</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="nt">max_connections</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="nt">work_mem</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;64MB&quot;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">shared_buffers</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4GB&quot;</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">log_min_duration_statement</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1000&quot;</span>
 </code></pre></div>
-<p>Example output:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pvc-abc123-def456-789                      10Gi       RWO            Retain           Released   default/data-my-cluster-1
-</code></pre></div>
-<p>The PV should be in <code>Released</code> or <code>Available</code> status.</p>
-<h3 id="step-2-create-a-new-documentdb-cluster-with-pv-recovery">Step 2: Create a New DocumentDB Cluster with PV Recovery<a class="headerlink" href="#step-2-create-a-new-documentdb-cluster-with-pv-recovery" title="Permanent link">&para;</a></h3>
-<div class="highlight"><span class="filename">restore-from-pv.yaml</span><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<p>User overrides take precedence over both memory-aware and static defaults.</p>
+<h2 id="protected-parameters">Protected Parameters<a class="headerlink" href="#protected-parameters" title="Permanent link">&para;</a></h2>
+<p>These parameters are managed by the operator and <strong>cannot be overridden</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cron.database_name</code></td>
+<td>postgres</td>
+<td>Required by pg_cron extension</td>
+</tr>
+<tr>
+<td><code>max_replication_slots</code></td>
+<td>10</td>
+<td>Required for CNPG replication</td>
+</tr>
+<tr>
+<td><code>max_wal_senders</code></td>
+<td>10</td>
+<td>Required for CNPG replication</td>
+</tr>
+<tr>
+<td><code>max_prepared_transactions</code></td>
+<td>100</td>
+<td>Enables two-phase commit (PREPARE TRANSACTION) for multi-document transactions</td>
+</tr>
+<tr>
+<td><code>wal_level</code></td>
+<td>logical</td>
+<td>Only when ChangeStreams feature gate is enabled</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Setting any of these in <code>spec.postgres.parameters</code> will be silently overridden by the operator.</p>
+</div>
+<h2 id="complete-example">Complete Example<a class="headerlink" href="#complete-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-recovered-cluster</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;namespace&gt;</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">documentDbCredentialSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-credentials</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10Gi</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;original-storage-class&gt;</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">exposeViaService</span><span class="p">:</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="nt">serviceType</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ClusterIP</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">  </span><span class="nt">bootstrap</span><span class="p">:</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">    </span><span class="nt">recovery</span><span class="p">:</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">      </span><span class="nt">persistentVolume</span><span class="p">:</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">        </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pvc-abc123-def456-789</span><span class="w">  </span><span class="c1"># The retained PV name</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production-cluster</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;100Gi&quot;</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;premium-ssd&quot;</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;16Gi&quot;</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8&quot;</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">postgres</span><span class="p">:</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">      </span><span class="nt">max_connections</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">      </span><span class="nt">log_min_duration_statement</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">      </span><span class="nt">idle_in_transaction_session_timeout</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;300000&quot;</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">  </span><span class="nt">featureGates</span><span class="p">:</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">    </span><span class="nt">ChangeStreams</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>restore-from-pv.yaml
+<p>This configuration will produce the following effective parameters (among others):</p>
+<ul>
+<li><code>shared_buffers</code>: 4GB (auto-computed from 16Gi)</li>
+<li><code>effective_cache_size</code>: 12GB (auto-computed)</li>
+<li><code>max_connections</code>: 500 (user override)</li>
+<li><code>wal_level</code>: logical (protected, from ChangeStreams gate)</li>
+<li><code>cron.database_name</code>: postgres (protected)</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="parameters-not-taking-effect">Parameters not taking effect<a class="headerlink" href="#parameters-not-taking-effect" title="Permanent link">&para;</a></h3>
+<p>Some parameters (like <code>shared_buffers</code>) require a PostgreSQL restart. The operator triggers a rolling restart when these parameters change. Check the CNPG cluster status:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>cluster<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
 </code></pre></div>
-<h3 id="step-3-verify-the-recovery">Step 3: Verify the Recovery<a class="headerlink" href="#step-3-verify-the-recovery" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Wait for the DocumentDB cluster to be ready</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-recovered-cluster<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-w
-</code></pre></div>
-<p>Once the status shows <code>Cluster in healthy state</code>, connect and verify your data. See <a href="../../configuration/networking/#connect-with-mongosh">Connect with mongosh</a> for connection instructions.</p>
-<h3 id="step-4-clean-up-the-source-pv">Step 4: Clean Up the Source PV<a class="headerlink" href="#step-4-clean-up-the-source-pv" title="Permanent link">&para;</a></h3>
-<p>After confirming the recovery is successful, delete the source PV:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>pv<span class="w"> </span>pvc-abc123-def456-789
+<h3 id="memory-aware-defaults-showing-static-fallbacks">Memory-aware defaults showing static fallbacks<a class="headerlink" href="#memory-aware-defaults-showing-static-fallbacks" title="Permanent link">&para;</a></h3>
+<p>If memory-aware defaults show fallback values (e.g., shared_buffers=256MB), verify that <code>spec.resource.memory</code> is set in your DocumentDB CR:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.spec.resource.memory}&#39;</span>
 </code></pre></div>
 
 
@@ -1617,9 +1932,6 @@
 
 
 
-
-  
-  
 
 
 
@@ -1668,10 +1980,10 @@
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../../..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    <script id="__config" type="application/json">{"base": "..", "features": ["content.code.copy", "content.code.annotate", "content.tabs.link", "navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.dd8806f2.min.js"></script>
+      <script src="../assets/javascripts/bundle.dd8806f2.min.js"></script>
       
     
   </body>
