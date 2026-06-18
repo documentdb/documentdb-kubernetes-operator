@@ -4,6 +4,7 @@
 package journal
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -126,5 +127,22 @@ var _ = Describe("Journal", func() {
 		}
 		wg.Wait()
 		Expect(j.Len()).To(Equal(writers * perWriter))
+	})
+
+	It("caps the in-memory event ring and keeps the most recent entries", func() {
+		// Exceed maxEvents + trimHeadroom so the trim path fires at least once.
+		j := New()
+		total := maxEvents + trimHeadroom + 500
+		for i := 0; i < total; i++ {
+			j.Info("c", fmt.Sprintf("%d", i))
+		}
+		// After amortized trim, length is between maxEvents and maxEvents+trimHeadroom.
+		Expect(j.Len()).To(BeNumerically(">=", maxEvents))
+		Expect(j.Len()).To(BeNumerically("<=", maxEvents+trimHeadroom))
+
+		events := j.Events()
+		// Oldest surviving message is total - len(events); newest is total-1.
+		Expect(events[0].Message).To(Equal(fmt.Sprintf("%d", total-len(events))))
+		Expect(events[len(events)-1].Message).To(Equal(fmt.Sprintf("%d", total-1)))
 	})
 })

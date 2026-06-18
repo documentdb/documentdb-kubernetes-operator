@@ -20,6 +20,14 @@ const (
 	LevelError Level = "ERROR"
 )
 
+// maxEvents bounds the in-memory event ring. We trim with headroom so the
+// trim cost is amortized over many appends (one copy every trimHeadroom
+// events), not paid on every append once we hit the cap.
+const (
+	maxEvents    = 10000
+	trimHeadroom = 1000
+)
+
 // Event represents a single journal entry.
 type Event struct {
 	Timestamp time.Time
@@ -54,6 +62,11 @@ func New() *Journal {
 }
 
 // Record appends a new event to the journal. Safe for concurrent use.
+//
+// To bound memory on multi-day runs the in-memory ring is capped at
+// maxEvents; once exceeded by trimHeadroom, the oldest events are dropped.
+// The rendered report only ever surfaces the last 20 events, so the cap is
+// invisible to consumers.
 func (j *Journal) Record(level Level, component, message string) {
 	e := Event{
 		Timestamp: time.Now(),
@@ -63,6 +76,11 @@ func (j *Journal) Record(level Level, component, message string) {
 	}
 	j.mu.Lock()
 	j.events = append(j.events, e)
+	if len(j.events) > maxEvents+trimHeadroom {
+		trimmed := make([]Event, maxEvents)
+		copy(trimmed, j.events[len(j.events)-maxEvents:])
+		j.events = trimmed
+	}
 	j.mu.Unlock()
 }
 
