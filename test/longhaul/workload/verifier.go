@@ -83,6 +83,89 @@ func (v *Verifier) verifyAll(ctx context.Context) {
 	v.metrics.VerifyPasses.Add(1)
 }
 
+// findingKind labels what the verifier observed at a particular seq.
+type findingKind int
+
+const (
+	findingGap findingKind = iota
+	findingChecksum
+	findingTail
+)
+
+// finding describes a single anomaly the verifier observed; auditDocs returns
+// these so the caller can log them with full context without coupling the
+// math to the journal.
+type finding struct {
+	kind     findingKind
+	writerID string
+	seq      int64  // doc.Seq for gap/checksum; expectedSeq for tail
+	endSeq   int64  // for gap: doc.Seq; for tail: maxSeq; unused for checksum
+	count    int64  // number of missing seqs (gap/tail), 1 for checksum
+	stored   string // for checksum only
+	computed string // for checksum only
+}
+
+// auditResult is the aggregate counts from one verifyWriter cycle. Pure —
+// no I/O — so it's table-testable without a mongo.
+type auditResult struct {
+	newExpectedSeq int64
+	internalGaps   int64
+	tailLoss       int64
+	checksumErrors int64
+	findings       []finding
+}
+
+// auditDocs is the pure decision core of verifyWriter. Given the docs the
+// verifier read (sorted by seq ascending) plus the writer's expected starting
+// seq and current tip, it returns the new expected seq, the gap/checksum/tail
+// counters, and a list of findings for the caller to log.
+//
+// Invariants checked:
+//   - For each doc, if doc.Seq > expectedSeq, the slots in [expectedSeq, doc.Seq)
+//     are missing (internal gap).
+//   - For each doc, checksum is recomputed and compared.
+//   - After processing all docs, if expectedSeq <= maxSeq the trailing slots
+//     [expectedSeq, maxSeq] are missing (tail loss).
+//   - On exit, newExpectedSeq is always maxSeq+1 when maxSeq >= initial
+//     expectedSeq, so the next cycle accounts for everything past maxSeq.
+func auditDocs(writerID string, docs []WriteDocument, expectedSeq, maxSeq int64) auditResult {
+	var r auditResult
+	for _, doc := range docs {
+		if doc.Seq > expectedSeq {
+			gaps := doc.Seq - expectedSeq
+			r.internalGaps += gaps
+			r.findings = append(r.findings, finding{
+				kind: findingGap, writerID: writerID,
+				seq: expectedSeq, endSeq: doc.Seq, count: gaps,
+			})
+		}
+		expectedSeq = doc.Seq + 1
+
+		want := computeChecksum(doc.WriterID, doc.Seq, doc.Payload)
+		if doc.Checksum != want {
+			r.checksumErrors++
+			r.findings = append(r.findings, finding{
+				kind: findingChecksum, writerID: writerID,
+				seq: doc.Seq, count: 1,
+				stored: doc.Checksum, computed: want,
+			})
+		}
+	}
+
+	if expectedSeq <= maxSeq {
+		tail := maxSeq - expectedSeq + 1
+		r.tailLoss = tail
+		r.findings = append(r.findings, finding{
+			kind: findingTail, writerID: writerID,
+			seq: expectedSeq, endSeq: maxSeq, count: tail,
+		})
+		expectedSeq = maxSeq + 1
+	}
+
+	r.newExpectedSeq = expectedSeq
+	return r
+}
+
 func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	writerID := w.id
 
@@ -102,6 +185,26 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 		return
 	}
 
+	docs, err := v.fetchDocs(ctx, writerID, expectedSeq, maxSeq)
+	if err != nil {
+		v.journal.Warn("verifier", fmt.Sprintf("query failed for writer %s: %v", writerID, err))
+		return
+	}
+
+	r := auditDocs(writerID, docs, expectedSeq, maxSeq)
+	v.metrics.VerifyGapsDetected.Add(r.internalGaps + r.tailLoss)
+	v.metrics.ChecksumErrors.Add(r.checksumErrors)
+	for _, f := range r.findings {
+		v.logFinding(f)
+	}
+
+	v.nextSeq[writerID] = r.newExpectedSeq
+}
+
+// fetchDocs reads all docs for writerID with seq in [expectedSeq, maxSeq],
+// sorted by seq ascending. Decode errors are logged but skipped (the rest of
+// the scan continues; a skipped doc looks like a gap to auditDocs).
+func (v *Verifier) fetchDocs(ctx context.Context, writerID string, expectedSeq, maxSeq int64) ([]WriteDocument, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "seq", Value: 1}})
 	filter := bson.D{
 		{Key: "writer_id", Value: writerID},
@@ -112,52 +215,37 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	}
 	cursor, err := v.collection.Find(ctx, filter, opts)
 	if err != nil {
-		v.journal.Warn("verifier", fmt.Sprintf("query failed for writer %s: %v", writerID, err))
-		return
+		return nil, err
 	}
 	defer cursor.Close(ctx)
 
+	var out []WriteDocument
 	for cursor.Next(ctx) {
 		var doc WriteDocument
 		if err := cursor.Decode(&doc); err != nil {
 			v.journal.Warn("verifier", fmt.Sprintf("decode error for writer %s: %v", writerID, err))
 			continue
 		}
-
-		// Internal gap: missing seq numbers between two observed docs.
-		if doc.Seq > expectedSeq {
-			gaps := doc.Seq - expectedSeq
-			v.metrics.VerifyGapsDetected.Add(gaps)
-			v.journal.Error("verifier", fmt.Sprintf(
-				"gap detected: writer=%s expected_seq=%d got_seq=%d (missing %d)",
-				writerID, expectedSeq, doc.Seq, gaps))
-		}
-		expectedSeq = doc.Seq + 1
-
-		// Verify checksum.
-		expected := computeChecksum(doc.WriterID, doc.Seq, doc.Payload)
-		if doc.Checksum != expected {
-			v.metrics.ChecksumErrors.Add(1)
-			v.journal.Error("verifier", fmt.Sprintf(
-				"checksum mismatch: writer=%s seq=%d stored=%s computed=%s",
-				writerID, doc.Seq, doc.Checksum, expected))
-		}
+		out = append(out, doc)
 	}
+	return out, nil
+}
 
-	// Tail loss: writer acked through maxSeq but DB has nothing in
-	// (expectedSeq-1, maxSeq]. This catches the case where the most recent
-	// acked writes vanished and no later writes have arrived to expose the
-	// gap via the per-doc check above.
-	if expectedSeq <= maxSeq {
-		tail := maxSeq - expectedSeq + 1
-		v.metrics.VerifyGapsDetected.Add(tail)
+func (v *Verifier) logFinding(f finding) {
+	switch f.kind {
+	case findingGap:
+		v.journal.Error("verifier", fmt.Sprintf(
+			"gap detected: writer=%s expected_seq=%d got_seq=%d (missing %d)",
+			f.writerID, f.seq, f.endSeq, f.count))
+	case findingTail:
 		v.journal.Error("verifier", fmt.Sprintf(
 			"tail loss: writer=%s expected_seq=%d acked_tip=%d (missing %d)",
-			writerID, expectedSeq, maxSeq, tail))
+			f.writerID, f.seq, f.endSeq, f.count))
+	case findingChecksum:
+		v.journal.Error("verifier", fmt.Sprintf(
+			"checksum mismatch: writer=%s seq=%d stored=%s computed=%s",
+			f.writerID, f.seq, f.stored, f.computed))
 	}
-
-	// We've accounted for every seq up to maxSeq; advance the resume point.
-	v.nextSeq[writerID] = maxSeq + 1
 }
 
 // StartVerifier launches a single verifier goroutine and returns it.

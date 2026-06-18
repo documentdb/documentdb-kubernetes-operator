@@ -37,14 +37,51 @@ type WriteDocument struct {
 	Timestamp time.Time `bson:"timestamp"`
 }
 
+// writeBackend abstracts the mongo collection so writeOne / Resume can be
+// unit-tested with a stub. Production uses mongoBackend (a thin wrapper over
+// *mongo.Collection); tests use a controllable fake.
+type writeBackend interface {
+	insert(ctx context.Context, doc WriteDocument) error
+	isDuplicate(err error) bool
+	// highestSeq returns the highest seq committed for writerID, or 0 if none.
+	highestSeq(ctx context.Context, writerID string) (int64, error)
+}
+
+// mongoBackend adapts *mongo.Collection to writeBackend.
+type mongoBackend struct {
+	coll *mongo.Collection
+}
+
+func (m mongoBackend) insert(ctx context.Context, doc WriteDocument) error {
+	_, err := m.coll.InsertOne(ctx, doc)
+	return err
+}
+
+func (m mongoBackend) isDuplicate(err error) bool {
+	return mongo.IsDuplicateKeyError(err)
+}
+
+func (m mongoBackend) highestSeq(ctx context.Context, writerID string) (int64, error) {
+	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
+	var doc WriteDocument
+	err := m.coll.FindOne(ctx, bson.M{"writer_id": writerID}, opts).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return doc.Seq, nil
+}
+
 // Writer performs sequential inserts to a MongoDB collection.
 // Each writer has a unique ID and tracks its own sequence number.
 type Writer struct {
-	id         string
-	seq        atomic.Int64
-	metrics    *Metrics
-	journal    *journal.Journal
-	collection *mongo.Collection
+	id      string
+	seq     atomic.Int64
+	metrics *Metrics
+	journal *journal.Journal
+	backend writeBackend
 }
 
 // NewWriter creates a writer with the given ID connected to the specified database.
@@ -52,10 +89,10 @@ func NewWriter(id string, db *mongo.Database, metrics *Metrics, j *journal.Journ
 	coll := db.Collection(CollectionName, options.Collection().
 		SetWriteConcern(writeconcern.Majority()))
 	return &Writer{
-		id:         id,
-		metrics:    metrics,
-		journal:    j,
-		collection: coll,
+		id:      id,
+		metrics: metrics,
+		journal: j,
+		backend: mongoBackend{coll: coll},
 	}
 }
 
@@ -86,8 +123,8 @@ func (w *Writer) Run(ctx context.Context) {
 func (w *Writer) writeOne(ctx context.Context) {
 	// Compute the next seq without advancing the counter yet — only commit on
 	// success. Each writer has exactly one goroutine (Run), so a plain
-	// Load/Store pair is race-free; atomic.Int64 is retained so external
-	// observers (verifier tests, future debug endpoints) can read it safely.
+	// Load/Store pair is race-free; atomic.Int64 is retained because the
+	// verifier reads w.seq concurrently via Seq().
 	seq := w.seq.Load() + 1
 	payload := fmt.Sprintf("writer=%s seq=%d t=%d", w.id, seq, time.Now().UnixNano())
 	checksum := computeChecksum(w.id, seq, payload)
@@ -102,7 +139,7 @@ func (w *Writer) writeOne(ctx context.Context) {
 
 	w.metrics.WriteAttempted.Add(1)
 
-	_, err := w.collection.InsertOne(ctx, doc)
+	err := w.backend.insert(ctx, doc)
 	if err != nil {
 		// Retryable writes are on by default in the v2 driver, so a network
 		// blip during a disruption window can produce this sequence:
@@ -111,7 +148,7 @@ func (w *Writer) writeOne(ctx context.Context) {
 		//   3. InsertOne returns a duplicate-key error to us
 		// The data is durably committed in case (3), so we advance seq and
 		// count it as a successful, idempotent ACK.
-		if mongo.IsDuplicateKeyError(err) {
+		if w.backend.isDuplicate(err) {
 			w.seq.Store(seq)
 			w.metrics.WriteAcknowledged.Add(1)
 			return
@@ -132,17 +169,12 @@ func (w *Writer) writeOne(ctx context.Context) {
 // up where the previous pod left off instead of colliding with the existing
 // unique index on (writer_id, seq).
 func (w *Writer) Resume(ctx context.Context) (int64, error) {
-	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
-	var doc WriteDocument
-	err := w.collection.FindOne(ctx, bson.M{"writer_id": w.id}, opts).Decode(&doc)
+	seq, err := w.backend.highestSeq(ctx, w.id)
 	if err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return 0, nil
-		}
 		return 0, err
 	}
-	w.seq.Store(doc.Seq)
-	return doc.Seq, nil
+	w.seq.Store(seq)
+	return seq, nil
 }
 
 // computeChecksum creates a deterministic hash of the write for verification.
