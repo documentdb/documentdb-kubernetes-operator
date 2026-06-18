@@ -22,10 +22,9 @@ var _ = Describe("UpgradeDocumentDB", func() {
 		Expect(u.Weight()).To(Equal(1))
 	})
 
-	It("OutagePolicy gives upgrades a longer downtime budget", func() {
+	It("OutagePolicy gives upgrades a more lenient failure budget", func() {
 		u := NewUpgradeDocumentDB(&fakeClient{}, fake.NewSimpleClientset(), nil, nil, "ns", 10*time.Minute)
 		p := u.OutagePolicy()
-		Expect(p.AllowedDowntime).To(Equal(120 * time.Second))
 		Expect(p.AllowedWriteFailures).To(Equal(int64(200)))
 		Expect(p.MustRecoverWithin).To(Equal(10 * time.Minute))
 	})

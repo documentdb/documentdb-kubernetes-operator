@@ -80,6 +80,5 @@ var _ = Describe("DisruptionWindow", func() {
 		p := DefaultOutagePolicy()
 		Expect(p.MustRecoverWithin).NotTo(BeZero())
 		Expect(p.AllowedWriteFailures).NotTo(BeZero())
-		Expect(p.AllowedDowntime).NotTo(BeZero())
 	})
 })

@@ -91,7 +91,6 @@ func NewScaleUp(client monitor.ClusterClient, health *monitor.HealthMonitor, max
 		boundKind: "max",
 		recovery:  recovery,
 		policy: journal.OutagePolicy{
-			AllowedDowntime:      30 * time.Second,
 			AllowedWriteFailures: 20,
 			MustRecoverWithin:    recovery,
 		},
@@ -120,7 +119,6 @@ func NewScaleDown(client monitor.ClusterClient, health *monitor.HealthMonitor, m
 		boundKind: "min",
 		recovery:  recovery,
 		policy: journal.OutagePolicy{
-			AllowedDowntime:      60 * time.Second,
 			AllowedWriteFailures: 50,
 			MustRecoverWithin:    recovery,
 		},

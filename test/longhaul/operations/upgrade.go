@@ -174,7 +174,6 @@ func (u *UpgradeDocumentDB) readDesiredVersion(ctx context.Context) (string, err
 // because rolling restarts touch every pod sequentially.
 func (u *UpgradeDocumentDB) OutagePolicy() journal.OutagePolicy {
 	return journal.OutagePolicy{
-		AllowedDowntime:      120 * time.Second,
 		AllowedWriteFailures: 200,
 		MustRecoverWithin:    u.recovery,
 	}

@@ -26,7 +26,6 @@ type Event struct {
 	Level     Level
 	Component string
 	Message   string
-	Metadata  map[string]string
 }
 
 // String returns a human-readable representation of the event.
@@ -54,14 +53,13 @@ func New() *Journal {
 	}
 }
 
-// Record appends a new event to the journal.
-func (j *Journal) Record(level Level, component, message string, metadata map[string]string) {
+// Record appends a new event to the journal. Safe for concurrent use.
+func (j *Journal) Record(level Level, component, message string) {
 	e := Event{
 		Timestamp: time.Now(),
 		Level:     level,
 		Component: component,
 		Message:   message,
-		Metadata:  metadata,
 	}
 	j.mu.Lock()
 	j.events = append(j.events, e)
@@ -70,17 +68,17 @@ func (j *Journal) Record(level Level, component, message string, metadata map[st
 
 // Info records an info-level event.
 func (j *Journal) Info(component, message string) {
-	j.Record(LevelInfo, component, message, nil)
+	j.Record(LevelInfo, component, message)
 }
 
 // Warn records a warn-level event.
 func (j *Journal) Warn(component, message string) {
-	j.Record(LevelWarn, component, message, nil)
+	j.Record(LevelWarn, component, message)
 }
 
 // Error records an error-level event.
 func (j *Journal) Error(component, message string) {
-	j.Record(LevelError, component, message, nil)
+	j.Record(LevelError, component, message)
 }
 
 // OpenDisruptionWindow starts tracking a new disruption period.

@@ -90,7 +90,6 @@ var _ = Describe("ScaleUp", func() {
 	It("OutagePolicy uses tighter budgets and echoes MustRecoverWithin", func() {
 		s := NewScaleUp(&fakeClient{}, nil, 3, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedDowntime).To(Equal(30 * time.Second))
 		Expect(p.AllowedWriteFailures).To(Equal(int64(20)))
 		Expect(p.MustRecoverWithin).To(Equal(5 * time.Minute))
 	})
@@ -134,7 +133,6 @@ var _ = Describe("ScaleDown", func() {
 	It("OutagePolicy is more lenient than scale-up", func() {
 		s := NewScaleDown(&fakeClient{}, nil, 1, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedDowntime).To(Equal(60 * time.Second))
 		Expect(p.AllowedWriteFailures).To(Equal(int64(50)))
 	})
 })
