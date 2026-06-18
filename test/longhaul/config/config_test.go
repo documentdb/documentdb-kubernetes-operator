@@ -18,7 +18,6 @@ var _ = Describe("Config", func() {
 			Expect(cfg.Namespace).To(Equal("default"))
 			Expect(cfg.ClusterName).To(BeEmpty())
 			Expect(cfg.NumWriters).To(Equal(5))
-			Expect(cfg.NumVerifiers).To(Equal(2))
 			Expect(cfg.OpCooldown).To(Equal(5 * time.Minute))
 			Expect(cfg.RecoveryTimeout).To(Equal(5 * time.Minute))
 			Expect(cfg.SteadyStateWait).To(Equal(60 * time.Second))
@@ -33,7 +32,7 @@ var _ = Describe("Config", func() {
 		BeforeEach(func() {
 			for _, k := range []string{
 				EnvEnabled, EnvMaxDuration, EnvNamespace, EnvClusterName,
-				EnvMongoURI, EnvNumWriters, EnvNumVerifiers,
+				EnvMongoURI, EnvNumWriters,
 				EnvOpCooldown, EnvRecoveryTimeout, EnvSteadyStateWait,
 				EnvMinInstances, EnvMaxInstances, EnvReportInterval,
 			} {

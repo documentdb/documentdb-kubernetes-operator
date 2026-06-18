@@ -38,8 +38,8 @@ func main() {
 		log.Fatalf("invalid config: %v", err)
 	}
 
-	log.Printf("config loaded: duration=%s namespace=%s cluster=%s writers=%d verifiers=%d",
-		cfg.MaxDuration, cfg.Namespace, cfg.ClusterName, cfg.NumWriters, cfg.NumVerifiers)
+	log.Printf("config loaded: duration=%s namespace=%s cluster=%s writers=%d",
+		cfg.MaxDuration, cfg.Namespace, cfg.ClusterName, cfg.NumWriters)
 
 	exitCode := run(cfg)
 	os.Exit(exitCode)
@@ -126,9 +126,10 @@ func run(cfg config.Config) int {
 	workload.StartWriters(ctx, cfg.NumWriters, db, metrics, j)
 	j.Info("main", fmt.Sprintf("started %d writers", cfg.NumWriters))
 
-	// Start verifiers.
-	workload.StartVerifiers(ctx, cfg.NumVerifiers, db, metrics, j)
-	j.Info("main", fmt.Sprintf("started %d verifiers", cfg.NumVerifiers))
+	// Start verifier. A single verifier is sufficient — see StartVerifier
+	// godoc for why multiple verifiers would multi-count gaps.
+	workload.StartVerifier(ctx, db, metrics, j)
+	j.Info("main", "verifier started")
 
 	// Configure operations.
 	ops := []operations.Operation{

@@ -151,13 +151,16 @@ func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
 	v.nextSeq[writerID] = expectedSeq
 }
 
-// StartVerifiers launches n verifiers and returns them.
-func StartVerifiers(ctx context.Context, n int, db *mongo.Database, metrics *Metrics, j *journal.Journal) []*Verifier {
-	verifiers := make([]*Verifier, n)
-	for i := 0; i < n; i++ {
-		id := fmt.Sprintf("v%03d", i)
-		verifiers[i] = NewVerifier(id, db, metrics, j)
-		go verifiers[i].Run(ctx)
-	}
-	return verifiers
+// StartVerifier launches a single verifier goroutine and returns it.
+//
+// Only one verifier runs. Each verifier scans the full collection and writes
+// to the shared Metrics.VerifyGapsDetected counter, so running multiple
+// verifiers would multi-count every real gap by N and double the read load
+// on the cluster (turning the verifier's own load into a confounding signal
+// for the test report). One verifier is sufficient because the scan is
+// stateless and bounded by the per-writer nextSeq resume map.
+func StartVerifier(ctx context.Context, db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
+	v := NewVerifier("v000", db, metrics, j)
+	go v.Run(ctx)
+	return v
 }

@@ -21,7 +21,6 @@ const (
 	// Workload and operation tuning.
 	EnvMongoURI        = "LONGHAUL_MONGO_URI"
 	EnvNumWriters      = "LONGHAUL_NUM_WRITERS"
-	EnvNumVerifiers    = "LONGHAUL_NUM_VERIFIERS"
 	EnvOpCooldown      = "LONGHAUL_OP_COOLDOWN"
 	EnvRecoveryTimeout = "LONGHAUL_RECOVERY_TIMEOUT"
 	EnvSteadyStateWait = "LONGHAUL_STEADY_STATE_WAIT"
@@ -53,9 +52,6 @@ type Config struct {
 
 	// NumWriters is the number of concurrent writer goroutines.
 	NumWriters int
-
-	// NumVerifiers is the number of concurrent verifier goroutines.
-	NumVerifiers int
 
 	// OpCooldown is the minimum time between disruptive operations.
 	OpCooldown time.Duration
@@ -91,7 +87,6 @@ func DefaultConfig() Config {
 		ClusterName:     "",
 		MongoURI:        "",
 		NumWriters:      5,
-		NumVerifiers:    2,
 		OpCooldown:      5 * time.Minute,
 		RecoveryTimeout: 5 * time.Minute,
 		SteadyStateWait: 60 * time.Second,
@@ -132,14 +127,6 @@ func LoadFromEnv() (Config, error) {
 			return cfg, fmt.Errorf("invalid %s=%q: %w", EnvNumWriters, v, err)
 		}
 		cfg.NumWriters = n
-	}
-
-	if v := os.Getenv(EnvNumVerifiers); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return cfg, fmt.Errorf("invalid %s=%q: %w", EnvNumVerifiers, v, err)
-		}
-		cfg.NumVerifiers = n
 	}
 
 	if v := os.Getenv(EnvOpCooldown); v != "" {
@@ -210,9 +197,6 @@ func (c *Config) Validate() error {
 	}
 	if c.NumWriters < 1 {
 		return fmt.Errorf("num writers must be at least 1, got %d", c.NumWriters)
-	}
-	if c.NumVerifiers < 1 {
-		return fmt.Errorf("num verifiers must be at least 1, got %d", c.NumVerifiers)
 	}
 	if c.OpCooldown < 0 {
 		return fmt.Errorf("operation cooldown must not be negative, got %s", c.OpCooldown)

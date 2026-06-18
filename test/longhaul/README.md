@@ -127,7 +127,6 @@ All configuration is via environment variables.
 | `LONGHAUL_NAMESPACE` | No | `default` | Kubernetes namespace of the target cluster. |
 | `LONGHAUL_MAX_DURATION` | No | `30m` | Max test duration. Use `0s` for run-until-failure. |
 | `LONGHAUL_NUM_WRITERS` | No | `5` | Number of concurrent writers. |
-| `LONGHAUL_NUM_VERIFIERS` | No | `2` | Number of concurrent verifiers. |
 | `LONGHAUL_OP_COOLDOWN` | No | `5m` | Cooldown between management operations. |
 | `LONGHAUL_RECOVERY_TIMEOUT` | No | `5m` | Max wait for cluster recovery after an operation. |
 | `LONGHAUL_MIN_INSTANCES` | No | `1` | Minimum `spec.instancesPerNode` for scale-down operations (CRD lower bound: 1). |
