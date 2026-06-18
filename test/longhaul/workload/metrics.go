@@ -12,56 +12,36 @@ import (
 )
 
 // Metrics tracks aggregate workload counters using atomic operations.
-// All fields are safe for concurrent access from multiple goroutines.
 //
-// Note on roles:
-//   - The writer-side counters (WriteAttempted/Acknowledged/Failed) are local
-//     observations made by writers from their InsertOne return values; they
-//     feed the disruption-window budget but do NOT by themselves fail the test.
-//   - The verifier-side counters (VerifyGapsDetected, ChecksumErrors) are the
-//     durability oracle: any non-zero value flips Result to FAIL in main.
+// Writer-side counters (WriteAttempted/Acknowledged/Failed) feed the
+// disruption-window budget but do not fail the test on their own.
+// Verifier-side counters (VerifyGapsDetected, ChecksumErrors) are the
+// durability oracle: any non-zero value flips Result to FAIL.
 type Metrics struct {
-	// WriteAttempted is the total number of InsertOne calls issued by all
-	// writers (one per writer tick). Includes calls that later fail or are
-	// retried as DupKey acks. Each writer ticks every writeInterval (100 ms).
+	// WriteAttempted is the total number of InsertOne calls issued by writers.
 	WriteAttempted atomic.Int64
 
-	// WriteAcknowledged is the number of writes the server confirmed as
-	// durable. Includes DupKey replies, which are treated as idempotent acks
-	// because the v2 driver's retryable-writes path can resend a committed
-	// insert after a dropped ACK (see writer.go:99-110). Equals
-	// WriteAttempted - WriteFailed in steady state.
+	// WriteAcknowledged is the number of writes the server confirmed durable.
+	// Includes DupKey replies (treated as idempotent acks for retryable writes).
 	WriteAcknowledged atomic.Int64
 
-	// WriteFailed counts non-DupKey insert errors observed by writers.
-	// These do NOT advance the writer's seq counter (so the next tick retries
-	// the same seq) and therefore do not cause data-loss gaps on their own.
-	// They DO get charged against the active disruption window's
-	// AllowedWriteFailures budget via journal.RecordWriteFailure.
+	// WriteFailed counts non-DupKey insert errors. Does not advance seq, so
+	// the next tick retries the same seq; charged against the disruption-window
+	// budget via journal.RecordWriteFailure.
 	WriteFailed atomic.Int64
 
-	// VerifyPasses is the number of completed verifier scan cycles (not the
-	// number of documents verified). Each verifier ticks every verifyInterval
-	// (10 s) and increments this on a clean scan with no gaps/checksum
-	// mismatches in the rows it observed this cycle.
+	// VerifyPasses is the number of completed verifier scan cycles.
 	VerifyPasses atomic.Int64
 
-	// VerifyGapsDetected is the durability-oracle signal: count of missing seq
-	// numbers observed in the workload collection. Incremented by
-	// (doc.Seq - expectedSeq) when the verifier reads a document whose seq is
-	// higher than the next expected one for that writer (verifier.go:127-135).
-	// A non-zero value flips Result to FAIL with reason "data loss".
+	// VerifyGapsDetected counts missing seq numbers observed by the verifier.
+	// Non-zero => FAIL with reason "data loss".
 	VerifyGapsDetected atomic.Int64
 
-	// ChecksumErrors counts documents whose stored SHA-256 checksum doesn't
-	// match the recomputed checksum over (writer_id, seq, payload). Indicates
-	// silent corruption (writer never sees these — only the verifier does).
-	// A non-zero value flips Result to FAIL with reason "data loss".
+	// ChecksumErrors counts documents whose stored checksum doesn't match the
+	// recomputed value. Non-zero => FAIL with reason "data loss".
 	ChecksumErrors atomic.Int64
 
-	// StartTime is the process-local clock time when this Metrics was
-	// constructed. Used to derive Elapsed in snapshots. Resets when the pod
-	// restarts (the data history does not — see Writer.Resume).
+	// StartTime is when this Metrics was constructed; resets on pod restart.
 	StartTime time.Time
 }
 
@@ -72,10 +52,8 @@ func NewMetrics() *Metrics {
 	}
 }
 
-// MetricsSnapshot is a point-in-time copy of all metric values.
-// Field semantics mirror the Metrics counters above; GapsDetected is the
-// snapshot name for VerifyGapsDetected, and Elapsed is time.Since(StartTime)
-// captured at snapshot time.
+// MetricsSnapshot is a point-in-time copy of Metrics. GapsDetected is the
+// snapshot name for VerifyGapsDetected.
 type MetricsSnapshot struct {
 	WriteAttempted    int64
 	WriteAcknowledged int64

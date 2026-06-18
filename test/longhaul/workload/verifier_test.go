@@ -11,11 +11,10 @@ import (
 )
 
 var _ = Describe("Verifier", func() {
-	It("constructor wires id, metrics, and journal correctly", func() {
+	It("constructor wires metrics and journal correctly", func() {
 		m := NewMetrics()
 		j := journal.New()
-		v := &Verifier{id: "v007", metrics: m, journal: j, nextSeq: make(map[string]int64)}
-		Expect(v.id).To(Equal("v007"))
+		v := &Verifier{metrics: m, journal: j, nextSeq: make(map[string]int64)}
 		Expect(v.metrics).To(BeIdenticalTo(m))
 		Expect(v.journal).To(BeIdenticalTo(j))
 		Expect(v.nextSeq).To(BeEmpty())

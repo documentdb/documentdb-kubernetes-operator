@@ -21,32 +21,32 @@ const (
 	verifyInterval = 10 * time.Second
 )
 
-// Verifier periodically scans the workload collection to detect
-// sequence gaps and checksum mismatches in acknowledged writes.
+// Verifier periodically scans the workload collection to detect sequence
+// gaps and checksum mismatches in acknowledged writes.
 //
-// To bound the per-cycle scan cost over a multi-day run, the verifier tracks
-// the next expected sequence per writer in nextSeq and only scans documents
-// with seq >= nextSeq. Without this, a 100ms-per-write writer accumulates
-// ~864k docs/day and verifyAll would re-read the entire history every 10s
-// (~75M doc-reads/hour per writer), which both saturates the cluster and
-// turns the verifier's own load into a confounding signal in the report.
+// Per-cycle scan cost is bounded by nextSeq: each scan starts at the
+// highest-seen seq+1 per writer, so the cycle cost is O(new docs since last
+// tick), not O(full history). Without this, a 100ms writer would accumulate
+// ~864k docs/day per writer and re-reading the whole collection every 10s
+// would dominate cluster load.
 type Verifier struct {
-	id         string
 	metrics    *Metrics
 	journal    *journal.Journal
 	collection *mongo.Collection
 
-	// nextSeq is the next sequence number we expect to see for each writer.
+	// nextSeq[writerID] is highest-observed seq + 1 for that writer; documents
+	// below this point are skipped on subsequent cycles. Consequence: a gap is
+	// counted exactly once when we step past it — a late-arriving fill at the
+	// missing seq is not re-checked.
 	// Only mutated from the verifier goroutine, so no lock is needed.
 	nextSeq map[string]int64
 }
 
-// NewVerifier creates a verifier with the given ID.
-func NewVerifier(id string, db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
+// NewVerifier creates a verifier.
+func NewVerifier(db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
 	coll := db.Collection(CollectionName, options.Collection().
 		SetReadConcern(readconcern.Majority()))
 	return &Verifier{
-		id:         id,
 		metrics:    metrics,
 		journal:    j,
 		collection: coll,
@@ -56,8 +56,8 @@ func NewVerifier(id string, db *mongo.Database, metrics *Metrics, j *journal.Jou
 
 // Run starts the verifier loop. It blocks until the context is cancelled.
 func (v *Verifier) Run(ctx context.Context) {
-	v.journal.Info("verifier", fmt.Sprintf("verifier %s started", v.id))
-	defer v.journal.Info("verifier", fmt.Sprintf("verifier %s stopped", v.id))
+	v.journal.Info("verifier", "verifier started")
+	defer v.journal.Info("verifier", "verifier stopped")
 
 	ticker := time.NewTicker(verifyInterval)
 	defer ticker.Stop()
@@ -145,9 +145,9 @@ func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
 		}
 	}
 
-	// Persist the resume point. If the cursor returned no rows, expectedSeq is
-	// unchanged and we'll re-scan from the same point next cycle (correct: a
-	// gap might fill in later when a delayed/recovered write commits).
+	// Persist the resume point. Note: if no rows were returned, expectedSeq
+	// is unchanged; if a gap was crossed, expectedSeq is past it, so a late
+	// fill at the missing seq will be filtered out by seq >= nextSeq next cycle.
 	v.nextSeq[writerID] = expectedSeq
 }
 
@@ -155,12 +155,11 @@ func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
 //
 // Only one verifier runs. Each verifier scans the full collection and writes
 // to the shared Metrics.VerifyGapsDetected counter, so running multiple
-// verifiers would multi-count every real gap by N and double the read load
-// on the cluster (turning the verifier's own load into a confounding signal
-// for the test report). One verifier is sufficient because the scan is
-// stateless and bounded by the per-writer nextSeq resume map.
+// verifiers would multi-count every real gap by N and double the cluster
+// read load. One verifier is sufficient because the per-writer nextSeq map
+// bounds each cycle to new documents.
 func StartVerifier(ctx context.Context, db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
-	v := NewVerifier("v000", db, metrics, j)
+	v := NewVerifier(db, metrics, j)
 	go v.Run(ctx)
 	return v
 }
