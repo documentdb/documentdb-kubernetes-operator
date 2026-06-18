@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Package report generates a markdown summary of the long haul test run.
 package report
 
 import (
@@ -14,7 +13,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/longhaul/workload"
 )
 
-// Result represents the overall test outcome.
+// Result is the terminal verdict of the test run.
 type Result string
 
 const (
@@ -22,16 +21,45 @@ const (
 	ResultFail Result = "FAIL"
 )
 
-// Summary contains all data needed to generate the final report.
+// Summary is the full state needed to render a checkpoint or final report.
+// It is a pure value snapshot — no live counters, no channels — so it can be
+// passed across goroutines and re-rendered offline.
 type Summary struct {
-	Result       Result
-	Duration     time.Duration
-	Metrics      workload.MetricsSnapshot
+	// Result is the current verdict. PASS while data-loss counters stay zero,
+	// flipped to FAIL when the durability oracle detects gaps/checksum errors
+	// or a disruption window blows its policy budget.
+	Result Result
+
+	// Duration is wall-clock time since the run started (process StartTime),
+	// not since the cluster was created. Resets on pod restart.
+	Duration time.Duration
+
+	// Metrics is a snapshot of the workload counters (writes attempted/acked/
+	// failed, verify passes, gaps, checksum errors).
+	Metrics workload.MetricsSnapshot
+
+	// LeakAnalysis is the operator-pod resource trend (memory/CPU slope over
+	// the run); LeakAnalysis.HasLeak being true does NOT flip Result — it
+	// only emits a warning annotation.
 	LeakAnalysis monitor.LeakAnalysis
-	OpsExecuted  int
-	Windows      []journal.DisruptionWindow
-	Events       []journal.Event
-	FailReason   string
+
+	// OpsExecuted is the count of operations (scale up/down, restart, etc.)
+	// the operations scheduler has run since startup.
+	OpsExecuted int
+
+	// Windows is every disruption window opened during the run, in start
+	// order. Each window records its op, duration, write-failure count, and
+	// whether it exceeded its policy budget.
+	Windows []journal.DisruptionWindow
+
+	// Events is the journal's full event ring (info/warn/error log lines).
+	// The renderer only includes the last 20 in the markdown body to keep
+	// the ConfigMap value under the 1 MiB limit.
+	Events []journal.Event
+
+	// FailReason is a short human-readable cause when Result == FAIL
+	// (e.g. "data loss: 17 gaps detected"). Empty when Result == PASS.
+	FailReason string
 }
 
 // GenerateMarkdown produces a human-readable markdown report.
