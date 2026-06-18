@@ -33,7 +33,9 @@ type Metrics struct {
 	// VerifyPasses is the number of completed verifier scan cycles.
 	VerifyPasses atomic.Int64
 
-	// VerifyGapsDetected counts missing seq numbers observed by the verifier.
+	// VerifyGapsDetected counts missing seq numbers observed by the verifier —
+	// both internal gaps (a hole between two observed docs) and tail loss
+	// (acked seqs beyond the highest doc present in the DB).
 	// Non-zero => FAIL with reason "data loss".
 	VerifyGapsDetected atomic.Int64
 

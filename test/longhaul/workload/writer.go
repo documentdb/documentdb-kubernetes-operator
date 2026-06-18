@@ -59,6 +59,12 @@ func NewWriter(id string, db *mongo.Database, metrics *Metrics, j *journal.Journ
 	}
 }
 
+// Seq returns the highest sequence number this writer has successfully
+// committed (including DupKey-as-ack). Safe to call from any goroutine.
+func (w *Writer) Seq() int64 {
+	return w.seq.Load()
+}
+
 // Run starts the writer loop. It blocks until the context is cancelled.
 func (w *Writer) Run(ctx context.Context) {
 	w.journal.Info("writer", fmt.Sprintf("writer %s started", w.id))

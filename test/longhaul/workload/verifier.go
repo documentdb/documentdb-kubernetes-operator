@@ -22,10 +22,10 @@ const (
 )
 
 // Verifier periodically scans the workload collection to detect sequence
-// gaps and checksum mismatches in acknowledged writes.
+// gaps, tail loss, and checksum mismatches in acknowledged writes.
 //
 // Per-cycle scan cost is bounded by nextSeq: each scan starts at the
-// highest-seen seq+1 per writer, so the cycle cost is O(new docs since last
+// highest-checked seq+1 per writer, so cycle cost is O(new docs since last
 // tick), not O(full history). Without this, a 100ms writer would accumulate
 // ~864k docs/day per writer and re-reading the whole collection every 10s
 // would dominate cluster load.
@@ -33,23 +33,27 @@ type Verifier struct {
 	metrics    *Metrics
 	journal    *journal.Journal
 	collection *mongo.Collection
+	writers    []*Writer
 
-	// nextSeq[writerID] is highest-observed seq + 1 for that writer; documents
-	// below this point are skipped on subsequent cycles. Consequence: a gap is
-	// counted exactly once when we step past it — a late-arriving fill at the
-	// missing seq is not re-checked.
+	// nextSeq[writerID] is the seq we'll start the next scan from for that
+	// writer — set to (snapshotted writer.Seq() + 1) at the end of each cycle.
+	// Consequence: any seq <= that snapshot is accounted for exactly once;
+	// a late-arriving fill at a missing seq is not re-checked.
 	// Only mutated from the verifier goroutine, so no lock is needed.
 	nextSeq map[string]int64
 }
 
-// NewVerifier creates a verifier.
-func NewVerifier(db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
+// NewVerifier creates a verifier. writers is the set of writers whose tips
+// the verifier will compare against the DB for tail-loss detection; pass nil
+// to disable tail-loss checks (useful in unit tests).
+func NewVerifier(db *mongo.Database, writers []*Writer, metrics *Metrics, j *journal.Journal) *Verifier {
 	coll := db.Collection(CollectionName, options.Collection().
 		SetReadConcern(readconcern.Majority()))
 	return &Verifier{
 		metrics:    metrics,
 		journal:    j,
 		collection: coll,
+		writers:    writers,
 		nextSeq:    make(map[string]int64),
 	}
 }
@@ -73,43 +77,38 @@ func (v *Verifier) Run(ctx context.Context) {
 }
 
 func (v *Verifier) verifyAll(ctx context.Context) {
-	// Get distinct writer IDs using aggregation (v2 API compatible).
-	pipeline := bson.A{
-		bson.D{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$writer_id"}}}},
+	for _, w := range v.writers {
+		v.verifyWriter(ctx, w)
 	}
-	cursor, err := v.collection.Aggregate(ctx, pipeline)
-	if err != nil {
-		v.journal.Warn("verifier", fmt.Sprintf("failed to get writer IDs: %v", err))
-		return
-	}
-	defer cursor.Close(ctx)
-
-	var results []struct {
-		ID string `bson:"_id"`
-	}
-	if err := cursor.All(ctx, &results); err != nil {
-		v.journal.Warn("verifier", fmt.Sprintf("failed to decode writer IDs: %v", err))
-		return
-	}
-
-	for _, r := range results {
-		v.verifyWriter(ctx, r.ID)
-	}
-
 	v.metrics.VerifyPasses.Add(1)
 }
 
-func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
-	// Resume from where the previous cycle left off. First-ever scan starts at 1.
+func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
+	writerID := w.id
+
+	// Snapshot the writer's tip BEFORE scanning. Writes that commit after this
+	// point land above maxSeq and the scan filter excludes them, so they're
+	// accounted for in the next cycle. Reading w.Seq() first (vs. CountDocuments
+	// first) guarantees expected <= what's-in-DB modulo real loss, so no false
+	// positives from in-flight writes.
+	maxSeq := w.Seq()
+
 	expectedSeq := v.nextSeq[writerID]
 	if expectedSeq == 0 {
 		expectedSeq = 1
+	}
+	if maxSeq < expectedSeq {
+		// Nothing new committed since last cycle.
+		return
 	}
 
 	opts := options.Find().SetSort(bson.D{{Key: "seq", Value: 1}})
 	filter := bson.D{
 		{Key: "writer_id", Value: writerID},
-		{Key: "seq", Value: bson.D{{Key: "$gte", Value: expectedSeq}}},
+		{Key: "seq", Value: bson.D{
+			{Key: "$gte", Value: expectedSeq},
+			{Key: "$lte", Value: maxSeq},
+		}},
 	}
 	cursor, err := v.collection.Find(ctx, filter, opts)
 	if err != nil {
@@ -125,7 +124,7 @@ func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
 			continue
 		}
 
-		// Check for gaps in the sequence.
+		// Internal gap: missing seq numbers between two observed docs.
 		if doc.Seq > expectedSeq {
 			gaps := doc.Seq - expectedSeq
 			v.metrics.VerifyGapsDetected.Add(gaps)
@@ -145,21 +144,30 @@ func (v *Verifier) verifyWriter(ctx context.Context, writerID string) {
 		}
 	}
 
-	// Persist the resume point. Note: if no rows were returned, expectedSeq
-	// is unchanged; if a gap was crossed, expectedSeq is past it, so a late
-	// fill at the missing seq will be filtered out by seq >= nextSeq next cycle.
-	v.nextSeq[writerID] = expectedSeq
+	// Tail loss: writer acked through maxSeq but DB has nothing in
+	// (expectedSeq-1, maxSeq]. This catches the case where the most recent
+	// acked writes vanished and no later writes have arrived to expose the
+	// gap via the per-doc check above.
+	if expectedSeq <= maxSeq {
+		tail := maxSeq - expectedSeq + 1
+		v.metrics.VerifyGapsDetected.Add(tail)
+		v.journal.Error("verifier", fmt.Sprintf(
+			"tail loss: writer=%s expected_seq=%d acked_tip=%d (missing %d)",
+			writerID, expectedSeq, maxSeq, tail))
+	}
+
+	// We've accounted for every seq up to maxSeq; advance the resume point.
+	v.nextSeq[writerID] = maxSeq + 1
 }
 
 // StartVerifier launches a single verifier goroutine and returns it.
 //
-// Only one verifier runs. Each verifier scans the full collection and writes
-// to the shared Metrics.VerifyGapsDetected counter, so running multiple
-// verifiers would multi-count every real gap by N and double the cluster
-// read load. One verifier is sufficient because the per-writer nextSeq map
-// bounds each cycle to new documents.
-func StartVerifier(ctx context.Context, db *mongo.Database, metrics *Metrics, j *journal.Journal) *Verifier {
-	v := NewVerifier(db, metrics, j)
+// Only one verifier runs. Each verifier writes to the shared
+// Metrics.VerifyGapsDetected counter, so running multiple would multi-count
+// every real gap by N and double the cluster read load. One is sufficient
+// because the per-writer nextSeq map bounds each cycle to new documents.
+func StartVerifier(ctx context.Context, db *mongo.Database, writers []*Writer, metrics *Metrics, j *journal.Journal) *Verifier {
+	v := NewVerifier(db, writers, metrics, j)
 	go v.Run(ctx)
 	return v
 }

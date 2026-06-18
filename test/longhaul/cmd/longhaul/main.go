@@ -123,12 +123,13 @@ func run(cfg config.Config) int {
 	leakDetector := monitor.NewLeakDetector(j, 10.0, 10)
 
 	// Start writers.
-	workload.StartWriters(ctx, cfg.NumWriters, db, metrics, j)
+	writers := workload.StartWriters(ctx, cfg.NumWriters, db, metrics, j)
 	j.Info("main", fmt.Sprintf("started %d writers", cfg.NumWriters))
 
 	// Start verifier. A single verifier is sufficient — see StartVerifier
-	// godoc for why multiple verifiers would multi-count gaps.
-	workload.StartVerifier(ctx, db, metrics, j)
+	// godoc. Writers are passed so the verifier can detect tail loss by
+	// comparing each writer's acked tip against what's in the DB.
+	workload.StartVerifier(ctx, db, writers, metrics, j)
 	j.Info("main", "verifier started")
 
 	// Configure operations.

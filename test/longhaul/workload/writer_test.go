@@ -62,4 +62,11 @@ var _ = Describe("Writer", func() {
 			Expect(w.seq.Add(1)).To(Equal(i))
 		}
 	})
+
+	It("Seq() returns the current committed sequence number", func() {
+		w := &Writer{id: "w001"}
+		Expect(w.Seq()).To(BeZero())
+		w.seq.Store(42)
+		Expect(w.Seq()).To(Equal(int64(42)))
+	})
 })

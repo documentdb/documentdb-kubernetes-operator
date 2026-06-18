@@ -21,9 +21,10 @@ var _ = Describe("Verifier", func() {
 	})
 
 	It("nextSeq is the per-writer resume point that bounds per-cycle scan cost", func() {
-		// verifyWriter sets nextSeq[writerID] to the seq AFTER the last seen doc,
-		// so on the next cycle the scan filter is "seq >= nextSeq". This is what
-		// keeps the per-cycle scan cost bounded over a multi-day run.
+		// verifyWriter sets nextSeq[writerID] to maxSeq+1 (writer's tip at scan
+		// time + 1), so the next cycle scans seq in (prev_tip, new_tip]. This
+		// is what bounds per-cycle scan cost AND lets tail loss be detected by
+		// comparing maxSeq against the highest doc actually present.
 		v := &Verifier{nextSeq: make(map[string]int64)}
 
 		got, ok := v.nextSeq["w1"]
