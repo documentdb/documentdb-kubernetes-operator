@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iouring-demo
+  labels:
+    app.kubernetes.io/part-of: io-uring-feature
+---
+# Throwaway gateway credentials for the IOUring feature playground.
+# Replace before using outside a local demo cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: iouring-demo-credentials
+  namespace: iouring-demo
+  labels:
+    app.kubernetes.io/part-of: io-uring-feature
+type: Opaque
+stringData:
+  username: demo
+  password: "ChangeMe!ReplaceBeforeUsing"
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: iouring-demo
+  namespace: iouring-demo
+  labels:
+    app.kubernetes.io/part-of: io-uring-feature
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: iouring-demo-credentials
+  image:
+    postgres: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+  resource:
+    storage:
+      pvcSize: "50Gi"
+      # storageClass: managed-csi-premium
+      persistentVolumeReclaimPolicy: Delete
+    memory: "4Gi"
+    cpu: "2"
+  postgres:
+    parameters:
+      track_io_timing: "on"
+  featureGates:
+    IOUring: true
+  exposeViaService:
+    serviceType: ClusterIP
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

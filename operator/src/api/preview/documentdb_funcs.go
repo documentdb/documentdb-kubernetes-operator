@@ -8,6 +8,7 @@ package preview
 // in a future version, simply change its value here — no CRD schema change is needed.
 var featureGateDefaults = map[string]bool{
 	FeatureGateChangeStreams: false,
+	FeatureGateIOUring:       false,
 }
 
 // IsFeatureGateEnabled checks whether a named feature gate is enabled for the given DocumentDB instance.

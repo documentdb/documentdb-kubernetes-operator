@@ -90,6 +90,9 @@ func ProtectedParameters(documentdb *dbpreview.DocumentDB) map[string]string {
 	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
 		params["wal_level"] = "logical"
 	}
+	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+		params["io_method"] = "io_uring"
+	}
 	return params
 }
 
