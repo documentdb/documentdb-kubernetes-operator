@@ -127,18 +127,6 @@ tests:
             name: GATEWAY_PORT
             value: "10260"
 
-  - it: should set DOCUMENTDB_IOURING_SECCOMP_MODE when configured
-    set:
-      operator:
-        ioUring:
-          seccompMode: "unconfined"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: DOCUMENTDB_IOURING_SECCOMP_MODE
-            value: "unconfined"
-
   - it: should set DOCUMENTDB_IOURING_SECCOMP_PROFILE when configured
     set:
       operator:
@@ -151,13 +139,8 @@ tests:
             name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
             value: "profiles/custom.json"
 
-  - it: should omit io_uring seccomp env vars by default
+  - it: should omit io_uring seccomp env var by default
     asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: DOCUMENTDB_IOURING_SECCOMP_MODE
-          any: true
       - notContains:
           path: spec.template.spec.containers[0].env
           content:

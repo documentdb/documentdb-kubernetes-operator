@@ -7,7 +7,6 @@ import (
 	"cmp"
 	"fmt"
 	"os"
-	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
@@ -332,20 +331,14 @@ func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbprevie
 // io_uring_{setup,enter,register} syscalls from that profile, so io_method=io_uring
 // would otherwise crash with "could not setup io_uring queue: Operation not permitted".
 //
-// The mode is operator-level configuration (the same profile decision applies to
-// every DocumentDB on the cluster):
-//   - "localhost" (default): reference a Localhost profile that re-allows the three
-//     io_uring syscalls. The profile must be installed on every node that runs
-//     postgres pods (see the io-uring feature playground). Preferred, hardened.
-//   - "unconfined": disable the seccomp sandbox entirely. Simplest, least secure.
+// The operator references a Localhost seccomp profile that re-allows only the three
+// io_uring syscalls. The profile path is operator-level configuration (the same
+// decision applies to every DocumentDB on the cluster) and must be installed on every
+// node that runs postgres pods (see the io-uring feature playground).
 //
 // No-op when the gate is disabled, so CNPG keeps its RuntimeDefault.
 func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
 	if !dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
-		return
-	}
-	if strings.EqualFold(os.Getenv(util.IOURING_SECCOMP_MODE_ENV), "unconfined") {
-		spec.SeccompProfile = &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined}
 		return
 	}
 	profile := cmp.Or(os.Getenv(util.IOURING_SECCOMP_PROFILE_ENV), util.DEFAULT_IOURING_SECCOMP_PROFILE)

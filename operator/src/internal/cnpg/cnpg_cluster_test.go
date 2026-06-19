@@ -557,7 +557,6 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		})
 
 		It("uses the default Localhost seccomp profile when IOUring is enabled and env is unset", func() {
-			GinkgoT().Setenv(util.IOURING_SECCOMP_MODE_ENV, "")
 			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "")
 
 			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
@@ -570,7 +569,6 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		})
 
 		It("uses the custom Localhost seccomp profile when configured", func() {
-			GinkgoT().Setenv(util.IOURING_SECCOMP_MODE_ENV, "")
 			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "profiles/custom-iouring.json")
 
 			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
@@ -579,18 +577,6 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeLocalhost))
 			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).ToNot(BeNil())
 			Expect(*cluster.Spec.SeccompProfile.LocalhostProfile).To(Equal("profiles/custom-iouring.json"))
-			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
-		})
-
-		It("uses Unconfined seccomp profile when configured", func() {
-			GinkgoT().Setenv(util.IOURING_SECCOMP_MODE_ENV, "UnCoNfInEd")
-			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "profiles/custom-iouring.json")
-
-			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
-
-			Expect(cluster.Spec.SeccompProfile).ToNot(BeNil())
-			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeUnconfined))
-			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).To(BeNil())
 			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
 		})
 	})

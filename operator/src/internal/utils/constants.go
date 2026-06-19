@@ -17,15 +17,9 @@ const (
 	// DocumentDB extension image pull policy environment variable
 	DOCUMENTDB_IMAGE_PULL_POLICY_ENV = "DOCUMENTDB_IMAGE_PULL_POLICY"
 
-	// IOURING_SECCOMP_MODE_ENV selects how the operator relaxes the postgres
-	// container seccomp profile when the IOUring feature gate is enabled.
-	// Accepted values (case-insensitive): "localhost" (default, hardened) or
-	// "unconfined" (no sandbox; simplest, least secure).
-	IOURING_SECCOMP_MODE_ENV = "DOCUMENTDB_IOURING_SECCOMP_MODE"
-
 	// IOURING_SECCOMP_PROFILE_ENV overrides the Localhost seccomp profile path
-	// used when IOURING_SECCOMP_MODE is "localhost". The path is relative to the
-	// node's kubelet seccomp root (/var/lib/kubelet/seccomp).
+	// applied to the postgres pods when the IOUring feature gate is enabled. The
+	// path is relative to the node's kubelet seccomp root (/var/lib/kubelet/seccomp).
 	IOURING_SECCOMP_PROFILE_ENV = "DOCUMENTDB_IOURING_SECCOMP_PROFILE"
 
 	// DEFAULT_IOURING_SECCOMP_PROFILE is the default Localhost profile path for

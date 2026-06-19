@@ -110,16 +110,13 @@ operator:
   # io_uring (PostgreSQL 18 asynchronous I/O) opt-in support. Enabling the
   # IOUring feature gate on a DocumentDB resource makes the operator relax the
   # postgres container seccomp profile so the io_uring syscalls are allowed.
-  # These operator-level settings control HOW seccomp is relaxed for every
-  # DocumentDB managed by this operator. Leave empty to use the operator's
-  # built-in defaults (localhost mode, profiles/documentdb-iouring.json).
+  # This operator-level setting controls the Localhost seccomp profile used for
+  # every DocumentDB managed by this operator. Leave empty to use the operator's
+  # built-in default (profiles/documentdb-iouring.json).
   # See docs/operator-public-documentation/io-uring.md.
   ioUring:
-    # seccompMode: "localhost" (hardened; profile must be installed on every
-    # postgres node) or "unconfined" (removes the sandbox; simplest, least
-    # secure). Empty string keeps the operator default (localhost).
-    seccompMode: ""
     # seccompProfile: Localhost profile path relative to /var/lib/kubelet/seccomp.
+    # The profile must be installed on every node that runs postgres pods.
     # Empty string keeps the operator default (profiles/documentdb-iouring.json).
     seccompProfile: ""
 
