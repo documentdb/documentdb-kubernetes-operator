@@ -54,7 +54,7 @@ USER=$(kubectl get secret documentdb-credentials -n $NS -o jsonpath='{.data.user
 PASS=$(kubectl get secret documentdb-credentials -n $NS -o jsonpath='{.data.password}' | base64 -d)
 
 # 3. Run the driver. Override LONGHAUL_MAX_DURATION for short dev iterations.
-LONGHAUL_MONGO_URI="mongodb://${USER}:${PASS}@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true" \
+LONGHAUL_DOCUMENTDB_URI="mongodb://${USER}:${PASS}@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true" \
 LONGHAUL_CLUSTER_NAME=documentdb-cluster \
 LONGHAUL_NAMESPACE=$NS \
 LONGHAUL_MAX_DURATION=5m \
@@ -82,8 +82,8 @@ cd <repo-root>
 docker build -t <your-registry>/longhaul-test:latest -f test/longhaul/Dockerfile .
 docker push <your-registry>/longhaul-test:latest
 
-# 2. Create the MongoDB credentials secret
-kubectl create secret generic longhaul-mongo-credentials \
+# 2. Create the DocumentDB credentials secret
+kubectl create secret generic longhaul-documentdb-credentials \
   --from-literal=uri='mongodb://docdb:YourPass@documentdb-service-documentdb-cluster.documentdb-test-ns.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true' \
   -n documentdb-test-ns
 
@@ -122,7 +122,7 @@ All configuration is via environment variables.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `LONGHAUL_MONGO_URI` | Yes | — | MongoDB connection string to the DocumentDB gateway. |
+| `LONGHAUL_DOCUMENTDB_URI` | Yes | — | Connection string to the DocumentDB gateway. |
 | `LONGHAUL_CLUSTER_NAME` | Yes | — | Name of the target DocumentDB cluster CR. |
 | `LONGHAUL_NAMESPACE` | No | `default` | Kubernetes namespace of the target cluster. |
 | `LONGHAUL_MAX_DURATION` | No | `30m` | Max test duration. Use `0s` for run-until-failure. |
@@ -177,7 +177,7 @@ harness will likely consume as it grows:
 
 - `e2eutils/mongo` — `BuildURI` (URL-escapes username/password), TLS-from-CA-bundle,
   `Handle` with port-forward + secret-backed credentials. The long haul driver
-  currently takes a raw `LONGHAUL_MONGO_URI` string; when it moves to per-secret
+  currently takes a raw `LONGHAUL_DOCUMENTDB_URI` string; when it moves to per-secret
   credentials or in-cluster TLS, these helpers become directly applicable.
 - `e2eutils/operatorhealth` — pod-ready / CRD-ready gating used during e2e setup.
   The monitor's `isPodReady` could delegate to this.

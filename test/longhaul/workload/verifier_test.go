@@ -40,7 +40,7 @@ var _ = Describe("Verifier", func() {
 	})
 
 	It("verifyAll requires a *mongo.Database (covered by integration runs)", func() {
-		// We can't unit-test verifyAll's mongo path without a server, but the
+		// We can't unit-test verifyAll's DocumentDB path without a server, but the
 		// constructor wiring above + the table-driven gap-detection logic is
 		// what the verifier actually does. Document the boundary.
 		Skip("verifyAll requires a *mongo.Database; covered by long-haul integration runs")

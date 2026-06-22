@@ -23,7 +23,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/longhaul/report"
 	"github.com/documentdb/documentdb-operator/test/longhaul/workload"
 
-	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
+	shareddocdb "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 func main() {
@@ -59,29 +59,29 @@ func run(cfg config.Config) int {
 	j := journal.New()
 	metrics := workload.NewMetrics()
 
-	// Connect to MongoDB.
-	if cfg.MongoURI == "" {
-		log.Fatal("LONGHAUL_MONGO_URI must be set")
+	// Connect to DocumentDB.
+	if cfg.DocumentDBURI == "" {
+		log.Fatal("LONGHAUL_DOCUMENTDB_URI must be set")
 	}
-	mongoClient, err := sharedmongo.NewFromURI(ctx, cfg.MongoURI)
+	docdbClient, err := shareddocdb.NewFromURI(ctx, cfg.DocumentDBURI)
 	if err != nil {
-		log.Fatalf("failed to connect to MongoDB: %v", err)
+		log.Fatalf("failed to connect to DocumentDB: %v", err)
 	}
 	defer func() {
 		disconnectCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
 		defer c()
-		_ = mongoClient.Disconnect(disconnectCtx)
+		_ = docdbClient.Disconnect(disconnectCtx)
 	}()
 
 	// Verify connectivity.
 	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer pingCancel()
-	if err := mongoClient.Ping(pingCtx, nil); err != nil {
-		log.Fatalf("MongoDB ping failed: %v", err)
+	if err := docdbClient.Ping(pingCtx, nil); err != nil {
+		log.Fatalf("DocumentDB ping failed: %v", err)
 	}
-	log.Println("MongoDB connection established")
+	log.Println("DocumentDB connection established")
 
-	db := mongoClient.Database("longhaul")
+	db := docdbClient.Database("longhaul")
 
 	// Optionally drop previous test data. Disabled by default so that pod
 	// restarts (Deployment auto-restart on crash) preserve durability

@@ -19,7 +19,7 @@ const (
 	EnvClusterName = "LONGHAUL_CLUSTER_NAME"
 
 	// Workload and operation tuning.
-	EnvMongoURI        = "LONGHAUL_MONGO_URI"
+	EnvDocumentDBURI   = "LONGHAUL_DOCUMENTDB_URI"
 	EnvNumWriters      = "LONGHAUL_NUM_WRITERS"
 	EnvOpCooldown      = "LONGHAUL_OP_COOLDOWN"
 	EnvRecoveryTimeout = "LONGHAUL_RECOVERY_TIMEOUT"
@@ -47,8 +47,8 @@ type Config struct {
 	// ClusterName is the name of the target DocumentDB cluster CR.
 	ClusterName string
 
-	// MongoURI is the MongoDB connection string for data-plane workload.
-	MongoURI string
+	// DocumentDBURI is the DocumentDB connection string for data-plane workload.
+	DocumentDBURI string
 
 	// NumWriters is the number of concurrent writer goroutines.
 	NumWriters int
@@ -85,7 +85,7 @@ func DefaultConfig() Config {
 		MaxDuration:     30 * time.Minute,
 		Namespace:       "default",
 		ClusterName:     "",
-		MongoURI:        "",
+		DocumentDBURI:   "",
 		NumWriters:      5,
 		OpCooldown:      5 * time.Minute,
 		RecoveryTimeout: 5 * time.Minute,
@@ -117,8 +117,8 @@ func LoadFromEnv() (Config, error) {
 		cfg.ClusterName = v
 	}
 
-	if v := os.Getenv(EnvMongoURI); v != "" {
-		cfg.MongoURI = v
+	if v := os.Getenv(EnvDocumentDBURI); v != "" {
+		cfg.DocumentDBURI = v
 	}
 
 	if v := os.Getenv(EnvNumWriters); v != "" {

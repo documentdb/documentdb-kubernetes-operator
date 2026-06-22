@@ -32,7 +32,7 @@ var _ = Describe("Config", func() {
 		BeforeEach(func() {
 			for _, k := range []string{
 				EnvEnabled, EnvMaxDuration, EnvNamespace, EnvClusterName,
-				EnvMongoURI, EnvNumWriters,
+				EnvDocumentDBURI, EnvNumWriters,
 				EnvOpCooldown, EnvRecoveryTimeout, EnvSteadyStateWait,
 				EnvMinInstances, EnvMaxInstances, EnvReportInterval,
 			} {
@@ -97,11 +97,11 @@ var _ = Describe("Config", func() {
 			Expect(cfg.OpCooldown).To(Equal(10 * time.Minute))
 		})
 
-		It("parses MongoURI from env", func() {
-			GinkgoT().Setenv(EnvMongoURI, "mongodb://localhost:27017")
+		It("parses DocumentDBURI from env", func() {
+			GinkgoT().Setenv(EnvDocumentDBURI, "mongodb://localhost:27017")
 			cfg, err := LoadFromEnv()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cfg.MongoURI).To(Equal("mongodb://localhost:27017"))
+			Expect(cfg.DocumentDBURI).To(Equal("mongodb://localhost:27017"))
 		})
 	})
 

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	// CollectionName is the MongoDB collection used by the workload.
+	// CollectionName is the DocumentDB collection used by the workload.
 	CollectionName = "longhaul_writes"
 
 	// writeInterval is the time between sequential writes per writer.
@@ -37,8 +37,8 @@ type WriteDocument struct {
 	Timestamp time.Time `bson:"timestamp"`
 }
 
-// writeBackend abstracts the mongo collection so writeOne / Resume can be
-// unit-tested with a stub. Production uses mongoBackend (a thin wrapper over
+// writeBackend abstracts the DocumentDB collection so writeOne / Resume can be
+// unit-tested with a stub. Production uses docdbBackend (a thin wrapper over
 // *mongo.Collection); tests use a controllable fake.
 type writeBackend interface {
 	insert(ctx context.Context, doc WriteDocument) error
@@ -47,21 +47,21 @@ type writeBackend interface {
 	highestSeq(ctx context.Context, writerID string) (int64, error)
 }
 
-// mongoBackend adapts *mongo.Collection to writeBackend.
-type mongoBackend struct {
+// docdbBackend adapts *mongo.Collection to writeBackend.
+type docdbBackend struct {
 	coll *mongo.Collection
 }
 
-func (m mongoBackend) insert(ctx context.Context, doc WriteDocument) error {
+func (m docdbBackend) insert(ctx context.Context, doc WriteDocument) error {
 	_, err := m.coll.InsertOne(ctx, doc)
 	return err
 }
 
-func (m mongoBackend) isDuplicate(err error) bool {
+func (m docdbBackend) isDuplicate(err error) bool {
 	return mongo.IsDuplicateKeyError(err)
 }
 
-func (m mongoBackend) highestSeq(ctx context.Context, writerID string) (int64, error) {
+func (m docdbBackend) highestSeq(ctx context.Context, writerID string) (int64, error) {
 	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
 	var doc WriteDocument
 	err := m.coll.FindOne(ctx, bson.M{"writer_id": writerID}, opts).Decode(&doc)
@@ -74,7 +74,7 @@ func (m mongoBackend) highestSeq(ctx context.Context, writerID string) (int64, e
 	return doc.Seq, nil
 }
 
-// Writer performs sequential inserts to a MongoDB collection.
+// Writer performs sequential inserts to a DocumentDB collection.
 // Each writer has a unique ID and tracks its own sequence number.
 type Writer struct {
 	id      string
@@ -92,7 +92,7 @@ func NewWriter(id string, db *mongo.Database, metrics *Metrics, j *journal.Journ
 		id:      id,
 		metrics: metrics,
 		journal: j,
-		backend: mongoBackend{coll: coll},
+		backend: docdbBackend{coll: coll},
 	}
 }
 

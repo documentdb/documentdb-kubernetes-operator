@@ -33,7 +33,7 @@ metadata:
     app.kubernetes.io/part-of: longhaul-test
 ---
 # Credentials for the DocumentDB cluster.
-# The operator creates the MongoDB user with these credentials.
+# The operator creates the DocumentDB user with these credentials.
 #
 # NOTE: This is a placeholder. Before applying, substitute a real password
 # (e.g. `sed -i "s/__LONGHAUL_PASSWORD__/$(openssl rand -base64 24)/" deploy/setup.yaml`)

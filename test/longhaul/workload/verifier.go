@@ -106,7 +106,7 @@ type finding struct {
 }
 
 // auditResult is the aggregate counts from one verifyWriter cycle. Pure —
-// no I/O — so it's table-testable without a mongo.
+// no I/O — so it's table-testable without a database.
 type auditResult struct {
 	newExpectedSeq int64
 	internalGaps   int64
