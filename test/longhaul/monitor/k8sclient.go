@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +39,7 @@ type K8sClusterClient struct {
 	metricsClient metricsv.Interface
 	namespace     string
 	clusterName   string
-	metricsAvail  bool
+	metricsAvail  atomic.Bool
 }
 
 // K8sClientConfig holds configuration for creating a K8sClusterClient.
@@ -71,16 +72,18 @@ func NewK8sClusterClient(cfg K8sClientConfig) (*K8sClusterClient, error) {
 	}
 
 	// Try to create metrics client (graceful fallback).
-	metricsClient, metricsAvail := tryMetricsClient(restConfig)
+	metricsClient, metricsOK := tryMetricsClient(restConfig)
 
-	return &K8sClusterClient{
+	client := &K8sClusterClient{
 		clientset:     clientset,
 		crClient:      crClient,
 		metricsClient: metricsClient,
 		namespace:     cfg.Namespace,
 		clusterName:   cfg.ClusterName,
-		metricsAvail:  metricsAvail,
-	}, nil
+	}
+	client.metricsAvail.Store(metricsOK)
+
+	return client, nil
 }
 
 func buildRestConfig(kubeconfig string) (*rest.Config, error) {
@@ -230,7 +233,7 @@ func (k *K8sClusterClient) UpgradeDocumentDB(ctx context.Context, version string
 // GetPodMetrics queries metrics-server for pod resource usage.
 // Returns nil, nil if metrics-server is not available.
 func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, error) {
-	if !k.metricsAvail || k.metricsClient == nil {
+	if !k.metricsAvail.Load() || k.metricsClient == nil {
 		return nil, nil
 	}
 
@@ -241,7 +244,7 @@ func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, err
 	if err != nil {
 		// Metrics API might have become unavailable.
 		log.Printf("[k8sclient] metrics query failed (disabling): %v", err)
-		k.metricsAvail = false
+		k.metricsAvail.Store(false)
 		return nil, nil
 	}
 
@@ -265,7 +268,7 @@ func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, err
 
 // MetricsAvailable returns whether metrics-server is usable.
 func (k *K8sClusterClient) MetricsAvailable() bool {
-	return k.metricsAvail
+	return k.metricsAvail.Load()
 }
 
 func isPodReady(pod *corev1.Pod) bool {
