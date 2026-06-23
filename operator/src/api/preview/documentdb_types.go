@@ -276,6 +276,52 @@ type Resource struct {
 	// Examples: "2", "4", "500m"
 	// +optional
 	CPU string `json:"cpu,omitempty"`
+
+	// Memory and CPU above describe the TOTAL pod envelope. When the gateway
+	// (and, with monitoring enabled, the OTel collector) sidecars run in the
+	// same pod, the operator carves their memory out of this envelope and gives
+	// PostgreSQL the remainder, recomputing PostgreSQL's memory-aware parameters
+	// from that reduced value. The optional per-component overrides below let you
+	// size each container independently; an explicit override always wins over the
+	// automatic carve-out.
+
+	// Gateway optionally overrides the resources allocated to the
+	// documentdb-gateway sidecar container. When unset, the operator derives the
+	// gateway's memory as min(gatewayMemoryFraction × memory, gatewayMemoryCap)
+	// and carves it out of the pod memory envelope. The value is applied as both
+	// the request and the limit (Guaranteed-class) so a gateway leak is
+	// OOM-isolated and cannot crowd out PostgreSQL.
+	// +optional
+	Gateway *ComponentResources `json:"gateway,omitempty"`
+
+	// Database optionally overrides the resources allocated to the PostgreSQL
+	// container. When unset, PostgreSQL receives the pod memory envelope minus the
+	// gateway and (when monitoring is enabled) OTel collector carve-outs.
+	// +optional
+	Database *ComponentResources `json:"database,omitempty"`
+
+	// OTel optionally overrides the resources allocated to the otel-collector
+	// sidecar container (only present when spec.monitoring.enabled is true).
+	// When unset, the operator applies built-in defaults (request 48Mi / limit 128Mi).
+	// +optional
+	OTel *ComponentResources `json:"otel,omitempty"`
+}
+
+// ComponentResources overrides the CPU and/or memory allocated to an individual
+// container in the DocumentDB pod (PostgreSQL, the gateway, or the OTel
+// collector). Each field is a Kubernetes quantity string; when set it is applied
+// as both the request and the limit for that container (Guaranteed-class) and
+// overrides the automatic carve-out derived from spec.resource.memory.
+type ComponentResources struct {
+	// Memory is the memory request=limit for the container (e.g. "512Mi", "2Gi").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
+	// +optional
+	Memory string `json:"memory,omitempty"`
+
+	// CPU is the CPU request=limit for the container (e.g. "500m", "2").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
+	// +optional
+	CPU string `json:"cpu,omitempty"`
 }
 
 type StorageConfiguration struct {
