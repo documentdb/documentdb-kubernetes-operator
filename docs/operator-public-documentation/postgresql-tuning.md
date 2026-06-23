@@ -15,7 +15,7 @@ The operator manages PostgreSQL parameters through a layered merge system with c
 
 ## Resource Configuration
 
-Configure CPU and memory for your DocumentDB pods using the `spec.resource` section:
+Configure CPU and memory for your DocumentDB pods using the `spec.resource` section. The `memory` value is the total pod memory envelope, not only PostgreSQL memory:
 
 ```yaml
 apiVersion: documentdb.io/preview
@@ -26,11 +26,11 @@ spec:
   resource:
     storage:
       pvcSize: "50Gi"
-    memory: "8Gi"    # Pod memory limit (Guaranteed QoS)
+    memory: "8Gi"    # Total pod memory envelope
     cpu: "4"         # Pod CPU limit (Guaranteed QoS)
 ```
 
-When `memory` is set, the operator uses **Guaranteed QoS** (requests = limits), as recommended by CloudNative-PG for database workloads. This ensures predictable performance and stable memory for PostgreSQL buffer management.
+When `memory` is set, the operator allocates memory to the PostgreSQL container, the documentdb-gateway sidecar, and, when monitoring is enabled, the OTel Collector sidecar. Each component gets its own container resource settings so a sidecar memory leak is OOM-killed in that sidecar instead of crowding out PostgreSQL.
 
 If `memory` is not specified (or set to `"0"`), no resource limits are applied and static fallback values are used for memory-sensitive parameters.
 
@@ -40,11 +40,60 @@ If `memory` is not specified (or set to `"0"`), no resource limits are applied a
     memory-aware PostgreSQL parameters (`shared_buffers`, `effective_cache_size`,
     `work_mem`, `maintenance_work_mem`) are recomputed and applied at the same time.
 
+## Sidecar Memory Isolation
+
+The operator treats `spec.resource.memory` as the total memory available to the pod and then carves out sidecar memory before computing PostgreSQL settings:
+
+- **documentdb-gateway**: by default, reserves 18.75% of the total memory envelope, capped at 32Gi.
+- **OTel Collector**: when `spec.monitoring.enabled` is true, defaults to a 48Mi memory request, a 128Mi memory limit, and a 50m CPU request.
+- **PostgreSQL**: receives the remaining memory, and memory-aware parameters such as `shared_buffers` are recomputed from that database allocation.
+
+Override individual containers with `spec.resource.gateway`, `spec.resource.database`, and `spec.resource.otel` when a cluster needs explicit sizing:
+
+```yaml
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: sized-cluster
+spec:
+  monitoring:
+    enabled: true
+  resource:
+    memory: "8Gi"        # Total pod envelope
+    cpu: "4"
+    gateway:
+      memory: "1Gi"
+      cpu: "500m"
+    database:
+      memory: "6Gi"
+      cpu: "3"
+    otel:
+      memory: "128Mi"
+      cpu: "50m"
+```
+
+Each per-component value is a Kubernetes quantity string and, when set, overrides the automatic split for that container.
+
+Cluster-wide defaults are configured with the operator Helm chart:
+
+```yaml
+operator:
+  sidecarResources:
+    gatewayMemoryFraction: "0.1875"
+    gatewayMemoryCap: "32Gi"
+    gatewayCpuLimit: ""        # optional; bounds gateway async worker threads
+    otelMemoryRequest: "48Mi"
+    otelMemoryLimit: "128Mi"
+    otelCpuRequest: "50m"
+```
+
+Use per-cluster `spec.resource` overrides for individual workload needs; use Helm values to change fleet-wide defaults for clusters managed by the operator.
+
 ## Memory-Aware Defaults
 
-When a memory limit is configured, these parameters are automatically computed:
+When PostgreSQL has an effective database memory allocation, these parameters are automatically computed from that allocation:
 
-| Parameter | Formula | Example (8Gi) |
+| Parameter | Formula | Example (8Gi database allocation) |
 |-----------|---------|---------------|
 | `shared_buffers` | 25% of memory | 2GB |
 | `effective_cache_size` | 75% of memory | 6GB |
@@ -53,7 +102,7 @@ When a memory limit is configured, these parameters are automatically computed:
 
 ### Sizing Reference
 
-| Pod Memory | shared_buffers | effective_cache_size | work_mem | maintenance_work_mem |
+| Database Memory | shared_buffers | effective_cache_size | work_mem | maintenance_work_mem |
 |-----------|----------------|---------------------|----------|---------------------|
 | (not set) | 256MB | 512MB | 16MB | 128MB |
 | 2Gi | 512MB | 1536MB | 4MB | 204MB |
@@ -138,8 +187,8 @@ spec:
 
 This configuration will produce the following effective parameters (among others):
 
-- `shared_buffers`: 4GB (auto-computed from 16Gi)
-- `effective_cache_size`: 12GB (auto-computed)
+- `shared_buffers`: auto-computed from the PostgreSQL memory remaining after sidecar reservations
+- `effective_cache_size`: auto-computed from the same effective database allocation
 - `max_connections`: 500 (user override)
 - `wal_level`: logical (protected, from ChangeStreams gate)
 - `cron.database_name`: postgres (protected)

@@ -93,6 +93,20 @@ spec:
         env:
         - name: GATEWAY_PORT
           value: "10260"
+        - name: DOCUMENTDB_GATEWAY_MEMORY_FRACTION
+          value: "{{ .Values.operator.sidecarResources.gatewayMemoryFraction }}"
+        - name: DOCUMENTDB_GATEWAY_MEMORY_CAP
+          value: "{{ .Values.operator.sidecarResources.gatewayMemoryCap }}"
+        {{- if .Values.operator.sidecarResources.gatewayCpuLimit }}
+        - name: DOCUMENTDB_GATEWAY_CPU_LIMIT
+          value: "{{ .Values.operator.sidecarResources.gatewayCpuLimit }}"
+        {{- end }}
+        - name: DOCUMENTDB_OTEL_MEMORY_REQUEST
+          value: "{{ .Values.operator.sidecarResources.otelMemoryRequest }}"
+        - name: DOCUMENTDB_OTEL_MEMORY_LIMIT
+          value: "{{ .Values.operator.sidecarResources.otelMemoryLimit }}"
+        - name: DOCUMENTDB_OTEL_CPU_REQUEST
+          value: "{{ .Values.operator.sidecarResources.otelCpuRequest }}"
         {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion }}"

@@ -33,10 +33,10 @@ func ddbWithMemory(mem string, monitoring bool) *dbpreview.DocumentDB {
 func TestComputeResourceSplit_ProductionRows(t *testing.T) {
 	// (SKU, envelope, expected gateway, expected db remainder) — monitoring OFF.
 	cases := []struct {
-		name       string
-		envelope   string
-		wantGW     string
-		wantDB     string
+		name     string
+		envelope string
+		wantGW   string
+		wantDB   string
 	}{
 		{"M20", "4Gi", "768Mi", "3328Mi"},
 		{"M50", "32Gi", "6Gi", "26Gi"},

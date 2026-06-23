@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/common"
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/decoder"
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/object"
 	"github.com/cloudnative-pg/cnpg-i/pkg/lifecycle"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 
@@ -178,6 +180,14 @@ func (impl Implementation) reconcileMetadata(
 			RunAsGroup: pointer.Int64(1000),
 		},
 	}
+	if resources := buildResources(
+		configuration.GatewayCPURequest,
+		configuration.GatewayCPULimit,
+		configuration.GatewayMemoryRequest,
+		configuration.GatewayMemoryLimit,
+	); hasResourceRequirements(resources) {
+		sidecar.Resources = resources
+	}
 
 	// If TLS secret parameter provided, mount it at /tls
 	// Track whether TLS secret is configured to augment container args later
@@ -314,6 +324,17 @@ func (impl Implementation) reconcileMetadata(
 				},
 			},
 		}
+		if resources := buildResources(
+			configuration.OTelCPURequest,
+			"",
+			configuration.OTelMemoryRequest,
+			configuration.OTelMemoryLimit,
+		); hasResourceRequirements(resources) {
+			otelSidecar.Resources = resources
+		}
+		if goMemLimitEnv, ok := buildGoMemLimitEnv(configuration.OTelMemoryLimit); ok {
+			otelSidecar.Env = append(otelSidecar.Env, goMemLimitEnv)
+		}
 
 		// Expose Prometheus metrics port when configured
 		if configuration.PrometheusPort > 0 {
@@ -381,6 +402,56 @@ func (impl Implementation) reconcileMetadata(
 // pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
 // Kept as a package-level constant so tests can reference it.
 const gatewayContainerName = "documentdb-gateway"
+
+func buildResources(cpuReq, cpuLim, memReq, memLim string) corev1.ResourceRequirements {
+	var requests corev1.ResourceList
+	var limits corev1.ResourceList
+
+	addQuantity := func(list corev1.ResourceList, name corev1.ResourceName, value string) corev1.ResourceList {
+		if value == "" {
+			return list
+		}
+		quantity, err := resource.ParseQuantity(value)
+		if err != nil {
+			return list
+		}
+		if list == nil {
+			list = corev1.ResourceList{}
+		}
+		list[name] = quantity
+		return list
+	}
+
+	requests = addQuantity(requests, corev1.ResourceCPU, cpuReq)
+	requests = addQuantity(requests, corev1.ResourceMemory, memReq)
+	limits = addQuantity(limits, corev1.ResourceCPU, cpuLim)
+	limits = addQuantity(limits, corev1.ResourceMemory, memLim)
+
+	return corev1.ResourceRequirements{
+		Requests: requests,
+		Limits:   limits,
+	}
+}
+
+func hasResourceRequirements(resources corev1.ResourceRequirements) bool {
+	return len(resources.Requests) > 0 || len(resources.Limits) > 0
+}
+
+func buildGoMemLimitEnv(memoryLimit string) (corev1.EnvVar, bool) {
+	if memoryLimit == "" {
+		return corev1.EnvVar{}, false
+	}
+
+	quantity, err := resource.ParseQuantity(memoryLimit)
+	if err != nil {
+		return corev1.EnvVar{}, false
+	}
+
+	return corev1.EnvVar{
+		Name:  "GOMEMLIMIT",
+		Value: strconv.FormatInt(quantity.Value()*80/100, 10),
+	}, true
+}
 
 // gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
 // injector adds to the gateway container so it can push metrics to the

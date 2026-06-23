@@ -12,6 +12,7 @@ import (
 	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/validation"
 	"github.com/cloudnative-pg/cnpg-i/pkg/operator"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -19,9 +20,16 @@ const (
 	annotationParameter                 = "annotations"
 	gatewayImageParameter               = "gatewayImage"
 	gatewayImagePullPolicyParameter     = "gatewayImagePullPolicy"
+	gatewayMemoryRequestParameter       = "gatewayMemoryRequest"
+	gatewayMemoryLimitParameter         = "gatewayMemoryLimit"
+	gatewayCPURequestParameter          = "gatewayCpuRequest"
+	gatewayCPULimitParameter            = "gatewayCpuLimit"
 	documentDbCredentialSecretParameter = "documentDbCredentialSecret"
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
+	otelMemoryRequestParameter          = "otelMemoryRequest"
+	otelMemoryLimitParameter            = "otelMemoryLimit"
+	otelCPURequestParameter             = "otelCpuRequest"
 	prometheusPortParameter             = "prometheusPort"
 )
 
@@ -31,9 +39,16 @@ type Configuration struct {
 	Annotations                map[string]string
 	GatewayImage               string
 	GatewayImagePullPolicy     corev1.PullPolicy
+	GatewayMemoryRequest       string
+	GatewayMemoryLimit         string
+	GatewayCPURequest          string
+	GatewayCPULimit            string
 	DocumentDbCredentialSecret string
 	OtelCollectorImage         string
 	OtelConfigMapName          string
+	OTelMemoryRequest          string
+	OTelMemoryLimit            string
+	OTelCPURequest             string
 	PrometheusPort             int32
 }
 
@@ -67,6 +82,15 @@ func FromParameters(
 	gatewayImage := helper.Parameters[gatewayImageParameter]
 	credentialSecret := helper.Parameters[documentDbCredentialSecretParameter]
 	pullPolicy := parsePullPolicy(helper.Parameters[gatewayImagePullPolicyParameter])
+	validateQuantityParameters(helper, &validationErrors,
+		gatewayMemoryRequestParameter,
+		gatewayMemoryLimitParameter,
+		gatewayCPURequestParameter,
+		gatewayCPULimitParameter,
+		otelMemoryRequestParameter,
+		otelMemoryLimitParameter,
+		otelCPURequestParameter,
+	)
 
 	var prometheusPort int32
 	if portStr := helper.Parameters[prometheusPortParameter]; portStr != "" {
@@ -86,9 +110,16 @@ func FromParameters(
 		Annotations:                annotations,
 		GatewayImage:               gatewayImage,
 		GatewayImagePullPolicy:     pullPolicy,
+		GatewayMemoryRequest:       helper.Parameters[gatewayMemoryRequestParameter],
+		GatewayMemoryLimit:         helper.Parameters[gatewayMemoryLimitParameter],
+		GatewayCPURequest:          helper.Parameters[gatewayCPURequestParameter],
+		GatewayCPULimit:            helper.Parameters[gatewayCPULimitParameter],
 		DocumentDbCredentialSecret: credentialSecret,
 		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
 		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
+		OTelMemoryRequest:          helper.Parameters[otelMemoryRequestParameter],
+		OTelMemoryLimit:            helper.Parameters[otelMemoryLimitParameter],
+		OTelCPURequest:             helper.Parameters[otelCPURequestParameter],
 		PrometheusPort:             prometheusPort,
 	}
 
@@ -113,6 +144,25 @@ func ValidateChanges(
 	}
 
 	return validationErrors
+}
+
+func validateQuantityParameters(
+	helper *common.Plugin,
+	validationErrors *[]*operator.ValidationError,
+	parameters ...string,
+) {
+	for _, parameter := range parameters {
+		value := helper.Parameters[parameter]
+		if value == "" {
+			continue
+		}
+		if _, err := resource.ParseQuantity(value); err != nil {
+			*validationErrors = append(
+				*validationErrors,
+				validation.BuildErrorForParameter(helper, parameter, "invalid resource quantity: "+err.Error()),
+			)
+		}
+	}
 }
 
 // applyDefaults fills the configuration with the defaults
@@ -166,7 +216,14 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	result[annotationParameter] = string(serializedAnnotations)
 	result[gatewayImageParameter] = config.GatewayImage
 	result[gatewayImagePullPolicyParameter] = string(config.GatewayImagePullPolicy)
+	result[gatewayMemoryRequestParameter] = config.GatewayMemoryRequest
+	result[gatewayMemoryLimitParameter] = config.GatewayMemoryLimit
+	result[gatewayCPURequestParameter] = config.GatewayCPURequest
+	result[gatewayCPULimitParameter] = config.GatewayCPULimit
 	result[documentDbCredentialSecretParameter] = config.DocumentDbCredentialSecret
+	result[otelMemoryRequestParameter] = config.OTelMemoryRequest
+	result[otelMemoryLimitParameter] = config.OTelMemoryLimit
+	result[otelCPURequestParameter] = config.OTelCPURequest
 
 	return result, nil
 }

@@ -1,0 +1,10 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  resource:
+    memory: ${POD_MEMORY}
+  monitoring:
+    enabled: ${MONITORING_ENABLED}

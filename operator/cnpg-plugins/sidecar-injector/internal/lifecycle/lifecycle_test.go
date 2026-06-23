@@ -4,10 +4,19 @@
 package lifecycle
 
 import (
+	"context"
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
+	apiv1 "github.com/cloudnative-pg/api/pkg/api/v1"
+	cnpglifecycle "github.com/cloudnative-pg/cnpg-i/pkg/lifecycle"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	pluginmetadata "github.com/documentdb/cnpg-i-sidecar-injector/pkg/metadata"
 )
 
 func gatewayContainer(env ...corev1.EnvVar) *corev1.Pod {
@@ -109,4 +118,162 @@ func TestInjectGatewayOTelEnv_NoGatewayContainer(t *testing.T) {
 	if len(pod.Spec.Containers[0].Env) != 0 {
 		t.Errorf("expected no envs on non-gateway container, got %v", envNames(pod.Spec.Containers[0].Env))
 	}
+}
+
+func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
+	enabled := true
+	cluster := &apiv1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiv1.SchemeGroupVersion.String(),
+			Kind:       apiv1.ClusterKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "default",
+		},
+		Spec: apiv1.ClusterSpec{
+			Plugins: []apiv1.PluginConfiguration{
+				{
+					Name:    pluginmetadata.PluginName,
+					Enabled: &enabled,
+					Parameters: map[string]string{
+						"gatewayImage":               "gateway:latest",
+						"gatewayMemoryRequest":       "768Mi",
+						"gatewayMemoryLimit":         "3Gi",
+						"gatewayCpuRequest":          "500m",
+						"gatewayCpuLimit":            "2",
+						"otelCollectorImage":         "otel:latest",
+						"otelConfigMapName":          "otel-config",
+						"otelMemoryRequest":          "64Mi",
+						"otelMemoryLimit":            "128Mi",
+						"otelCpuRequest":             "100m",
+						"documentDbCredentialSecret": "documentdb-credentials",
+					},
+				},
+			},
+		},
+		Status: apiv1.ClusterStatus{
+			TargetPrimary: "cluster-1",
+		},
+	}
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "cluster-1",
+			Namespace:   "default",
+			Labels:      map[string]string{"cnpg.io/cluster": "cluster"},
+			Annotations: map[string]string{"cnpg.io/operatorVersion": "test"},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "postgres"},
+			},
+		},
+	}
+
+	response, err := Implementation{}.LifecycleHook(context.Background(), &cnpglifecycle.OperatorLifecycleRequest{
+		OperationType: &cnpglifecycle.OperatorOperationType{
+			Type: cnpglifecycle.OperatorOperationType_TYPE_CREATE,
+		},
+		ClusterDefinition: mustMarshal(t, cluster),
+		ObjectDefinition:  mustMarshal(t, pod),
+	})
+	if err != nil {
+		t.Fatalf("LifecycleHook() error: %v", err)
+	}
+
+	containers := addedContainersFromPatch(t, response.JsonPatch)
+	gateway, ok := containers[gatewayContainerName]
+	if !ok {
+		t.Fatalf("gateway container missing from patch; patch=%s", string(response.JsonPatch))
+	}
+	assertResourceQuantity(t, gateway.Resources.Requests, corev1.ResourceCPU, "500m")
+	assertResourceQuantity(t, gateway.Resources.Requests, corev1.ResourceMemory, "768Mi")
+	assertResourceQuantity(t, gateway.Resources.Limits, corev1.ResourceCPU, "2")
+	assertResourceQuantity(t, gateway.Resources.Limits, corev1.ResourceMemory, "3Gi")
+
+	otel, ok := containers["otel-collector"]
+	if !ok {
+		t.Fatalf("otel container missing from patch; patch=%s", string(response.JsonPatch))
+	}
+	assertResourceQuantity(t, otel.Resources.Requests, corev1.ResourceCPU, "100m")
+	assertResourceQuantity(t, otel.Resources.Requests, corev1.ResourceMemory, "64Mi")
+	assertResourceQuantity(t, otel.Resources.Limits, corev1.ResourceMemory, "128Mi")
+	if _, ok := otel.Resources.Limits[corev1.ResourceCPU]; ok {
+		t.Errorf("otel Resources.Limits[%s] set, want unset", corev1.ResourceCPU)
+	}
+	assertEnvValue(t, otel.Env, "GOMEMLIMIT", "107374182")
+}
+
+func mustMarshal(t *testing.T, value any) []byte {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("json.Marshal() error: %v", err)
+	}
+	return data
+}
+
+func addedContainersFromPatch(t *testing.T, patch []byte) map[string]corev1.Container {
+	t.Helper()
+	var operations []struct {
+		Path  string          `json:"path"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(patch, &operations); err != nil {
+		t.Fatalf("json.Unmarshal(patch) error: %v", err)
+	}
+
+	containers := map[string]corev1.Container{}
+	for _, operation := range operations {
+		if operation.Path == "/spec/containers" {
+			var added []corev1.Container
+			if err := json.Unmarshal(operation.Value, &added); err != nil {
+				continue
+			}
+			for _, container := range added {
+				containers[container.Name] = container
+			}
+			continue
+		}
+		if !strings.HasPrefix(operation.Path, "/spec/containers/") {
+			continue
+		}
+		var container corev1.Container
+		if err := json.Unmarshal(operation.Value, &container); err != nil {
+			continue
+		}
+		if container.Name != "" {
+			containers[container.Name] = container
+		}
+	}
+	return containers
+}
+
+func assertResourceQuantity(t *testing.T, resources corev1.ResourceList, name corev1.ResourceName, want string) {
+	t.Helper()
+	got, ok := resources[name]
+	if !ok {
+		t.Fatalf("resource %s missing, want %s", name, want)
+	}
+	wantQuantity := resource.MustParse(want)
+	if got.Cmp(wantQuantity) != 0 {
+		t.Errorf("resource %s = %s, want %s", name, got.String(), want)
+	}
+}
+
+func assertEnvValue(t *testing.T, env []corev1.EnvVar, name, want string) {
+	t.Helper()
+	for _, envVar := range env {
+		if envVar.Name == name {
+			if envVar.Value != want {
+				t.Errorf("%s = %q, want %q", name, envVar.Value, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("%s env var missing", name)
 }

@@ -127,6 +127,24 @@ tests:
             name: GATEWAY_PORT
             value: "10260"
 
+  - it: should set default sidecar resource isolation env vars
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_MEMORY_FRACTION
+            value: "0.1875"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_MEMORY_CAP
+            value: "32Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_MEMORY_LIMIT
+            value: "128Mi"
+
   # -------------------------------------------------------------------
   # Service account
   # -------------------------------------------------------------------
