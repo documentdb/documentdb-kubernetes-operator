@@ -1,0 +1,17 @@
+# chart-testing (ct) configuration for the DocumentDB operator Helm chart.
+# Used by the "Helm Chart Lint (chart-testing)" CI job to run `helm lint`,
+# values-schema validation (values.schema.json), and yaml/Chart.yaml linting.
+target-branch: main
+# Lint this chart explicitly rather than relying on git changed-detection, so
+# the job is deterministic regardless of which files a PR touches.
+charts:
+  - operator/documentdb-helm-chart
+# The chart has no maintainers field, and chart versioning is handled by the
+# release workflow rather than per-PR — disable both checks.
+validate-maintainers: false
+check-version-increment: false
+# Build the bundled CloudNative-PG dependency from its upstream repo.
+chart-repos:
+  - cloudnative-pg=https://cloudnative-pg.github.io/charts/
+helm-extra-args: --timeout 600s
+lint-conf: .github/configs/lintconf.yaml

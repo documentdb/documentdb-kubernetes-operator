@@ -1,0 +1,5 @@
+# ct lint test case: baseline render.
+# Preflight is disabled because CI lints/templates without a live cluster
+# (no cert-manager CRD present for API discovery).
+certManager:
+  preflightCheck: false

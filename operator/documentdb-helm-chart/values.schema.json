@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DocumentDB Operator Helm chart values",
+  "description": "Schema for values.yaml. Validates user-supplied values at install/upgrade/template/lint time so typos and wrong types fail fast with an actionable message instead of at runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "namespace": {
+      "description": "Namespace the operator is deployed into. Defaults to the Helm release namespace when unset.",
+      "type": "string"
+    },
+    "replicaCount": {
+      "description": "Number of operator replicas. The operator is a cluster singleton; keep at 1 unless leader election is configured.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "documentDbVersion": {
+      "description": "DocumentDB database image version (extension + gateway). Independent of Chart.appVersion. Empty falls back to the operator's compiled-in defaults.",
+      "type": "string"
+    },
+    "gatewayImagePullPolicy": {
+      "description": "Pull policy for the gateway sidecar container. Empty uses the Kubernetes default (IfNotPresent).",
+      "type": "string",
+      "enum": ["", "Always", "IfNotPresent", "Never"]
+    },
+    "documentDbImagePullPolicy": {
+      "description": "Pull policy for the DocumentDB extension ImageVolume. Empty uses Kubernetes default behavior.",
+      "type": "string",
+      "enum": ["", "Always", "IfNotPresent", "Never"]
+    },
+    "serviceAccount": {
+      "description": "Operator ServiceAccount configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "description": "Whether to create the ServiceAccount.",
+          "type": "boolean"
+        },
+        "automount": {
+          "description": "Whether to automount the ServiceAccount API credentials.",
+          "type": "boolean"
+        },
+        "annotations": {
+          "description": "Annotations to add to the ServiceAccount.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Name of the ServiceAccount to use.",
+          "type": "string"
+        }
+      }
+    },
+    "walReplica": {
+      "description": "Feature flag: deploy the WAL replica plugin when true.",
+      "type": "boolean"
+    },
+    "imagePullSecrets": {
+      "description": "Image pull secrets used by all operator components. Each entry is a Secret reference, e.g. [{ name: my-registry-secret }].",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "image": {
+      "description": "Container image repositories and pull policies for operator components.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "documentdbk8soperator": {
+          "$ref": "#/definitions/imageComponent"
+        },
+        "sidecarinjector": {
+          "$ref": "#/definitions/imageComponent"
+        },
+        "walreplica": {
+          "$ref": "#/definitions/imageComponent"
+        }
+      }
+    },
+    "certManager": {
+      "description": "cert-manager preflight configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preflightCheck": {
+          "description": "Fail the install with an actionable error when cert-manager is not present. Set false only for offline templating or out-of-band management.",
+          "type": "boolean"
+        }
+      }
+    },
+    "operator": {
+      "$ref": "#/definitions/componentConfig",
+      "description": "Pod-level configuration for the operator deployment."
+    },
+    "sidecarInjector": {
+      "$ref": "#/definitions/componentConfig",
+      "description": "Pod-level configuration for the sidecar-injector plugin deployment."
+    },
+    "walReplicaPlugin": {
+      "$ref": "#/definitions/componentConfig",
+      "description": "Pod-level configuration for the wal-replica plugin deployment."
+    },
+    "cloudnative-pg": {
+      "description": "Values passed through to the bundled CloudNative-PG subchart. Validated by the subchart's own schema.",
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "definitions": {
+    "imageComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "description": "Image repository.",
+          "type": "string"
+        },
+        "pullPolicy": {
+          "description": "Image pull policy.",
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        },
+        "tag": {
+          "description": "Image tag. Defaults to Chart.appVersion when unset.",
+          "type": "string"
+        }
+      }
+    },
+    "componentConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resources": {
+          "description": "Compute resource requests/limits for the container.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "podSecurityContext": {
+          "description": "Pod-level security context.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "containerSecurityContext": {
+          "description": "Container-level security context.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "nodeSelector": {
+          "description": "Node selector for scheduling.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "tolerations": {
+          "description": "Tolerations for scheduling.",
+          "type": "array"
+        },
+        "affinity": {
+          "description": "Affinity rules for scheduling.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "topologySpreadConstraints": {
+          "description": "Topology spread constraints for scheduling.",
+          "type": "array"
+        },
+        "priorityClassName": {
+          "description": "PriorityClass name for the pod.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

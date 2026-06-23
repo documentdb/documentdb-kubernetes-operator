@@ -1,0 +1,6 @@
+# ct lint test case: WAL replica plugin enabled.
+# Exercises the templates/03_documentdb_wal_replica.yaml render path that is
+# skipped by default (walReplica: false).
+certManager:
+  preflightCheck: false
+walReplica: true

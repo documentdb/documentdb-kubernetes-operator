@@ -1,0 +1,16 @@
+# ct lint test case: custom namespace plus image-pull secrets and scheduling
+# overrides. Exercises the optional `{{- with ... }}` blocks (imagePullSecrets,
+# nodeSelector, tolerations) and the namespace override across resources.
+certManager:
+  preflightCheck: false
+namespace: documentdb-custom
+imagePullSecrets:
+  - name: my-registry-secret
+operator:
+  nodeSelector:
+    disktype: ssd
+  tolerations:
+    - key: dedicated
+      operator: Equal
+      value: documentdb
+      effect: NoSchedule

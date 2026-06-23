@@ -8,6 +8,8 @@ on:
       - 'operator/src/go.mod'
       - 'operator/src/go.sum'
       - 'operator/documentdb-helm-chart/**'
+      - '.github/workflows/test-unit.yml'
+      - '.github/configs/**'
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'operator/src/go.mod'
       - 'operator/src/go.sum'
       - 'operator/documentdb-helm-chart/**'
+      - '.github/workflows/test-unit.yml'
+      - '.github/configs/**'
 
 permissions:
   contents: read
@@ -83,3 +87,38 @@ jobs:
         run: |
           echo "## Helm Chart Test Results" >> $GITHUB_STEP_SUMMARY
           echo "✅ Helm chart unit tests completed" >> $GITHUB_STEP_SUMMARY
+
+  helm-chart-lint:
+    name: Helm Chart Lint (chart-testing)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # chart-testing needs history to diff against the target branch.
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          check-latest: true
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
+      - name: Run chart-testing (lint)
+        # Lints the chart and validates values.yaml plus every ci/*-values.yaml
+        # combination against values.schema.json.
+        run: ct lint --config .github/configs/ct.yaml
+
+      - name: Lint Summary
+        if: always()
+        run: |
+          echo "## Helm Chart Lint Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ chart-testing lint (schema + yaml) completed" >> $GITHUB_STEP_SUMMARY
