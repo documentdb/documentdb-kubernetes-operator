@@ -8,3 +8,10 @@ spec:
     memory: ${POD_MEMORY}
   monitoring:
     enabled: ${MONITORING_ENABLED}
+    # A Prometheus exporter is configured so the OTel collector has a valid
+    # pipeline when monitoring is enabled. When monitoring is disabled the
+    # collector sidecar is not injected and this block is ignored.
+    # Port 9464 avoids CNPG's built-in metrics port (9187) and the gateway (10260).
+    exporter:
+      prometheus:
+        port: 9464
