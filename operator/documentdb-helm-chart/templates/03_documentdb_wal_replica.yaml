@@ -126,13 +126,13 @@ spec:
         - containerPort: 9090
           protocol: TCP
         {{- if .Values.pluginProbes.enabled }}
+        # TCP readiness probe only (no liveness), matching the upstream CNPG
+        # plugin practice (e.g. plugin-barman-cloud). The plugins are gRPC
+        # servers with no HTTP health endpoint, so a tcpSocket check on 9090
+        # gates the Service until the gRPC listener is accepting connections.
+        # Liveness is intentionally omitted to avoid restart loops on a weak
+        # TCP signal; revisit if/when the plugins implement grpc.health.v1.
         readinessProbe:
-          tcpSocket:
-            port: 9090
-          initialDelaySeconds: {{ .Values.pluginProbes.initialDelaySeconds }}
-          periodSeconds: {{ .Values.pluginProbes.periodSeconds }}
-          failureThreshold: {{ .Values.pluginProbes.failureThreshold }}
-        livenessProbe:
           tcpSocket:
             port: 9090
           initialDelaySeconds: {{ .Values.pluginProbes.initialDelaySeconds }}

@@ -74,23 +74,17 @@ certManager:
   # unreliable. Disabling the check does NOT remove the dependency.
   preflightCheck: true
 
-# PodDisruptionBudget for the operator. Disabled by default because the
-# operator ships with replicaCount: 1 and a PDB on a single-replica deployment
-# blocks node drains. Enable when running multi-replica with leader election.
-# Set exactly one of minAvailable or maxUnavailable; if both are set, only
-# minAvailable is honored.
-podDisruptionBudget:
-  enabled: false
-  minAvailable: 1
-  maxUnavailable: ""
-
 # Probes for the CNPG plugin sidecars (sidecar-injector, wal-replica).
-# Both are gRPC servers on port 9090; TCP socket probes are used because
-# the plugins do not expose an HTTP health endpoint. Set probe.enabled=false
-# to omit the probe (e.g., if you supply your own via a patch).
+# Both are gRPC servers on port 9090; a TCP socket readiness probe is used
+# because the plugins do not expose an HTTP health endpoint. This matches the
+# upstream CNPG plugin practice (plugin-barman-cloud uses the same tcpSocket
+# readiness probe on 9090). Only a readiness probe is set -- it gates the
+# plugin Service so CNPG never routes to a pod before its gRPC listener is up.
+# No liveness probe is defined, intentionally, to avoid restart loops on a weak
+# TCP signal (CNPG's plugin omits it too). Set enabled=false to omit the probe.
 pluginProbes:
   enabled: true
-  initialDelaySeconds: 5
+  initialDelaySeconds: 10
   periodSeconds: 10
   failureThreshold: 3
 

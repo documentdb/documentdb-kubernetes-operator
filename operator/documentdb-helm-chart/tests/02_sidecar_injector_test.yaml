@@ -159,7 +159,7 @@ tests:
   # -------------------------------------------------------------------
   # Plugin probes
   # -------------------------------------------------------------------
-  - it: should render TCP readiness and liveness probes by default
+  - it: should render a TCP readiness probe by default (no liveness probe)
     documentIndex: 1
     asserts:
       - equal:
@@ -167,25 +167,15 @@ tests:
           value: 9090
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
-          value: 5
+          value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.periodSeconds
           value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
-          value: 9090
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 5
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
-          value: 10
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
-          value: 3
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
 
   - it: should omit probes when pluginProbes.enabled is false
     set:
@@ -211,5 +201,5 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.periodSeconds
           value: 30
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 5
