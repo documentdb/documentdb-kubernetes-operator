@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,6 +22,7 @@ import (
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedk8s "github.com/documentdb/documentdb-operator/test/shared/k8s"
 )
 
 // PodMetrics holds resource usage for a single pod.
@@ -125,7 +125,7 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 	health := ClusterHealth{Timestamp: time.Now()}
 
 	// List pods with the CNPG cluster label.
-	labelSelector := fmt.Sprintf("cnpg.io/cluster=%s", k.clusterName)
+	labelSelector := fmt.Sprintf("%s=%s", sharedk8s.ClusterLabel, k.clusterName)
 	pods, err := k.clientset.CoreV1().Pods(k.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
@@ -139,12 +139,10 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		if isPodReady(pod) {
+		if sharedk8s.IsPodReady(pod) {
 			readyCount++
 		}
-		for _, cs := range pod.Status.ContainerStatuses {
-			totalRestarts += cs.RestartCount
-		}
+		totalRestarts += sharedk8s.TotalRestarts(pod)
 	}
 
 	health.ReadyPods = readyCount
@@ -237,7 +235,7 @@ func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, err
 		return nil, nil
 	}
 
-	labelSelector := fmt.Sprintf("cnpg.io/cluster=%s", k.clusterName)
+	labelSelector := fmt.Sprintf("%s=%s", sharedk8s.ClusterLabel, k.clusterName)
 	podMetricsList, err := k.metricsClient.MetricsV1beta1().PodMetricses(k.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
@@ -269,13 +267,4 @@ func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, err
 // MetricsAvailable returns whether metrics-server is usable.
 func (k *K8sClusterClient) MetricsAvailable() bool {
 	return k.metricsAvail.Load()
-}
-
-func isPodReady(pod *corev1.Pod) bool {
-	for _, cond := range pod.Status.Conditions {
-		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
 }

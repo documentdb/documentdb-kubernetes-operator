@@ -56,25 +56,6 @@ func newTestK8sClient(ns, cluster string, cs *fake.Clientset, objs ...ctrlclient
 var _ = Describe("K8sClusterClient", func() {
 	const ns, cluster = "default", "documentdb-cluster"
 
-	DescribeTable("isPodReady",
-		func(pod *corev1.Pod, want bool) {
-			Expect(isPodReady(pod)).To(Equal(want))
-		},
-		Entry("no conditions", &corev1.Pod{}, false),
-		Entry("PodReady=True",
-			&corev1.Pod{Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
-				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
-			}}}, true),
-		Entry("PodReady=False",
-			&corev1.Pod{Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
-				{Type: corev1.PodReady, Status: corev1.ConditionFalse},
-			}}}, false),
-		Entry("only PodScheduled=True (no Ready condition)",
-			&corev1.Pod{Status: corev1.PodStatus{Conditions: []corev1.PodCondition{
-				{Type: corev1.PodScheduled, Status: corev1.ConditionTrue},
-			}}}, false),
-	)
-
 	Describe("GetClusterHealth", func() {
 		It("aggregates pods filtered by cnpg.io/cluster and reads CR status", func() {
 			pods := []runtime.Object{
