@@ -90,122 +90,122 @@ func TestRenderTLSMixins(t *testing.T) {
 // Kubernetes API.
 
 func TestOwnershipLabels(t *testing.T) {
-resetRunIDForTest()
-SetRunID("abcd1234")
-labels := ownershipLabels(FixtureSharedRO, "lifecycle")
-if labels[LabelRunID] != "abcd1234" {
-t.Fatalf("run-id label = %q", labels[LabelRunID])
-}
-if labels[LabelFixture] != FixtureSharedRO {
-t.Fatalf("fixture label = %q", labels[LabelFixture])
-}
-if labels[LabelArea] != "lifecycle" {
-t.Fatalf("area label = %q", labels[LabelArea])
-}
-// Empty area must not be recorded at all.
-if _, ok := ownershipLabels(FixtureSharedRO, "")[LabelArea]; ok {
-t.Fatalf("area label present for empty area")
-}
+	resetRunIDForTest()
+	SetRunID("abcd1234")
+	labels := ownershipLabels(FixtureSharedRO, "lifecycle")
+	if labels[LabelRunID] != "abcd1234" {
+		t.Fatalf("run-id label = %q", labels[LabelRunID])
+	}
+	if labels[LabelFixture] != FixtureSharedRO {
+		t.Fatalf("fixture label = %q", labels[LabelFixture])
+	}
+	if labels[LabelArea] != "lifecycle" {
+		t.Fatalf("area label = %q", labels[LabelArea])
+	}
+	// Empty area must not be recorded at all.
+	if _, ok := ownershipLabels(FixtureSharedRO, "")[LabelArea]; ok {
+		t.Fatalf("area label present for empty area")
+	}
 }
 
 func TestRunIDFirstWriterWins(t *testing.T) {
-resetRunIDForTest()
-SetRunID("first")
-SetRunID("second")
-if got := RunID(); got != "first" {
-t.Fatalf("RunID after conflicting sets = %q, want %q", got, "first")
-}
-resetRunIDForTest()
-if got := RunID(); got != "unset" {
-t.Fatalf("reset RunID = %q, want \"unset\"", got)
-}
+	resetRunIDForTest()
+	SetRunID("first")
+	SetRunID("second")
+	if got := RunID(); got != "first" {
+		t.Fatalf("RunID after conflicting sets = %q, want %q", got, "first")
+	}
+	resetRunIDForTest()
+	if got := RunID(); got != "unset" {
+		t.Fatalf("reset RunID = %q, want \"unset\"", got)
+	}
 }
 
 // newFakeClient builds a controller-runtime fake client registered for
 // the core + preview schemes used by the fixtures helpers.
 func newFakeClient(t *testing.T) *fakeclient.ClientBuilder {
-t.Helper()
-s, err := shareddb.NewScheme(corev1.AddToScheme)
-if err != nil {
-t.Fatalf("NewScheme: %v", err)
-}
-return fakeclient.NewClientBuilder().WithScheme(s)
+	t.Helper()
+	s, err := shareddb.NewScheme(corev1.AddToScheme)
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
+	}
+	return fakeclient.NewClientBuilder().WithScheme(s)
 }
 
 func TestCreateLabeledNamespaceStampsLabels(t *testing.T) {
-resetRunIDForTest()
-SetRunID("r-create")
-c := newFakeClient(t).Build()
-if err := CreateLabeledNamespace(context.Background(), c, "ns-a", "lifecycle"); err != nil {
-t.Fatalf("CreateLabeledNamespace: %v", err)
-}
-got := &corev1.Namespace{}
-if err := c.Get(context.Background(), types.NamespacedName{Name: "ns-a"}, got); err != nil {
-t.Fatalf("Get: %v", err)
-}
-if got.Labels[LabelRunID] != "r-create" ||
-got.Labels[LabelFixture] != FixturePerSpec ||
-got.Labels[LabelArea] != "lifecycle" {
-t.Fatalf("unexpected labels: %v", got.Labels)
-}
+	resetRunIDForTest()
+	SetRunID("r-create")
+	c := newFakeClient(t).Build()
+	if err := CreateLabeledNamespace(context.Background(), c, "ns-a", "lifecycle"); err != nil {
+		t.Fatalf("CreateLabeledNamespace: %v", err)
+	}
+	got := &corev1.Namespace{}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "ns-a"}, got); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Labels[LabelRunID] != "r-create" ||
+		got.Labels[LabelFixture] != FixturePerSpec ||
+		got.Labels[LabelArea] != "lifecycle" {
+		t.Fatalf("unexpected labels: %v", got.Labels)
+	}
 }
 
 func TestCreateLabeledNamespaceAdoptsMatchingRunID(t *testing.T) {
-resetRunIDForTest()
-SetRunID("r-adopt")
-existing := &corev1.Namespace{
-ObjectMeta: metav1.ObjectMeta{
-Name:   "ns-b",
-Labels: map[string]string{LabelRunID: "r-adopt"},
-},
-}
-c := newFakeClient(t).WithObjects(existing).Build()
-if err := CreateLabeledNamespace(context.Background(), c, "ns-b", "lifecycle"); err != nil {
-t.Fatalf("expected adoption on matching run-id, got: %v", err)
-}
+	resetRunIDForTest()
+	SetRunID("r-adopt")
+	existing := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "ns-b",
+			Labels: map[string]string{LabelRunID: "r-adopt"},
+		},
+	}
+	c := newFakeClient(t).WithObjects(existing).Build()
+	if err := CreateLabeledNamespace(context.Background(), c, "ns-b", "lifecycle"); err != nil {
+		t.Fatalf("expected adoption on matching run-id, got: %v", err)
+	}
 }
 
 func TestCreateLabeledNamespaceRejectsRunIDMismatch(t *testing.T) {
-resetRunIDForTest()
-SetRunID("r-current")
-existing := &corev1.Namespace{
-ObjectMeta: metav1.ObjectMeta{
-Name:   "ns-c",
-Labels: map[string]string{LabelRunID: "r-stale"},
-},
-}
-c := newFakeClient(t).WithObjects(existing).Build()
-err := CreateLabeledNamespace(context.Background(), c, "ns-c", "lifecycle")
-if err == nil {
-t.Fatalf("expected collision error, got nil")
-}
+	resetRunIDForTest()
+	SetRunID("r-current")
+	existing := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "ns-c",
+			Labels: map[string]string{LabelRunID: "r-stale"},
+		},
+	}
+	c := newFakeClient(t).WithObjects(existing).Build()
+	err := CreateLabeledNamespace(context.Background(), c, "ns-c", "lifecycle")
+	if err == nil {
+		t.Fatalf("expected collision error, got nil")
+	}
 }
 
 func TestCreateLabeledCredentialSecret(t *testing.T) {
-resetRunIDForTest()
-SetRunID("r-sec")
-c := newFakeClient(t).Build()
-if err := CreateLabeledCredentialSecret(context.Background(), c, "ns-s"); err != nil {
-t.Fatalf("CreateLabeledCredentialSecret: %v", err)
-}
-got := &corev1.Secret{}
-if err := c.Get(context.Background(), types.NamespacedName{
-Namespace: "ns-s", Name: DefaultCredentialSecretName,
-}, got); err != nil {
-t.Fatalf("Get: %v", err)
-}
-if string(got.Data["username"]) != DefaultCredentialUsername {
-// fake client promotes StringData to Data on read; both keys must match.
-if got.StringData["username"] != DefaultCredentialUsername {
-t.Fatalf("username mismatch: data=%q stringData=%q",
-got.Data["username"], got.StringData["username"])
-}
-}
-if got.Labels[LabelRunID] != "r-sec" || got.Labels[LabelFixture] != FixturePerSpec {
-t.Fatalf("unexpected labels: %v", got.Labels)
-}
-// Second call must not error even though the secret already exists.
-if err := CreateLabeledCredentialSecret(context.Background(), c, "ns-s"); err != nil {
-t.Fatalf("idempotent CreateLabeledCredentialSecret returned: %v", err)
-}
+	resetRunIDForTest()
+	SetRunID("r-sec")
+	c := newFakeClient(t).Build()
+	if err := CreateLabeledCredentialSecret(context.Background(), c, "ns-s"); err != nil {
+		t.Fatalf("CreateLabeledCredentialSecret: %v", err)
+	}
+	got := &corev1.Secret{}
+	if err := c.Get(context.Background(), types.NamespacedName{
+		Namespace: "ns-s", Name: DefaultCredentialSecretName,
+	}, got); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(got.Data["username"]) != DefaultCredentialUsername {
+		// fake client promotes StringData to Data on read; both keys must match.
+		if got.StringData["username"] != DefaultCredentialUsername {
+			t.Fatalf("username mismatch: data=%q stringData=%q",
+				got.Data["username"], got.StringData["username"])
+		}
+	}
+	if got.Labels[LabelRunID] != "r-sec" || got.Labels[LabelFixture] != FixturePerSpec {
+		t.Fatalf("unexpected labels: %v", got.Labels)
+	}
+	// Second call must not error even though the secret already exists.
+	if err := CreateLabeledCredentialSecret(context.Background(), c, "ns-s"); err != nil {
+		t.Fatalf("idempotent CreateLabeledCredentialSecret returned: %v", err)
+	}
 }
