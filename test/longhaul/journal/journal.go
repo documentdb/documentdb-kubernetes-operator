@@ -75,13 +75,14 @@ func (j *Journal) Record(level Level, component, message string) {
 		Message:   message,
 	}
 	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	j.events = append(j.events, e)
 	if len(j.events) > maxEvents+trimHeadroom {
 		trimmed := make([]Event, maxEvents)
 		copy(trimmed, j.events[len(j.events)-maxEvents:])
 		j.events = trimmed
 	}
-	j.mu.Unlock()
 }
 
 // Info records an info-level event.

@@ -47,8 +47,8 @@ func NewLeakDetector(j *journal.Journal, slopeThresholdMBPerHour float64, minSam
 // AddSample records a resource usage observation.
 func (l *LeakDetector) AddSample(s ResourceSample) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.samples = append(l.samples, s)
-	l.mu.Unlock()
 }
 
 // LeakAnalysis contains the results of trend analysis.

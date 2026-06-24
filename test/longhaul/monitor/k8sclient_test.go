@@ -193,14 +193,16 @@ var _ = Describe("K8sClusterClient", func() {
 
 	Describe("metrics", func() {
 		It("MetricsAvailable mirrors the metricsAvail flag", func() {
-			k := &K8sClusterClient{metricsAvail: true}
+			k := &K8sClusterClient{}
+			k.metricsAvail.Store(true)
 			Expect(k.MetricsAvailable()).To(BeTrue())
-			k.metricsAvail = false
+			k.metricsAvail.Store(false)
 			Expect(k.MetricsAvailable()).To(BeFalse())
 		})
 
 		It("GetPodMetrics returns nil/nil when metrics are unavailable", func() {
-			k := &K8sClusterClient{metricsAvail: false}
+			k := &K8sClusterClient{}
+			k.metricsAvail.Store(false)
 			got, err := k.GetPodMetrics(context.Background())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(BeNil())
