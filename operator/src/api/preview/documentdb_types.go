@@ -277,13 +277,20 @@ type Resource struct {
 	// +optional
 	CPU string `json:"cpu,omitempty"`
 
-	// Memory and CPU above describe the TOTAL pod envelope. When the gateway
-	// (and, with monitoring enabled, the OTel collector) sidecars run in the
-	// same pod, the operator carves their memory out of this envelope and gives
-	// PostgreSQL the remainder, recomputing PostgreSQL's memory-aware parameters
-	// from that reduced value. The optional per-component overrides below let you
-	// size each container independently; an explicit override always wins over the
-	// automatic carve-out.
+	// Memory and CPU above describe the TOTAL pod envelope, but are OPTIONAL.
+	// When a sidecar (the gateway, and — with monitoring enabled — the OTel
+	// collector) shares the pod, the operator carves its memory and CPU out of
+	// the envelope and gives PostgreSQL the remainder, recomputing PostgreSQL's
+	// memory-aware parameters from that reduced value. The optional per-component
+	// overrides below let you size each container independently; an explicit
+	// override always wins over the automatic carve-out.
+	//
+	// The envelope (Memory/CPU above) may be omitted for a dimension when that
+	// dimension is set explicitly on BOTH the gateway and the database — the
+	// effective envelope is then the sum of the containers. If you omit the
+	// envelope without fully specifying the containers, the resource is rejected;
+	// if you omit both the envelope and all container values, that dimension is
+	// left unmanaged (no limits).
 
 	// Gateway optionally overrides the resources allocated to the
 	// documentdb-gateway sidecar container. When unset, the operator derives the

@@ -68,21 +68,24 @@ func DefaultSplitConfig() SplitConfig {
 	}
 }
 
-// ComputeResourceSplit resolves how the pod memory envelope
-// (spec.resource.memory) is divided across the PostgreSQL, gateway, and (when
-// monitoring is enabled) OTel collector containers.
+// ComputeResourceSplit resolves how the pod memory and CPU envelopes
+// (spec.resource.memory / spec.resource.cpu) are divided across the PostgreSQL,
+// gateway, and (when monitoring is enabled) OTel collector containers.
 //
-// Algorithm (memory):
-//   - otelMem    = override ?? (monitoring ? OTelMemoryLimit : 0)   [carved only if monitoring]
-//   - gatewayMem = override ?? min(fraction × envelope, cap)        [carved only if envelope > 0]
-//   - dbMem      = override ?? (envelope − gatewayMem − otelMem)
+// The envelope is OPTIONAL. For each dimension:
+//   - If the envelope is set, the operator carves it: the gateway and OTel
+//     collector reservations are subtracted and PostgreSQL (the sink) gets the
+//     remainder. Unset reservations fall back to defaults (gateway memory =
+//     min(fraction × envelope, cap); OTel memory = limit default; OTel cpu =
+//     request default).
+//   - If the envelope is omitted, every container that has an explicit value
+//     keeps it; the effective envelope is the sum of the resolved containers.
+//     Containers whose default depends on the envelope (gateway memory fraction,
+//     PostgreSQL remainder) can only be derived when the envelope is set, so the
+//     omitted-envelope path requires those to be explicit — see ValidateResources.
 //
-// When the envelope memory is unset, no automatic carve-out happens; only
-// explicit per-component overrides are applied (preserving legacy behavior).
-//
-// CPU: PostgreSQL gets spec.resource.database.cpu ?? spec.resource.cpu. The
-// gateway/otel get their explicit cpu overrides, or the operator-level
-// GatewayCPULimit / OTelCPURequest defaults.
+// Legacy behavior is preserved: when neither the envelope nor any per-container
+// value is set for a dimension, that dimension is left unmanaged (no limits).
 func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) ResourceSplit {
 	res := documentdb.Spec.Resource
 	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
@@ -116,10 +119,7 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 		split.Gateway.MemoryLimit = g.Memory
 		gatewayBytes = parseMemoryToBytes(g.Memory)
 	} else if envelopeBytes > 0 {
-		gatewayBytes = int64(float64(envelopeBytes) * cfg.GatewayMemoryFraction)
-		if cfg.GatewayMemoryCapBytes > 0 && gatewayBytes > cfg.GatewayMemoryCapBytes {
-			gatewayBytes = cfg.GatewayMemoryCapBytes
-		}
+		gatewayBytes = gatewayMemoryReservationBytes(envelopeBytes, cfg)
 		q := bytesToQuantity(gatewayBytes)
 		split.Gateway.MemoryRequest = q
 		split.Gateway.MemoryLimit = q
@@ -153,14 +153,55 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 		}
 	}
 
-	// PostgreSQL CPU: database override wins, else the pod envelope CPU.
-	pgCPU := firstNonEmpty(databaseCPUOverride(res.Database), normalizeCPU(res.CPU))
-	if pgCPU != "" {
-		split.Postgres.CPURequest = pgCPU
-		split.Postgres.CPULimit = pgCPU
+	// PostgreSQL CPU (sink): database override wins; otherwise the pod CPU
+	// envelope minus the gateway and OTel CPU reservations, symmetric with the
+	// memory carve-out so the resolved container CPUs sum to the envelope.
+	if cpu := databaseCPUOverride(res.Database); cpu != "" {
+		split.Postgres.CPURequest = cpu
+		split.Postgres.CPULimit = cpu
+	} else if env := normalizeCPU(res.CPU); env != "" {
+		pgCPU := subtractCPU(env, split.Gateway.CPURequest, split.OTel.CPURequest)
+		if pgCPU != "" {
+			split.Postgres.CPURequest = pgCPU
+			split.Postgres.CPULimit = pgCPU
+		}
 	}
 
 	return split
+}
+
+// gatewayMemoryReservationBytes returns the gateway's memory reservation derived
+// from the pod memory envelope: min(fraction × envelope, cap).
+func gatewayMemoryReservationBytes(envelopeBytes int64, cfg SplitConfig) int64 {
+	b := int64(float64(envelopeBytes) * cfg.GatewayMemoryFraction)
+	if cfg.GatewayMemoryCapBytes > 0 && b > cfg.GatewayMemoryCapBytes {
+		b = cfg.GatewayMemoryCapBytes
+	}
+	return b
+}
+
+// subtractCPU returns (envelope − Σ reserved) as a milli-CPU quantity string.
+// Empty reservations are ignored; a non-positive remainder yields "".
+func subtractCPU(envelope string, reserved ...string) string {
+	env, err := resource.ParseQuantity(envelope)
+	if err != nil {
+		return ""
+	}
+	milli := env.MilliValue()
+	for _, r := range reserved {
+		if r == "" || r == "0" {
+			continue
+		}
+		q, err := resource.ParseQuantity(r)
+		if err != nil {
+			continue
+		}
+		milli -= q.MilliValue()
+	}
+	if milli <= 0 {
+		return ""
+	}
+	return resource.NewMilliQuantity(milli, resource.DecimalSI).String()
 }
 
 // --- helpers ---

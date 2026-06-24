@@ -32,7 +32,7 @@ spec:
 
 When `memory` is set, the operator allocates memory to the PostgreSQL container, the documentdb-gateway sidecar, and, when monitoring is enabled, the OTel Collector sidecar. Each component gets its own container resource settings so a sidecar memory leak is OOM-killed in that sidecar instead of crowding out PostgreSQL.
 
-If `memory` is not specified (or set to `"0"`), no resource limits are applied and static fallback values are used for memory-sensitive parameters.
+If neither `memory` nor any per-container memory value is specified, no memory limits are applied and static fallback values are used for memory-sensitive parameters. See [The envelope is optional](#the-envelope-is-optional) below for omitting the envelope while still sizing containers.
 
 !!! note
     Changing `memory` (or `cpu`) triggers a rolling restart of the DocumentDB pods,
@@ -73,6 +73,31 @@ spec:
 ```
 
 Each per-component value is a Kubernetes quantity string and, when set, overrides the automatic split for that container.
+
+### The envelope is optional
+
+`spec.resource.memory` and `spec.resource.cpu` (the pod envelope) are optional. For each dimension independently:
+
+- **Set the envelope** and let the operator divide it (gateway and OTel reserved, PostgreSQL gets the remainder).
+- **Omit the envelope** and instead set that dimension on **both** `spec.resource.gateway` and `spec.resource.database` — the effective envelope is the sum of the containers (the OTel collector uses its default if you do not set it). For example:
+
+```yaml
+spec:
+  resource:
+    storage:
+      pvcSize: "50Gi"
+    # no top-level memory/cpu — derived from the containers below
+    gateway:
+      memory: "1Gi"
+      cpu: "500m"
+    database:
+      memory: "6Gi"
+      cpu: "3"
+```
+
+- **Omit the envelope and all container values** for a dimension to leave it unmanaged (no limits).
+
+If you omit the envelope but only partially specify the containers (for example, you set `gateway.memory` but not `database.memory`), the resource is **rejected** by the validating webhook, because the gateway's memory fraction and PostgreSQL's remainder cannot be derived without the envelope. Likewise, an explicit envelope that the sidecar reservations exhaust — or that explicit per-container values exceed — is rejected.
 
 Cluster-wide defaults are configured with the operator Helm chart:
 

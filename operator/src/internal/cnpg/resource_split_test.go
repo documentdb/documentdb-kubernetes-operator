@@ -144,3 +144,99 @@ func TestComputeResourceSplit_GatewayCPULimitDefault(t *testing.T) {
 		t.Errorf("gateway cpu = %q/%q, want 2/2", s.Gateway.CPURequest, s.Gateway.CPULimit)
 	}
 }
+
+func TestComputeResourceSplit_EnvelopeOmittedAllExplicit(t *testing.T) {
+	cfg := prodSplitConfig()
+	// No envelope; gateway + database fully specified for both dims.
+	d := ddbWithMemory("", false)
+	d.Spec.Resource.CPU = ""
+	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi", CPU: "500m"}
+	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi", CPU: "3"}
+
+	s := ComputeResourceSplit(d, cfg)
+	if s.Gateway.MemoryLimit != "512Mi" || s.Gateway.CPULimit != "500m" {
+		t.Errorf("gateway = %+v, want 512Mi/500m", s.Gateway)
+	}
+	if s.Postgres.MemoryLimit != "4Gi" || s.Postgres.CPULimit != "3" {
+		t.Errorf("postgres = %+v, want 4Gi/3", s.Postgres)
+	}
+	if s.PostgresMemoryBytes != 4*1024*1024*1024 {
+		t.Errorf("postgres bytes = %d, want 4Gi", s.PostgresMemoryBytes)
+	}
+}
+
+func TestComputeResourceSplit_CPUCarvedWithMonitoring(t *testing.T) {
+	cfg := prodSplitConfig()
+	d := ddbWithMemory("8Gi", true)
+	d.Spec.Resource.CPU = "4"
+	s := ComputeResourceSplit(d, cfg)
+	// otel cpu reservation defaults to 50m; postgres = 4 - 50m = 3950m.
+	if s.OTel.CPURequest != "50m" {
+		t.Errorf("otel cpu = %q, want 50m", s.OTel.CPURequest)
+	}
+	if s.Postgres.CPULimit != "3950m" {
+		t.Errorf("postgres cpu = %q, want 3950m (4 - 50m otel)", s.Postgres.CPULimit)
+	}
+}
+
+func TestValidateResources(t *testing.T) {
+	cfg := prodSplitConfig()
+	mk := func(memEnv, cpuEnv string, monitoring bool) *dbpreview.DocumentDB {
+		d := ddbWithMemory(memEnv, monitoring)
+		d.Spec.Resource.CPU = cpuEnv
+		return d
+	}
+
+	// 1. Envelope set, valid -> no errors.
+	if errs := ValidateResources(mk("16Gi", "", false), cfg); len(errs) != 0 {
+		t.Errorf("envelope-set valid: unexpected errors %v", errs)
+	}
+
+	// 2. Envelope omitted, gateway+database memory set -> ok.
+	d := mk("", "", false)
+	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi"}
+	if errs := ValidateResources(d, cfg); len(errs) != 0 {
+		t.Errorf("omitted+fully-specified memory: unexpected errors %v", errs)
+	}
+
+	// 3. Envelope omitted, only gateway memory set -> error.
+	d = mk("", "", false)
+	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+	if errs := ValidateResources(d, cfg); len(errs) == 0 {
+		t.Errorf("omitted+partial memory: expected an error")
+	}
+
+	// 4. Nothing set -> no error (unmanaged).
+	if errs := ValidateResources(mk("", "", false), cfg); len(errs) != 0 {
+		t.Errorf("unmanaged: unexpected errors %v", errs)
+	}
+
+	// 5. Envelope set but explicit database memory exceeds it -> error.
+	d = mk("4Gi", "", false)
+	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "8Gi"}
+	if errs := ValidateResources(d, cfg); len(errs) == 0 {
+		t.Errorf("oversubscribed memory: expected an error")
+	}
+
+	// 6. Tiny envelope: gateway(18.75% of 100Mi) + otel(128Mi) reservations
+	// exceed the 100Mi envelope, leaving nothing for postgres -> error.
+	if errs := ValidateResources(mk("100Mi", "", true), cfg); len(errs) == 0 {
+		t.Errorf("reservations exceed envelope: expected an error")
+	}
+
+	// 7. CPU omitted + only database.cpu set (gateway.cpu unset) -> error (symmetric rule).
+	d = mk("", "", false)
+	d.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+	if errs := ValidateResources(d, cfg); len(errs) == 0 {
+		t.Errorf("omitted+partial cpu: expected an error")
+	}
+
+	// 8. CPU omitted + gateway.cpu + database.cpu set -> ok.
+	d = mk("", "", false)
+	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{CPU: "500m"}
+	d.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+	if errs := ValidateResources(d, cfg); len(errs) != 0 {
+		t.Errorf("omitted+fully-specified cpu: unexpected errors %v", errs)
+	}
+}

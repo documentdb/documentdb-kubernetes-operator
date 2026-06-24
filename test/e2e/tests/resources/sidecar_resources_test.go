@@ -98,6 +98,31 @@ var _ = Describe("Sidecar memory carve-out",
 				Expect(pg).ToNot(BeNil(), "postgres container present")
 				assertGuaranteedMemory(pg, wantPostgresWithMon)
 			})
+
+		It("derives the envelope from per-container memory when the envelope is omitted",
+			func() {
+				env := e2e.SuiteEnv()
+				Expect(env).ToNot(BeNil())
+				c := env.Client
+
+				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+				DeferCleanup(cancel)
+
+				// No spec.resource.memory; gateway + database memory set explicitly.
+				cr, cleanup := setupExplicitCluster(ctx, c, "carveout-explicit", "256Mi", "1Gi")
+				DeferCleanup(cleanup)
+
+				pod, err := getInstancePod(ctx, c, cr.Namespace, cr.Name)
+				Expect(err).ToNot(HaveOccurred())
+
+				gw := containerByName(pod, gatewayContainerName)
+				Expect(gw).ToNot(BeNil(), "gateway container present")
+				assertGuaranteedMemory(gw, "256Mi")
+
+				pg := containerByName(pod, postgresContainerName)
+				Expect(pg).ToNot(BeNil(), "postgres container present")
+				assertGuaranteedMemory(pg, "1Gi")
+			})
 	})
 
 // assertGuaranteedMemory asserts the container's memory request and limit both

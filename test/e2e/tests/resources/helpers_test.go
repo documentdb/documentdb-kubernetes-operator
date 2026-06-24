@@ -93,9 +93,40 @@ func setupFreshCluster(
 	}
 	vars := baseVars(ns, name, podMemory, monitoring)
 
+	return createAndWait(ctx, c, ns, name, []string{"sidecar_resources"}, vars)
+}
+
+// setupExplicitCluster creates a cluster with NO top-level resource.memory
+// envelope, sizing the gateway and database memory explicitly so the operator
+// derives the effective envelope as their sum.
+func setupExplicitCluster(
+	ctx context.Context,
+	c client.Client,
+	name, gatewayMemory, databaseMemory string,
+) (*previewv1.DocumentDB, func()) {
+	ns := namespaces.NamespaceForSpec(e2e.ResourcesLabel)
+	Expect(fixtures.CreateLabeledNamespace(ctx, c, ns, e2e.ResourcesLabel)).To(Succeed())
+	Expect(fixtures.CreateLabeledCredentialSecret(ctx, c, ns)).To(Succeed())
+
+	vars := baseVars(ns, name, "", "false")
+	vars["GW_MEMORY"] = gatewayMemory
+	vars["DB_MEMORY"] = databaseMemory
+
+	return createAndWait(ctx, c, ns, name, []string{"sidecar_resources_explicit"}, vars)
+}
+
+// createAndWait renders base+mixins, creates the CR, waits for health, and
+// returns the live object plus a namespace-cleanup func.
+func createAndWait(
+	ctx context.Context,
+	c client.Client,
+	ns, name string,
+	mixins []string,
+	vars map[string]string,
+) (*previewv1.DocumentDB, func()) {
 	_, err := documentdbutil.Create(ctx, c, ns, name, documentdbutil.CreateOptions{
 		Base:          "documentdb",
-		Mixins:        []string{"sidecar_resources"},
+		Mixins:        mixins,
 		Vars:          vars,
 		ManifestsRoot: manifestsRoot(),
 	})
