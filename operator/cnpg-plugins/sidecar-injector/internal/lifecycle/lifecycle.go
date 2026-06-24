@@ -172,11 +172,8 @@ func (impl Implementation) reconcileMetadata(
 				ContainerPort: 10260,
 			},
 		},
-		Env: envVars,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  pointer.Int64(1000),
-			RunAsGroup: pointer.Int64(1000),
-		},
+		Env:             envVars,
+		SecurityContext: hardenedSecurityContext(),
 	}
 
 	// If TLS secret parameter provided, mount it at /tls
@@ -313,6 +310,7 @@ func (impl Implementation) reconcileMetadata(
 					ReadOnly:  true,
 				},
 			},
+			SecurityContext: hardenedSecurityContext(),
 		}
 
 		// Expose Prometheus metrics port when configured
@@ -381,6 +379,39 @@ func (impl Implementation) reconcileMetadata(
 // pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
 // Kept as a package-level constant so tests can reference it.
 const gatewayContainerName = "documentdb-gateway"
+
+// hardenedSecurityContext returns a container SecurityContext that satisfies
+// the Kubernetes Pod Security Admission (PSA) "restricted" profile. It is
+// applied to every sidecar this plugin injects (documentdb-gateway and
+// otel-collector) so that DocumentDB cluster pods are admitted on clusters
+// that enforce `pod-security.kubernetes.io/enforce=restricted` (e.g. GKE
+// Autopilot, OpenShift, AKS with the Azure Policy security baseline).
+//
+// PSA requires these fields to be set per-container; pod-level inheritance
+// does not satisfy the checks. This mirrors how CloudNativePG hardens its own
+// built-in containers (see pkg/specs GetSecurityContext) and how the CNPG
+// barman-cloud plugin hardens its injected sidecar.
+//
+// readOnlyRootFilesystem is intentionally NOT set: it is not required by the
+// PSA "restricted" profile, and the upstream gateway / OTel collector images
+// have not been verified to run on a read-only root filesystem. It can be
+// added later (with an emptyDir scratch mount) once validated, without
+// affecting admission compliance.
+func hardenedSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		RunAsUser:                pointer.Int64(1000),
+		RunAsGroup:               pointer.Int64(1000),
+		RunAsNonRoot:             pointer.Bool(true),
+		Privileged:               pointer.Bool(false),
+		AllowPrivilegeEscalation: pointer.Bool(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
 
 // gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
 // injector adds to the gateway container so it can push metrics to the

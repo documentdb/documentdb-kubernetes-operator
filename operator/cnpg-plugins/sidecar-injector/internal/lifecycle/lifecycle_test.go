@@ -110,3 +110,46 @@ func TestInjectGatewayOTelEnv_NoGatewayContainer(t *testing.T) {
 		t.Errorf("expected no envs on non-gateway container, got %v", envNames(pod.Spec.Containers[0].Env))
 	}
 }
+
+// assertPSARestricted verifies a container SecurityContext sets every field
+// required by the Kubernetes Pod Security Admission "restricted" profile.
+// Pod-level inheritance does not satisfy PSA, so the injected sidecars must
+// carry these per-container.
+func assertPSARestricted(t *testing.T, name string, sc *corev1.SecurityContext) {
+	t.Helper()
+	if sc == nil {
+		t.Fatalf("%s: SecurityContext is nil", name)
+	}
+	if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+		t.Errorf("%s: RunAsNonRoot must be true", name)
+	}
+	if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+		t.Errorf("%s: AllowPrivilegeEscalation must be false", name)
+	}
+	if sc.Privileged != nil && *sc.Privileged {
+		t.Errorf("%s: Privileged must not be true", name)
+	}
+	if sc.Capabilities == nil {
+		t.Errorf("%s: Capabilities must drop ALL", name)
+	} else {
+		dropsAll := false
+		for _, c := range sc.Capabilities.Drop {
+			if c == "ALL" {
+				dropsAll = true
+				break
+			}
+		}
+		if !dropsAll {
+			t.Errorf("%s: Capabilities.Drop must contain ALL, got %v", name, sc.Capabilities.Drop)
+		}
+	}
+	if sc.SeccompProfile == nil || sc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+		t.Errorf("%s: SeccompProfile.Type must be RuntimeDefault", name)
+	}
+}
+
+// TestHardenedSecurityContext_PSARestricted guards the helper applied to both
+// injected sidecars so PSA "restricted" compliance cannot regress silently.
+func TestHardenedSecurityContext_PSARestricted(t *testing.T) {
+	assertPSARestricted(t, "hardenedSecurityContext", hardenedSecurityContext())
+}
