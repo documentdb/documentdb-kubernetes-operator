@@ -1,0 +1,166 @@
+name: WATCH - DocumentDB Releases
+
+# Polls the upstream documentdb/documentdb repository for new releases and, when a
+# newer version than the operator's current default is published, automatically:
+#   1. Builds candidate documentdb + gateway images (build_documentdb_images.yml)
+#   2. Promotes them to release tags and opens a "chore: bump DocumentDB images" PR
+#      (release_documentdb_images.yml)
+#
+# The version-bump PR is the human gate: a maintainer reviews and merges it, which
+# is what actually makes the new version the default for new installs.
+#
+# Only handles the DATABASE version track (documentDbVersion). Operator/sidecar
+# images follow a separate track (build_operator_images.yml / release_operator.yml).
+
+on:
+  schedule:
+    # Every 6 hours. GitHub's releases/latest excludes drafts and pre-releases,
+    # so pre-releases never trigger this automation.
+    - cron: '0 */6 * * *'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override upstream version to release (e.g. 0.111.0). Leave empty to auto-detect latest.'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Only detect and report; do not build or open a PR.'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  id-token: write
+
+env:
+  UPSTREAM_REPO: documentdb/documentdb
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detect whether a newer upstream release exists
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Detect new DocumentDB release
+    runs-on: ubuntu-22.04
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve latest upstream release
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          OVERRIDE="${{ github.event.inputs.version || '' }}"
+          if [[ -n "$OVERRIDE" ]]; then
+            RAW="$OVERRIDE"
+            echo "Using manual version override: $RAW"
+          else
+            RAW=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')
+            echo "Latest upstream release tag: $RAW"
+          fi
+          # Normalize: strip leading 'v', convert dashed (0.110-0) to dotted (0.110.0).
+          RAW="${RAW#v}"
+          if [[ "$RAW" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            VERSION="${RAW/-/.}"
+          else
+            VERSION="$RAW"
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Could not parse a dotted semver from upstream tag '$RAW'" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Upstream DocumentDB version: $VERSION"
+
+      - name: Read current default version
+        id: current
+        run: |
+          set -euo pipefail
+          CURRENT=$(sed -nE 's|^[[:space:]]*DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:([0-9]+\.[0-9]+\.[0-9]+)".*|\1|p' \
+            operator/src/internal/utils/constants.go | head -1)
+          if [[ -z "$CURRENT" ]]; then
+            echo "Failed to read DEFAULT_DOCUMENTDB_IMAGE from operator/src/internal/utils/constants.go" >&2
+            exit 1
+          fi
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Current default DocumentDB version: $CURRENT"
+
+      - name: Decide whether to release
+        id: check
+        run: |
+          set -euo pipefail
+          NEW="${{ steps.upstream.outputs.version }}"
+          CUR="${{ steps.current.outputs.version }}"
+          echo "new_version=$NEW" >> "$GITHUB_OUTPUT"
+
+          # Not newer than the current default? Nothing to do.
+          if [[ "$NEW" == "$CUR" ]] || \
+             [[ "$(printf '%s\n%s\n' "$CUR" "$NEW" | sort -V | tail -1)" != "$NEW" ]]; then
+            echo "Upstream $NEW is not newer than current default $CUR. Nothing to do."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Already promoted? If the release tag exists, the bump PR is likely
+          # pending review/merge, so don't rebuild on every cron tick.
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          if docker manifest inspect "ghcr.io/${{ github.repository }}/documentdb:${NEW}" >/dev/null 2>&1; then
+            echo "Release image documentdb:${NEW} already exists; version-bump PR is likely pending merge. Skipping."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "Dry run: a newer version $NEW (current $CUR) was detected but no build/PR will be created."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "New upstream version $NEW detected (current default $CUR). Proceeding to build + release."
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Detection summary
+        if: always()
+        run: |
+          echo "## DocumentDB Release Watch" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Upstream latest**: \`${{ steps.upstream.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Current default**: \`${{ steps.current.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Action**: ${{ steps.check.outputs.should_release == 'true' && 'Building candidate images and opening version-bump PR' || 'No release needed' }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Build candidate images for the new version
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build candidate images
+    needs: detect
+    if: needs.detect.outputs.should_release == 'true'
+    uses: ./.github/workflows/build_documentdb_images.yml
+    with:
+      version: ${{ needs.detect.outputs.new_version }}
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Promote candidate images and open the version-bump PR
+  # ---------------------------------------------------------------------------
+  release:
+    name: Promote images and open version-bump PR
+    needs: [detect, build]
+    if: needs.detect.outputs.should_release == 'true'
+    uses: ./.github/workflows/release_documentdb_images.yml
+    with:
+      candidate_version: ${{ needs.build.outputs.image_tag }}
+      version: ${{ needs.detect.outputs.new_version }}
+      update_defaults: true
+    secrets: inherit

@@ -286,6 +286,7 @@ Types:
 - `build_documentdb_images.yml` - Build documentdb/gateway candidate images (database version track)
 - `release_operator.yml` - Promote operator/sidecar images and publish Helm chart
 - `release_documentdb_images.yml` - Promote documentdb/gateway images and auto-PR version bumps
+- `watch_documentdb_images.yml` - Poll upstream documentdb/documentdb releases (cron) and auto-build + open version-bump PR on a new release
 - `build_images.yml` - [DEPRECATED] Combined image builds (replaced by split workflows above)
 - `release_images.yml` - [DEPRECATED] Combined release (replaced by split workflows above)
 - `deploy_docs.yml` - Documentation deployment

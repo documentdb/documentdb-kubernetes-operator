@@ -14,6 +14,21 @@ on:
         required: false
         default: '0.110.0'
 
+  workflow_call:
+    inputs:
+      version:
+        description: 'Released DocumentDB version to package (for example 0.110.0)'
+        required: false
+        type: string
+        default: '0.110.0'
+    outputs:
+      documentdb_version:
+        description: 'Resolved DocumentDB version (dotted semver, e.g. 0.110.0)'
+        value: ${{ jobs.resolve-public-artifacts.outputs.documentdb_version }}
+      image_tag:
+        description: 'Candidate image tag produced by this build'
+        value: ${{ jobs.resolve-public-artifacts.outputs.image_tag }}
+
   repository_dispatch:
     types: [documentdb-release]
 
@@ -44,7 +59,7 @@ jobs:
       id: version
       run: |
         set -euo pipefail
-        RAW_VERSION="${{ github.event.inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
+        RAW_VERSION="${{ inputs.version || github.event.client_payload.version || env.DEFAULT_DOCUMENTDB_VERSION }}"
         if [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
           VERSION="${RAW_VERSION/-/.}"
         else
@@ -189,7 +204,7 @@ jobs:
         DIGEST=$(docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ env.IMAGE_TAG }} \
           | awk '/^Digest:/ { print $2 }')
         cosign verify \
-          --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/build_documentdb_images.yml@${{ github.ref }}" \
+          --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/build_documentdb_images\.yml@" \
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
           ghcr.io/${{ github.repository }}/${{ matrix.image }}@${DIGEST}
 

@@ -302,6 +302,41 @@ Flow:
      └── Opens PR: "chore: bump DocumentDB images to 0.111.0"
 ```
 
+### Automatic Release Detection (`watch_documentdb_images.yml`)
+
+Watches the upstream [`documentdb/documentdb`](https://github.com/documentdb/documentdb)
+repository for new releases and drives the database track end-to-end without manual
+intervention. This is the automation behind keeping new installs on the latest
+DocumentDB version.
+
+| Aspect | Details |
+|--------|---------|
+| **Trigger** | `schedule` (cron `0 */6 * * *`), `workflow_dispatch` (manual, with optional `version` override and `dry_run`) |
+| **Detection** | Reads upstream `releases/latest` (drafts and pre-releases are excluded by GitHub) and compares against the current `DEFAULT_DOCUMENTDB_IMAGE` in `constants.go` |
+| **Chaining** | Calls `build_documentdb_images.yml` then `release_documentdb_images.yml` as reusable workflows (`workflow_call`) |
+| **Human gate** | The auto-generated `chore: bump DocumentDB images` PR — a maintainer reviews and merges it to make the new version the default |
+
+```
+Flow:
+  1. detect
+     ├── Resolve upstream latest release tag (e.g. v0.111-0 → 0.111.0)
+     ├── Read current default from constants.go
+     ├── Skip if not newer, if release tag already exists (PR pending), or dry_run
+     └── Output: should_release, new_version
+
+  2. build   (uses build_documentdb_images.yml)  ── if should_release
+     └── Output: image_tag (candidate)
+
+  3. release (uses release_documentdb_images.yml) ── if should_release
+     ├── candidate_version: <image_tag from build>
+     ├── version: <new_version>
+     └── update_defaults: true  → opens the version-bump PR
+```
+
+Idempotency: once the release images are promoted, the `documentdb:<version>`
+tag exists, so subsequent cron ticks short-circuit until the bump PR is merged
+(which advances the default and stops further detection for that version).
+
 ---
 
 ## Test Pipelines

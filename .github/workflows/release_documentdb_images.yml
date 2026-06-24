@@ -21,6 +21,22 @@ on:
         default: true
         type: boolean
 
+  workflow_call:
+    inputs:
+      candidate_version:
+        description: 'Database candidate tag to promote (e.g., 0.111.0-build-123456789-1-deadbee)'
+        required: true
+        type: string
+      version:
+        description: 'Database image release version (e.g., 0.111.0)'
+        required: true
+        type: string
+      update_defaults:
+        description: 'Create PR to update default image versions in code'
+        required: false
+        default: true
+        type: boolean
+
 permissions:
   contents: write
   packages: write
