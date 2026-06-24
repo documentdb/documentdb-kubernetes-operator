@@ -8,17 +8,18 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 var _ = Describe("DocumentDB lifecycle — deploy",
@@ -93,5 +94,41 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			DeferCleanup(func(ctx SpecContext) { _ = h.Close(ctx) })
 			Expect(sharedmongo.Ping(ctx, h.Client())).To(Succeed(),
 				"ping freshly-deployed DocumentDB gateway")
+
+			// PSA "restricted" guard (regression test for #387): the
+			// namespace is labeled pod-security.kubernetes.io/enforce=
+			// restricted by the fixture, so reaching Ready already
+			// proves the injected sidecars passed admission. This
+			// explicit assertion turns an otherwise opaque CNPG
+			// pod-creation failure into a precise message naming the
+			// offending container and field.
+			var pods corev1.PodList
+			Expect(c.List(ctx, &pods,
+				client.InNamespace(ns),
+				client.MatchingLabels{"cnpg.io/cluster": name})).To(Succeed())
+			Expect(pods.Items).ToNot(BeEmpty(), "expected CNPG pods for cluster %s", name)
+			for i := range pods.Items {
+				for j := range pods.Items[i].Spec.Containers {
+					ctr := pods.Items[i].Spec.Containers[j]
+					if ctr.Name != "documentdb-gateway" && ctr.Name != "otel-collector" {
+						continue
+					}
+					sc := ctr.SecurityContext
+					Expect(sc).ToNot(BeNil(),
+						"container %q in pod %q must set a securityContext", ctr.Name, pods.Items[i].Name)
+					Expect(sc.RunAsNonRoot).To(HaveValue(BeTrue()),
+						"container %q must set runAsNonRoot=true", ctr.Name)
+					Expect(sc.AllowPrivilegeEscalation).To(HaveValue(BeFalse()),
+						"container %q must set allowPrivilegeEscalation=false", ctr.Name)
+					Expect(sc.Capabilities).ToNot(BeNil(),
+						"container %q must drop ALL capabilities", ctr.Name)
+					Expect(sc.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")),
+						"container %q must drop ALL capabilities", ctr.Name)
+					Expect(sc.SeccompProfile).ToNot(BeNil(),
+						"container %q must set a seccompProfile", ctr.Name)
+					Expect(sc.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault),
+						"container %q must set seccompProfile=RuntimeDefault", ctr.Name)
+				}
+			}
 		})
 	})
