@@ -73,10 +73,13 @@ func run(cfg config.Config) int {
 		_ = docdbClient.Disconnect(disconnectCtx)
 	}()
 
-	// Verify connectivity.
-	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	// Verify connectivity. The driver intentionally induces disruption
+	// windows (scale/upgrade), so we use the shared retry-aware Ping
+	// rather than a bare one-shot Ping — a single connection-refused
+	// during gateway sidecar restart shouldn't abort the run.
+	pingCtx, pingCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer pingCancel()
-	if err := docdbClient.Ping(pingCtx, nil); err != nil {
+	if err := shareddocdb.PingWithRetry(pingCtx, docdbClient, 60*time.Second); err != nil {
 		log.Fatalf("DocumentDB ping failed: %v", err)
 	}
 	log.Println("DocumentDB connection established")
