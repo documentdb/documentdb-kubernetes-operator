@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"    //nolint:revive
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -107,39 +106,11 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			// always-injected documentdb-gateway sidecar is present;
 			// the otel-collector sidecar (injected only when monitoring
 			// is enabled) is covered by the sidecar-injector unit test.
-			// The matched counter guards against this assertion passing
-			// vacuously if the gateway is ever renamed or not injected.
-			var pods corev1.PodList
-			Expect(c.List(ctx, &pods,
-				client.InNamespace(ns),
-				client.MatchingLabels{"cnpg.io/cluster": name})).To(Succeed())
-			Expect(pods.Items).ToNot(BeEmpty(), "expected CNPG pods for cluster %s", name)
-			matched := 0
-			for i := range pods.Items {
-				for j := range pods.Items[i].Spec.Containers {
-					ctr := pods.Items[i].Spec.Containers[j]
-					if ctr.Name != "documentdb-gateway" && ctr.Name != "otel-collector" {
-						continue
-					}
-					matched++
-					sc := ctr.SecurityContext
-					Expect(sc).ToNot(BeNil(),
-						"container %q in pod %q must set a securityContext", ctr.Name, pods.Items[i].Name)
-					Expect(sc.RunAsNonRoot).To(HaveValue(BeTrue()),
-						"container %q must set runAsNonRoot=true", ctr.Name)
-					Expect(sc.AllowPrivilegeEscalation).To(HaveValue(BeFalse()),
-						"container %q must set allowPrivilegeEscalation=false", ctr.Name)
-					Expect(sc.Capabilities).ToNot(BeNil(),
-						"container %q must drop ALL capabilities", ctr.Name)
-					Expect(sc.Capabilities.Drop).To(ContainElement(corev1.Capability("ALL")),
-						"container %q must drop ALL capabilities", ctr.Name)
-					Expect(sc.SeccompProfile).ToNot(BeNil(),
-						"container %q must set a seccompProfile", ctr.Name)
-					Expect(sc.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault),
-						"container %q must set seccompProfile=RuntimeDefault", ctr.Name)
-				}
-			}
-			Expect(matched).To(BeNumerically(">", 0),
-				"expected at least one injected sidecar (documentdb-gateway) to assert securityContext on")
+			// The shared helper errors if no injected sidecar is found,
+			// so this cannot pass vacuously.
+			Eventually(assertions.AssertInjectedSidecarsPSARestricted(ctx, c, ns, name),
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Succeed(), "deployed cluster pods must carry PSA-restricted securityContext")
 		})
 	})
