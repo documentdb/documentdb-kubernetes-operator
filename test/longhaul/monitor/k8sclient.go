@@ -12,7 +12,6 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -62,9 +61,9 @@ func NewK8sClusterClient(cfg K8sClientConfig) (*K8sClusterClient, error) {
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
-	scheme := runtime.NewScheme()
-	if err := previewv1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add previewv1 to scheme: %w", err)
+	scheme, err := shareddb.NewScheme()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build scheme: %w", err)
 	}
 	crClient, err := ctrlclient.New(restConfig, ctrlclient.Options{Scheme: scheme})
 	if err != nil {

@@ -21,12 +21,6 @@ import (
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
-func newTestScheme() *runtime.Scheme {
-	s := runtime.NewScheme()
-	Expect(previewv1.AddToScheme(s)).To(Succeed())
-	return s
-}
-
 func newTestDocumentDB(ns, name string, modify func(dd *previewv1.DocumentDB)) *previewv1.DocumentDB {
 	dd := &previewv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
@@ -40,7 +34,8 @@ func newTestDocumentDB(ns, name string, modify func(dd *previewv1.DocumentDB)) *
 // newTestK8sClient builds a K8sClusterClient backed by fake clients. Failures
 // are reported via Gomega's Expect, so it must be called from inside a spec.
 func newTestK8sClient(ns, cluster string, cs *fake.Clientset, objs ...ctrlclient.Object) *K8sClusterClient {
-	scheme := newTestScheme()
+	scheme, err := shareddb.NewScheme()
+	Expect(err).NotTo(HaveOccurred())
 	builder := fakeclient.NewClientBuilder().WithScheme(scheme)
 	if len(objs) > 0 {
 		builder = builder.WithObjects(objs...)
