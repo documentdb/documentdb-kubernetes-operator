@@ -102,17 +102,26 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			// explicit assertion turns an otherwise opaque CNPG
 			// pod-creation failure into a precise message naming the
 			// offending container and field.
+			//
+			// This spec deploys with monitoring off, so only the
+			// always-injected documentdb-gateway sidecar is present;
+			// the otel-collector sidecar (injected only when monitoring
+			// is enabled) is covered by the sidecar-injector unit test.
+			// The matched counter guards against this assertion passing
+			// vacuously if the gateway is ever renamed or not injected.
 			var pods corev1.PodList
 			Expect(c.List(ctx, &pods,
 				client.InNamespace(ns),
 				client.MatchingLabels{"cnpg.io/cluster": name})).To(Succeed())
 			Expect(pods.Items).ToNot(BeEmpty(), "expected CNPG pods for cluster %s", name)
+			matched := 0
 			for i := range pods.Items {
 				for j := range pods.Items[i].Spec.Containers {
 					ctr := pods.Items[i].Spec.Containers[j]
 					if ctr.Name != "documentdb-gateway" && ctr.Name != "otel-collector" {
 						continue
 					}
+					matched++
 					sc := ctr.SecurityContext
 					Expect(sc).ToNot(BeNil(),
 						"container %q in pod %q must set a securityContext", ctr.Name, pods.Items[i].Name)
@@ -130,5 +139,7 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 						"container %q must set seccompProfile=RuntimeDefault", ctr.Name)
 				}
 			}
+			Expect(matched).To(BeNumerically(">", 0),
+				"expected at least one injected sidecar (documentdb-gateway) to assert securityContext on")
 		})
 	})

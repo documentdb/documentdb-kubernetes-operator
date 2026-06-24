@@ -153,3 +153,49 @@ func assertPSARestricted(t *testing.T, name string, sc *corev1.SecurityContext) 
 func TestHardenedSecurityContext_PSARestricted(t *testing.T) {
 	assertPSARestricted(t, "hardenedSecurityContext", hardenedSecurityContext())
 }
+
+// TestHardenedSecurityContext_NoForcedUID asserts the shared helper does not
+// pin a UID/GID, so third-party images (e.g. otel-collector) keep their own
+// baked-in non-root user.
+func TestHardenedSecurityContext_NoForcedUID(t *testing.T) {
+	sc := hardenedSecurityContext()
+	if sc.RunAsUser != nil {
+		t.Errorf("shared hardened context must not pin RunAsUser, got %d", *sc.RunAsUser)
+	}
+	if sc.RunAsGroup != nil {
+		t.Errorf("shared hardened context must not pin RunAsGroup, got %d", *sc.RunAsGroup)
+	}
+}
+
+// TestGatewaySecurityContext_PSARestrictedAsUID1000 asserts the gateway sidecar
+// is PSA restricted and pinned to the non-root UID/GID 1000 its image expects.
+func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
+	sc := gatewaySecurityContext()
+	assertPSARestricted(t, "gatewaySecurityContext", sc)
+	if sc.RunAsUser == nil || *sc.RunAsUser != 1000 {
+		t.Errorf("gateway must run as UID 1000, got %v", sc.RunAsUser)
+	}
+	if sc.RunAsGroup == nil || *sc.RunAsGroup != 1000 {
+		t.Errorf("gateway must run as GID 1000, got %v", sc.RunAsGroup)
+	}
+}
+
+// TestNewOtelCollectorSidecar_Hardened is the injection-layer guard for the
+// otel-collector sidecar (which the e2e suite does not exercise unless
+// monitoring is enabled). It asserts the constructed container is PSA
+// restricted and, unlike the gateway, does not force a UID so the collector
+// image keeps its own non-root user (UID 10001).
+func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "demo")
+
+	if c.Name != otelCollectorContainerName {
+		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
+	}
+	assertPSARestricted(t, "otel-collector", c.SecurityContext)
+	if c.SecurityContext.RunAsUser != nil {
+		t.Errorf("otel-collector must not force a UID (keeps image's 10001), got %d", *c.SecurityContext.RunAsUser)
+	}
+	if c.SecurityContext.RunAsGroup != nil {
+		t.Errorf("otel-collector must not force a GID, got %d", *c.SecurityContext.RunAsGroup)
+	}
+}

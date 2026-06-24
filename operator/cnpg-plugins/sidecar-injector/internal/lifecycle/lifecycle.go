@@ -173,7 +173,7 @@ func (impl Implementation) reconcileMetadata(
 			},
 		},
 		Env:             envVars,
-		SecurityContext: hardenedSecurityContext(),
+		SecurityContext: gatewaySecurityContext(),
 	}
 
 	// If TLS secret parameter provided, mount it at /tls
@@ -260,58 +260,7 @@ func (impl Implementation) reconcileMetadata(
 			})
 		}
 
-		otelSidecar := &corev1.Container{
-			Name:  "otel-collector",
-			Image: configuration.OtelCollectorImage,
-			Args: []string{
-				"--config=file:/config/static.yaml",
-				"--config=file:/config/dynamic.yaml",
-			},
-			// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
-			// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
-			// keys for the application database user. The OTel Collector's sqlquery receiver
-			// uses these credentials to connect to PostgreSQL and collect health metrics.
-			Env: []corev1.EnvVar{
-				{
-					Name: "POD_NAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "metadata.name",
-						},
-					},
-				},
-				{
-					Name: "PGUSER",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: cluster.Name + "-app",
-							},
-							Key: "username",
-						},
-					},
-				},
-				{
-					Name: "PGPASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: cluster.Name + "-app",
-							},
-							Key: "password",
-						},
-					},
-				},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "otel-config",
-					MountPath: "/config",
-					ReadOnly:  true,
-				},
-			},
-			SecurityContext: hardenedSecurityContext(),
-		}
+		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage, cluster.Name)
 
 		// Expose Prometheus metrics port when configured
 		if configuration.PrometheusPort > 0 {
@@ -392,6 +341,11 @@ const gatewayContainerName = "documentdb-gateway"
 // built-in containers (see pkg/specs GetSecurityContext) and how the CNPG
 // barman-cloud plugin hardens its injected sidecar.
 //
+// It deliberately does NOT pin RunAsUser/RunAsGroup: PSA "restricted" only
+// requires RunAsNonRoot=true, not a specific UID. Each caller adds an explicit
+// UID only where the image needs one (the gateway runs as 1000); third-party
+// images such as otel-collector keep their own baked-in non-root user.
+//
 // readOnlyRootFilesystem is intentionally NOT set: it is not required by the
 // PSA "restricted" profile, and the upstream gateway / OTel collector images
 // have not been verified to run on a read-only root filesystem. It can be
@@ -399,8 +353,6 @@ const gatewayContainerName = "documentdb-gateway"
 // affecting admission compliance.
 func hardenedSecurityContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
-		RunAsUser:                pointer.Int64(1000),
-		RunAsGroup:               pointer.Int64(1000),
 		RunAsNonRoot:             pointer.Bool(true),
 		Privileged:               pointer.Bool(false),
 		AllowPrivilegeEscalation: pointer.Bool(false),
@@ -461,5 +413,80 @@ func injectGatewayOTelEnv(pod *corev1.Pod) {
 			}
 		}
 		return
+	}
+}
+
+// otelCollectorContainerName is the name of the injected OpenTelemetry
+// Collector sidecar.
+const otelCollectorContainerName = "otel-collector"
+
+// gatewaySecurityContext returns the SecurityContext for the documentdb-gateway
+// sidecar: the shared PSA-restricted hardening plus an explicit UID/GID of
+// 1000, the non-root user the gateway image is built to run as.
+func gatewaySecurityContext() *corev1.SecurityContext {
+	sc := hardenedSecurityContext()
+	sc.RunAsUser = pointer.Int64(1000)
+	sc.RunAsGroup = pointer.Int64(1000)
+	return sc
+}
+
+// newOtelCollectorSidecar builds the base OpenTelemetry Collector sidecar
+// container (ports, scrape annotations and readiness probe are layered on by
+// the caller). It carries the shared PSA-restricted SecurityContext without an
+// explicit UID so the upstream collector image keeps its own baked-in non-root
+// user (UID 10001); PSA "restricted" only requires runAsNonRoot, not a fixed
+// UID. clusterName selects the CNPG-managed "<cluster>-app" credential secret.
+func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
+	return &corev1.Container{
+		Name:  otelCollectorContainerName,
+		Image: image,
+		Args: []string{
+			"--config=file:/config/static.yaml",
+			"--config=file:/config/dynamic.yaml",
+		},
+		// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
+		// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
+		// keys for the application database user. The OTel Collector's sqlquery receiver
+		// uses these credentials to connect to PostgreSQL and collect health metrics.
+		Env: []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name: "PGUSER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: clusterName + "-app",
+						},
+						Key: "username",
+					},
+				},
+			},
+			{
+				Name: "PGPASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: clusterName + "-app",
+						},
+						Key: "password",
+					},
+				},
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "otel-config",
+				MountPath: "/config",
+				ReadOnly:  true,
+			},
+		},
+		SecurityContext: hardenedSecurityContext(),
 	}
 }
