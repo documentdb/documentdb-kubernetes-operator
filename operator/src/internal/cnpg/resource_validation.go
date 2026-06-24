@@ -28,91 +28,107 @@ import (
 //   - If neither the envelope nor any container sets the dimension, it is left
 //     unmanaged (no error).
 func ValidateResources(documentdb *dbpreview.DocumentDB, cfg SplitConfig) field.ErrorList {
-	var errs field.ErrorList
 	res := documentdb.Spec.Resource
 	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
 	base := field.NewPath("spec", "resource")
 
-	// ----- memory -----
-	envMemSet := isSet(res.Memory)
-	gwMemSet := componentMemSet(res.Gateway)
-	dbMemSet := componentMemSet(res.Database)
-	otelMemSet := monitoring && componentMemSet(res.OTel)
-
-	if !envMemSet {
-		if (gwMemSet || dbMemSet || otelMemSet) && !(gwMemSet && dbMemSet) {
-			errs = append(errs, field.Required(base.Child("memory"),
-				"pod memory envelope is required unless memory is set on both spec.resource.gateway and spec.resource.database"))
-		}
-	} else {
-		envBytes := parseMemoryToBytes(res.Memory)
-		gwBytes := componentMemBytes(res.Gateway)
-		if gwBytes == 0 {
-			gwBytes = gatewayMemoryReservationBytes(envBytes, cfg)
-		}
-		otelBytes := int64(0)
-		if monitoring {
-			otelBytes = componentMemBytes(res.OTel)
-			if otelBytes == 0 {
-				otelBytes = parseMemoryToBytes(cfg.OTelMemoryLimit)
-			}
-		}
-		reserved := gwBytes + otelBytes
-		switch {
-		case reserved >= envBytes:
-			errs = append(errs, field.Invalid(base.Child("memory"), res.Memory,
-				fmt.Sprintf("gateway and OTel memory reservations (%s) leave no memory for PostgreSQL within the pod memory envelope (%s)",
-					bytesToQuantity(reserved), res.Memory)))
-		case dbMemSet:
-			total := reserved + componentMemBytes(res.Database)
-			if total > envBytes {
-				errs = append(errs, field.Invalid(base.Child("database", "memory"), res.Database.Memory,
-					fmt.Sprintf("sum of gateway + OTel + database memory (%s) exceeds the pod memory envelope (%s)",
-						bytesToQuantity(total), res.Memory)))
-			}
+	// Memory reservations, with defaults applied when a container omits the
+	// value (gateway always defaults to its fraction of the envelope).
+	memEnv := parseMemoryToBytes(res.Memory)
+	memGw := componentMemBytes(res.Gateway)
+	if memGw == 0 {
+		memGw = gatewayMemoryReservationBytes(memEnv, cfg)
+	}
+	var memOTel int64
+	if monitoring {
+		if memOTel = componentMemBytes(res.OTel); memOTel == 0 {
+			memOTel = parseMemoryToBytes(cfg.OTelMemoryLimit)
 		}
 	}
 
-	// ----- cpu -----
-	envCPUSet := isSet(res.CPU)
-	gwCPUSet := componentCPUSet(res.Gateway)
-	dbCPUSet := componentCPUSet(res.Database)
-	otelCPUSet := monitoring && componentCPUSet(res.OTel)
-
-	if !envCPUSet {
-		if (gwCPUSet || dbCPUSet || otelCPUSet) && !(gwCPUSet && dbCPUSet) {
-			errs = append(errs, field.Required(base.Child("cpu"),
-				"pod cpu envelope is required unless cpu is set on both spec.resource.gateway and spec.resource.database"))
-		}
-	} else {
-		envMilli := cpuMilli(res.CPU)
-		gwMilli := componentCPUMilli(res.Gateway)
-		if gwMilli == 0 && cfg.GatewayCPULimit != "" {
-			gwMilli = cpuMilli(cfg.GatewayCPULimit)
-		}
-		otelMilli := int64(0)
-		if monitoring {
-			otelMilli = componentCPUMilli(res.OTel)
-			if otelMilli == 0 {
-				otelMilli = cpuMilli(cfg.OTelCPURequest)
-			}
-		}
-		reserved := gwMilli + otelMilli
-		switch {
-		case reserved >= envMilli:
-			errs = append(errs, field.Invalid(base.Child("cpu"), res.CPU,
-				fmt.Sprintf("gateway and OTel cpu reservations (%dm) leave no cpu for PostgreSQL within the pod cpu envelope (%s)",
-					reserved, res.CPU)))
-		case dbCPUSet:
-			total := reserved + componentCPUMilli(res.Database)
-			if total > envMilli {
-				errs = append(errs, field.Invalid(base.Child("database", "cpu"), res.Database.CPU,
-					fmt.Sprintf("sum of gateway + OTel + database cpu (%dm) exceeds the pod cpu envelope (%s)",
-						total, res.CPU)))
-			}
+	// CPU reservations. Unlike memory, the gateway only reserves CPU when an
+	// operator-level limit is configured.
+	cpuEnv := cpuMilli(res.CPU)
+	cpuGw := componentCPUMilli(res.Gateway)
+	if cpuGw == 0 && cfg.GatewayCPULimit != "" {
+		cpuGw = cpuMilli(cfg.GatewayCPULimit)
+	}
+	var cpuOTel int64
+	if monitoring {
+		if cpuOTel = componentCPUMilli(res.OTel); cpuOTel == 0 {
+			cpuOTel = cpuMilli(cfg.OTelCPURequest)
 		}
 	}
 
+	errs := validateDimension(base, dimension{
+		noun:         "memory",
+		envSet:       isSet(res.Memory),
+		gwSet:        componentMemSet(res.Gateway),
+		dbSet:        componentMemSet(res.Database),
+		otelSet:      monitoring && componentMemSet(res.OTel),
+		envValue:     res.Memory,
+		dbValue:      componentMemoryValue(res.Database),
+		envQty:       memEnv,
+		gwReserved:   memGw,
+		otelReserved: memOTel,
+		dbQty:        componentMemBytes(res.Database),
+		format:       bytesToQuantity,
+	})
+	errs = append(errs, validateDimension(base, dimension{
+		noun:         "cpu",
+		envSet:       isSet(res.CPU),
+		gwSet:        componentCPUSet(res.Gateway),
+		dbSet:        componentCPUSet(res.Database),
+		otelSet:      monitoring && componentCPUSet(res.OTel),
+		envValue:     res.CPU,
+		dbValue:      componentCPUValue(res.Database),
+		envQty:       cpuEnv,
+		gwReserved:   cpuGw,
+		otelReserved: cpuOTel,
+		dbQty:        componentCPUMilli(res.Database),
+		format:       milliCPUString,
+	})...)
+	return errs
+}
+
+// dimension is a fully resolved view of one resource dimension (memory or cpu)
+// used by validateDimension. Quantities are in the dimension's native unit
+// (bytes for memory, milli-CPU for cpu); format renders that unit for messages.
+type dimension struct {
+	noun                             string // "memory" or "cpu", used in paths and messages
+	envSet, gwSet, dbSet, otelSet    bool
+	envValue, dbValue                string // raw quantity strings for error display
+	envQty, gwReserved, otelReserved int64
+	dbQty                            int64
+	format                           func(int64) string
+}
+
+// validateDimension enforces the envelope-optional rules for a single dimension.
+// Memory and CPU share this logic; only the unit and noun differ.
+func validateDimension(base *field.Path, d dimension) field.ErrorList {
+	var errs field.ErrorList
+	if !d.envSet {
+		// Envelope omitted: it can only be derived when both the gateway and the
+		// database pin the dimension; any other partial configuration is invalid.
+		if (d.gwSet || d.dbSet || d.otelSet) && !(d.gwSet && d.dbSet) {
+			errs = append(errs, field.Required(base.Child(d.noun),
+				fmt.Sprintf("pod %s envelope is required unless %s is set on both spec.resource.gateway and spec.resource.database", d.noun, d.noun)))
+		}
+		return errs
+	}
+	reserved := d.gwReserved + d.otelReserved
+	switch {
+	case reserved >= d.envQty:
+		errs = append(errs, field.Invalid(base.Child(d.noun), d.envValue,
+			fmt.Sprintf("gateway and OTel %s reservations (%s) leave no %s for PostgreSQL within the pod %s envelope (%s)",
+				d.noun, d.format(reserved), d.noun, d.noun, d.envValue)))
+	case d.dbSet:
+		if total := reserved + d.dbQty; total > d.envQty {
+			errs = append(errs, field.Invalid(base.Child("database", d.noun), d.dbValue,
+				fmt.Sprintf("sum of gateway + OTel + database %s (%s) exceeds the pod %s envelope (%s)",
+					d.noun, d.format(total), d.noun, d.envValue)))
+		}
+	}
 	return errs
 }
 
@@ -134,6 +150,23 @@ func componentMemBytes(c *dbpreview.ComponentResources) int64 {
 	}
 	return parseMemoryToBytes(c.Memory)
 }
+
+func componentMemoryValue(c *dbpreview.ComponentResources) string {
+	if c == nil {
+		return ""
+	}
+	return c.Memory
+}
+
+func componentCPUValue(c *dbpreview.ComponentResources) string {
+	if c == nil {
+		return ""
+	}
+	return c.CPU
+}
+
+// milliCPUString renders a milli-CPU count as a Kubernetes quantity (e.g. "500m").
+func milliCPUString(m int64) string { return fmt.Sprintf("%dm", m) }
 
 func componentCPUMilli(c *dbpreview.ComponentResources) int64 {
 	if c == nil {

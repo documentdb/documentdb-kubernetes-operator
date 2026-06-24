@@ -326,7 +326,7 @@ func (impl Implementation) reconcileMetadata(
 		}
 		if resources := buildResources(
 			configuration.OTelCPURequest,
-			"",
+			configuration.OTelCPULimit,
 			configuration.OTelMemoryRequest,
 			configuration.OTelMemoryLimit,
 		); hasResourceRequirements(resources) {

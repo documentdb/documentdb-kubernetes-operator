@@ -53,6 +53,9 @@ const (
 	OTEL_MEMORY_LIMIT_ENV   = "DOCUMENTDB_OTEL_MEMORY_LIMIT"
 	// OTEL_CPU_REQUEST_ENV optionally sets the OTel collector CPU request.
 	OTEL_CPU_REQUEST_ENV = "DOCUMENTDB_OTEL_CPU_REQUEST"
+	// OTEL_CPU_LIMIT_ENV optionally bounds the OTel collector CPU (a ceiling on
+	// burst; CPU is compressible so this throttles rather than OOM-kills).
+	OTEL_CPU_LIMIT_ENV = "DOCUMENTDB_OTEL_CPU_LIMIT"
 
 	// DEFAULT_GATEWAY_MEMORY_FRACTION reserves 18.75% (3/16) of the pod memory
 	// envelope for the gateway, matching the production sizing model.
@@ -64,6 +67,9 @@ const (
 	DEFAULT_OTEL_MEMORY_LIMIT   = "128Mi"
 	// DEFAULT_OTEL_CPU_REQUEST is the collector CPU request.
 	DEFAULT_OTEL_CPU_REQUEST = "50m"
+	// DEFAULT_OTEL_CPU_LIMIT bounds the collector's CPU burst (Burstable: the
+	// 50m request above is the reserved floor, this is the hard ceiling).
+	DEFAULT_OTEL_CPU_LIMIT = "200m"
 
 	// --- Sidecar-injector plugin parameter names for component resources ---
 	// The operator passes the resolved per-container requests/limits to the
@@ -76,6 +82,7 @@ const (
 	PLUGIN_PARAM_OTEL_MEMORY_REQUEST    = "otelMemoryRequest"
 	PLUGIN_PARAM_OTEL_MEMORY_LIMIT      = "otelMemoryLimit"
 	PLUGIN_PARAM_OTEL_CPU_REQUEST       = "otelCpuRequest"
+	PLUGIN_PARAM_OTEL_CPU_LIMIT         = "otelCpuLimit"
 
 	// TODO: remove these constants once change stream support is included in the official images.
 	CHANGESTREAM_DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/wentingwu666666/documentdb-kubernetes-operator"

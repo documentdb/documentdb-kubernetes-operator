@@ -269,10 +269,12 @@ type Resource struct {
 	// +optional
 	Memory string `json:"memory,omitempty"`
 
-	// CPU specifies the CPU limit for each DocumentDB instance pod.
-	// This value is passed to the CNPG Cluster's spec.resources.limits.cpu
-	// and spec.resources.requests.cpu (Guaranteed QoS).
-	// If not specified or set to "0", no CPU limit is applied.
+	// CPU specifies the total CPU envelope for each DocumentDB instance pod.
+	// The operator divides this envelope across PostgreSQL, the documentdb-gateway
+	// sidecar, and, when monitoring is enabled, the OTel collector sidecar.
+	// PostgreSQL receives the remainder after gateway and OTel CPU reservations;
+	// an explicit per-container CPU override wins over the automatic carve-out.
+	// If not specified or set to "0", no CPU envelope is applied.
 	// Examples: "2", "4", "500m"
 	// +optional
 	CPU string `json:"cpu,omitempty"`
@@ -302,14 +304,17 @@ type Resource struct {
 	Gateway *ComponentResources `json:"gateway,omitempty"`
 
 	// Database optionally overrides the resources allocated to the PostgreSQL
-	// container. When unset, PostgreSQL receives the pod memory envelope minus the
-	// gateway and (when monitoring is enabled) OTel collector carve-outs.
+	// container. When unset, PostgreSQL receives the pod memory and CPU envelopes
+	// minus the gateway and (when monitoring is enabled) OTel collector carve-outs.
 	// +optional
 	Database *ComponentResources `json:"database,omitempty"`
 
 	// OTel optionally overrides the resources allocated to the otel-collector
 	// sidecar container (only present when spec.monitoring.enabled is true).
-	// When unset, the operator applies built-in defaults (request 48Mi / limit 128Mi).
+	// When unset, the operator applies built-in defaults: memory request 48Mi /
+	// limit 128Mi and CPU request 50m / limit 200m (Burstable — the requests are
+	// the reserved floor and the limits cap a telemetry burst). Setting otel.cpu
+	// or otel.memory pins that dimension to request == limit (Guaranteed).
 	// +optional
 	OTel *ComponentResources `json:"otel,omitempty"`
 }

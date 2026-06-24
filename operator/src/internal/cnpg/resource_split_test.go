@@ -18,6 +18,7 @@ func prodSplitConfig() SplitConfig {
 		OTelMemoryRequest:     "48Mi",
 		OTelMemoryLimit:       "128Mi",
 		OTelCPURequest:        "50m",
+		OTelCPULimit:          "200m",
 	}
 }
 
@@ -95,7 +96,7 @@ func TestComputeResourceSplit_ExplicitOverridesWin(t *testing.T) {
 	d := ddbWithMemory("16Gi", true)
 	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "2Gi", CPU: "1"}
 	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "10Gi"}
-	d.Spec.Resource.OTel = &dbpreview.ComponentResources{Memory: "256Mi"}
+	d.Spec.Resource.OTel = &dbpreview.ComponentResources{Memory: "256Mi", CPU: "150m"}
 
 	s := ComputeResourceSplit(d, cfg)
 
@@ -107,6 +108,11 @@ func TestComputeResourceSplit_ExplicitOverridesWin(t *testing.T) {
 	}
 	if s.OTel.MemoryLimit != "256Mi" || s.OTel.MemoryRequest != "256Mi" {
 		t.Errorf("otel override not applied: %+v", s.OTel)
+	}
+	// An explicit otel.cpu override pins request == limit (Guaranteed), not the
+	// Burstable 50m/200m default.
+	if s.OTel.CPULimit != "150m" || s.OTel.CPURequest != "150m" {
+		t.Errorf("otel cpu override not applied: %+v", s.OTel)
 	}
 	if s.Postgres.MemoryLimit != "10Gi" {
 		t.Errorf("database override not applied: %q", s.Postgres.MemoryLimit)
@@ -170,9 +176,13 @@ func TestComputeResourceSplit_CPUCarvedWithMonitoring(t *testing.T) {
 	d := ddbWithMemory("8Gi", true)
 	d.Spec.Resource.CPU = "4"
 	s := ComputeResourceSplit(d, cfg)
-	// otel cpu reservation defaults to 50m; postgres = 4 - 50m = 3950m.
+	// otel cpu reservation defaults to 50m request / 200m limit (Burstable);
+	// only the request is carved from the envelope, so postgres = 4 - 50m = 3950m.
 	if s.OTel.CPURequest != "50m" {
-		t.Errorf("otel cpu = %q, want 50m", s.OTel.CPURequest)
+		t.Errorf("otel cpu request = %q, want 50m", s.OTel.CPURequest)
+	}
+	if s.OTel.CPULimit != "200m" {
+		t.Errorf("otel cpu limit = %q, want 200m", s.OTel.CPULimit)
 	}
 	if s.Postgres.CPULimit != "3950m" {
 		t.Errorf("postgres cpu = %q, want 3950m (4 - 50m otel)", s.Postgres.CPULimit)

@@ -147,6 +147,7 @@ func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
 						"otelMemoryRequest":          "64Mi",
 						"otelMemoryLimit":            "128Mi",
 						"otelCpuRequest":             "100m",
+						"otelCpuLimit":               "300m",
 						"documentDbCredentialSecret": "documentdb-credentials",
 					},
 				},
@@ -202,9 +203,7 @@ func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
 	assertResourceQuantity(t, otel.Resources.Requests, corev1.ResourceCPU, "100m")
 	assertResourceQuantity(t, otel.Resources.Requests, corev1.ResourceMemory, "64Mi")
 	assertResourceQuantity(t, otel.Resources.Limits, corev1.ResourceMemory, "128Mi")
-	if _, ok := otel.Resources.Limits[corev1.ResourceCPU]; ok {
-		t.Errorf("otel Resources.Limits[%s] set, want unset", corev1.ResourceCPU)
-	}
+	assertResourceQuantity(t, otel.Resources.Limits, corev1.ResourceCPU, "300m")
 	assertEnvValue(t, otel.Env, "GOMEMLIMIT", "107374182")
 }
 

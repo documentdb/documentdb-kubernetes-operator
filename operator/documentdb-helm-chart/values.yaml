@@ -90,6 +90,7 @@ operator:
     otelMemoryRequest: "48Mi"
     otelMemoryLimit: "128Mi"
     otelCpuRequest: "50m"
+    otelCpuLimit: "200m"       # bounds the collector's CPU burst (ceiling)
   # Requests-only by convention: scheduler reserves capacity for the
   # operator, but no memory ceiling so a single operator can manage
   # fleets of any size without OOMKill. Set limits explicitly if your

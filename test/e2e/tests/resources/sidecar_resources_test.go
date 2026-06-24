@@ -15,14 +15,14 @@ import (
 // These specs validate the pod memory carve-out (sidecar resource isolation).
 // With spec.resource.memory treated as the total pod envelope, the operator
 // reserves memory for the gateway (default 18.75%, here 192Mi of a 1Gi envelope)
-// and — when monitoring is enabled — the OTel collector (default limit 128Mi),
-// and gives PostgreSQL the remainder. Each sidecar is Guaranteed (request==limit)
+// and — when monitoring is enabled — the OTel collector (default memory limit
+// 128Mi, CPU 50m request / 200m limit), and gives PostgreSQL the remainder. Each sidecar is Guaranteed (request==limit)
 // so a leak is OOM-isolated to its own container.
 //
 // For a 1Gi (1024Mi) envelope:
 //
 //	gateway  = 18.75% × 1024Mi          = 192Mi   (request == limit)
-//	otel     = 48Mi request / 128Mi limit          (only when monitoring on)
+//	otel     = 48Mi request / 128Mi limit; cpu 50m req / 200m limit (monitoring on)
 //	postgres = 1024 − 192            = 832Mi   (monitoring off)
 //	postgres = 1024 − 192 − 128      = 704Mi   (monitoring on)
 const (
@@ -32,6 +32,8 @@ const (
 	wantPostgresWithMon = "704Mi"
 	wantOTelMemRequest  = "48Mi"
 	wantOTelMemLimit    = "128Mi"
+	wantOTelCPURequest  = "50m"
+	wantOTelCPULimit    = "200m"
 )
 
 var _ = Describe("Sidecar memory carve-out",
@@ -91,6 +93,10 @@ var _ = Describe("Sidecar memory carve-out",
 					"otel memory request = %s, want %s", otel.Resources.Requests.Memory(), wantOTelMemRequest)
 				Expect(quantityEqual(otel.Resources.Limits.Memory(), wantOTelMemLimit)).To(BeTrue(),
 					"otel memory limit = %s, want %s", otel.Resources.Limits.Memory(), wantOTelMemLimit)
+				Expect(quantityEqual(otel.Resources.Requests.Cpu(), wantOTelCPURequest)).To(BeTrue(),
+					"otel cpu request = %s, want %s", otel.Resources.Requests.Cpu(), wantOTelCPURequest)
+				Expect(quantityEqual(otel.Resources.Limits.Cpu(), wantOTelCPULimit)).To(BeTrue(),
+					"otel cpu limit = %s, want %s", otel.Resources.Limits.Cpu(), wantOTelCPULimit)
 				Expect(hasEnv(otel, "GOMEMLIMIT")).To(BeTrue(),
 					"otel collector should have a GOMEMLIMIT env var")
 

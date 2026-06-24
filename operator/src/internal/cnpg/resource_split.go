@@ -30,6 +30,9 @@ type SplitConfig struct {
 	OTelMemoryLimit   string
 	// OTelCPURequest is the OTel collector CPU request (quantity string).
 	OTelCPURequest string
+	// OTelCPULimit bounds the OTel collector CPU (a ceiling on burst). Empty
+	// leaves the collector's CPU unbounded.
+	OTelCPULimit string
 }
 
 // ComponentResource is a resolved per-container request/limit pair. Empty
@@ -39,6 +42,18 @@ type ComponentResource struct {
 	MemoryLimit   string
 	CPURequest    string
 	CPULimit      string
+}
+
+// setMemory pins the container's memory request and limit to q (Guaranteed).
+func (c *ComponentResource) setMemory(q string) {
+	c.MemoryRequest = q
+	c.MemoryLimit = q
+}
+
+// setCPU pins the container's CPU request and limit to q (Guaranteed).
+func (c *ComponentResource) setCPU(q string) {
+	c.CPURequest = q
+	c.CPULimit = q
 }
 
 // ResourceSplit is the resolved allocation across the pod's containers.
@@ -57,7 +72,7 @@ type ResourceSplit struct {
 // environment, falling back to the documented production defaults.
 func DefaultSplitConfig() SplitConfig {
 	frac := parseFloatOr(os.Getenv(util.GATEWAY_MEMORY_FRACTION_ENV), util.DEFAULT_GATEWAY_MEMORY_FRACTION)
-	capBytes := parseQuantityOrZero(envOr(util.GATEWAY_MEMORY_CAP_ENV, util.DEFAULT_GATEWAY_MEMORY_CAP))
+	capBytes := parseQuantityOr(os.Getenv(util.GATEWAY_MEMORY_CAP_ENV), util.DEFAULT_GATEWAY_MEMORY_CAP)
 	return SplitConfig{
 		GatewayMemoryFraction: frac,
 		GatewayMemoryCapBytes: capBytes,
@@ -65,6 +80,7 @@ func DefaultSplitConfig() SplitConfig {
 		OTelMemoryRequest:     envOr(util.OTEL_MEMORY_REQUEST_ENV, util.DEFAULT_OTEL_MEMORY_REQUEST),
 		OTelMemoryLimit:       envOr(util.OTEL_MEMORY_LIMIT_ENV, util.DEFAULT_OTEL_MEMORY_LIMIT),
 		OTelCPURequest:        envOr(util.OTEL_CPU_REQUEST_ENV, util.DEFAULT_OTEL_CPU_REQUEST),
+		OTelCPULimit:          envOr(util.OTEL_CPU_LIMIT_ENV, util.DEFAULT_OTEL_CPU_LIMIT),
 	}
 }
 
@@ -96,11 +112,10 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 	// --- OTel collector (memory) ---
 	var otelBytes int64
 	if monitoring {
-		if o := res.OTel; o != nil && o.Memory != "" && o.Memory != "0" {
+		if componentMemSet(res.OTel) {
 			// Explicit override: requests == limits (Guaranteed).
-			split.OTel.MemoryRequest = o.Memory
-			split.OTel.MemoryLimit = o.Memory
-			otelBytes = parseMemoryToBytes(o.Memory)
+			split.OTel.setMemory(res.OTel.Memory)
+			otelBytes = parseMemoryToBytes(res.OTel.Memory)
 		} else {
 			split.OTel.MemoryRequest = cfg.OTelMemoryRequest
 			split.OTel.MemoryLimit = cfg.OTelMemoryLimit
@@ -108,38 +123,40 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 			// oversubscribed.
 			otelBytes = parseMemoryToBytes(cfg.OTelMemoryLimit)
 		}
-		split.OTel.CPURequest = firstNonEmpty(otelCPUOverride(res.OTel), cfg.OTelCPURequest)
-		split.OTel.CPULimit = otelCPUOverride(res.OTel) // limit only when explicitly set
+		// OTel CPU: an explicit override pins request == limit (Guaranteed);
+		// otherwise the collector keeps its Burstable default (request floor +
+		// a bounded limit ceiling). CPU is compressible, so the carve-out below
+		// only reserves the request from the envelope — the limit just caps burst.
+		if cpu := componentCPU(res.OTel); cpu != "" {
+			split.OTel.setCPU(cpu)
+		} else {
+			split.OTel.CPURequest = cfg.OTelCPURequest
+			split.OTel.CPULimit = cfg.OTelCPULimit
+		}
 	}
 
 	// --- Gateway (memory) ---
 	var gatewayBytes int64
-	if g := res.Gateway; g != nil && g.Memory != "" && g.Memory != "0" {
-		split.Gateway.MemoryRequest = g.Memory
-		split.Gateway.MemoryLimit = g.Memory
-		gatewayBytes = parseMemoryToBytes(g.Memory)
+	if componentMemSet(res.Gateway) {
+		split.Gateway.setMemory(res.Gateway.Memory)
+		gatewayBytes = parseMemoryToBytes(res.Gateway.Memory)
 	} else if envelopeBytes > 0 {
 		gatewayBytes = gatewayMemoryReservationBytes(envelopeBytes, cfg)
-		q := bytesToQuantity(gatewayBytes)
-		split.Gateway.MemoryRequest = q
-		split.Gateway.MemoryLimit = q
+		split.Gateway.setMemory(bytesToQuantity(gatewayBytes))
 	}
 
 	// Gateway CPU: explicit override wins, else operator-level limit (request
 	// mirrors the limit so the container is Guaranteed on CPU when bounded).
-	if cpu := gatewayCPUOverride(res.Gateway); cpu != "" {
-		split.Gateway.CPURequest = cpu
-		split.Gateway.CPULimit = cpu
+	if cpu := componentCPU(res.Gateway); cpu != "" {
+		split.Gateway.setCPU(cpu)
 	} else if cfg.GatewayCPULimit != "" {
-		split.Gateway.CPURequest = cfg.GatewayCPULimit
-		split.Gateway.CPULimit = cfg.GatewayCPULimit
+		split.Gateway.setCPU(cfg.GatewayCPULimit)
 	}
 
 	// --- PostgreSQL (remainder) ---
-	if d := res.Database; d != nil && d.Memory != "" && d.Memory != "0" {
-		split.Postgres.MemoryRequest = d.Memory
-		split.Postgres.MemoryLimit = d.Memory
-		split.PostgresMemoryBytes = parseMemoryToBytes(d.Memory)
+	if componentMemSet(res.Database) {
+		split.Postgres.setMemory(res.Database.Memory)
+		split.PostgresMemoryBytes = parseMemoryToBytes(res.Database.Memory)
 	} else if envelopeBytes > 0 {
 		dbBytes := envelopeBytes - gatewayBytes - otelBytes
 		if dbBytes < 0 {
@@ -147,23 +164,19 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 		}
 		split.PostgresMemoryBytes = dbBytes
 		if dbBytes > 0 {
-			q := bytesToQuantity(dbBytes)
-			split.Postgres.MemoryRequest = q
-			split.Postgres.MemoryLimit = q
+			split.Postgres.setMemory(bytesToQuantity(dbBytes))
 		}
 	}
 
 	// PostgreSQL CPU (sink): database override wins; otherwise the pod CPU
 	// envelope minus the gateway and OTel CPU reservations, symmetric with the
 	// memory carve-out so the resolved container CPUs sum to the envelope.
-	if cpu := databaseCPUOverride(res.Database); cpu != "" {
-		split.Postgres.CPURequest = cpu
-		split.Postgres.CPULimit = cpu
+	if cpu := componentCPU(res.Database); cpu != "" {
+		split.Postgres.setCPU(cpu)
 	} else if env := normalizeCPU(res.CPU); env != "" {
 		pgCPU := subtractCPU(env, split.Gateway.CPURequest, split.OTel.CPURequest)
 		if pgCPU != "" {
-			split.Postgres.CPURequest = pgCPU
-			split.Postgres.CPULimit = pgCPU
+			split.Postgres.setCPU(pgCPU)
 		}
 	}
 
@@ -206,41 +219,20 @@ func subtractCPU(envelope string, reserved ...string) string {
 
 // --- helpers ---
 
-func gatewayCPUOverride(c *dbpreview.ComponentResources) string {
+// componentCPU returns the component's CPU override, or "" when unset/zero.
+func componentCPU(c *dbpreview.ComponentResources) string {
 	if c == nil {
 		return ""
 	}
 	return normalizeCPU(c.CPU)
 }
 
-func otelCPUOverride(c *dbpreview.ComponentResources) string {
-	if c == nil {
-		return ""
-	}
-	return normalizeCPU(c.CPU)
-}
-
-func databaseCPUOverride(c *dbpreview.ComponentResources) string {
-	if c == nil {
-		return ""
-	}
-	return normalizeCPU(c.CPU)
-}
-
+// normalizeCPU returns cpu unless it is unset/zero, in which case "".
 func normalizeCPU(cpu string) string {
-	if cpu == "" || cpu == "0" {
+	if !isSet(cpu) {
 		return ""
 	}
 	return cpu
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func envOr(envKey, fallback string) string {
@@ -250,31 +242,47 @@ func envOr(envKey, fallback string) string {
 	return fallback
 }
 
+// parseFloatOr parses value as a float, falling back to fallback when value is
+// empty or unparseable. The result is clamped to [0, 1]: 0 disables the gateway
+// carve-out, and values above 1 would otherwise reserve more than the envelope.
 func parseFloatOr(value, fallback string) float64 {
 	s := value
 	if s == "" {
 		s = fallback
 	}
 	f, err := strconv.ParseFloat(s, 64)
-	if err != nil || f <= 0 {
-		// Re-parse the fallback as a last resort.
-		if ff, ferr := strconv.ParseFloat(fallback, 64); ferr == nil {
-			return ff
-		}
+	if err != nil {
+		// Fall back to the documented default (a constant, so ignore its error).
+		f, _ = strconv.ParseFloat(fallback, 64)
+	}
+	if f < 0 {
 		return 0
+	}
+	if f > 1 {
+		return 1
 	}
 	return f
 }
 
-func parseQuantityOrZero(value string) int64 {
-	if value == "" {
-		return 0
+// parseQuantityOr parses value as a Kubernetes resource quantity and returns its
+// byte value. It falls back to fallback when value is empty or unparseable (so a
+// typo'd fleet-wide knob does not silently disable the cap) and clamps negatives
+// to 0.
+func parseQuantityOr(value, fallback string) int64 {
+	s := value
+	if s == "" {
+		s = fallback
 	}
-	q, err := resource.ParseQuantity(value)
+	q, err := resource.ParseQuantity(s)
 	if err != nil {
-		return 0
+		if q, err = resource.ParseQuantity(fallback); err != nil {
+			return 0
+		}
 	}
-	return q.Value()
+	if v := q.Value(); v > 0 {
+		return v
+	}
+	return 0
 }
 
 // bytesToQuantity renders a byte count as a binary-SI Kubernetes quantity string

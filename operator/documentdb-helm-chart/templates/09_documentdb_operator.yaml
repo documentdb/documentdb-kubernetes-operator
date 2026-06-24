@@ -107,6 +107,10 @@ spec:
           value: "{{ .Values.operator.sidecarResources.otelMemoryLimit }}"
         - name: DOCUMENTDB_OTEL_CPU_REQUEST
           value: "{{ .Values.operator.sidecarResources.otelCpuRequest }}"
+        {{- if .Values.operator.sidecarResources.otelCpuLimit }}
+        - name: DOCUMENTDB_OTEL_CPU_LIMIT
+          value: "{{ .Values.operator.sidecarResources.otelCpuLimit }}"
+        {{- end }}
         {{- if .Values.documentDbVersion }}
         - name: DOCUMENTDB_VERSION
           value: "{{ .Values.documentDbVersion }}"

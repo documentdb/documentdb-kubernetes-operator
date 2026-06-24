@@ -30,6 +30,7 @@ const (
 	otelMemoryRequestParameter          = "otelMemoryRequest"
 	otelMemoryLimitParameter            = "otelMemoryLimit"
 	otelCPURequestParameter             = "otelCpuRequest"
+	otelCPULimitParameter               = "otelCpuLimit"
 	prometheusPortParameter             = "prometheusPort"
 )
 
@@ -49,6 +50,7 @@ type Configuration struct {
 	OTelMemoryRequest          string
 	OTelMemoryLimit            string
 	OTelCPURequest             string
+	OTelCPULimit               string
 	PrometheusPort             int32
 }
 
@@ -90,6 +92,7 @@ func FromParameters(
 		otelMemoryRequestParameter,
 		otelMemoryLimitParameter,
 		otelCPURequestParameter,
+		otelCPULimitParameter,
 	)
 
 	var prometheusPort int32
@@ -120,6 +123,7 @@ func FromParameters(
 		OTelMemoryRequest:          helper.Parameters[otelMemoryRequestParameter],
 		OTelMemoryLimit:            helper.Parameters[otelMemoryLimitParameter],
 		OTelCPURequest:             helper.Parameters[otelCPURequestParameter],
+		OTelCPULimit:               helper.Parameters[otelCPULimitParameter],
 		PrometheusPort:             prometheusPort,
 	}
 
@@ -216,14 +220,21 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	result[annotationParameter] = string(serializedAnnotations)
 	result[gatewayImageParameter] = config.GatewayImage
 	result[gatewayImagePullPolicyParameter] = string(config.GatewayImagePullPolicy)
-	result[gatewayMemoryRequestParameter] = config.GatewayMemoryRequest
-	result[gatewayMemoryLimitParameter] = config.GatewayMemoryLimit
-	result[gatewayCPURequestParameter] = config.GatewayCPURequest
-	result[gatewayCPULimitParameter] = config.GatewayCPULimit
+	// Omit empty optional resource params to avoid noisy defaulting diffs.
+	setIfNotEmpty := func(key, val string) {
+		if val != "" {
+			result[key] = val
+		}
+	}
+	setIfNotEmpty(gatewayMemoryRequestParameter, config.GatewayMemoryRequest)
+	setIfNotEmpty(gatewayMemoryLimitParameter, config.GatewayMemoryLimit)
+	setIfNotEmpty(gatewayCPURequestParameter, config.GatewayCPURequest)
+	setIfNotEmpty(gatewayCPULimitParameter, config.GatewayCPULimit)
 	result[documentDbCredentialSecretParameter] = config.DocumentDbCredentialSecret
-	result[otelMemoryRequestParameter] = config.OTelMemoryRequest
-	result[otelMemoryLimitParameter] = config.OTelMemoryLimit
-	result[otelCPURequestParameter] = config.OTelCPURequest
+	setIfNotEmpty(otelMemoryRequestParameter, config.OTelMemoryRequest)
+	setIfNotEmpty(otelMemoryLimitParameter, config.OTelMemoryLimit)
+	setIfNotEmpty(otelCPURequestParameter, config.OTelCPURequest)
+	setIfNotEmpty(otelCPULimitParameter, config.OTelCPULimit)
 
 	return result, nil
 }
