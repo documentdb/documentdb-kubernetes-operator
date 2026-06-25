@@ -7,6 +7,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	preview "github.com/documentdb/documentdb-operator/api/preview"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,15 +17,9 @@ import (
 
 func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
-	s := runtime.NewScheme()
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("corev1.AddToScheme: %v", err)
-	}
-	if err := preview.AddToScheme(s); err != nil {
-		t.Fatalf("preview.AddToScheme: %v", err)
-	}
-	if err := cnpgv1.AddToScheme(s); err != nil {
-		t.Fatalf("cnpgv1.AddToScheme: %v", err)
+	s, err := shareddb.NewScheme(corev1.AddToScheme, cnpgv1.AddToScheme)
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
 	}
 	return s
 }

@@ -198,6 +198,44 @@ func Ping(ctx context.Context, c *mongo.Client) error {
 	return nil
 }
 
+// DefaultPingRetryBackoff is the inter-attempt delay used by
+// PingWithRetry. Short enough that the happy path adds at most one
+// backoff to startup.
+const DefaultPingRetryBackoff = 100 * time.Millisecond
+
+// PingWithRetry polls Ping until it succeeds or timeout elapses. Each
+// individual Ping is bounded by a 3s sub-context so a single hung
+// attempt cannot consume the whole budget. Between failed attempts
+// the loop sleeps DefaultPingRetryBackoff (interruptible by ctx).
+//
+// Use this instead of Ping when the gateway may be transiently
+// unreachable — port-forward bind windows in e2e, or operator-induced
+// scale/upgrade disruption windows in long-haul.
+func PingWithRetry(ctx context.Context, c *mongo.Client, timeout time.Duration) error {
+	if c == nil {
+		return errors.New("mongo: nil client")
+	}
+	deadline := time.Now().Add(timeout)
+	var last error
+	for {
+		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := c.Ping(pingCtx, nil)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		last = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("mongo: ping did not succeed within %s: %w", timeout, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(DefaultPingRetryBackoff):
+		}
+	}
+}
+
 // Seed inserts docs into db.coll via InsertMany and returns the number
 // of documents accepted by the server.
 func Seed(ctx context.Context, c *mongo.Client, db, coll string, docs []bson.M) (int, error) {

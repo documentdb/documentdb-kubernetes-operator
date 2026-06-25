@@ -1,0 +1,219 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+package workload
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"sync/atomic"
+	"time"
+
+	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
+)
+
+const (
+	// CollectionName is the DocumentDB collection used by the workload.
+	CollectionName = "longhaul_writes"
+
+	// writeInterval is the time between sequential writes per writer.
+	writeInterval = 100 * time.Millisecond
+)
+
+// WriteDocument is the schema for data-plane durability tracking.
+type WriteDocument struct {
+	WriterID  string    `bson:"writer_id"`
+	Seq       int64     `bson:"seq"`
+	Payload   string    `bson:"payload"`
+	Checksum  string    `bson:"checksum"`
+	Timestamp time.Time `bson:"timestamp"`
+}
+
+// writeBackend abstracts the DocumentDB collection so writeOne / Resume can be
+// unit-tested with a stub. Production uses docdbBackend (a thin wrapper over
+// *mongo.Collection); tests use a controllable fake.
+type writeBackend interface {
+	insert(ctx context.Context, doc WriteDocument) error
+	isDuplicate(err error) bool
+	// highestSeq returns the highest seq committed for writerID, or 0 if none.
+	highestSeq(ctx context.Context, writerID string) (int64, error)
+}
+
+// docdbBackend adapts *mongo.Collection to writeBackend.
+type docdbBackend struct {
+	coll *mongo.Collection
+}
+
+func (m docdbBackend) insert(ctx context.Context, doc WriteDocument) error {
+	_, err := m.coll.InsertOne(ctx, doc)
+	return err
+}
+
+func (m docdbBackend) isDuplicate(err error) bool {
+	return mongo.IsDuplicateKeyError(err)
+}
+
+func (m docdbBackend) highestSeq(ctx context.Context, writerID string) (int64, error) {
+	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
+	var doc WriteDocument
+	err := m.coll.FindOne(ctx, bson.M{"writer_id": writerID}, opts).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return doc.Seq, nil
+}
+
+// Writer performs sequential inserts to a DocumentDB collection.
+// Each writer has a unique ID and tracks its own sequence number.
+type Writer struct {
+	id      string
+	seq     atomic.Int64
+	metrics *Metrics
+	journal *journal.Journal
+	backend writeBackend
+}
+
+// NewWriter creates a writer with the given ID connected to the specified database.
+func NewWriter(id string, db *mongo.Database, metrics *Metrics, j *journal.Journal) *Writer {
+	coll := db.Collection(CollectionName, options.Collection().
+		SetWriteConcern(writeconcern.Majority()))
+	return &Writer{
+		id:      id,
+		metrics: metrics,
+		journal: j,
+		backend: docdbBackend{coll: coll},
+	}
+}
+
+// Seq returns the highest sequence number this writer has successfully
+// committed (including DupKey-as-ack). Safe to call from any goroutine.
+func (w *Writer) Seq() int64 {
+	return w.seq.Load()
+}
+
+// Run starts the writer loop. It blocks until the context is cancelled.
+func (w *Writer) Run(ctx context.Context) {
+	w.journal.Info("writer", fmt.Sprintf("writer %s started", w.id))
+	defer w.journal.Info("writer", fmt.Sprintf("writer %s stopped", w.id))
+
+	ticker := time.NewTicker(writeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.writeOne(ctx)
+		}
+	}
+}
+
+func (w *Writer) writeOne(ctx context.Context) {
+	// Compute the next seq without advancing the counter yet — only commit on
+	// success. Each writer has exactly one goroutine (Run), so a plain
+	// Load/Store pair is race-free; atomic.Int64 is retained because the
+	// verifier reads w.seq concurrently via Seq().
+	seq := w.seq.Load() + 1
+	payload := fmt.Sprintf("writer=%s seq=%d t=%d", w.id, seq, time.Now().UnixNano())
+	checksum := computeChecksum(w.id, seq, payload)
+
+	doc := WriteDocument{
+		WriterID:  w.id,
+		Seq:       seq,
+		Payload:   payload,
+		Checksum:  checksum,
+		Timestamp: time.Now(),
+	}
+
+	w.metrics.WriteAttempted.Add(1)
+
+	err := w.backend.insert(ctx, doc)
+	if err != nil {
+		// Retryable writes are on by default in the v2 driver, so a network
+		// blip during a disruption window can produce this sequence:
+		//   1. driver sends InsertOne, server commits, ACK is dropped
+		//   2. driver auto-retries the same _id, server returns code 11000
+		//   3. InsertOne returns a duplicate-key error to us
+		// The data is durably committed in case (3), so we advance seq and
+		// count it as a successful, idempotent ACK.
+		if w.backend.isDuplicate(err) {
+			w.seq.Store(seq)
+			w.metrics.WriteAcknowledged.Add(1)
+			return
+		}
+		// For any other error the document was NOT committed. Do NOT advance
+		// seq, otherwise the verifier will see a permanent gap and report
+		// false-positive data loss. The next tick will retry the same seq.
+		w.metrics.WriteFailed.Add(1)
+		w.journal.RecordWriteFailure()
+		return
+	}
+	w.seq.Store(seq)
+	w.metrics.WriteAcknowledged.Add(1)
+}
+
+// Resume seeds the writer's seq counter from the highest seq already persisted
+// for this writer_id. Called on startup so a Deployment-driven restart picks
+// up where the previous pod left off instead of colliding with the existing
+// unique index on (writer_id, seq).
+func (w *Writer) Resume(ctx context.Context) (int64, error) {
+	seq, err := w.backend.highestSeq(ctx, w.id)
+	if err != nil {
+		return 0, err
+	}
+	w.seq.Store(seq)
+	return seq, nil
+}
+
+// computeChecksum creates a deterministic hash of the write for verification.
+func computeChecksum(writerID string, seq int64, payload string) string {
+	data := fmt.Sprintf("%s:%d:%s", writerID, seq, payload)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:8])
+}
+
+// StartWriters launches n writer goroutines and returns the slice of writers.
+// Each writer is seeded from the collection so a restart resumes its seq
+// counter past the previous tip (preventing dup-key collisions on the unique
+// (writer_id, seq) index).
+// The writers run until the supplied context is cancelled; there is no separate
+// stop signal.
+func StartWriters(ctx context.Context, n int, db *mongo.Database, metrics *Metrics, j *journal.Journal) []*Writer {
+	writers := make([]*Writer, n)
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("w%03d", i)
+		writers[i] = NewWriter(id, db, metrics, j)
+		if seq, err := writers[i].Resume(ctx); err != nil {
+			j.Warn("writer", fmt.Sprintf("writer %s resume failed: %v (starting at 0)", id, err))
+		} else if seq > 0 {
+			j.Info("writer", fmt.Sprintf("writer %s resumed at seq=%d", id, seq))
+		}
+		go writers[i].Run(ctx)
+	}
+	return writers
+}
+
+// EnsureIndexes creates the necessary indexes on the workload collection.
+func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
+	coll := db.Collection(CollectionName)
+	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "writer_id", Value: 1},
+			{Key: "seq", Value: 1},
+		},
+		Options: options.Index().SetUnique(true),
+	})
+	return err
+}

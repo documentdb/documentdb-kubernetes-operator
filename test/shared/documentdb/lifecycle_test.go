@@ -20,8 +20,8 @@ import (
 )
 
 func newScheme() *runtime.Scheme {
-	s := runtime.NewScheme()
-	Expect(previewv1.AddToScheme(s)).To(Succeed())
+	s, err := NewScheme()
+	Expect(err).NotTo(HaveOccurred())
 	return s
 }
 
