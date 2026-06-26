@@ -16,6 +16,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
@@ -34,6 +35,31 @@ const (
 	// truth for both e2e and long-haul callers.
 	ReadyStatus = "Cluster in healthy state"
 )
+
+// NewScheme returns a fresh runtime.Scheme with the DocumentDB preview
+// API group always pre-registered, plus any caller-supplied adders run
+// in order. The variadic shape lets call sites layer on additional
+// groups (corev1, cnpgv1, snapshotv1, ...) without re-implementing the
+// "make scheme, check err for every AddToScheme" boilerplate they
+// otherwise repeat across both the e2e suite and the long-haul driver.
+//
+// Returns the first AddToScheme error encountered, including the
+// preview registration so a broken upstream import is loud.
+func NewScheme(adders ...func(*runtime.Scheme) error) (*runtime.Scheme, error) {
+	s := runtime.NewScheme()
+	if err := previewv1.AddToScheme(s); err != nil {
+		return nil, fmt.Errorf("registering documentdb preview group: %w", err)
+	}
+	for i, add := range adders {
+		if add == nil {
+			continue
+		}
+		if err := add(s); err != nil {
+			return nil, fmt.Errorf("scheme adder #%d: %w", i, err)
+		}
+	}
+	return s, nil
+}
 
 // Get fetches the DocumentDB identified by key.
 func Get(ctx context.Context, c client.Client, key client.ObjectKey) (*previewv1.DocumentDB, error) {

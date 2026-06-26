@@ -34,6 +34,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	sharedk8s "github.com/documentdb/documentdb-operator/test/shared/k8s"
 )
 
 // DefaultNamespace is where the Helm chart installs the DocumentDB
@@ -84,7 +86,7 @@ func NewGate(ctx context.Context, c client.Client, ns string) (*Gate, error) {
 		ns:              ns,
 		initialUID:      pod.UID,
 		initialPodName:  pod.Name,
-		initialRestarts: totalRestarts(pod),
+		initialRestarts: sharedk8s.TotalRestarts(pod),
 	}, nil
 }
 
@@ -105,9 +107,9 @@ func (g *Gate) Check(ctx context.Context) (healthy bool, reason string, err erro
 		return false, fmt.Sprintf("operator pod UID changed: %s -> %s", g.initialUID, pod.UID), nil
 	case pod.Name != g.initialPodName:
 		return false, fmt.Sprintf("operator pod renamed: %s -> %s", g.initialPodName, pod.Name), nil
-	case totalRestarts(pod) != g.initialRestarts:
+	case sharedk8s.TotalRestarts(pod) != g.initialRestarts:
 		return false, fmt.Sprintf("operator pod restart count changed: %d -> %d",
-			g.initialRestarts, totalRestarts(pod)), nil
+			g.initialRestarts, sharedk8s.TotalRestarts(pod)), nil
 	}
 	return true, "", nil
 }
@@ -197,17 +199,4 @@ func findOperatorPod(ctx context.Context, c client.Client, ns string) (*corev1.P
 			fmt.Sprintf("%s=%s in %s", PodLabelKey, PodLabelValue, ns))
 	}
 	return &pods.Items[0], nil
-}
-
-// totalRestarts sums RestartCount across all container statuses on pod.
-// Matches CNPG's PodRestarted semantics.
-func totalRestarts(pod *corev1.Pod) int32 {
-	if pod == nil {
-		return 0
-	}
-	var total int32
-	for _, cs := range pod.Status.ContainerStatuses {
-		total += cs.RestartCount
-	}
-	return total
 }

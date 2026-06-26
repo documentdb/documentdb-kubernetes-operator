@@ -15,15 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
-	s := runtime.NewScheme()
-	if err := previewv1.AddToScheme(s); err != nil {
-		t.Fatalf("AddToScheme: %v", err)
+	s, err := shareddb.NewScheme()
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
 	}
 	return s
 }

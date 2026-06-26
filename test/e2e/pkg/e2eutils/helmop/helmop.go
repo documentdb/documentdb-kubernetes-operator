@@ -35,6 +35,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/environment"
 
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/operatorhealth"
+	sharedk8s "github.com/documentdb/documentdb-operator/test/shared/k8s"
 )
 
 // DefaultTimeout bounds every helm invocation. Individual callers may
@@ -178,14 +179,8 @@ func operatorReadyOnce(ctx context.Context, c client.Client, namespace string) (
 		return false, "no operator pods yet", nil
 	}
 	for i := range pods.Items {
-		p := &pods.Items[i]
-		if p.Status.Phase != corev1.PodRunning {
-			continue
-		}
-		for _, cond := range p.Status.Conditions {
-			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-				return true, "", nil
-			}
+		if sharedk8s.IsPodRunningAndReady(&pods.Items[i]) {
+			return true, "", nil
 		}
 	}
 	return false, fmt.Sprintf("%d operator pod(s) present but none Ready", len(pods.Items)), nil

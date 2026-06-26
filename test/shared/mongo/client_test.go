@@ -154,28 +154,69 @@ var _ = Describe("buildTLSConfig", func() {
 	})
 })
 
+var _ = Describe("PingWithRetry", func() {
+	It("rejects a nil client", func() {
+		err := PingWithRetry(context.Background(), nil, time.Second)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("nil client"))
+	})
 
+	It("returns the underlying error after the timeout expires", func() {
+		// Unreachable host + tiny timeout: PingWithRetry should iterate
+		// at least once, then surface a timeout-wrapped error.
+		c, err := NewFromURI(context.Background(), "mongodb://127.0.0.1:1/?directConnection=true&serverSelectionTimeoutMS=50")
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = c.Disconnect(context.Background()) }()
+
+		err = PingWithRetry(context.Background(), c, 200*time.Millisecond)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("did not succeed within 200ms"))
+	})
+
+	It("respects context cancellation between attempts", func() {
+		c, err := NewFromURI(context.Background(), "mongodb://127.0.0.1:1/?directConnection=true&serverSelectionTimeoutMS=50")
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = c.Disconnect(context.Background()) }()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		// Cancel quickly after the first ping attempt so the select
+		// between ctx.Done and time.After picks ctx.Done.
+		go func() {
+			time.Sleep(75 * time.Millisecond)
+			cancel()
+		}()
+
+		err = PingWithRetry(ctx, c, 5*time.Second)
+		Expect(err).To(HaveOccurred())
+		// Either the cancelled context or the per-attempt timeout
+		// surfaces — both are valid "ctx done" outcomes here.
+		Expect(err).To(SatisfyAny(
+			Equal(context.Canceled),
+			MatchError(ContainSubstring("context")),
+		))
+	})
+})
 var _ = Describe("NewFromURI", func() {
-It("rejects an empty URI", func() {
-c, err := NewFromURI(context.Background(), "")
-Expect(err).To(HaveOccurred())
-Expect(err.Error()).To(ContainSubstring("uri is required"))
-Expect(c).To(BeNil())
-})
+	It("rejects an empty URI", func() {
+		c, err := NewFromURI(context.Background(), "")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("uri is required"))
+		Expect(c).To(BeNil())
+	})
 
-It("returns a connected client for a syntactically valid URI without dialing", func() {
-// mongo-driver v2 Connect is lazy (no network until Ping/op),
-// so a well-formed URI to an unreachable host should still
-// succeed at this stage.
-c, err := NewFromURI(context.Background(), "mongodb://127.0.0.1:1/?directConnection=true")
-Expect(err).NotTo(HaveOccurred())
-Expect(c).NotTo(BeNil())
-Expect(c.Disconnect(context.Background())).To(Succeed())
-})
+	It("returns a connected client for a syntactically valid URI without dialing", func() {
+		// mongo-driver v2 Connect is lazy (no network until Ping/op),
+		// so a well-formed URI to an unreachable host should still
+		// succeed at this stage.
+		c, err := NewFromURI(context.Background(), "mongodb://127.0.0.1:1/?directConnection=true")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c).NotTo(BeNil())
+		Expect(c.Disconnect(context.Background())).To(Succeed())
+	})
 
-It("rejects a malformed URI", func() {
-c, err := NewFromURI(context.Background(), "not-a-mongo-uri://oops")
-Expect(err).To(HaveOccurred())
-Expect(c).To(BeNil())
-})
+	It("rejects a malformed URI", func() {
+		c, err := NewFromURI(context.Background(), "not-a-mongo-uri://oops")
+		Expect(err).To(HaveOccurred())
+		Expect(c).To(BeNil())
+	})
 })

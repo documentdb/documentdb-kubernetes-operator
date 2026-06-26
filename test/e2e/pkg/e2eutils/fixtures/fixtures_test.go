@@ -6,11 +6,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 func TestDBNameForDeterministic(t *testing.T) {
@@ -125,12 +125,9 @@ func TestRunIDFirstWriterWins(t *testing.T) {
 // the core + preview schemes used by the fixtures helpers.
 func newFakeClient(t *testing.T) *fakeclient.ClientBuilder {
 	t.Helper()
-	s := runtime.NewScheme()
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("corev1 AddToScheme: %v", err)
-	}
-	if err := previewv1.AddToScheme(s); err != nil {
-		t.Fatalf("previewv1 AddToScheme: %v", err)
+	s, err := shareddb.NewScheme(corev1.AddToScheme)
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
 	}
 	return fakeclient.NewClientBuilder().WithScheme(s)
 }
