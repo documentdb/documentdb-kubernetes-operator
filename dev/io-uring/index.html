@@ -6,13 +6,15 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Enable PostgreSQL 18 asynchronous I/O (io_method=io_uring) in DocumentDB through the IOUring feature gate, including the seccomp trade-offs, operator configuration, prerequisites, verification, and troubleshooting.">
       
       
       
-        <link rel="prev" href="../preview/configuration/tls/">
+      
+        <link rel="prev" href="../postgresql-tuning/">
       
       
-        <link rel="next" href="../io-uring/">
+        <link rel="next" href="../preview/operations/upgrades/">
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -20,7 +22,7 @@
     
     
       
-        <title>PostgreSQL Tuning - DocumentDB-Kubernetes-Operator</title>
+        <title>io_uring async I/O feature gate - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -62,7 +64,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#postgresql-parameter-tuning" class="md-skip">
+        <a href="#io_uring-async-io-feature-gate" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              PostgreSQL Tuning
+              io_uring async I/O feature gate
             
           </span>
         </div>
@@ -691,6 +693,27 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../postgresql-tuning/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    PostgreSQL Tuning
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -707,7 +730,7 @@
           
   
   <span class="md-ellipsis">
-    PostgreSQL Tuning
+    io_uring Async I/O
   </span>
   
 
@@ -718,7 +741,7 @@
         
   
   <span class="md-ellipsis">
-    PostgreSQL Tuning
+    io_uring Async I/O
   </span>
   
 
@@ -740,78 +763,63 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      How It Works
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#resource-configuration" class="md-nav__link">
+  <a href="#what-enabling-the-gate-does" class="md-nav__link">
     <span class="md-ellipsis">
-      Resource Configuration
+      What enabling the gate does
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#memory-aware-defaults" class="md-nav__link">
+  <a href="#how-to-enable" class="md-nav__link">
     <span class="md-ellipsis">
-      Memory-Aware Defaults
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Memory-Aware Defaults">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#sizing-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      Sizing Reference
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#static-defaults" class="md-nav__link">
-    <span class="md-ellipsis">
-      Static Defaults
+      How to enable
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#user-overrides" class="md-nav__link">
+  <a href="#seccomp-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      User Overrides
+      Seccomp configuration
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#protected-parameters" class="md-nav__link">
+  <a href="#prerequisites" class="md-nav__link">
     <span class="md-ellipsis">
-      Protected Parameters
+      Prerequisites
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#complete-example" class="md-nav__link">
+  <a href="#verification" class="md-nav__link">
     <span class="md-ellipsis">
-      Complete Example
+      Verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance
     </span>
   </a>
   
@@ -828,18 +836,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parameters-not-taking-effect" class="md-nav__link">
+  <a href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" class="md-nav__link">
     <span class="md-ellipsis">
-      Parameters not taking effect
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#memory-aware-defaults-showing-static-fallbacks" class="md-nav__link">
-    <span class="md-ellipsis">
-      Memory-aware defaults showing static fallbacks
+      PostgreSQL CrashLoops with "could not setup io_uring queue"
     </span>
   </a>
   
@@ -850,31 +849,19 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      Related
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../io-uring/" class="md-nav__link">
-        
-  
-  <span class="md-ellipsis">
-    io_uring Async I/O
-  </span>
-  
-
-      </a>
     </li>
   
 
@@ -1513,78 +1500,63 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
-      How It Works
+      Overview
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#resource-configuration" class="md-nav__link">
+  <a href="#what-enabling-the-gate-does" class="md-nav__link">
     <span class="md-ellipsis">
-      Resource Configuration
+      What enabling the gate does
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#memory-aware-defaults" class="md-nav__link">
+  <a href="#how-to-enable" class="md-nav__link">
     <span class="md-ellipsis">
-      Memory-Aware Defaults
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Memory-Aware Defaults">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#sizing-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      Sizing Reference
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#static-defaults" class="md-nav__link">
-    <span class="md-ellipsis">
-      Static Defaults
+      How to enable
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#user-overrides" class="md-nav__link">
+  <a href="#seccomp-configuration" class="md-nav__link">
     <span class="md-ellipsis">
-      User Overrides
+      Seccomp configuration
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#protected-parameters" class="md-nav__link">
+  <a href="#prerequisites" class="md-nav__link">
     <span class="md-ellipsis">
-      Protected Parameters
+      Prerequisites
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#complete-example" class="md-nav__link">
+  <a href="#verification" class="md-nav__link">
     <span class="md-ellipsis">
-      Complete Example
+      Verification
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance
     </span>
   </a>
   
@@ -1601,18 +1573,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parameters-not-taking-effect" class="md-nav__link">
+  <a href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" class="md-nav__link">
     <span class="md-ellipsis">
-      Parameters not taking effect
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#memory-aware-defaults-showing-static-fallbacks" class="md-nav__link">
-    <span class="md-ellipsis">
-      Memory-aware defaults showing static fallbacks
+      PostgreSQL CrashLoops with "could not setup io_uring queue"
     </span>
   </a>
   
@@ -1620,6 +1583,15 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      Related
+    </span>
+  </a>
   
 </li>
       
@@ -1641,318 +1613,155 @@
   
 
 
-<h1 id="postgresql-parameter-tuning">PostgreSQL Parameter Tuning<a class="headerlink" href="#postgresql-parameter-tuning" title="Permanent link">&para;</a></h1>
-<p>DocumentDB Kubernetes Operator provides intelligent PostgreSQL parameter tuning with memory-aware defaults, static best-practice values, and full user customization.</p>
-<h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
-<p>The operator manages PostgreSQL parameters through a layered merge system with clear priority:</p>
+<h1 id="io_uring-async-io-feature-gate">io_uring async I/O feature gate<a class="headerlink" href="#io_uring-async-io-feature-gate" title="Permanent link">&para;</a></h1>
+<p>The <code>IOUring</code> feature gate enables PostgreSQL 18's asynchronous I/O backend (<code>io_method=io_uring</code>) for a DocumentDB cluster. Because io_uring requires relaxing the container's seccomp sandbox, the feature is <strong>opt-in</strong> and disabled by default.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>PostgreSQL 18 introduces a pluggable asynchronous I/O subsystem. On Linux, the <code>io_uring</code> backend submits read I/O through the kernel's <a href="https://en.wikipedia.org/wiki/Io_uring">io_uring</a> interface, which overlaps storage latency instead of blocking on each read.</p>
+<p>DocumentDB doesn't turn this on for you automatically, for one reason: <strong>security</strong>. io_uring has been a recurring kernel-exploit surface, so the container runtime's <code>RuntimeDefault</code> seccomp profile strips the <code>io_uring_setup</code>, <code>io_uring_enter</code>, and <code>io_uring_register</code> syscalls. CloudNative-PG (CNPG) runs the PostgreSQL pods with <code>seccompProfile=RuntimeDefault</code>, so without intervention PostgreSQL crashes at startup with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>FATAL: could not setup io_uring queue: Operation not permitted
+</code></pre></div>
+<p>Enabling io_uring therefore means relaxing seccomp — a security trade-off that the Kubernetes cluster operator must consciously accept. DocumentDB makes that choice explicit through the <code>IOUring</code> feature gate rather than enabling it silently.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The <code>IOUring</code> gate controls one DocumentDB cluster. The seccomp <em>profile</em> (which Localhost profile the operator points the pods at) is configured once on the operator and applies to every DocumentDB cluster it manages. See <a href="#seccomp-configuration">Seccomp configuration</a>.</p>
+</div>
+<h2 id="what-enabling-the-gate-does">What enabling the gate does<a class="headerlink" href="#what-enabling-the-gate-does" title="Permanent link">&para;</a></h2>
+<p>When you set <code>spec.featureGates.IOUring: true</code>, the operator does two things natively — <strong>no external Kyverno policy or admission webhook is required</strong>:</p>
+<ol>
+<li><strong>Sets <code>io_method=io_uring</code></strong> as a protected PostgreSQL parameter. This value can't be overridden through <code>spec.postgres.parameters</code>. (See <a href="../postgresql-tuning/">PostgreSQL parameter tuning</a> for how protected parameters work.)</li>
+<li><strong>Relaxes the PostgreSQL container's seccomp profile</strong> so the three io_uring syscalls are allowed. The operator points the CNPG cluster's pod security context at a Localhost seccomp profile (see <a href="#seccomp-configuration">Seccomp configuration</a>).</li>
+</ol>
+<p>When the gate is disabled (the default), the operator changes nothing and CNPG keeps its hardened <code>RuntimeDefault</code> profile.</p>
+<h2 id="how-to-enable">How to enable<a class="headerlink" href="#how-to-enable" title="Permanent link">&para;</a></h2>
+<p>Add the feature gate to your DocumentDB custom resource:</p>
+<div class="highlight"><span class="filename">documentdb.yaml</span><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50Gi&quot;</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">featureGates</span><span class="p">:</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="nt">IOUring</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># (1)!</span>
+</code></pre></div>
+<ol>
+<li>Opt in to PostgreSQL 18 <code>io_method=io_uring</code>. The operator also relaxes the PostgreSQL container seccomp profile using the operator-level Localhost profile.</li>
+</ol>
+<p>For the full field reference, see <a href="../preview/api-reference/#documentdbspec">DocumentDBSpec</a> in the API Reference.</p>
+<h2 id="seccomp-configuration">Seccomp configuration<a class="headerlink" href="#seccomp-configuration" title="Permanent link">&para;</a></h2>
+<p>Which Localhost seccomp profile the operator points the pods at is <strong>operator-level configuration</strong>, set through an environment variable on the operator deployment. The same profile applies to <strong>all</strong> DocumentDB clusters managed by that operator.</p>
 <table>
 <thead>
 <tr>
-<th>Priority</th>
-<th>Source</th>
+<th>Environment variable</th>
+<th>Values</th>
+<th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>1 (highest)</td>
-<td><strong>Protected parameters</strong></td>
-<td>Operator-managed values that cannot be overridden</td>
-</tr>
-<tr>
-<td>2</td>
-<td><strong>User overrides</strong></td>
-<td>Values from <code>spec.postgres.parameters</code></td>
-</tr>
-<tr>
-<td>3</td>
-<td><strong>Memory-aware defaults</strong></td>
-<td>Auto-computed from pod memory limit</td>
-</tr>
-<tr>
-<td>4 (lowest)</td>
-<td><strong>Static defaults</strong></td>
-<td>Best-practice values for all deployments</td>
+<td><code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code></td>
+<td>profile path</td>
+<td><code>profiles/documentdb-iouring.json</code></td>
+<td>Localhost profile path, relative to the node's kubelet seccomp root (<code>/var/lib/kubelet/seccomp</code>).</td>
 </tr>
 </tbody>
 </table>
-<h2 id="resource-configuration">Resource Configuration<a class="headerlink" href="#resource-configuration" title="Permanent link">&para;</a></h2>
-<p>Configure CPU and memory for your DocumentDB pods using the <code>spec.resource</code> section:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-cluster</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;50Gi&quot;</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8Gi&quot;</span><span class="w">    </span><span class="c1"># Pod memory limit (Guaranteed QoS)</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4&quot;</span><span class="w">         </span><span class="c1"># Pod CPU limit (Guaranteed QoS)</span>
+<p>With the bundled Helm chart, set this through a first-class value (preferred):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>--install<span class="w"> </span>documentdb-operator<span class="w"> </span>&lt;chart&gt;<span class="w"> </span>-n<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--set<span class="w"> </span>operator.ioUring.seccompProfile<span class="o">=</span>profiles/documentdb-iouring.json
 </code></pre></div>
-<p>When <code>memory</code> is set, the operator uses <strong>Guaranteed QoS</strong> (requests = limits), as recommended by CloudNative-PG for database workloads. This ensures predictable performance and stable memory for PostgreSQL buffer management.</p>
-<p>If <code>memory</code> is not specified (or set to <code>"0"</code>), no resource limits are applied and static fallback values are used for memory-sensitive parameters.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Changing <code>memory</code> (or <code>cpu</code>) triggers a rolling restart of the DocumentDB pods,
-causing brief downtime. The pod is recreated with the new resource limits, and the
-memory-aware PostgreSQL parameters (<code>shared_buffers</code>, <code>effective_cache_size</code>,
-<code>work_mem</code>, <code>maintenance_work_mem</code>) are recomputed and applied at the same time.</p>
-</div>
-<h2 id="memory-aware-defaults">Memory-Aware Defaults<a class="headerlink" href="#memory-aware-defaults" title="Permanent link">&para;</a></h2>
-<p>When a memory limit is configured, these parameters are automatically computed:</p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Formula</th>
-<th>Example (8Gi)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>shared_buffers</code></td>
-<td>25% of memory</td>
-<td>2GB</td>
-</tr>
-<tr>
-<td><code>effective_cache_size</code></td>
-<td>75% of memory</td>
-<td>6GB</td>
-</tr>
-<tr>
-<td><code>work_mem</code></td>
-<td>memory / (max_connections × 4)</td>
-<td>6MB</td>
-</tr>
-<tr>
-<td><code>maintenance_work_mem</code></td>
-<td>min(2GB, 10% of memory)</td>
-<td>819MB</td>
-</tr>
-</tbody>
-</table>
-<h3 id="sizing-reference">Sizing Reference<a class="headerlink" href="#sizing-reference" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Pod Memory</th>
-<th>shared_buffers</th>
-<th>effective_cache_size</th>
-<th>work_mem</th>
-<th>maintenance_work_mem</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>(not set)</td>
-<td>256MB</td>
-<td>512MB</td>
-<td>16MB</td>
-<td>128MB</td>
-</tr>
-<tr>
-<td>2Gi</td>
-<td>512MB</td>
-<td>1536MB</td>
-<td>4MB</td>
-<td>204MB</td>
-</tr>
-<tr>
-<td>4Gi</td>
-<td>1GB</td>
-<td>3GB</td>
-<td>4MB</td>
-<td>409MB</td>
-</tr>
-<tr>
-<td>8Gi</td>
-<td>2GB</td>
-<td>6GB</td>
-<td>6MB</td>
-<td>819MB</td>
-</tr>
-<tr>
-<td>16Gi</td>
-<td>4GB</td>
-<td>12GB</td>
-<td>13MB</td>
-<td>1638MB</td>
-</tr>
-<tr>
-<td>32Gi</td>
-<td>8GB</td>
-<td>24GB</td>
-<td>27MB</td>
-<td>2GB</td>
-</tr>
-</tbody>
-</table>
-<h2 id="static-defaults">Static Defaults<a class="headerlink" href="#static-defaults" title="Permanent link">&para;</a></h2>
-<p>These best-practice values are applied to all clusters regardless of memory:</p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Value</th>
-<th>Rationale</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>max_connections</code></td>
-<td>300</td>
-<td>DocumentDB gateway is connection-heavy</td>
-</tr>
-<tr>
-<td><code>random_page_cost</code></td>
-<td>1.1</td>
-<td>Optimized for SSD storage (typical in cloud)</td>
-</tr>
-<tr>
-<td><code>effective_io_concurrency</code></td>
-<td>200</td>
-<td>Modern SSD parallelism</td>
-</tr>
-<tr>
-<td><code>checkpoint_completion_target</code></td>
-<td>0.9</td>
-<td>Spread checkpoint I/O</td>
-</tr>
-<tr>
-<td><code>wal_buffers</code></td>
-<td>16MB</td>
-<td>Adequate for most workloads</td>
-</tr>
-<tr>
-<td><code>min_wal_size</code></td>
-<td>256MB</td>
-<td>Prevent excessive WAL recycling</td>
-</tr>
-<tr>
-<td><code>max_wal_size</code></td>
-<td>2GB</td>
-<td>Limit checkpoint distance</td>
-</tr>
-<tr>
-<td><code>autovacuum_vacuum_scale_factor</code></td>
-<td>0.1</td>
-<td>More aggressive vacuum triggers</td>
-</tr>
-<tr>
-<td><code>autovacuum_analyze_scale_factor</code></td>
-<td>0.05</td>
-<td>More frequent statistics updates</td>
-</tr>
-<tr>
-<td><code>autovacuum_vacuum_cost_delay</code></td>
-<td>2ms</td>
-<td>Reduce vacuum I/O throttling</td>
-</tr>
-<tr>
-<td><code>autovacuum_max_workers</code></td>
-<td>4</td>
-<td>Parallel autovacuum</td>
-</tr>
-</tbody>
-</table>
-<h2 id="user-overrides">User Overrides<a class="headerlink" href="#user-overrides" title="Permanent link">&para;</a></h2>
-<p>Override any non-protected parameter via <code>spec.postgres.parameters</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">postgres</span><span class="p">:</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="nt">max_connections</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="nt">work_mem</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;64MB&quot;</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">shared_buffers</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;4GB&quot;</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">log_min_duration_statement</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1000&quot;</span>
+<p>Leaving the value empty keeps the operator's built-in default
+(<code>profiles/documentdb-iouring.json</code>). For an already-installed operator you can patch
+the manager container env directly instead:</p>
+<div class="highlight"><span class="filename">operator-deployment.yaml (excerpt)</span><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">template</span><span class="p">:</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">      </span><span class="nt">containers</span><span class="p">:</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb-operator</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">          </span><span class="nt">env</span><span class="p">:</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">            </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCUMENTDB_IOURING_SECCOMP_PROFILE</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">              </span><span class="nt">value</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;profiles/documentdb-iouring.json&quot;</span>
 </code></pre></div>
-<p>User overrides take precedence over both memory-aware and static defaults.</p>
-<h2 id="protected-parameters">Protected Parameters<a class="headerlink" href="#protected-parameters" title="Permanent link">&para;</a></h2>
-<p>These parameters are managed by the operator and <strong>cannot be overridden</strong>:</p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Value</th>
-<th>Reason</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>cron.database_name</code></td>
-<td>postgres</td>
-<td>Required by pg_cron extension</td>
-</tr>
-<tr>
-<td><code>max_replication_slots</code></td>
-<td>10</td>
-<td>Required for CNPG replication</td>
-</tr>
-<tr>
-<td><code>max_wal_senders</code></td>
-<td>10</td>
-<td>Required for CNPG replication</td>
-</tr>
-<tr>
-<td><code>max_prepared_transactions</code></td>
-<td>100</td>
-<td>Enables two-phase commit (PREPARE TRANSACTION) for multi-document transactions</td>
-</tr>
-<tr>
-<td><code>wal_level</code></td>
-<td>logical</td>
-<td>Only when ChangeStreams feature gate is enabled</td>
-</tr>
-</tbody>
-</table>
+<p>The operator points the PostgreSQL pods at a <strong>Localhost</strong> seccomp profile that re-allows only the three io_uring syscalls on top of the runtime default. This keeps the rest of the sandbox intact.</p>
+<p>The referenced profile JSON — the upstream <code>RuntimeDefault</code> profile <strong>plus</strong> <code>io_uring_setup</code>, <code>io_uring_enter</code>, and <code>io_uring_register</code> — <strong>must be pre-installed on every node that runs PostgreSQL pods</strong>, at the path resolved under <code>/var/lib/kubelet/seccomp</code>. If the profile is missing on a node, the pod scheduled there fails to start.</p>
+<p>The hands-on <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> provides the curated profile plus a kind <code>extraMount</code> and a DaemonSet installer that distribute it to every node.</p>
 <div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Setting any of these in <code>spec.postgres.parameters</code> will be silently overridden by the operator.</p>
+<p class="admonition-title">Security trade-off</p>
+<p>Relaxing seccomp — even with the hardened Localhost profile that re-allows only the three io_uring syscalls — widens the kernel attack surface. io_uring has been a recurring kernel-exploit vector, so this is a trade-off you accept as the cluster operator. That is why the gate is opt-in and disabled by default.</p>
 </div>
-<h2 id="complete-example">Complete Example<a class="headerlink" href="#complete-example" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">metadata</span><span class="p">:</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">production-cluster</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;100Gi&quot;</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="nt">storageClass</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;premium-ssd&quot;</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">    </span><span class="nt">memory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;16Gi&quot;</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">    </span><span class="nt">cpu</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;8&quot;</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="nt">postgres</span><span class="p">:</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">    </span><span class="nt">parameters</span><span class="p">:</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">      </span><span class="nt">max_connections</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
-<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">      </span><span class="nt">log_min_duration_statement</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;500&quot;</span>
-<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">      </span><span class="nt">idle_in_transaction_session_timeout</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;300000&quot;</span>
-<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">  </span><span class="nt">featureGates</span><span class="p">:</span>
-<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">    </span><span class="nt">ChangeStreams</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</code></pre></div>
-<p>This configuration will produce the following effective parameters (among others):</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>shared_buffers</code>: 4GB (auto-computed from 16Gi)</li>
-<li><code>effective_cache_size</code>: 12GB (auto-computed)</li>
-<li><code>max_connections</code>: 500 (user override)</li>
-<li><code>wal_level</code>: logical (protected, from ChangeStreams gate)</li>
-<li><code>cron.database_name</code>: postgres (protected)</li>
+<li><strong>PostgreSQL 18 image.</strong> <code>io_method=io_uring</code> exists only in PostgreSQL 18 and later. Make sure the cluster runs a PG18 image.</li>
+<li><strong>A node kernel with io_uring enabled.</strong> io_uring must not be disabled at the kernel level — the <code>kernel.io_uring_disabled</code> sysctl must be <code>0</code> (the kernel default; <code>0</code> means <em>not disabled</em>, i.e. enabled), mirroring the <code>IOUring: true</code> gate you set on the cluster. Modern AKS, EKS, and GKE node images qualify.</li>
+<li><strong>The seccomp profile installed on nodes.</strong> The Localhost profile referenced by <code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code> must exist on every node that runs PostgreSQL pods. The <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> automates this.</li>
 </ul>
+<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h2>
+<p>After enabling the gate and waiting for the rolling restart to finish, confirm io_uring is active.</p>
+<ol>
+<li>
+<p><strong>Check that the PostgreSQL pods are running</strong> (not CrashLooping):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-l<span class="w"> </span>documentdb.io/cluster<span class="o">=</span>&lt;cluster-name&gt;
+</code></pre></div>
+</li>
+<li>
+<p><strong>Confirm <code>io_method</code> is <code>io_uring</code></strong> by connecting to PostgreSQL:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SHOW io_method;&quot;</span>
+</code></pre></div>
+<p>Expected output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a> io_method
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>-----------
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a> io_uring
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>(1 row)
+</code></pre></div>
+</li>
+<li>
+<p><strong>Inspect the pod's seccomp profile</strong> to confirm the operator relaxed it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pod<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.spec.securityContext.seccompProfile}&#39;</span>
+</code></pre></div>
+<p>This shows <code>{"type":"Localhost","localhostProfile":"profiles/documentdb-iouring.json"}</code>.</p>
+</li>
+<li>
+<p><strong>Confirm reads are flowing through the I/O path</strong> with <code>pg_stat_io</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>&lt;pod-name&gt;<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;<span class="w"> </span>-c<span class="w"> </span>postgres<span class="w"> </span>--<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT backend_type, object, context, reads FROM pg_stat_io WHERE reads &gt; 0;&quot;</span>
+</code></pre></div>
+</li>
+</ol>
+<h2 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h2>
+<p>io_uring's measured benefit is primarily <strong>tail-latency stability on I/O-bound scans</strong>, not raw throughput. On Azure Premium SSD at low concurrency, <code>io_method=io_uring</code> delivers lower, more predictable p95/p99 latency on heavy range scans and reduces in-engine read-wait time, while point lookups and aggregate throughput are largely unchanged.</p>
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
-<h3 id="parameters-not-taking-effect">Parameters not taking effect<a class="headerlink" href="#parameters-not-taking-effect" title="Permanent link">&para;</a></h3>
-<p>Some parameters (like <code>shared_buffers</code>) require a PostgreSQL restart. The operator triggers a rolling restart when these parameters change. Check the CNPG cluster status:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>cluster<span class="w"> </span>-n<span class="w"> </span>&lt;namespace&gt;
+<h3 id="postgresql-crashloops-with-could-not-setup-io_uring-queue">PostgreSQL CrashLoops with "could not setup io_uring queue"<a class="headerlink" href="#postgresql-crashloops-with-could-not-setup-io_uring-queue" title="Permanent link">&para;</a></h3>
+<p>If a PostgreSQL pod restarts repeatedly and its logs show:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>FATAL: could not setup io_uring queue: Operation not permitted
 </code></pre></div>
-<h3 id="memory-aware-defaults-showing-static-fallbacks">Memory-aware defaults showing static fallbacks<a class="headerlink" href="#memory-aware-defaults-showing-static-fallbacks" title="Permanent link">&para;</a></h3>
-<p>If memory-aware defaults show fallback values (e.g., shared_buffers=256MB), verify that <code>spec.resource.memory</code> is set in your DocumentDB CR:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.spec.resource.memory}&#39;</span>
-</code></pre></div>
+<p>the seccomp profile wasn't relaxed for that pod. Check, in order:</p>
+<ul>
+<li><strong>Profile not installed on the node.</strong> The profile JSON is missing on the node where the pod is scheduled. Install it on every node that runs PostgreSQL pods — the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> DaemonSet handles this.</li>
+<li><strong>Wrong profile path.</strong> <code>DOCUMENTDB_IOURING_SECCOMP_PROFILE</code> doesn't match the actual file path under <code>/var/lib/kubelet/seccomp</code> on the node. Align the env var with the installed file.</li>
+<li><strong>Operator not restarted.</strong> The profile env var changed but the operator deployment wasn't rolled, so new clusters still reference the old path. Verify the pod's seccomp profile with the <a href="#verification">verification</a> command above.</li>
+</ul>
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../postgresql-tuning/">PostgreSQL parameter tuning</a> — how protected parameters such as <code>io_method</code> are managed</li>
+<li><a href="../preview/api-reference/#documentdbspec">API Reference: DocumentDBSpec</a> — the <code>featureGates</code> field</li>
+<li><a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature">io_uring feature playground</a> — kind <code>extraMount</code>, DaemonSet installer, and curated profile</li>
+</ul>
 
 
 
 
 
 
+
+  
+  
 
 
 
