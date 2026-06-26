@@ -127,6 +127,67 @@ tests:
             name: GATEWAY_PORT
             value: "10260"
 
+  - it: should set default sidecar resource isolation env vars
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_MEMORY_FRACTION
+            value: "0.1875"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_MEMORY_CAP
+            value: "32Gi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_MEMORY_REQUEST
+            value: "48Mi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_MEMORY_LIMIT
+            value: "128Mi"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_CPU_REQUEST
+            value: "50m"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_CPU_LIMIT
+            value: "200m"
+
+  - it: should omit DOCUMENTDB_GATEWAY_CPU_LIMIT when empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_CPU_LIMIT
+          any: true
+
+  - it: should set DOCUMENTDB_GATEWAY_CPU_LIMIT when configured
+    set:
+      operator.sidecarResources.gatewayCpuLimit: "500m"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_GATEWAY_CPU_LIMIT
+            value: "500m"
+
+  - it: should omit DOCUMENTDB_OTEL_CPU_LIMIT when empty
+    set:
+      operator.sidecarResources.otelCpuLimit: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_OTEL_CPU_LIMIT
+          any: true
+
   # -------------------------------------------------------------------
   # Service account
   # -------------------------------------------------------------------

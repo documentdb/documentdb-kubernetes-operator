@@ -269,11 +269,69 @@ type Resource struct {
 	// +optional
 	Memory string `json:"memory,omitempty"`
 
-	// CPU specifies the CPU limit for each DocumentDB instance pod.
-	// This value is passed to the CNPG Cluster's spec.resources.limits.cpu
-	// and spec.resources.requests.cpu (Guaranteed QoS).
-	// If not specified or set to "0", no CPU limit is applied.
+	// CPU specifies the total CPU envelope for each DocumentDB instance pod.
+	// The operator divides this envelope across PostgreSQL, the documentdb-gateway
+	// sidecar, and, when monitoring is enabled, the OTel collector sidecar.
+	// PostgreSQL receives the remainder after gateway and OTel CPU reservations;
+	// an explicit per-container CPU override wins over the automatic carve-out.
+	// If not specified or set to "0", no CPU envelope is applied.
 	// Examples: "2", "4", "500m"
+	// +optional
+	CPU string `json:"cpu,omitempty"`
+
+	// Memory and CPU above describe the TOTAL pod envelope, but are OPTIONAL.
+	// When a sidecar (the gateway, and — with monitoring enabled — the OTel
+	// collector) shares the pod, the operator carves its memory and CPU out of
+	// the envelope and gives PostgreSQL the remainder, recomputing PostgreSQL's
+	// memory-aware parameters from that reduced value. The optional per-component
+	// overrides below let you size each container independently; an explicit
+	// override always wins over the automatic carve-out.
+	//
+	// The envelope (Memory/CPU above) may be omitted for a dimension when that
+	// dimension is set explicitly on BOTH the gateway and the database — the
+	// effective envelope is then the sum of the containers. If you omit the
+	// envelope without fully specifying the containers, the resource is rejected;
+	// if you omit both the envelope and all container values, that dimension is
+	// left unmanaged (no limits).
+
+	// Gateway optionally overrides the resources allocated to the
+	// documentdb-gateway sidecar container. When unset, the operator derives the
+	// gateway's memory as min(gatewayMemoryFraction × memory, gatewayMemoryCap)
+	// and carves it out of the pod memory envelope. The value is applied as both
+	// the request and the limit (Guaranteed-class) so a gateway leak is
+	// OOM-isolated and cannot crowd out PostgreSQL.
+	// +optional
+	Gateway *ComponentResources `json:"gateway,omitempty"`
+
+	// Database optionally overrides the resources allocated to the PostgreSQL
+	// container. When unset, PostgreSQL receives the pod memory and CPU envelopes
+	// minus the gateway and (when monitoring is enabled) OTel collector carve-outs.
+	// +optional
+	Database *ComponentResources `json:"database,omitempty"`
+
+	// OTel optionally overrides the resources allocated to the otel-collector
+	// sidecar container (only present when spec.monitoring.enabled is true).
+	// When unset, the operator applies built-in defaults: memory request 48Mi /
+	// limit 128Mi and CPU request 50m / limit 200m (Burstable — the requests are
+	// the reserved floor and the limits cap a telemetry burst). Setting otel.cpu
+	// or otel.memory pins that dimension to request == limit (Guaranteed).
+	// +optional
+	OTel *ComponentResources `json:"otel,omitempty"`
+}
+
+// ComponentResources overrides the CPU and/or memory allocated to an individual
+// container in the DocumentDB pod (PostgreSQL, the gateway, or the OTel
+// collector). Each field is a Kubernetes quantity string; when set it is applied
+// as both the request and the limit for that container (Guaranteed-class) and
+// overrides the automatic carve-out derived from spec.resource.memory.
+type ComponentResources struct {
+	// Memory is the memory request=limit for the container (e.g. "512Mi", "2Gi").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
+	// +optional
+	Memory string `json:"memory,omitempty"`
+
+	// CPU is the CPU request=limit for the container (e.g. "500m", "2").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
 	// +optional
 	CPU string `json:"cpu,omitempty"`
 }

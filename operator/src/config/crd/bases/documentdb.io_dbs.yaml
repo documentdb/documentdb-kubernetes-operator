@@ -1361,12 +1361,51 @@ spec:
                 properties:
                   cpu:
                     description: |-
-                      CPU specifies the CPU limit for each DocumentDB instance pod.
-                      This value is passed to the CNPG Cluster's spec.resources.limits.cpu
-                      and spec.resources.requests.cpu (Guaranteed QoS).
-                      If not specified or set to "0", no CPU limit is applied.
+                      CPU specifies the total CPU envelope for each DocumentDB instance pod.
+                      The operator divides this envelope across PostgreSQL, the documentdb-gateway
+                      sidecar, and, when monitoring is enabled, the OTel collector sidecar.
+                      PostgreSQL receives the remainder after gateway and OTel CPU reservations;
+                      an explicit per-container CPU override wins over the automatic carve-out.
+                      If not specified or set to "0", no CPU envelope is applied.
                       Examples: "2", "4", "500m"
                     type: string
+                  database:
+                    description: |-
+                      Database optionally overrides the resources allocated to the PostgreSQL
+                      container. When unset, PostgreSQL receives the pod memory and CPU envelopes
+                      minus the gateway and (when monitoring is enabled) OTel collector carve-outs.
+                    properties:
+                      cpu:
+                        description: CPU is the CPU request=limit for the container
+                          (e.g. "500m", "2").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                      memory:
+                        description: Memory is the memory request=limit for the container
+                          (e.g. "512Mi", "2Gi").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                    type: object
+                  gateway:
+                    description: |-
+                      Gateway optionally overrides the resources allocated to the
+                      documentdb-gateway sidecar container. When unset, the operator derives the
+                      gateway's memory as min(gatewayMemoryFraction × memory, gatewayMemoryCap)
+                      and carves it out of the pod memory envelope. The value is applied as both
+                      the request and the limit (Guaranteed-class) so a gateway leak is
+                      OOM-isolated and cannot crowd out PostgreSQL.
+                    properties:
+                      cpu:
+                        description: CPU is the CPU request=limit for the container
+                          (e.g. "500m", "2").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                      memory:
+                        description: Memory is the memory request=limit for the container
+                          (e.g. "512Mi", "2Gi").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                    type: object
                   memory:
                     description: |-
                       Memory specifies the memory limit for each DocumentDB instance pod.
@@ -1378,6 +1417,26 @@ spec:
                       defaults are used for memory-aware parameters.
                       Examples: "2Gi", "4Gi", "8Gi"
                     type: string
+                  otel:
+                    description: |-
+                      OTel optionally overrides the resources allocated to the otel-collector
+                      sidecar container (only present when spec.monitoring.enabled is true).
+                      When unset, the operator applies built-in defaults: memory request 48Mi /
+                      limit 128Mi and CPU request 50m / limit 200m (Burstable — the requests are
+                      the reserved floor and the limits cap a telemetry burst). Setting otel.cpu
+                      or otel.memory pins that dimension to request == limit (Guaranteed).
+                    properties:
+                      cpu:
+                        description: CPU is the CPU request=limit for the container
+                          (e.g. "500m", "2").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                      memory:
+                        description: Memory is the memory request=limit for the container
+                          (e.g. "512Mi", "2Gi").
+                        pattern: ^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$
+                        type: string
+                    type: object
                   storage:
                     description: Storage configuration for DocumentDB persistent volumes.
                     properties:

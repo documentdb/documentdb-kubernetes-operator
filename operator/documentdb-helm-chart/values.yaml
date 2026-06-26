@@ -78,6 +78,19 @@ certManager:
 # Defaults are conservative and aim to be compatible with Pod Security Admission's
 # `restricted` profile. Override any field per component as needed.
 operator:
+  # Sidecar resource isolation defaults. spec.resource.memory on a DocumentDB
+  # cluster is the total pod memory envelope; the operator reserves memory for
+  # the gateway sidecar (gatewayMemoryFraction of the envelope, capped at
+  # gatewayMemoryCap) and, when monitoring is enabled, the OTel collector
+  # (otelMemoryLimit), then gives PostgreSQL the remainder.
+  sidecarResources:
+    gatewayMemoryFraction: "0.1875"
+    gatewayMemoryCap: "32Gi"
+    gatewayCpuLimit: ""        # optional; bounds gateway async worker threads
+    otelMemoryRequest: "48Mi"
+    otelMemoryLimit: "128Mi"
+    otelCpuRequest: "50m"
+    otelCpuLimit: "200m"       # bounds the collector's CPU burst (ceiling)
   # Requests-only by convention: scheduler reserves capacity for the
   # operator, but no memory ceiling so a single operator can manage
   # fleets of any size without OOMKill. Set limits explicitly if your
