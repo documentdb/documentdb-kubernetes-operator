@@ -127,6 +127,26 @@ tests:
             name: GATEWAY_PORT
             value: "10260"
 
+  - it: should set DOCUMENTDB_IOURING_SECCOMP_PROFILE when configured
+    set:
+      operator:
+        ioUring:
+          seccompProfile: "profiles/custom.json"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+            value: "profiles/custom.json"
+
+  - it: should omit io_uring seccomp env var by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+          any: true
+
   # -------------------------------------------------------------------
   # Service account
   # -------------------------------------------------------------------

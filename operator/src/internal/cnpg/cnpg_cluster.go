@@ -127,6 +127,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
 			applyPostgresProcessIdentity(&spec, documentdb)
+			applyIOUringSeccomp(&spec, documentdb)
 
 			return spec
 		}(),
@@ -321,6 +322,29 @@ func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbprevie
 	}
 	if pg.GID != nil {
 		spec.PostgresGID = *pg.GID
+	}
+}
+
+// applyIOUringSeccomp relaxes the postgres container seccomp profile when the
+// IOUring feature gate is enabled. CNPG runs the postgres pods with
+// seccompProfile=RuntimeDefault, but the container runtime strips the
+// io_uring_{setup,enter,register} syscalls from that profile, so io_method=io_uring
+// would otherwise crash with "could not setup io_uring queue: Operation not permitted".
+//
+// The operator references a Localhost seccomp profile that re-allows only the three
+// io_uring syscalls. The profile path is operator-level configuration (the same
+// decision applies to every DocumentDB on the cluster) and must be installed on every
+// node that runs postgres pods (see the io-uring feature playground).
+//
+// No-op when the gate is disabled, so CNPG keeps its RuntimeDefault.
+func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
+	if !dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+		return
+	}
+	profile := cmp.Or(os.Getenv(util.IOURING_SECCOMP_PROFILE_ENV), util.DEFAULT_IOURING_SECCOMP_PROFILE)
+	spec.SeccompProfile = &corev1.SeccompProfile{
+		Type:             corev1.SeccompProfileTypeLocalhost,
+		LocalhostProfile: pointer.String(profile),
 	}
 }
 
