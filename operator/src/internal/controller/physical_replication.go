@@ -87,7 +87,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		}
 
 		/* TODO re-enable when we have a WAL replica image
-		walReplicaPluginName := documentdb.Spec.WalReplicaPluginName
+		walReplicaPluginName := ""
+		if documentdb.Spec.Plugins != nil {
+			walReplicaPluginName = documentdb.Spec.Plugins.WalReplicaName
+		}
 		if walReplicaPluginName == "" {
 			walReplicaPluginName = util.DEFAULT_WAL_REPLICA_PLUGIN
 		}
@@ -341,6 +344,23 @@ func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, curre
 		if refreshTime > 0 || err != nil {
 			return nil, err, refreshTime
 		}
+	}
+
+	// Issue #375 sub-issue 2: clear stale promotionToken after successful promotion.
+	// During Replica→Primary transition, getPrimaryChangePatchOps sets a PromotionToken.
+	// On subsequent reconciliations, primaryChanged is false (both current and desired
+	// agree this node is primary), so the token is never cleared. CNPG then reports
+	// "Cluster is unrecoverable / Promotion token content is not correct".
+	// Fix: when the primary hasn't changed but the current token differs from the desired
+	// (which is always empty), patch to clear it.
+	if !primaryChanged && current.Spec.ReplicaCluster.PromotionToken != desired.Spec.ReplicaCluster.PromotionToken {
+		clearedConfig := *desired.Spec.ReplicaCluster
+		patchOps = append(patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathReplicaCluster,
+			Value: &clearedConfig,
+		})
+		log.Log.Info("Clearing stale promotionToken", "cluster", current.Name)
 	}
 
 	// Update if the cluster list has changed

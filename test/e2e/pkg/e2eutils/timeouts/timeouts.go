@@ -40,6 +40,22 @@ const (
 	// ServiceReady waits for a LoadBalancer / ClusterIP to acquire an
 	// address and begin routing.
 	ServiceReady Op = "serviceReady"
+	// ClusterReplicationReady waits for a replicated DocumentDB pair (primary +
+	// replica) to reach a fully streaming state. This is longer than
+	// DocumentDBReady because the replica must pg_basebackup from the
+	// primary before it can start streaming.
+	ClusterReplicationReady Op = "clusterReplicationReady"
+	// ClusterReplicationDataSync waits for data written to the primary
+	// DocumentDB to replicate and become visible on a replica in a
+	// cross-cluster replication setup. PostgreSQL streaming replication
+	// is typically sub-second, but end-to-end propagation through the
+	// gateway layer can take longer on busy CI runners.
+	ClusterReplicationDataSync Op = "clusterReplicationDataSync"
+	// ClusterReplicationFailover waits for a cross-cluster promotion/
+	// failover operation to complete. This includes the time for the
+	// replica to become the new primary, CNPG to update cluster roles,
+	// and the cluster to reach Ready.
+	ClusterReplicationFailover Op = "clusterReplicationFailover"
 )
 
 // UnknownOpFallback is returned by For when an Op is not in the
@@ -57,6 +73,9 @@ var documentDBDefaults = map[Op]time.Duration{
 	RestoreComplete:   15 * time.Minute,
 	MongoConnect:      30 * time.Second,
 	ServiceReady:      2 * time.Minute,
+	ClusterReplicationReady:  10 * time.Minute,
+	ClusterReplicationDataSync:     3 * time.Minute,
+	ClusterReplicationFailover:     10 * time.Minute,
 }
 
 // cnpgAlias maps selected DocumentDB ops to their CNPG counterparts.
@@ -94,10 +113,11 @@ func For(op Op) time.Duration {
 // 10-second poll to reduce API-server churn during long waits.
 func PollInterval(op Op) time.Duration {
 	switch op {
-	case MongoConnect, ServiceReady:
+	case MongoConnect, ServiceReady, ClusterReplicationDataSync:
 		return 2 * time.Second
 	case DocumentDBReady, DocumentDBUpgrade, InstanceScale,
-		PVCResize, BackupComplete, RestoreComplete:
+		PVCResize, BackupComplete, RestoreComplete,
+		ClusterReplicationReady, ClusterReplicationFailover:
 		return 10 * time.Second
 	default:
 		return 5 * time.Second

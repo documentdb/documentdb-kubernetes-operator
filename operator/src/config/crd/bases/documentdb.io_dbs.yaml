@@ -1084,8 +1084,8 @@ spec:
                     x-kubernetes-validations:
                     - message: cannot specify both backup and persistentVolume recovery
                         at the same time
-                      rule: '!(has(self.backup) && self.backup.name != '''' && has(self.persistentVolume)
-                        && self.persistentVolume.name != '''')'
+                      rule: '!(has(self.backup) && size(self.backup.name) > 0 && has(self.persistentVolume)
+                        && size(self.persistentVolume.name) > 0)'
                 type: object
               clusterReplication:
                 description: ClusterReplication configures cross-cluster replication
@@ -1135,17 +1135,11 @@ spec:
                 - clusterList
                 - primary
                 type: object
-              documentDBImage:
-                description: |-
-                  DocumentDBImage is the container image to use for DocumentDB.
-                  Changing this is not recommended for most users.
-                  If not specified, defaults based on documentDBVersion or operator defaults.
-                type: string
               documentDBVersion:
                 description: |-
                   DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).
-                  When set, this overrides the default versions for documentDBImage and gatewayImage.
-                  Individual image fields take precedence over this version.
+                  When set, this overrides the default versions for image.documentDB and image.gateway.
+                  Individual image fields under spec.image take precedence over this version.
                 type: string
               documentDbCredentialSecret:
                 description: |-
@@ -1196,14 +1190,58 @@ spec:
                   3. Add a default entry in the featureGateDefaults map in documentdb_types.go
                 type: object
                 x-kubernetes-validations:
-                - message: 'unsupported feature gate key; allowed keys: ChangeStreams'
-                  rule: self.all(key, key in ['ChangeStreams'])
-              gatewayImage:
+                - message: 'unsupported feature gate key; allowed keys: ChangeStreams,
+                    IOUring'
+                  rule: self.all(key, key in ['ChangeStreams', 'IOUring'])
+              image:
                 description: |-
-                  GatewayImage is the container image to use for the DocumentDB Gateway sidecar.
-                  Changing this is not recommended for most users.
-                  If not specified, defaults to a version that matches the DocumentDB operator version.
-                type: string
+                  Image groups container image settings for the DocumentDB stack
+                  (extension image, gateway image, PostgreSQL image).
+                  All fields are optional; sensible defaults are applied when omitted.
+                properties:
+                  documentDB:
+                    description: |-
+                      DocumentDB is the container image for the DocumentDB extension layer.
+                      This image is mounted into the PostgreSQL container via CNPG's
+                      ImageVolumeSource so that the extension files are available alongside
+                      an upstream PostgreSQL image.
+                    type: string
+                  gateway:
+                    description: Gateway is the container image for the DocumentDB
+                      Gateway sidecar.
+                    type: string
+                  postgres:
+                    default: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+                    description: |-
+                      Postgres is the container image for the PostgreSQL server.
+                      Must be an upstream CNPG-compatible PostgreSQL image (the operator
+                      adds the DocumentDB extension via an ImageVolume mount), and must
+                      use trixie (Debian 13) base to match the extension's GLIBC
+                      requirements.
+                    type: string
+                type: object
+              imagePullSecrets:
+                description: |-
+                  ImagePullSecrets is an optional list of references to secrets in the same namespace
+                  to use for pulling any of the images used by this cluster. Passed through to the
+                  underlying CloudNative-PG cluster.
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      default: ""
+                      description: |-
+                        Name of the referent.
+                        This field is effectively required, but due to backwards compatibility is
+                        allowed to be empty. Instances of this type with an empty value here are
+                        almost certainly wrong.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
               instancesPerNode:
                 description: 'InstancesPerNode is the number of DocumentDB instances
                   per node. Range: 1-3.'
@@ -1255,16 +1293,92 @@ spec:
                 maximum: 1
                 minimum: 1
                 type: integer
-              postgresImage:
-                default: ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+              plugins:
                 description: |-
-                  PostgresImage is the container image to use for the PostgreSQL server.
-                  If not specified, defaults to the last stable PostgreSQL version compatible with DocumentDB.
-                  Must use trixie (Debian 13) base to match the extension's GLIBC requirements.
-                type: string
+                  Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
+                  All fields are optional; defaults are preserved when omitted.
+                properties:
+                  sidecarInjectorName:
+                    description: |-
+                      SidecarInjectorName is the name of the CNPG sidecar injector plugin
+                      to use for the gateway and other sidecars. Immutable.
+                    type: string
+                    x-kubernetes-validations:
+                    - message: sidecar injector plugin name cannot be changed after
+                        cluster creation
+                      rule: self == oldSelf
+                  walReplicaName:
+                    description: |-
+                      WalReplicaName is the name of the WAL replica plugin to use for
+                      cross-cluster replication.
+                    type: string
+                type: object
+              postgres:
+                description: |-
+                  Postgres groups PostgreSQL process-level tuning (UID/GID, custom post-init SQL).
+                  All fields are optional; defaults are preserved when omitted.
+                properties:
+                  gid:
+                    description: |-
+                      GID is the numeric group ID under which the PostgreSQL server process runs.
+                      When set, UID must also be set.
+                    format: int64
+                    type: integer
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Parameters allows users to override PostgreSQL configuration parameters
+                      (postgresql.conf settings) passed through to the underlying CNPG Cluster.
+                      The operator applies memory-aware defaults (shared_buffers, effective_cache_size,
+                      work_mem, maintenance_work_mem) computed from the pod memory limit, plus static
+                      best-practice defaults for autovacuum, IO, WAL, and connection settings.
+                      Values specified here override computed and static defaults.
+                      Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,
+                      max_prepared_transactions) cannot be overridden.
+                    type: object
+                  postInitSQL:
+                    description: |-
+                      PostInitSQL is an ordered list of SQL statements executed after the
+                      cluster is initialized. These statements run AFTER the operator's
+                      mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE
+                      documentdb, ALTER ROLE documentdb), so they can safely reference the
+                      documentdb extension and role.
+                    items:
+                      type: string
+                    type: array
+                  uid:
+                    description: |-
+                      UID is the numeric user ID under which the PostgreSQL server process runs.
+                      When set, GID must also be set.
+                    format: int64
+                    type: integer
+                type: object
+                x-kubernetes-validations:
+                - message: uid and gid must be set together
+                  rule: has(self.uid) == has(self.gid)
               resource:
                 description: Resource specifies the storage resources for DocumentDB.
                 properties:
+                  cpu:
+                    description: |-
+                      CPU specifies the CPU limit for each DocumentDB instance pod.
+                      This value is passed to the CNPG Cluster's spec.resources.limits.cpu
+                      and spec.resources.requests.cpu (Guaranteed QoS).
+                      If not specified or set to "0", no CPU limit is applied.
+                      Examples: "2", "4", "500m"
+                    type: string
+                  memory:
+                    description: |-
+                      Memory specifies the memory limit for each DocumentDB instance pod.
+                      This value is passed to the CNPG Cluster's spec.resources.limits.memory
+                      and spec.resources.requests.memory (Guaranteed QoS).
+                      Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)
+                      are auto-computed from this value.
+                      If not specified or set to "0", no memory limit is applied and static
+                      defaults are used for memory-aware parameters.
+                      Examples: "2Gi", "4Gi", "8Gi"
+                    type: string
                   storage:
                     description: Storage configuration for DocumentDB persistent volumes.
                     properties:
@@ -1332,14 +1446,6 @@ spec:
                       Must be <= the binary version.
                 pattern: ^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$
                 type: string
-              sidecarInjectorPluginName:
-                description: SidecarInjectorPluginName is the name of the sidecar
-                  injector plugin to use.
-                type: string
-                x-kubernetes-validations:
-                - message: sidecar injector plugin name cannot be changed after cluster
-                    creation
-                  rule: self == oldSelf
               timeouts:
                 properties:
                   stopDelay:
@@ -1416,10 +1522,6 @@ spec:
                       for future phases).
                     type: object
                 type: object
-              walReplicaPluginName:
-                description: WalReplicaPluginName is the name of the wal replica plugin
-                  to use.
-                type: string
             required:
             - instancesPerNode
             - nodeCount

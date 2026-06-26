@@ -14,7 +14,7 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/portforward"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
@@ -78,7 +78,7 @@ var _ = Describe("DocumentDB exposure — ClusterIP",
 			Eventually(func() error {
 				pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
 				defer pingCancel()
-				cli, err := mongo.NewClient(pingCtx, mongo.ClientOptions{
+				cli, err := sharedmongo.NewClient(pingCtx, sharedmongo.ClientOptions{
 					Host:        "127.0.0.1",
 					Port:        strconv.Itoa(localPort),
 					User:        credUser,
@@ -91,7 +91,7 @@ var _ = Describe("DocumentDB exposure — ClusterIP",
 					return err
 				}
 				defer func() { _ = cli.Disconnect(context.Background()) }()
-				pingErr = mongo.Ping(pingCtx, cli)
+				pingErr = sharedmongo.Ping(pingCtx, cli)
 				return pingErr
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "mongo ping through ClusterIP port-forward: %v", pingErr)

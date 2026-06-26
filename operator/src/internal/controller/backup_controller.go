@@ -102,7 +102,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				return ctrl.Result{RequeueAfter: time.Minute * 1}, nil
 			}
 
-			return r.createCNPGBackup(ctx, backup, cluster)
+			return r.createCNPGBackup(ctx, backup, cluster, replicationContext)
 		}
 		logger.Error(err, "Failed to get CNPG Backup")
 		return ctrl.Result{}, err
@@ -175,11 +175,8 @@ func buildVolumeSnapshotClass(environment string) *snapshotv1.VolumeSnapshotClas
 }
 
 // createCNPGBackup creates a new CNPG Backup resource
-func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbpreview.Backup, cluster *dbpreview.DocumentDB) (ctrl.Result, error) {
-	cnpgClusterName := cluster.Name
-	if cluster.Spec.ClusterReplication != nil && cluster.Spec.ClusterReplication.Primary != "" {
-		cnpgClusterName = cluster.Spec.ClusterReplication.Primary
-	}
+func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbpreview.Backup, cluster *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (ctrl.Result, error) {
+	cnpgClusterName := replicationContext.CNPGClusterName
 
 	cnpgBackup, err := backup.CreateCNPGBackup(r.Scheme, cnpgClusterName)
 	if err != nil {

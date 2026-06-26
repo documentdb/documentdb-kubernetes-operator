@@ -347,7 +347,8 @@ spec:
       storageClass: documentdb-storage
   exposeViaService:
     serviceType: LoadBalancer  # (2)!
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
 ```
 
 1. Setting `environment: eks` automatically applies AWS-specific LoadBalancer annotations

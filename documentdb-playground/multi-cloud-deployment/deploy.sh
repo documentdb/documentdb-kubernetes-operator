@@ -483,18 +483,14 @@ echo "✅ cert-manager installed on all clusters"
 
 # Create an issuer in istio-system namespace on hub
 temp_dir=$(mktemp -d)
-echo "Temporary directory created at: $temp_dir"
+echo "Temporary istioctl directory created at: $temp_dir"
 
-# Check if istioctl is installed, if not install it to temp_dir
-if ! command -v istioctl &> /dev/null; then
-  echo "istioctl not found, installing to $temp_dir..."
-  ISTIO_VERSION="1.24.0"
-  curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_VERSION TARGET_ARCH=x86_64 sh - -d "$temp_dir" >/dev/null 2>&1
-  export PATH="$temp_dir/istio-$ISTIO_VERSION/bin:$PATH"
-  echo "✓ istioctl installed to $temp_dir/istio-$ISTIO_VERSION/bin"
-else
-  echo "✓ istioctl already installed: $(which istioctl)"
-fi
+ISTIO_VERSION="1.30.1"
+pushd "$temp_dir"
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_VERSION TARGET_ARCH=x86_64 sh - >/dev/null 2>&1
+popd
+export PATH="$temp_dir/istio-$ISTIO_VERSION/bin:$PATH"
+echo "✓ istioctl installed to $temp_dir/istio-$ISTIO_VERSION/bin"
 
 if [ -z "$ISTIO_DIR" ]; then
   git clone https://github.com/istio/istio.git "$temp_dir/istio"

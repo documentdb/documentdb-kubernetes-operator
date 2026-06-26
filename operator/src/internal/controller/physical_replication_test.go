@@ -479,6 +479,114 @@ var _ = Describe("Physical Replication", func() {
 		Expect(paths).To(HaveKey(cnpg.PatchPathReplicationSlots))
 	})
 
+	It("clears stale promotionToken when cluster is already primary (issue #375 sub-issue 2)", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-stale-token", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      "cluster-a",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		// Current: cluster-a IS the primary but has a stale promotionToken
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-stale-token",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:           "cluster-a",
+					Primary:        "cluster-a",
+					Source:         "cluster-b",
+					PromotionToken: "stale-token-from-previous-promotion",
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "cluster-a"},
+					{Name: "cluster-b"},
+				},
+			},
+		}
+
+		// Desired: same primary, but PromotionToken is always empty in desired state
+		desired := current.DeepCopy()
+		desired.Spec.ReplicaCluster.PromotionToken = ""
+
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext := &util.ReplicationContext{
+			OtherCNPGClusterNames: []string{"cluster-b"},
+		}
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		Expect(patchOps).ToNot(BeEmpty(), "should produce patch ops to clear the stale token")
+
+		// Should have a ReplicaCluster replace patch with empty PromotionToken
+		found := false
+		for _, op := range patchOps {
+			if op.Path == cnpg.PatchPathReplicaCluster && op.Op == cnpg.PatchOpReplace {
+				found = true
+				if replicaConfig, ok := op.Value.(*cnpgv1.ReplicaClusterConfiguration); ok {
+					Expect(replicaConfig.PromotionToken).To(BeEmpty(),
+						"patched ReplicaCluster should have empty PromotionToken")
+				}
+			}
+		}
+		Expect(found).To(BeTrue(), "should include ReplicaCluster replace patch")
+	})
+
+	It("does not produce extra patches when promotionToken is already empty", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-clean-token", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      "cluster-a",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-clean-token",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:           "cluster-a",
+					Primary:        "cluster-a",
+					Source:         "cluster-b",
+					PromotionToken: "", // already clean
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "cluster-a"},
+					{Name: "cluster-b"},
+				},
+			},
+		}
+
+		desired := current.DeepCopy()
+
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext := &util.ReplicationContext{
+			OtherCNPGClusterNames: []string{"cluster-b"},
+		}
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		Expect(patchOps).To(BeEmpty(), "no patches needed when token is already empty and nothing else changed")
+	})
+
 	It("updates external clusters and synchronous config", func() {
 		ctx := context.Background()
 		namespace := "default"

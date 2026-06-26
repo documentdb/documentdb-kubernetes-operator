@@ -18,16 +18,18 @@ import (
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
 
 // DocumentDB upgrade — images: with the operator already running at
-// the current version, patches the DocumentDB spec.documentDBImage
-// (and spec.gatewayImage) from an old image tag to a new one and
+// the current version, patches the DocumentDB spec.image.documentDB
+// (and spec.image.gateway) from an old image tag to a new one and
 // verifies the rollout completes + the seeded dataset is retained.
 // Unlike upgrade_control_plane_test.go this does not touch the Helm
 // release; it only exercises the CR-driven data-plane image upgrade
@@ -110,7 +112,7 @@ var _ = Describe("DocumentDB upgrade — images",
 			})
 			Expect(err).NotTo(HaveOccurred(), "create DocumentDB %s/%s", ns, ddName)
 			DeferCleanup(func(ctx SpecContext) {
-				_ = documentdb.Delete(ctx, c, dd, 3*time.Minute)
+				_ = shareddb.Delete(ctx, c, dd, 3*time.Minute)
 			})
 
 			key := types.NamespacedName{Namespace: ns, Name: ddName}
@@ -123,18 +125,21 @@ var _ = Describe("DocumentDB upgrade — images",
 			docs := seed.SmallDataset()
 			handle, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "connect to DocumentDB gateway on oldImage")
-			inserted, err := e2emongo.Seed(ctx, handle.Client(), dbName, collName, docs)
+			inserted, err := sharedmongo.Seed(ctx, handle.Client(), dbName, collName, docs)
 			Expect(err).NotTo(HaveOccurred(), "seed %s.%s", dbName, collName)
 			Expect(inserted).To(Equal(seed.SmallDatasetSize))
 			Expect(handle.Close(ctx)).To(Succeed())
 
-			By("patching spec.documentDBImage (and optionally gatewayImage) to the new image")
-			fresh, err := documentdb.Get(ctx, c, key)
+			By("patching spec.image.documentDB (and optionally image.gateway) to the new image")
+			fresh, err := shareddb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before patch")
-			Expect(documentdb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
-				s.DocumentDBImage = newImage
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+				if s.Image == nil {
+					s.Image = &previewv1.ImageSpec{}
+				}
+				s.Image.DocumentDB = newImage
 				if newGwImage != "" {
-					s.GatewayImage = newGwImage
+					s.Image.Gateway = newGwImage
 				}
 			})).To(Succeed(), "patch DocumentDB image from %s to %s", oldImage, newImage)
 
@@ -158,7 +163,7 @@ var _ = Describe("DocumentDB upgrade — images",
 			handle2, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "reconnect to DocumentDB gateway on newImage")
 			DeferCleanup(func(ctx SpecContext) { _ = handle2.Close(ctx) })
-			n, err := e2emongo.Count(ctx, handle2.Client(), dbName, collName, bson.M{})
+			n, err := sharedmongo.Count(ctx, handle2.Client(), dbName, collName, bson.M{})
 			Expect(err).NotTo(HaveOccurred(), "count %s.%s on newImage", dbName, collName)
 			Expect(n).To(Equal(int64(seed.SmallDatasetSize)),
 				"seeded document count changed across image upgrade")

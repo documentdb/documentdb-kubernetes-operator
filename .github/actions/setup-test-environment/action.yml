@@ -737,8 +737,9 @@ runs:
         spec:
           nodeCount: ${{ inputs.node-count }}
           instancesPerNode: ${{ inputs.instances-per-node }}
-          documentDBImage: ${DOCUMENTDB_IMAGE_RESOLVED}
-          gatewayImage: ${GATEWAY_IMAGE_RESOLVED}
+          image:
+            documentDB: ${DOCUMENTDB_IMAGE_RESOLVED}
+            gateway: ${GATEWAY_IMAGE_RESOLVED}
           resource:
             storage:
               pvcSize: 5Gi

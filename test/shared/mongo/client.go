@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Package mongo provides thin helpers for the DocumentDB E2E suite to
 // connect to a DocumentDB gateway endpoint using the official
 // mongo-driver/v2 client. It is intentionally minimal: URI construction
@@ -123,6 +126,27 @@ func NewClient(_ context.Context, opts ClientOptions) (*mongo.Client, error) {
 	return c, nil
 }
 
+// NewFromURI builds a connected *mongo.Client against an externally
+// supplied mongodb:// URI. Connect time is bounded by
+// DefaultConnectTimeout. The driver's Connect is lazy, so callers who
+// need a post-connect round-trip should call Ping themselves.
+//
+// This helper exists so the long-haul driver can stop calling
+// mongo.Connect(options.Client().ApplyURI(...)) directly, which would
+// silently bypass the connect timeout that NewClient applies for
+// every other caller.
+func NewFromURI(_ context.Context, uri string) (*mongo.Client, error) {
+	if uri == "" {
+		return nil, errors.New("mongo: uri is required")
+	}
+	co := options.Client().ApplyURI(uri).SetConnectTimeout(DefaultConnectTimeout)
+	c, err := mongo.Connect(co)
+	if err != nil {
+		return nil, fmt.Errorf("mongo: connect: %w", err)
+	}
+	return c, nil
+}
+
 // buildTLSConfig assembles a *tls.Config for the driver. Priority:
 //
 //  1. RootCAs, if non-nil — use as trust store.
@@ -172,6 +196,44 @@ func Ping(ctx context.Context, c *mongo.Client) error {
 		return fmt.Errorf("mongo: ping: %w", err)
 	}
 	return nil
+}
+
+// DefaultPingRetryBackoff is the inter-attempt delay used by
+// PingWithRetry. Short enough that the happy path adds at most one
+// backoff to startup.
+const DefaultPingRetryBackoff = 100 * time.Millisecond
+
+// PingWithRetry polls Ping until it succeeds or timeout elapses. Each
+// individual Ping is bounded by a 3s sub-context so a single hung
+// attempt cannot consume the whole budget. Between failed attempts
+// the loop sleeps DefaultPingRetryBackoff (interruptible by ctx).
+//
+// Use this instead of Ping when the gateway may be transiently
+// unreachable — port-forward bind windows in e2e, or operator-induced
+// scale/upgrade disruption windows in long-haul.
+func PingWithRetry(ctx context.Context, c *mongo.Client, timeout time.Duration) error {
+	if c == nil {
+		return errors.New("mongo: nil client")
+	}
+	deadline := time.Now().Add(timeout)
+	var last error
+	for {
+		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := c.Ping(pingCtx, nil)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		last = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("mongo: ping did not succeed within %s: %w", timeout, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(DefaultPingRetryBackoff):
+		}
+	}
 }
 
 // Seed inserts docs into db.coll via InsertMany and returns the number

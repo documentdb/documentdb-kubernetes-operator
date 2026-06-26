@@ -46,6 +46,8 @@ nav:
           - Storage: preview/configuration/storage.md
           - Networking: preview/configuration/networking.md
           - TLS: preview/configuration/tls.md
+          - PostgreSQL Tuning: postgresql-tuning.md
+          - io_uring Async I/O: io-uring.md
       - Operations:
           - Upgrades: preview/operations/upgrades.md
           - Failover: preview/operations/failover.md
@@ -56,6 +58,9 @@ nav:
           - Overview: preview/high-availability/overview.md
           - Local HA: preview/high-availability/local-ha.md
       - Advanced Configuration: preview/advanced-configuration/README.md
+      - Monitoring:
+          - Overview: preview/monitoring/overview.md
+          - Metrics Reference: preview/monitoring/metrics.md
       - Multi-Region Deployment:
           - Overview: preview/multi-region-deployment/overview.md
           - Setup Guide: preview/multi-region-deployment/setup.md

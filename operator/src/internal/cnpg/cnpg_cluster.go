@@ -11,6 +11,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
@@ -21,14 +22,14 @@ import (
 )
 
 func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
-	sidecarPluginName := documentdb.Spec.SidecarInjectorPluginName
+	sidecarPluginName := pluginsSidecarInjectorName(documentdb)
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
 	}
 
 	// Get the gateway image for this DocumentDB instance
 	gatewayImage := util.GetGatewayImageForDocumentDB(documentdb)
-	log.Info("Creating CNPG cluster with gateway image", "gatewayImage", gatewayImage, "documentdbName", documentdb.Name, "specGatewayImage", documentdb.Spec.GatewayImage)
+	log.Info("Creating CNPG cluster with gateway image", "gatewayImage", gatewayImage, "documentdbName", documentdb.Name, "specGatewayImage", imageGateway(documentdb))
 
 	credentialSecretName := documentdb.Spec.DocumentDbCredentialSecret
 	if credentialSecretName == "" {
@@ -68,7 +69,8 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
 				Instances:           documentdb.Spec.InstancesPerNode,
-				ImageName:           documentdb.Spec.PostgresImage,
+				ImageName:           imagePostgres(documentdb),
+				ImagePullSecrets:    toCNPGImagePullSecrets(documentdb.Spec.ImagePullSecrets),
 				PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethodSwitchover,
 				StorageConfiguration: cnpgv1.StorageConfiguration{
 					StorageClass: storageClassPointer, // Use configured storage class or default
@@ -111,46 +113,21 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						Parameters: params,
 					}}
 				}(),
-				PostgresConfiguration: cnpgv1.PostgresConfiguration{
-					Extensions: []cnpgv1.ExtensionConfiguration{
-						{
-							Name:                 "documentdb",
-							ImageVolumeSource:    extensionImageSource,
-							DynamicLibraryPath:   []string{"lib"},
-							ExtensionControlPath: []string{"share"},
-							LdLibraryPath:        []string{"lib", "system"},
-						},
-					},
-					AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-					Parameters: func() map[string]string {
-						params := map[string]string{
-							"cron.database_name":    "postgres",
-							"max_replication_slots": "10",
-							"max_wal_senders":       "10",
-						}
-						// TODO: once DocumentDB supports change streams natively, additional GUC parameters may be needed here.
-						if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
-							params["wal_level"] = "logical"
-						}
-						return params
-					}(),
-					PgHBA: []string{
-						"host all all 0.0.0.0/0 trust",
-						"host all all ::0/0 trust",
-						"host replication all all trust",
-					},
-				},
-				Bootstrap: getBootstrapConfiguration(documentdb, isPrimaryRegion, log),
-				LogLevel:  cmp.Or(documentdb.Spec.LogLevel, "info"),
+				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource),
+				Bootstrap:             getBootstrapConfiguration(documentdb, isPrimaryRegion, log),
+				LogLevel:              cmp.Or(documentdb.Spec.LogLevel, "info"),
 				Backup: &cnpgv1.BackupConfiguration{
 					VolumeSnapshot: &cnpgv1.VolumeSnapshotConfiguration{
 						SnapshotOwnerReference: "backup", // Set owner reference to 'backup' so that snapshots are deleted when Backup resource is deleted
 					},
 					Target: cnpgv1.BackupTarget("primary"),
 				},
-				Affinity: documentdb.Spec.Affinity,
+				Affinity:  documentdb.Spec.Affinity,
+				Resources: buildResourceRequirements(documentdb),
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
+			applyPostgresProcessIdentity(&spec, documentdb)
+			applyIOUringSeccomp(&spec, documentdb)
 
 			return spec
 		}(),
@@ -202,17 +179,21 @@ func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion
 		}
 	}
 
-	return getDefaultBootstrapConfiguration()
+	return getDefaultBootstrapConfiguration(documentdb)
 }
 
-func getDefaultBootstrapConfiguration() *cnpgv1.BootstrapConfiguration {
+func getDefaultBootstrapConfiguration(documentdb *dbpreview.DocumentDB) *cnpgv1.BootstrapConfiguration {
+	postInitSQL := []string{
+		"CREATE EXTENSION documentdb CASCADE",
+		"CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'",
+		"ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS",
+	}
+	if documentdb != nil && documentdb.Spec.Postgres != nil && len(documentdb.Spec.Postgres.PostInitSQL) > 0 {
+		postInitSQL = append(postInitSQL, documentdb.Spec.Postgres.PostInitSQL...)
+	}
 	return &cnpgv1.BootstrapConfiguration{
 		InitDB: &cnpgv1.BootstrapInitDB{
-			PostInitSQL: []string{
-				"CREATE EXTENSION documentdb CASCADE",
-				"CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'",
-				"ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS",
-			},
+			PostInitSQL: postInitSQL,
 		},
 	}
 }
@@ -225,6 +206,53 @@ func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
 	return util.CNPG_DEFAULT_STOP_DELAY
 }
 
+// parseMemoryToBytes converts a Kubernetes quantity string (e.g., "2Gi", "4096Mi")
+// to bytes. Returns 0 if the string is empty or "0" (meaning unlimited/unset).
+func parseMemoryToBytes(memoryStr string) int64 {
+	if memoryStr == "" || memoryStr == "0" {
+		return 0
+	}
+	qty, err := resource.ParseQuantity(memoryStr)
+	if err != nil {
+		return 0
+	}
+	return qty.Value()
+}
+
+// buildResourceRequirements constructs corev1.ResourceRequirements from the
+// DocumentDB Resource spec. Uses Guaranteed QoS (requests == limits) as
+// recommended by CNPG. Returns empty requirements if neither Memory nor CPU is set.
+func buildResourceRequirements(documentdb *dbpreview.DocumentDB) corev1.ResourceRequirements {
+	reqs := corev1.ResourceRequirements{}
+	mem := documentdb.Spec.Resource.Memory
+	cpu := documentdb.Spec.Resource.CPU
+
+	if (mem == "" || mem == "0") && (cpu == "" || cpu == "0") {
+		return reqs
+	}
+
+	limits := corev1.ResourceList{}
+	if mem != "" && mem != "0" {
+		if quantity, err := resource.ParseQuantity(mem); err == nil {
+			limits[corev1.ResourceMemory] = quantity
+		}
+	}
+	if cpu != "" && cpu != "0" {
+		if quantity, err := resource.ParseQuantity(cpu); err == nil {
+			limits[corev1.ResourceCPU] = quantity
+		}
+	}
+
+	if len(limits) == 0 {
+		return reqs
+	}
+
+	// Guaranteed QoS: requests == limits
+	reqs.Limits = limits
+	reqs.Requests = limits.DeepCopy()
+	return reqs
+}
+
 // parsePullPolicy converts a string to a corev1.PullPolicy.
 // Returns empty string for unrecognized values.
 func parsePullPolicy(value string) corev1.PullPolicy {
@@ -233,5 +261,119 @@ func parsePullPolicy(value string) corev1.PullPolicy {
 		return corev1.PullPolicy(value)
 	default:
 		return ""
+	}
+}
+
+// imagePostgres returns spec.image.postgres or empty string when unset.
+// Nil-safe.
+func imagePostgres(documentdb *dbpreview.DocumentDB) string {
+	if documentdb == nil || documentdb.Spec.Image == nil {
+		return ""
+	}
+	return documentdb.Spec.Image.Postgres
+}
+
+// imageGateway returns spec.image.gateway or empty string when unset.
+// Nil-safe.
+func imageGateway(documentdb *dbpreview.DocumentDB) string {
+	if documentdb == nil || documentdb.Spec.Image == nil {
+		return ""
+	}
+	return documentdb.Spec.Image.Gateway
+}
+
+// pluginsSidecarInjectorName returns spec.plugins.sidecarInjectorName
+// or empty string when unset. Nil-safe.
+func pluginsSidecarInjectorName(documentdb *dbpreview.DocumentDB) string {
+	if documentdb == nil || documentdb.Spec.Plugins == nil {
+		return ""
+	}
+	return documentdb.Spec.Plugins.SidecarInjectorName
+}
+
+// toCNPGImagePullSecrets translates a list of corev1.LocalObjectReference
+// (the Kubernetes-native shape used on spec.imagePullSecrets) into the
+// CNPG-flavoured cnpgv1.LocalObjectReference shape that
+// cnpgv1.ClusterSpec.ImagePullSecrets expects.
+func toCNPGImagePullSecrets(secrets []corev1.LocalObjectReference) []cnpgv1.LocalObjectReference {
+	if len(secrets) == 0 {
+		return nil
+	}
+	out := make([]cnpgv1.LocalObjectReference, 0, len(secrets))
+	for _, s := range secrets {
+		if s.Name == "" {
+			continue
+		}
+		out = append(out, cnpgv1.LocalObjectReference{Name: s.Name})
+	}
+	return out
+}
+
+// applyPostgresProcessIdentity wires spec.postgres.uid / spec.postgres.gid
+// onto the CNPG ClusterSpec. CNPG validates that both are set together;
+// the CRD enforces the same invariant via XValidation on PostgresSpec.
+func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
+	if documentdb == nil || documentdb.Spec.Postgres == nil {
+		return
+	}
+	pg := documentdb.Spec.Postgres
+	if pg.UID != nil {
+		spec.PostgresUID = *pg.UID
+	}
+	if pg.GID != nil {
+		spec.PostgresGID = *pg.GID
+	}
+}
+
+// applyIOUringSeccomp relaxes the postgres container seccomp profile when the
+// IOUring feature gate is enabled. CNPG runs the postgres pods with
+// seccompProfile=RuntimeDefault, but the container runtime strips the
+// io_uring_{setup,enter,register} syscalls from that profile, so io_method=io_uring
+// would otherwise crash with "could not setup io_uring queue: Operation not permitted".
+//
+// The operator references a Localhost seccomp profile that re-allows only the three
+// io_uring syscalls. The profile path is operator-level configuration (the same
+// decision applies to every DocumentDB on the cluster) and must be installed on every
+// node that runs postgres pods (see the io-uring feature playground).
+//
+// No-op when the gate is disabled, so CNPG keeps its RuntimeDefault.
+func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
+	if !dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+		return
+	}
+	profile := cmp.Or(os.Getenv(util.IOURING_SECCOMP_PROFILE_ENV), util.DEFAULT_IOURING_SECCOMP_PROFILE)
+	spec.SeccompProfile = &corev1.SeccompProfile{
+		Type:             corev1.SeccompProfileTypeLocalhost,
+		LocalhostProfile: pointer.String(profile),
+	}
+}
+
+// buildPostgresConfiguration returns the cnpgv1.PostgresConfiguration block
+// for the cluster.
+//
+// The operator declares the DocumentDB extension via CNPG's Extensions
+// stanza (mounted from spec.image.documentDB as an ImageVolumeSource),
+// sets a fixed AdditionalLibraries list, and applies a small set of
+// operator-managed GUCs.
+func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource) cnpgv1.PostgresConfiguration {
+	pgHBA := []string{
+		"host all all 0.0.0.0/0 trust",
+		"host all all ::0/0 trust",
+		"host replication all all trust",
+	}
+
+	return cnpgv1.PostgresConfiguration{
+		Extensions: []cnpgv1.ExtensionConfiguration{
+			{
+				Name:                 "documentdb",
+				ImageVolumeSource:    extensionImageSource,
+				DynamicLibraryPath:   []string{"lib"},
+				ExtensionControlPath: []string{"share"},
+				LdLibraryPath:        []string{"lib", "system"},
+			},
+		},
+		AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
+		Parameters:          MergeParameters(documentdb, parseMemoryToBytes(documentdb.Spec.Resource.Memory)),
+		PgHBA:               pgHBA,
 	}
 }

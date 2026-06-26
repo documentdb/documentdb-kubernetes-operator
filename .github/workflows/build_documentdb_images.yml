@@ -18,6 +18,10 @@ on:
         description: 'Debian package version of postgresql-18-documentdb to pin (e.g. 0.110.0). Leave empty to derive from version.'
         required: false
         default: ''
+      documentdb_gateway_image_repo:
+        description: 'Container image repo for gateway source (without tag)'
+        required: false
+        default: 'ghcr.io/documentdb/documentdb/documentdb-local'
 
   workflow_call:
     inputs:
@@ -45,10 +49,11 @@ permissions:
   id-token: write
 
 env:
+
   DEFAULT_DOCUMENTDB_VERSION: '0.110.0'
   DOCUMENTDB_APT_REPO_URL: https://documentdb.io/deb
   DOCUMENTDB_APT_KEYRING_URL: https://documentdb.io/documentdb-archive-keyring.gpg
-  GATEWAY_SOURCE_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
+  DOCUMENTDB_GATEWAY_IMAGE_REPO: ${{ github.event.inputs.documentdb_gateway_image_repo || 'ghcr.io/documentdb/documentdb/documentdb-local' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -86,7 +91,7 @@ jobs:
         fi
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
-        GATEWAY_SOURCE_IMAGE="${{ env.GATEWAY_SOURCE_IMAGE_REPO }}:pg17-${VERSION}"
+        GATEWAY_SOURCE_IMAGE="${{ env.DOCUMENTDB_GATEWAY_IMAGE_REPO }}:pg17-${VERSION}"
         echo "documentdb_version=$VERSION" >> $GITHUB_OUTPUT
         echo "documentdb_version_dash=$VERSION_DASH" >> $GITHUB_OUTPUT
         echo "documentdb_apt_version=$APT_VERSION" >> $GITHUB_OUTPUT

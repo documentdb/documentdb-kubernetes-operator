@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/tlscerts"
@@ -92,7 +92,7 @@ var _ = Describe("DocumentDB TLS — provided",
 			Expect(pool.AppendCertsFromPEM(bundle.CACertPEM)).
 				To(BeTrue(), "parse self-minted CA PEM")
 
-			client, err := mongohelper.NewClient(connectCtx, mongohelper.ClientOptions{
+			client, err := sharedmongo.NewClient(connectCtx, sharedmongo.ClientOptions{
 				Host:       host,
 				Port:       port,
 				User:       tlsCredentialUser,
@@ -105,7 +105,7 @@ var _ = Describe("DocumentDB TLS — provided",
 			defer func() { _ = client.Disconnect(ctx) }()
 
 			Eventually(func() error {
-				return mongohelper.Ping(connectCtx, client)
+				return sharedmongo.Ping(connectCtx, client)
 			}, timeouts.For(timeouts.MongoConnect), timeouts.PollInterval(timeouts.MongoConnect)).
 				Should(Succeed(), "ping via provided cert should succeed under CA verification")
 		})

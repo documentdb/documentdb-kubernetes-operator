@@ -1,0 +1,147 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: WAL replica feature gate
+templates:
+  - 03_documentdb_wal_replica.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # Feature gate (walReplica)
+  # -------------------------------------------------------------------
+  - it: should not render any resources when walReplica is false (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render resources when walReplica is true
+    set:
+      walReplica: true
+    asserts:
+      - hasDocuments:
+          count: 7
+
+  # -------------------------------------------------------------------
+  # Service
+  # -------------------------------------------------------------------
+  - it: should create a Service on port 9090 when enabled
+    set:
+      walReplica: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: wal-replica
+      - equal:
+          path: metadata.namespace
+          value: cnpg-system
+
+  # -------------------------------------------------------------------
+  # cert-manager resources
+  # -------------------------------------------------------------------
+  - it: should create client and server Certificates when enabled
+    set:
+      walReplica: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: walreplica-client
+      - equal:
+          path: spec.usages[0]
+          value: client auth
+
+  - it: should create server Certificate with correct DNS name
+    set:
+      walReplica: true
+    documentIndex: 2
+    asserts:
+      - isKind:
+          of: Certificate
+      - equal:
+          path: metadata.name
+          value: walreplica-server
+      - contains:
+          path: spec.dnsNames
+          content: wal-replica
+
+  # -------------------------------------------------------------------
+  # Deployment
+  # -------------------------------------------------------------------
+  - it: should create a Deployment when enabled
+    set:
+      walReplica: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: wal-replica
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: cnpg-i-wal-replica
+
+  - it: should use the default wal-replica image with appVersion tag
+    set:
+      walReplica: true
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:0.2.0"
+
+  - it: should use a custom wal-replica image tag when set
+    set:
+      walReplica: true
+      image.walreplica.tag: "v9.9.9"
+    documentIndex: 3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:v9.9.9"
+
+  # -------------------------------------------------------------------
+  # RBAC
+  # -------------------------------------------------------------------
+  - it: should create ClusterRoleBinding when enabled
+    set:
+      walReplica: true
+    documentIndex: 4
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: wal-replica-manager-binding
+
+  - it: should create ClusterRole with CNPG permissions when enabled
+    set:
+      walReplica: true
+    documentIndex: 5
+    asserts:
+      - isKind:
+          of: ClusterRole
+      - equal:
+          path: metadata.name
+          value: wal-replica-manager
+
+  - it: should create a ServiceAccount when enabled
+    set:
+      walReplica: true
+    documentIndex: 6
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: wal-replica-manager
+      - equal:
+          path: metadata.namespace
+          value: cnpg-system

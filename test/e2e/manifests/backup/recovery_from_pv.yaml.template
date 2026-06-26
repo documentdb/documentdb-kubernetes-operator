@@ -6,8 +6,9 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: ${INSTANCES}
-  documentDBImage: ${DOCUMENTDB_IMAGE}
-  gatewayImage: ${GATEWAY_IMAGE}
+  image:
+    documentDB: ${DOCUMENTDB_IMAGE}
+    gateway: ${GATEWAY_IMAGE}
   documentDbCredentialSecret: ${CREDENTIAL_SECRET}
   resource:
     storage:

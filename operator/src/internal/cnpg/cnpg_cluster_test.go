@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -160,18 +161,33 @@ var _ = Describe("getBootstrapConfiguration", func() {
 
 var _ = Describe("getDefaultBootstrapConfiguration", func() {
 	It("returns a bootstrap configuration with InitDB", func() {
-		result := getDefaultBootstrapConfiguration()
+		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
 		Expect(result).ToNot(BeNil())
 		Expect(result.InitDB).ToNot(BeNil())
 		Expect(result.Recovery).To(BeNil())
 	})
 
-	It("includes required PostInitSQL statements", func() {
-		result := getDefaultBootstrapConfiguration()
+	It("includes required PostInitSQL statements by default", func() {
+		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
 		Expect(result.InitDB.PostInitSQL).To(HaveLen(3))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE EXTENSION documentdb CASCADE"))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'"))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS"))
+	})
+
+	It("appends spec.postgres.postInitSQL after operator-required statements", func() {
+		db := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Postgres: &dbpreview.PostgresSpec{
+					PostInitSQL: []string{"SELECT 1", "SELECT 2"},
+				},
+			},
+		}
+		result := getDefaultBootstrapConfiguration(db)
+		Expect(result.InitDB.PostInitSQL).To(HaveLen(5))
+		Expect(result.InitDB.PostInitSQL[0]).To(Equal("CREATE EXTENSION documentdb CASCADE"))
+		Expect(result.InitDB.PostInitSQL[3]).To(Equal("SELECT 1"))
+		Expect(result.InitDB.PostInitSQL[4]).To(Equal("SELECT 2"))
 	})
 })
 
@@ -186,7 +202,9 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		documentdb := &dbpreview.DocumentDB{
 			Spec: dbpreview.DocumentDBSpec{
 				InstancesPerNode: 3,
-				PostgresImage:    "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
 				Resource: dbpreview.Resource{
 					Storage: dbpreview.StorageConfiguration{
 						PvcSize: "10Gi",
@@ -503,6 +521,66 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		})
 	})
 
+	Context("IOUring seccomp profile", func() {
+		var req ctrl.Request
+
+		BeforeEach(func() {
+			req = ctrl.Request{}
+			req.Name = "test-cluster"
+			req.Namespace = "default"
+		})
+
+		createDocumentDB := func(featureGateEnabled bool) *dbpreview.DocumentDB {
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "10Gi",
+						},
+					},
+				},
+			}
+			if featureGateEnabled {
+				documentdb.Spec.FeatureGates = map[string]bool{
+					dbpreview.FeatureGateIOUring: true,
+				}
+			}
+			return documentdb
+		}
+
+		It("does not set seccomp profile or io_method when IOUring is disabled", func() {
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(false), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).To(BeNil())
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).NotTo(HaveKey("io_method"))
+		})
+
+		It("uses the default Localhost seccomp profile when IOUring is enabled and env is unset", func() {
+			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "")
+
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).ToNot(BeNil())
+			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeLocalhost))
+			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).ToNot(BeNil())
+			Expect(*cluster.Spec.SeccompProfile.LocalhostProfile).To(Equal(util.DEFAULT_IOURING_SECCOMP_PROFILE))
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
+		})
+
+		It("uses the custom Localhost seccomp profile when configured", func() {
+			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "profiles/custom-iouring.json")
+
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).ToNot(BeNil())
+			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeLocalhost))
+			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).ToNot(BeNil())
+			Expect(*cluster.Spec.SeccompProfile.LocalhostProfile).To(Equal("profiles/custom-iouring.json"))
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
+		})
+	})
+
 	It("always includes default PostgreSQL parameters", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
@@ -617,6 +695,58 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(pluginParams).NotTo(HaveKey("monitoringEnabled"))
 		Expect(pluginParams).NotTo(HaveKey("otelCollectorImage"))
 		Expect(pluginParams).NotTo(HaveKey("otelConfigMapName"))
+	})
+
+	It("propagates spec.imagePullSecrets to the CNPG cluster spec", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				ImagePullSecrets: []corev1.LocalObjectReference{
+					{Name: "registry-creds"},
+					{Name: ""},
+					{Name: "private-pull"},
+				},
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(cluster.Spec.ImagePullSecrets).To(HaveLen(2))
+		Expect(cluster.Spec.ImagePullSecrets[0].Name).To(Equal("registry-creds"))
+		Expect(cluster.Spec.ImagePullSecrets[1].Name).To(Equal("private-pull"))
+	})
+
+	It("propagates spec.postgres.uid and gid to PostgresUID/PostgresGID", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Image: &dbpreview.ImageSpec{
+					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
+				},
+				Postgres: &dbpreview.PostgresSpec{
+					UID: ptr.To(int64(1001)),
+					GID: ptr.To(int64(1002)),
+				},
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "documentdb-oss:1.0", "test-sa", "", true, log)
+		Expect(cluster.Spec.PostgresUID).To(Equal(int64(1001)))
+		Expect(cluster.Spec.PostgresGID).To(Equal(int64(1002)))
 	})
 })
 
@@ -735,3 +865,149 @@ func TestGetMaxStopDelayOrDefault(t *testing.T) {
 		})
 	}
 }
+
+var _ = Describe("parseMemoryToBytes", func() {
+	It("returns 0 for empty string", func() {
+		Expect(parseMemoryToBytes("")).To(Equal(int64(0)))
+	})
+
+	It("returns 0 for '0'", func() {
+		Expect(parseMemoryToBytes("0")).To(Equal(int64(0)))
+	})
+
+	It("returns 0 for invalid quantity", func() {
+		Expect(parseMemoryToBytes("notavalue")).To(Equal(int64(0)))
+	})
+
+	It("parses Gi values correctly", func() {
+		Expect(parseMemoryToBytes("2Gi")).To(Equal(int64(2 * 1024 * 1024 * 1024)))
+	})
+
+	It("parses Mi values correctly", func() {
+		Expect(parseMemoryToBytes("512Mi")).To(Equal(int64(512 * 1024 * 1024)))
+	})
+})
+
+var _ = Describe("buildResourceRequirements", func() {
+	It("returns empty requirements when both memory and cpu are empty", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+
+	It("returns empty requirements when both memory and cpu are '0'", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "0",
+					CPU:     "0",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+
+	It("sets memory limits and requests with Guaranteed QoS", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "4Gi",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		expectedMem := resource.MustParse("4Gi")
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(expectedMem))
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(expectedMem))
+	})
+
+	It("sets cpu limits and requests with Guaranteed QoS", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					CPU:     "2",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		expectedCPU := resource.MustParse("2")
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(expectedCPU))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(expectedCPU))
+	})
+
+	It("sets both memory and cpu", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "8Gi",
+					CPU:     "4",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
+	})
+
+	It("ignores invalid memory values gracefully", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "notvalid",
+					CPU:     "2",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		_, hasMem := result.Limits[corev1.ResourceMemory]
+		Expect(hasMem).To(BeFalse())
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+	})
+
+	It("ignores invalid cpu values gracefully", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "4Gi",
+					CPU:     "notvalid",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		_, hasCPU := result.Limits[corev1.ResourceCPU]
+		Expect(hasCPU).To(BeFalse())
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
+	})
+
+	It("returns empty requirements when all values are invalid", func() {
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+					Memory:  "notvalid",
+					CPU:     "alsonotvalid",
+				},
+			},
+		}
+		result := buildResourceRequirements(documentdb)
+		Expect(result.Limits).To(BeNil())
+		Expect(result.Requests).To(BeNil())
+	})
+})

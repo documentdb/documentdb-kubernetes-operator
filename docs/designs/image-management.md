@@ -88,7 +88,7 @@ The operator binary determines which database images to use through a priority c
 
 ```
 Priority (highest → lowest):
-1. spec.documentDBImage          ← CR field: full image URI override
+1. spec.image.documentDB          ← CR field: full image URI override
 2. spec.documentDBVersion        ← CR field: used as tag with hardcoded repo
 3. env DOCUMENTDB_VERSION        ← from Helm chart (documentDbVersion in values.yaml)
 4. ChangeStreams feature gate     ← temporary override for changestream images
@@ -99,7 +99,7 @@ Priority (highest → lowest):
 
 ```
 Priority (highest → lowest):
-1. spec.gatewayImage             ← CR field: full image URI override
+1. spec.image.gateway             ← CR field: full image URI override
 2. spec.documentDBVersion        ← CR field: used as tag with hardcoded repo
 3. env DOCUMENTDB_VERSION        ← from Helm chart (documentDbVersion in values.yaml)
 4. ChangeStreams feature gate     ← temporary override for changestream images
@@ -108,7 +108,7 @@ Priority (highest → lowest):
 
 ### PostgreSQL Image
 
-Set via `spec.postgresImage` in the DocumentDB CR. Defaults to `ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` (hardcoded in the CRD schema).
+Set via `spec.image.postgres` in the DocumentDB CR. Defaults to `ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` (hardcoded in the CRD schema).
 
 ### How Images Flow into Pods
 

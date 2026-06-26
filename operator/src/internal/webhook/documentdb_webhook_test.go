@@ -35,7 +35,7 @@ func newTestDocumentDB(version, schemaVersion, image string) *dbpreview.Document
 		db.Spec.SchemaVersion = schemaVersion
 	}
 	if image != "" {
-		db.Spec.DocumentDBImage = image
+		db.Spec.Image = &dbpreview.ImageSpec{DocumentDB: image}
 	}
 	return db
 }

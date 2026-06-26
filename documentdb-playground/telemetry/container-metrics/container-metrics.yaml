@@ -1,0 +1,161 @@
+# Reference container metrics collector for playground/demo clusters.
+# Use your platform's existing node-level collector if one is already installed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: documentdb-container-metrics
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: documentdb-container-metrics
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+rules:
+  - apiGroups: [""]
+    resources: ["nodes/stats", "nodes/proxy"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: documentdb-container-metrics
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: documentdb-container-metrics
+subjects:
+  - kind: ServiceAccount
+    name: documentdb-container-metrics
+    namespace: documentdb-operator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: documentdb-container-metrics-config
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+data:
+  collector.yaml: |
+    receivers:
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: serviceAccount
+        endpoint: ${env:K8S_NODE_NAME}:10250
+        insecure_skip_verify: true
+        metric_groups: [container, pod, node]
+    processors:
+      batch:
+        send_batch_size: 1024
+        timeout: 10s
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        resource_to_telemetry_conversion:
+          enabled: true
+    service:
+      pipelines:
+        metrics:
+          receivers: [kubeletstats]
+          processors: [batch]
+          exporters: [prometheus]
+      telemetry:
+        logs:
+          level: info
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: documentdb-container-metrics
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: documentdb-container-metrics
+      app.kubernetes.io/component: container-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: documentdb-container-metrics
+        app.kubernetes.io/component: container-metrics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8889"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: documentdb-container-metrics
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.149.0
+          args: ["--config=/etc/collector/collector.yaml"]
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: prom
+              containerPort: 8889
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/collector
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: documentdb-container-metrics-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: documentdb-container-metrics
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+    app.kubernetes.io/managed-by: documentdb-playground
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: documentdb-container-metrics
+    app.kubernetes.io/component: container-metrics
+  ports:
+    - name: prom
+      port: 8889
+      targetPort: prom

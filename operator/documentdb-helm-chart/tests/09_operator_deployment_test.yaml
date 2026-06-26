@@ -1,0 +1,216 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: operator deployment
+templates:
+  - 09_documentdb_operator.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  # -------------------------------------------------------------------
+  # Basics
+  # -------------------------------------------------------------------
+  - it: should render a Deployment
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: documentdb-operator
+
+  - it: should use the default namespace from values
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: documentdb-operator
+
+  - it: should use a custom namespace when overridden
+    set:
+      namespace: custom-ns
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: custom-ns
+
+  - it: should set replicas from values
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # -------------------------------------------------------------------
+  # Container image
+  # -------------------------------------------------------------------
+  - it: should use the default operator image with appVersion tag
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.2.0"
+
+  - it: should use a custom image tag when set
+    set:
+      image.documentdbk8soperator.tag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/operator:v1.2.3"
+
+  - it: should use the configured pull policy
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: "IfNotPresent"
+
+  # -------------------------------------------------------------------
+  # Environment variables
+  # -------------------------------------------------------------------
+  - it: should set DOCUMENTDB_VERSION env when documentDbVersion is set
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_VERSION
+            value: "0.110.0"
+
+  - it: should omit DOCUMENTDB_VERSION env when documentDbVersion is empty
+    set:
+      documentDbVersion: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_VERSION
+          any: true
+
+  - it: should set GATEWAY_IMAGE_PULL_POLICY when configured
+    set:
+      gatewayImagePullPolicy: "Never"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GATEWAY_IMAGE_PULL_POLICY
+            value: "Never"
+
+  - it: should omit GATEWAY_IMAGE_PULL_POLICY when empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GATEWAY_IMAGE_PULL_POLICY
+          any: true
+
+  - it: should set DOCUMENTDB_IMAGE_PULL_POLICY when configured
+    set:
+      documentDbImagePullPolicy: "IfNotPresent"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IMAGE_PULL_POLICY
+            value: "IfNotPresent"
+
+  - it: should omit DOCUMENTDB_IMAGE_PULL_POLICY when empty
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IMAGE_PULL_POLICY
+          any: true
+
+  - it: should always set GATEWAY_PORT
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: GATEWAY_PORT
+            value: "10260"
+
+  - it: should set DOCUMENTDB_IOURING_SECCOMP_PROFILE when configured
+    set:
+      operator:
+        ioUring:
+          seccompProfile: "profiles/custom.json"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+            value: "profiles/custom.json"
+
+  - it: should omit io_uring seccomp env var by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+          any: true
+
+  # -------------------------------------------------------------------
+  # Service account
+  # -------------------------------------------------------------------
+  - it: should use the default service account name
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: documentdb-operator
+
+  # -------------------------------------------------------------------
+  # Probes
+  # -------------------------------------------------------------------
+  - it: should configure readiness probe on health port
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: health
+
+  - it: should configure liveness probe on health port
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+
+  - it: should configure startup probe with generous failure threshold
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+
+  # -------------------------------------------------------------------
+  # Webhook TLS volume
+  # -------------------------------------------------------------------
+  - it: should mount webhook cert volume as read-only
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: webhook-cert
+            readOnly: true
+
+  - it: should define webhook cert volume from secret with optional flag
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: webhook-cert
+            secret:
+              secretName: documentdb-webhook-tls
+              defaultMode: 420
+              optional: true
+
+  # -------------------------------------------------------------------
+  # Labels
+  # -------------------------------------------------------------------
+  - it: should have standard app.kubernetes.io labels
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: documentdb-operator
+      - equal:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+          value: "Helm"

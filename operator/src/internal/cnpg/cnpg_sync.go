@@ -189,6 +189,32 @@ func SyncCnpgCluster(
 		})
 	}
 
+	// PostgreSQL parameters (postgresql.conf settings)
+	// The desired parameters are computed by MergeParameters (memory-aware + static
+	// defaults + user overrides). CNPG detects parameter changes and reconciles the
+	// generated configuration, restarting pods when a parameter requires it.
+	// Use "add" rather than "replace" so the patch succeeds even when the target
+	// field is not yet present on the current cluster spec.
+	if !reflect.DeepEqual(current.Spec.PostgresConfiguration.Parameters, desired.Spec.PostgresConfiguration.Parameters) {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpAdd,
+			Path:  PatchPathPostgresParameters,
+			Value: desired.Spec.PostgresConfiguration.Parameters,
+		})
+	}
+
+	// Resource requirements (CPU/memory requests and limits)
+	// CNPG includes resources in the generated PodSpec and detects drift via ComparePodSpecs.
+	// Use "add" rather than "replace" so the patch succeeds even when the target
+	// field is not yet present on the current cluster spec.
+	if !reflect.DeepEqual(current.Spec.Resources, desired.Spec.Resources) {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpAdd,
+			Path:  PatchPathResources,
+			Value: desired.Spec.Resources,
+		})
+	}
+
 	// Extra operations (e.g., replication changes)
 	patchOps = append(patchOps, extraOps...)
 
@@ -202,8 +228,8 @@ func SyncCnpgCluster(
 		// JSON Patch "add" requires the parent path to exist.
 		if current.Annotations == nil {
 			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpAdd,
-				Path:  "/metadata/annotations",
+				Op:   PatchOpAdd,
+				Path: "/metadata/annotations",
 				Value: map[string]string{
 					"kubectl.kubernetes.io/restartedAt": time.Now().Format(time.RFC3339Nano),
 				},
