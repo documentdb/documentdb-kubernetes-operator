@@ -52,6 +52,37 @@ const (
 	LabelArea    = "e2e.documentdb.io/area"
 )
 
+// Pod Security Admission (PSA) labels stamped on every per-spec DocumentDB
+// namespace so the suite validates that runtime cluster pods are admitted
+// under the strictest profile. This covers the CNPG pods and the
+// documentdb-gateway sidecar (always injected); the otel-collector sidecar is
+// only injected when monitoring is enabled, so it is exercised here only by
+// specs that turn monitoring on (its securityContext is otherwise covered by
+// the sidecar-injector unit test). The labeling mirrors the GA target
+// platforms (GKE Autopilot, OpenShift, AKS Azure Policy baseline) and guards
+// against regressions like
+// https://github.com/documentdb/documentdb-kubernetes-operator/issues/387
+// where injected sidecars lacked a PSA-compliant securityContext.
+const (
+	psaEnforceLabel        = "pod-security.kubernetes.io/enforce"
+	psaEnforceVersionLabel = "pod-security.kubernetes.io/enforce-version"
+	psaWarnLabel           = "pod-security.kubernetes.io/warn"
+	psaAuditLabel          = "pod-security.kubernetes.io/audit"
+	psaRestricted          = "restricted"
+	psaVersionLatest       = "latest"
+)
+
+// psaRestrictedLabels returns the PSA labels enforcing the "restricted"
+// profile on a namespace.
+func psaRestrictedLabels() map[string]string {
+	return map[string]string{
+		psaEnforceLabel:        psaRestricted,
+		psaEnforceVersionLabel: psaVersionLatest,
+		psaWarnLabel:           psaRestricted,
+		psaAuditLabel:          psaRestricted,
+	}
+}
+
 // Fixture kind label values.
 const (
 	FixtureSharedRO    = "shared-ro"
@@ -286,10 +317,14 @@ func ensureCredentialSecret(ctx context.Context, c client.Client, namespace, nam
 // namespace with the current run-id (or no run-id label) is adopted; a
 // mismatched run-id is a collision and returns an error.
 func CreateLabeledNamespace(ctx context.Context, c client.Client, name, area string) error {
+	labels := ownershipLabels(FixturePerSpec, area)
+	for k, v := range psaRestrictedLabels() {
+		labels[k] = v
+	}
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
-			Labels: ownershipLabels(FixturePerSpec, area),
+			Labels: labels,
 		},
 	}
 	err := c.Create(ctx, ns)
@@ -306,6 +341,24 @@ func CreateLabeledNamespace(ctx context.Context, c client.Client, name, area str
 	if got := existing.Labels[LabelRunID]; got != "" && got != RunID() {
 		return fmt.Errorf("fixture collision: namespace %s exists with run-id=%q (current run-id=%q)",
 			name, got, RunID())
+	}
+	// Ensure the PSA labels are present on an adopted namespace too (e.g. one
+	// surviving from a prior run), so restricted enforcement — and thus the
+	// #387 regression guard — cannot be silently bypassed on re-runs.
+	if existing.Labels == nil {
+		existing.Labels = map[string]string{}
+	}
+	patched := false
+	for k, v := range psaRestrictedLabels() {
+		if existing.Labels[k] != v {
+			existing.Labels[k] = v
+			patched = true
+		}
+	}
+	if patched {
+		if err := c.Update(ctx, existing); err != nil {
+			return fmt.Errorf("apply PSA labels to existing namespace %s: %w", name, err)
+		}
 	}
 	return nil
 }

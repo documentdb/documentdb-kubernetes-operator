@@ -13,12 +13,12 @@ import (
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 var _ = Describe("DocumentDB lifecycle — deploy",
@@ -93,5 +93,24 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			DeferCleanup(func(ctx SpecContext) { _ = h.Close(ctx) })
 			Expect(sharedmongo.Ping(ctx, h.Client())).To(Succeed(),
 				"ping freshly-deployed DocumentDB gateway")
+
+			// PSA "restricted" guard (regression test for #387): the
+			// namespace is labeled pod-security.kubernetes.io/enforce=
+			// restricted by the fixture, so reaching Ready already
+			// proves the injected sidecars passed admission. This
+			// explicit assertion turns an otherwise opaque CNPG
+			// pod-creation failure into a precise message naming the
+			// offending container and field.
+			//
+			// This spec deploys with monitoring off, so only the
+			// always-injected documentdb-gateway sidecar is present;
+			// the otel-collector sidecar (injected only when monitoring
+			// is enabled) is covered by the sidecar-injector unit test.
+			// The shared helper errors if no injected sidecar is found,
+			// so this cannot pass vacuously.
+			Eventually(assertions.AssertInjectedSidecarsPSARestricted(ctx, c, ns, name),
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Succeed(), "deployed cluster pods must carry PSA-restricted securityContext")
 		})
 	})

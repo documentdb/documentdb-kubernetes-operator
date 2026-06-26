@@ -104,6 +104,14 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Succeed(), "recovery DocumentDB %s/%s did not become ready", ns, recoveryName)
 
+			// Restored cluster pods must also be PSA "restricted" compliant
+			// (#387): the recovery cluster gets the same injected sidecars as a
+			// fresh deploy, and the namespace enforces restricted.
+			Eventually(assertions.AssertInjectedSidecarsPSARestricted(ctx, c, ns, recoveryName),
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Succeed(), "restored cluster pods must carry PSA-restricted securityContext")
+
 			// 5. Temp PVC used during the adoption dance must be gone.
 			tempPVC := fmt.Sprintf("%s-pv-recovery-temp", recoveryName)
 			Expect(bkp.WaitForPVCDeleted(ctx, c, ns, tempPVC, 3*time.Minute)).

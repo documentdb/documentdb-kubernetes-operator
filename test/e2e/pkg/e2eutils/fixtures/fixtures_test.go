@@ -148,6 +148,11 @@ func TestCreateLabeledNamespaceStampsLabels(t *testing.T) {
 		got.Labels[LabelArea] != "lifecycle" {
 		t.Fatalf("unexpected labels: %v", got.Labels)
 	}
+	for k, v := range psaRestrictedLabels() {
+		if got.Labels[k] != v {
+			t.Fatalf("missing PSA label %q=%q on created namespace: %v", k, v, got.Labels)
+		}
+	}
 }
 
 func TestCreateLabeledNamespaceAdoptsMatchingRunID(t *testing.T) {
@@ -162,6 +167,17 @@ func TestCreateLabeledNamespaceAdoptsMatchingRunID(t *testing.T) {
 	c := newFakeClient(t).WithObjects(existing).Build()
 	if err := CreateLabeledNamespace(context.Background(), c, "ns-b", "lifecycle"); err != nil {
 		t.Fatalf("expected adoption on matching run-id, got: %v", err)
+	}
+	// An adopted namespace must also receive the PSA labels so restricted
+	// enforcement is applied on re-runs (#387 regression guard).
+	got := &corev1.Namespace{}
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "ns-b"}, got); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	for k, v := range psaRestrictedLabels() {
+		if got.Labels[k] != v {
+			t.Fatalf("missing PSA label %q=%q on adopted namespace: %v", k, v, got.Labels)
+		}
 	}
 }
 
