@@ -1,7 +1,7 @@
 name: WATCH - DocumentDB Releases
 
-# Polls the upstream documentdb/documentdb repository for new releases and, when a
-# newer version than the operator's current default is published, automatically:
+# Reacts to new upstream DocumentDB releases and, when a newer version than the
+# operator's current default is published, automatically:
 #   1. Builds candidate documentdb + gateway images (build_documentdb_images.yml)
 #   2. Promotes them to release tags and opens a "chore: bump DocumentDB images" PR
 #      (release_documentdb_images.yml)
@@ -9,19 +9,34 @@ name: WATCH - DocumentDB Releases
 # The version-bump PR is the human gate: a maintainer reviews and merges it, which
 # is what actually makes the new version the default for new installs.
 #
+# Primary trigger: a `repository_dispatch` event of type `documentdb-release`,
+# sent by the upstream documentdb/documentdb repository on `release: published`.
+# A reference sender workflow lives in docs/designs/upstream-release-dispatch-sender.md.
+# A low-frequency cron poll is kept only as a safety net in case the dispatch is
+# missed, and `workflow_dispatch` allows manual runs.
+#
 # Only handles the DATABASE version track (documentDbVersion). Operator/sidecar
 # images follow a separate track (build_operator_images.yml / release_operator.yml).
 
 on:
+  # Primary trigger: upstream fires this on release: published.
+  # client_payload: { "version": "0.111.0", "apt_version": "0.111.0" (optional) }
+  repository_dispatch:
+    types: [documentdb-release]
+
+  # Safety-net poll in case a dispatch event is missed. GitHub's releases/latest
+  # excludes drafts and pre-releases, so pre-releases never trigger this.
   schedule:
-    # Every 6 hours. GitHub's releases/latest excludes drafts and pre-releases,
-    # so pre-releases never trigger this automation.
-    - cron: '0 */6 * * *'
+    - cron: '0 7 * * *'
 
   workflow_dispatch:
     inputs:
       version:
         description: 'Override upstream version to release (e.g. 0.111.0). Leave empty to auto-detect latest.'
+        required: false
+        default: ''
+      documentdb_apt_version:
+        description: 'Debian package version of postgresql-18-documentdb to pin. Leave empty to derive from version.'
         required: false
         default: ''
       dry_run:
@@ -48,6 +63,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       new_version: ${{ steps.check.outputs.new_version }}
+      apt_version: ${{ steps.upstream.outputs.apt_version }}
       should_release: ${{ steps.check.outputs.should_release }}
     steps:
       - name: Checkout code
@@ -61,8 +77,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Precedence: repository_dispatch payload > manual override > auto-detect latest.
+          PAYLOAD_VERSION="${{ github.event.client_payload.version || '' }}"
           OVERRIDE="${{ github.event.inputs.version || '' }}"
-          if [[ -n "$OVERRIDE" ]]; then
+          if [[ -n "$PAYLOAD_VERSION" ]]; then
+            RAW="$PAYLOAD_VERSION"
+            echo "Using repository_dispatch payload version: $RAW"
+          elif [[ -n "$OVERRIDE" ]]; then
             RAW="$OVERRIDE"
             echo "Using manual version override: $RAW"
           else
@@ -80,7 +101,10 @@ jobs:
             echo "Could not parse a dotted semver from upstream tag '$RAW'" >&2
             exit 1
           fi
+          # Optional APT package version to pin (payload or manual input).
+          APT_VERSION="${{ github.event.client_payload.apt_version || github.event.inputs.documentdb_apt_version || '' }}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "apt_version=$APT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Upstream DocumentDB version: $VERSION"
 
       - name: Read current default version
@@ -112,13 +136,25 @@ jobs:
             exit 0
           fi
 
-          # Already promoted? If the release tag exists, the bump PR is likely
-          # pending review/merge, so don't rebuild on every cron tick.
+          # Already promoted? Only skip when BOTH the documentdb and gateway
+          # release images exist for this version. If just one is present (a
+          # partial/aborted promotion), fall through and rebuild to converge.
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          DOCDB_EXISTS=false
+          GW_EXISTS=false
           if docker manifest inspect "ghcr.io/${{ github.repository }}/documentdb:${NEW}" >/dev/null 2>&1; then
-            echo "Release image documentdb:${NEW} already exists; version-bump PR is likely pending merge. Skipping."
+            DOCDB_EXISTS=true
+          fi
+          if docker manifest inspect "ghcr.io/${{ github.repository }}/gateway:${NEW}" >/dev/null 2>&1; then
+            GW_EXISTS=true
+          fi
+          if [[ "$DOCDB_EXISTS" == "true" && "$GW_EXISTS" == "true" ]]; then
+            echo "Release images documentdb:${NEW} and gateway:${NEW} already exist; version-bump PR is likely pending merge. Skipping."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          if [[ "$DOCDB_EXISTS" == "true" || "$GW_EXISTS" == "true" ]]; then
+            echo "Partial promotion detected (documentdb=$DOCDB_EXISTS, gateway=$GW_EXISTS); rebuilding to converge."
           fi
 
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
@@ -149,6 +185,7 @@ jobs:
     uses: ./.github/workflows/build_documentdb_images.yml
     with:
       version: ${{ needs.detect.outputs.new_version }}
+      documentdb_apt_version: ${{ needs.detect.outputs.apt_version }}
     secrets: inherit
 
   # ---------------------------------------------------------------------------

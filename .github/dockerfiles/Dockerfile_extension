@@ -6,10 +6,16 @@
 # Follows the pattern from:
 #   https://github.com/cloudnative-pg/postgres-extensions-containers
 #
+# The DocumentDB extension is installed from the official DocumentDB APT
+# repository (https://documentdb.io/deb). The `postgresql-${PG_MAJOR}-documentdb`
+# meta-package pulls in its own runtime dependencies (Citus, RUM, libbson,
+# PCRE2, pgvector, PostGIS, ...), so no extra extension packages are installed
+# explicitly here.
+#
 # Usage:
 #   docker build \
 #     --build-arg PG_MAJOR=18 \
-#     --build-arg DEB_PACKAGE_REL_PATH=packages/documentdb_0.110-0_arm64.deb \
+#     --build-arg DOCUMENTDB_APT_VERSION=0.110.0 \
 #     -t documentdb-extension:latest \
 #     -f Dockerfile_extension .
 
@@ -17,24 +23,33 @@ ARG BASE=ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
 FROM ${BASE} AS builder
 
 ARG PG_MAJOR=18
-ARG DEB_PACKAGE_REL_PATH
+# Full Debian package version of postgresql-${PG_MAJOR}-documentdb to install
+# from the official DocumentDB APT repository. Pin this per build for
+# reproducibility. If empty, the latest version in the 'stable' channel is used.
+ARG DOCUMENTDB_APT_VERSION
 
 USER 0
 
 RUN set -eux && \
     # Snapshot base image system libraries for later diffing
     ldconfig -p | awk '{print $NF}' | grep '^/' | sort | uniq > /tmp/base-image-libs.out && \
-    # Install pgdg extension packages
+    # Tools needed to add the official DocumentDB APT repository
     apt-get update && \
-    apt-get install -y --no-install-recommends \
-        postgresql-${PG_MAJOR}-cron \
-        postgresql-${PG_MAJOR}-pgvector \
-        postgresql-${PG_MAJOR}-postgis-3
-
-# Install the DocumentDB extension from a pre-built .deb
-COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
-RUN dpkg -i /tmp/documentdb.deb && \
-    rm -f /tmp/documentdb.deb
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg && \
+    # Install the official DocumentDB signing key and APT source
+    curl -fsSL https://documentdb.io/documentdb-archive-keyring.gpg \
+        -o /usr/share/keyrings/documentdb-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/documentdb-archive-keyring.gpg] https://documentdb.io/deb stable main" \
+        > /etc/apt/sources.list.d/documentdb.list && \
+    apt-get update && \
+    # Install the DocumentDB extension meta-package from the official repo.
+    if [ -n "${DOCUMENTDB_APT_VERSION}" ]; then \
+        apt-get install -y --no-install-recommends \
+            "postgresql-${PG_MAJOR}-documentdb=${DOCUMENTDB_APT_VERSION}"; \
+    else \
+        apt-get install -y --no-install-recommends \
+            "postgresql-${PG_MAJOR}-documentdb"; \
+    fi
 
 # Gather system library dependencies not present in the CNPG base image
 RUN set -eux && \

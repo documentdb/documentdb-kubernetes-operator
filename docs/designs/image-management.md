@@ -44,7 +44,7 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 
 | Image | GHCR Path | Source | Dockerfile | Purpose |
 |-------|-----------|--------|------------|---------|
-| **documentdb** | `.../documentdb` | Public `deb13` PostgreSQL 18 package from `documentdb/documentdb` releases | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
+| **documentdb** | `.../documentdb` | Official `postgresql-18-documentdb` package from the DocumentDB APT repo (`https://documentdb.io/deb`) | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
 | **gateway** | `.../gateway` | Public gateway payload copied from `ghcr.io/documentdb/documentdb/documentdb-local:pg17-<version>` | `.github/dockerfiles/Dockerfile_gateway_public_image` | MongoDB wire-protocol gateway binary (Rust) |
 
 ### External Image (Not Built Here)
@@ -203,20 +203,20 @@ Builds documentdb extension and gateway images from public DocumentDB release ar
 
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | `workflow_dispatch`, `repository_dispatch` (from upstream) |
+| **Trigger** | `workflow_dispatch` (manual), `workflow_call` (invoked by `watch_documentdb_images.yml`) |
 | **Images** | documentdb, gateway |
 | **Dockerfiles** | `.github/dockerfiles/Dockerfile_extension`, `.github/dockerfiles/Dockerfile_gateway_public_image` |
 | **Tag pattern** | `{documentdb_version}-build-{run_id}-{attempt}-{sha}` (candidate) |
 | **Build time** | ~5 minutes (public artifact download + image build) |
 | **Multi-arch** | amd64 + arm64 → multi-arch manifest |
 | **Signing** | cosign keyless (OIDC) |
-| **Version detection** | Workflow input / repository dispatch payload (defaults to released `0.110.0`) |
+| **Version detection** | Workflow input `version` (track) + optional `documentdb_apt_version` (APT pin); defaults to released `0.110.0` |
 
 The build process:
-1. Resolves the released DocumentDB version to package
-2. Downloads the public `deb13` PostgreSQL 18 extension package from `documentdb/documentdb` release assets
+1. Resolves the released DocumentDB version to package (and the APT package version to pin)
+2. Verifies the official DocumentDB APT repo (`https://documentdb.io/deb`) and signing keyring are reachable
 3. Verifies the public multi-arch `documentdb-local:pg17-<version>` image exists
-4. Builds `Dockerfile_extension` using the public extension `.deb` (installs pg_cron, pgvector, postgis alongside)
+4. Builds `Dockerfile_extension`, installing `postgresql-18-documentdb` from the official APT repo (its meta-package pulls in Citus, RUM, pgvector, PostGIS, etc.)
 5. Builds `Dockerfile_gateway_public_image` by copying the gateway binary and runtime files from the public upstream image
 
 ### Dockerfile Details
@@ -236,7 +236,7 @@ The build process:
 - **Multi-stage**: 2 stages
 - **No entrypoint** — this is an ImageVolume source, not a runnable container
 - Follows the [cloudnative-pg/postgres-extensions-containers](https://github.com/cloudnative-pg/postgres-extensions-containers) pattern
-- Installs DocumentDB extension + pg_cron + pgvector + PostGIS
+- Installs `postgresql-18-documentdb` from the official DocumentDB APT repo (`https://documentdb.io/deb`); the meta-package pulls in its own dependencies (Citus, RUM, pgvector, PostGIS, ...)
 - Copies only extension artifacts (`.so`, `.control`, `.sql`, bitcode) and required system libraries
 - Resolves Debian-alternatives symlinks (they break in ImageVolume mode)
 
@@ -309,20 +309,27 @@ repository for new releases and drives the database track end-to-end without man
 intervention. This is the automation behind keeping new installs on the latest
 DocumentDB version.
 
+The **primary trigger** is a `repository_dispatch` event of type `documentdb-release`
+sent by the upstream repo on `release: published`. See
+[upstream-release-dispatch-sender.md](upstream-release-dispatch-sender.md) for the
+reference sender workflow that lives in `documentdb/documentdb`. A daily cron poll
+is kept only as a safety net in case a dispatch is missed.
+
 | Aspect | Details |
 |--------|---------|
-| **Trigger** | `schedule` (cron `0 */6 * * *`), `workflow_dispatch` (manual, with optional `version` override and `dry_run`) |
-| **Detection** | Reads upstream `releases/latest` (drafts and pre-releases are excluded by GitHub) and compares against the current `DEFAULT_DOCUMENTDB_IMAGE` in `constants.go` |
+| **Trigger** | `repository_dispatch` (`documentdb-release`, primary), `schedule` (daily cron safety-net), `workflow_dispatch` (manual, with optional `version` / `documentdb_apt_version` override and `dry_run`) |
+| **Detection** | Reads the dispatch payload version (or upstream `releases/latest` for cron/manual; drafts and pre-releases are excluded by GitHub) and compares against the current `DEFAULT_DOCUMENTDB_IMAGE` in `constants.go` |
 | **Chaining** | Calls `build_documentdb_images.yml` then `release_documentdb_images.yml` as reusable workflows (`workflow_call`) |
 | **Human gate** | The auto-generated `chore: bump DocumentDB images` PR — a maintainer reviews and merges it to make the new version the default |
 
 ```
 Flow:
   1. detect
-     ├── Resolve upstream latest release tag (e.g. v0.111-0 → 0.111.0)
+     ├── Resolve version (dispatch payload → manual override → upstream latest)
      ├── Read current default from constants.go
-     ├── Skip if not newer, if release tag already exists (PR pending), or dry_run
-     └── Output: should_release, new_version
+     ├── Skip if not newer, if BOTH documentdb+gateway release tags already exist
+     │   (PR pending), or dry_run; rebuild on partial promotion
+     └── Output: should_release, new_version, apt_version
 
   2. build   (uses build_documentdb_images.yml)  ── if should_release
      └── Output: image_tag (candidate)
@@ -333,9 +340,11 @@ Flow:
      └── update_defaults: true  → opens the version-bump PR
 ```
 
-Idempotency: once the release images are promoted, the `documentdb:<version>`
-tag exists, so subsequent cron ticks short-circuit until the bump PR is merged
-(which advances the default and stops further detection for that version).
+Idempotency: once the release images are promoted, both the `documentdb:<version>`
+and `gateway:<version>` tags exist, so subsequent triggers short-circuit until the
+bump PR is merged (which advances the default and stops further detection for that
+version). A partial promotion (only one of the two tags) does not short-circuit —
+the build re-runs to converge.
 
 ---
 
