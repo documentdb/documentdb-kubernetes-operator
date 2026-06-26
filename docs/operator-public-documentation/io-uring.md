@@ -102,7 +102,7 @@ The hands-on [io_uring feature playground](https://github.com/documentdb/documen
 ## Prerequisites
 
 - **PostgreSQL 18 image.** `io_method=io_uring` exists only in PostgreSQL 18 and later. Make sure the cluster runs a PG18 image.
-- **A node kernel with io_uring enabled.** The nodes must run a kernel that exposes io_uring with `io_uring_disabled=0`. Modern AKS, EKS, and GKE node images qualify.
+- **A node kernel with io_uring enabled.** io_uring must not be disabled at the kernel level — the `kernel.io_uring_disabled` sysctl must be `0` (the kernel default; `0` means *not disabled*, i.e. enabled), mirroring the `IOUring: true` gate you set on the cluster. Modern AKS, EKS, and GKE node images qualify.
 - **The seccomp profile installed on nodes.** The Localhost profile referenced by `DOCUMENTDB_IOURING_SECCOMP_PROFILE` must exist on every node that runs PostgreSQL pods. The [io_uring feature playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature) automates this.
 
 ## Verification

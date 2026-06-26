@@ -36,7 +36,8 @@ flowchart LR
 - DocumentDB operator version that includes the native `IOUring` feature gate.
 - PostgreSQL 18 image (`ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` in
   `manifests/documentdb-iouring.yaml`).
-- Linux nodes with `io_uring_disabled=0`:
+- Linux nodes with io_uring enabled (`kernel.io_uring_disabled = 0`, the kernel
+  default — `0` means *not disabled*, i.e. enabled):
   ```bash
   kubectl debug node/<node> -it --image=busybox:1.36 -- chroot /host cat /proc/sys/kernel/io_uring_disabled
   ```
