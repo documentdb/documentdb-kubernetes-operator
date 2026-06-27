@@ -402,6 +402,6 @@ If PVCs aren't provisioning:
 ## Next steps
 
 - [Failover procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
-- [Backup and restore](../backup-and-restore.md) - Configure multi-region backup strategies
+- [Backup and restore](../operations/backup-and-restore.md) - Configure multi-region backup strategies
 - [TLS configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
 - [AKS Fleet deployment example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup
