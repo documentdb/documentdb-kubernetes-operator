@@ -207,6 +207,76 @@ func TestPVBelongsToClusterMatchesLabelsOrClaimPrefix(t *testing.T) {
 	}
 }
 
+func TestMarkExpiredPatchesStatusViaSubresource(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	bkp := &previewv1.Backup{
+		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
+		Spec:       previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
+	}
+	c := fakeclient.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(bkp).
+		WithStatusSubresource(&previewv1.Backup{}).
+		Build()
+
+	when := time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := MarkExpired(context.Background(), c, "ns", "b", when); err != nil {
+		t.Fatalf("MarkExpired: %v", err)
+	}
+
+	var got previewv1.Backup
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "b"}, &got); err != nil {
+		t.Fatalf("Get after MarkExpired: %v", err)
+	}
+	if got.Status.ExpiredAt == nil {
+		t.Fatalf("expected status.expiredAt to be set; got nil")
+	}
+	if !got.Status.ExpiredAt.Time.Equal(when) {
+		t.Fatalf("status.expiredAt=%v want %v", got.Status.ExpiredAt.Time, when)
+	}
+}
+
+func TestMarkExpiredErrorsOnNotFound(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	c := fakeclient.NewClientBuilder().
+		WithScheme(s).
+		WithStatusSubresource(&previewv1.Backup{}).
+		Build()
+
+	err := MarkExpired(context.Background(), c, "ns", "missing", time.Unix(0, 0))
+	if err == nil {
+		t.Fatal("expected error for missing Backup, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("expected error to mention name; got %v", err)
+	}
+}
+
+func TestWaitForBackupDeletedReturnsWhenMissing(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	if err := WaitForBackupDeleted(context.Background(), c, "ns", "nope", 500*time.Millisecond); err != nil {
+		t.Fatalf("expected nil for missing Backup, got %v", err)
+	}
+}
+
+func TestWaitForBackupDeletedTimesOutWhenPresent(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	bkp := &previewv1.Backup{
+		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
+		Status:     previewv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
+	}
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(bkp).Build()
+	err := WaitForBackupDeleted(context.Background(), c, "ns", "b", 500*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
 func TestWaitForPVCDeletedReturnsWhenMissing(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
