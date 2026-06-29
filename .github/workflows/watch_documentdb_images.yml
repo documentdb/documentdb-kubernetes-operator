@@ -20,7 +20,7 @@ name: WATCH - DocumentDB Releases
 
 on:
   # Primary trigger: upstream fires this on release: published.
-  # client_payload: { "version": "0.111.0", "apt_version": "0.111.0" (optional) }
+  # client_payload: { "version": "0.111.0", "apt_version": "0.111-0" (optional, dashed Debian version) }
   repository_dispatch:
     types: [documentdb-release]
 
@@ -36,7 +36,7 @@ on:
         required: false
         default: ''
       documentdb_apt_version:
-        description: 'Debian package version of postgresql-18-documentdb to pin. Leave empty to derive from version.'
+        description: 'Debian package version of postgresql-18-documentdb to pin, dashed format (e.g. 0.111-0). Leave empty to derive from version.'
         required: false
         default: ''
       dry_run:

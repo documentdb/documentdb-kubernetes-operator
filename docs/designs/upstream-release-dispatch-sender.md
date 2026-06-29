@@ -66,13 +66,16 @@ jobs:
             VERSION="$RAW"
           fi
           echo "Dispatching documentdb-release for version $VERSION"
+          # Omit apt_version: the operator derives the dashed Debian version
+          # (0.111.0 -> 0.111-0) the APT repo expects. Only send apt_version
+          # explicitly if the APT channel uses a non-standard revision.
           curl -fsSL -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/documentdb/documentdb-kubernetes-operator/dispatches \
             -d "$(jq -nc --arg v "$VERSION" \
-                  '{event_type:"documentdb-release", client_payload:{version:$v, apt_version:$v}}')"
+                  '{event_type:"documentdb-release", client_payload:{version:$v}}')"
 ```
 
 ## Payload contract
@@ -82,11 +85,12 @@ The operator's `watch_documentdb_images.yml` reads:
 | Field                       | Required | Meaning                                                                 |
 |-----------------------------|----------|-------------------------------------------------------------------------|
 | `client_payload.version`    | yes      | Dotted semver of the release (e.g. `0.111.0`). Drives image tag + track. |
-| `client_payload.apt_version`| no       | Debian package version of `postgresql-18-documentdb` to pin. Defaults to `version`. |
+| `client_payload.apt_version`| no       | Debian package version of `postgresql-18-documentdb` to pin, in dashed Debian format (e.g. `0.111-0`). Defaults to the dashed form of `version`. |
 
-If `apt_version` differs from `version` (the APT `stable` channel may publish a
-different revision than the dotted release version), set it explicitly so the
-extension image pins the exact package.
+The official APT `stable` channel serves **dashed** Debian versions (e.g.
+`0.111-0`), not dotted semver. If omitted, the operator derives `apt_version`
+by converting the dotted `version` to its dashed form. Set it explicitly only
+if the APT channel publishes a revision that doesn't follow that convention.
 
 ## Testing without upstream
 

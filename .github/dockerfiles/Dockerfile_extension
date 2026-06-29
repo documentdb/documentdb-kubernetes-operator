@@ -15,7 +15,7 @@
 # Usage:
 #   docker build \
 #     --build-arg PG_MAJOR=18 \
-#     --build-arg DOCUMENTDB_APT_VERSION=0.110.0 \
+#     --build-arg DOCUMENTDB_APT_VERSION=0.110-0 \
 #     -t documentdb-extension:latest \
 #     -f Dockerfile_extension .
 
@@ -24,8 +24,10 @@ FROM ${BASE} AS builder
 
 ARG PG_MAJOR=18
 # Full Debian package version of postgresql-${PG_MAJOR}-documentdb to install
-# from the official DocumentDB APT repository. Pin this per build for
-# reproducibility. If empty, the latest version in the 'stable' channel is used.
+# from the official DocumentDB APT repository, in dashed Debian format (e.g.
+# 0.110-0, not dotted 0.110.0 — apt's '=' requires an exact string match). Pin
+# this per build for reproducibility. If empty, the latest version in the
+# 'stable' channel is used.
 ARG DOCUMENTDB_APT_VERSION
 
 USER 0

@@ -15,7 +15,7 @@ on:
         required: false
         default: '0.110.0'
       documentdb_apt_version:
-        description: 'Debian package version of postgresql-18-documentdb to pin (e.g. 0.110.0). Leave empty to derive from version.'
+        description: 'Debian package version of postgresql-18-documentdb to pin, dashed format (e.g. 0.110-0). Leave empty to derive from version.'
         required: false
         default: ''
       documentdb_gateway_image_repo:
@@ -31,7 +31,7 @@ on:
         type: string
         default: '0.110.0'
       documentdb_apt_version:
-        description: 'Debian package version of postgresql-18-documentdb to pin. Leave empty to derive from version.'
+        description: 'Debian package version of postgresql-18-documentdb to pin, dashed format (e.g. 0.110-0). Leave empty to derive from version.'
         required: false
         type: string
         default: ''
@@ -84,10 +84,11 @@ jobs:
           exit 1
         fi
         VERSION_DASH=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+)$/\1-\2/')
-        # APT package version to pin. Defaults to the dotted semver version.
+        # APT package version to pin. The official APT repo serves dashed Debian
+        # versions (e.g. 0.113-0), not dotted semver, so default to VERSION_DASH.
         APT_VERSION="${{ inputs.documentdb_apt_version || '' }}"
         if [[ -z "$APT_VERSION" ]]; then
-          APT_VERSION="$VERSION"
+          APT_VERSION="$VERSION_DASH"
         fi
         SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
         IMAGE_TAG="${VERSION}-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${SHORT_SHA}"
@@ -102,13 +103,41 @@ jobs:
         echo "Candidate image tag: $IMAGE_TAG"
         echo "Gateway source image: $GATEWAY_SOURCE_IMAGE"
 
-    - name: Verify official DocumentDB APT repository is reachable
+    - name: Verify DocumentDB package is available in the APT index
+      env:
+        APT_VERSION: ${{ steps.version.outputs.documentdb_apt_version }}
       run: |
         set -euo pipefail
         echo "Checking keyring: ${{ env.DOCUMENTDB_APT_KEYRING_URL }}"
         curl -fsI -L "${{ env.DOCUMENTDB_APT_KEYRING_URL }}" >/dev/null
-        echo "Checking APT repo: ${{ env.DOCUMENTDB_APT_REPO_URL }}"
-        curl -fsI -L "${{ env.DOCUMENTDB_APT_REPO_URL }}/dists/stable/Release" >/dev/null
+        # Verify the exact package version is actually present in the index, not
+        # just that the repo responds. The release that triggered this build and
+        # the APT channel are published by separate pipelines, so absorb publish
+        # lag with a bounded retry before failing.
+        for ARCH in amd64 arm64; do
+          PKG_URL="${{ env.DOCUMENTDB_APT_REPO_URL }}/dists/stable/main/binary-${ARCH}/Packages"
+          echo "Looking for postgresql-18-documentdb=${APT_VERSION} (${ARCH}) in $PKG_URL"
+          FOUND=""
+          for ATTEMPT in 1 2 3 4 5 6; do
+            # Index may be served plain or gzip-compressed; try both.
+            PACKAGES=$(curl -fsSL --compressed "$PKG_URL" 2>/dev/null \
+              || curl -fsSL "${PKG_URL}.gz" 2>/dev/null | gunzip -c) || PACKAGES=""
+            if printf '%s\n' "$PACKAGES" \
+                | grep -A1 '^Package: postgresql-18-documentdb$' \
+                | grep -qx "Version: ${APT_VERSION}"; then
+              FOUND=yes
+              break
+            fi
+            echo "Not in index yet (attempt ${ATTEMPT}/6); retrying in 30s..."
+            sleep 30
+          done
+          if [[ -z "$FOUND" ]]; then
+            echo "postgresql-18-documentdb=${APT_VERSION} (${ARCH}) not found in APT 'stable' index." >&2
+            echo "The release may not yet be published to ${{ env.DOCUMENTDB_APT_REPO_URL }}." >&2
+            exit 1
+          fi
+          echo "Found postgresql-18-documentdb=${APT_VERSION} (${ARCH})."
+        done
 
     - name: Verify public gateway source image
       env:
