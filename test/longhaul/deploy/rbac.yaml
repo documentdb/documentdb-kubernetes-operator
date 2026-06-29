@@ -1,0 +1,81 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# ServiceAccount for the long-haul test Job.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhaul-test
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+---
+# Role granting permissions within the target namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhaul-test
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+rules:
+  # Read pod status for health monitoring.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Read and patch DocumentDB CRs for health check and scale operations.
+  - apiGroups: ["documentdb.io"]
+    resources: ["dbs"]
+    verbs: ["get", "list", "patch"]
+  # Create/update ConfigMaps for periodic report persistence.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhaul-test
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhaul-test
+subjects:
+  - kind: ServiceAccount
+    name: longhaul-test
+    namespace: documentdb-test-ns
+---
+# ClusterRole for metrics-server access (metrics API is cluster-scoped).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhaul-test-metrics
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+rules:
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhaul-test-metrics
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhaul-test-metrics
+subjects:
+  - kind: ServiceAccount
+    name: longhaul-test
+    namespace: documentdb-test-ns
