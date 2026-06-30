@@ -122,9 +122,14 @@ jobs:
             # Index may be served plain or gzip-compressed; try both.
             PACKAGES=$(curl -fsSL --compressed "$PKG_URL" 2>/dev/null \
               || curl -fsSL "${PKG_URL}.gz" 2>/dev/null | gunzip -c) || PACKAGES=""
-            if printf '%s\n' "$PACKAGES" \
-                | grep -A1 '^Package: postgresql-18-documentdb$' \
-                | grep -qx "Version: ${APT_VERSION}"; then
+            # Parse the Debian Packages index stanza-by-stanza (fields are
+            # blank-line separated and NOT in a fixed order — Version typically
+            # follows Source, not Package — so a positional grep won't work).
+            if printf '%s\n' "$PACKAGES" | awk -v pkg="postgresql-18-documentdb" -v ver="$APT_VERSION" '
+                /^Package:[[:space:]]/ { p=$2 }
+                /^Version:[[:space:]]/ { v=$2 }
+                /^[[:space:]]*$/ { if (p==pkg && v==ver) { found=1; exit }; p=""; v="" }
+                END { if (p==pkg && v==ver) found=1; exit found?0:1 }'; then
               FOUND=yes
               break
             fi
