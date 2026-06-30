@@ -66,9 +66,11 @@ RUN --mount=type=bind,target=/ctx set -eux && \
     apt-get update && \
     # Install the DocumentDB extension: a locally-built .deb (CI build mode)
     # takes precedence, then a pinned APT version, otherwise latest stable.
-    if [ -n "${DOCUMENTDB_DEB_PACKAGE}" ]; then \
+    # Both ARGs are optional; ${VAR:-} keeps them safe under `set -u` when
+    # Docker does not inject an unset ARG into the RUN environment.
+    if [ -n "${DOCUMENTDB_DEB_PACKAGE:-}" ]; then \
         apt-get install -y --no-install-recommends "/ctx/${DOCUMENTDB_DEB_PACKAGE}"; \
-    elif [ -n "${DOCUMENTDB_APT_VERSION}" ]; then \
+    elif [ -n "${DOCUMENTDB_APT_VERSION:-}" ]; then \
         apt-get install -y --no-install-recommends \
             "postgresql-${PG_MAJOR}-documentdb=${DOCUMENTDB_APT_VERSION}"; \
     else \
