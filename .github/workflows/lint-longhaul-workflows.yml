@@ -80,10 +80,14 @@ jobs:
         run: |
           set -euo pipefail
           curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # Fetch chart dependencies (e.g. cloudnative-pg) so the chart can
+          # be templated — mirrors the release workflows.
+          helm dependency update operator/documentdb-helm-chart
           # If the chart fails to template, the monitor's auto-upgrade
           # job will fail at runtime against the live cluster.
           helm template documentdb-operator operator/documentdb-helm-chart \
             --namespace documentdb-operator \
+            --api-versions cert-manager.io/v1/Certificate \
             > /tmp/rendered.yaml
           # Sanity: rendered output must include the operator Deployment we
           # target by name in monitor.yaml.
