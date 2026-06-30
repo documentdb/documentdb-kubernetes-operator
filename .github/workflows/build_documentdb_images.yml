@@ -178,6 +178,9 @@ jobs:
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
     - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
+      env:
+        # Dockerfile_extension uses RUN --mount, which requires BuildKit.
+        DOCKER_BUILDKIT: '1'
       run: |
         set -euo pipefail
         TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}

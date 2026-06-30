@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # DocumentDB extension image for CNPG ImageVolume mode.
 # Contains only extension artifacts (.so, .control, .sql, bitcode) and
 # runtime shared-library dependencies.  PostgreSQL is provided by the
@@ -12,10 +13,22 @@
 # PCRE2, pgvector, PostGIS, ...), so no extra extension packages are installed
 # explicitly here.
 #
+# For CI build mode, a locally-built .deb can be installed instead of the
+# published package by passing DOCUMENTDB_DEB_PACKAGE (see below); its runtime
+# dependencies are still resolved from the official APT repo.
+#
 # Usage:
+#   # Install a pinned published version from the APT repo:
 #   docker build \
 #     --build-arg PG_MAJOR=18 \
 #     --build-arg DOCUMENTDB_APT_VERSION=0.110-0 \
+#     -t documentdb-extension:latest \
+#     -f Dockerfile_extension .
+#
+#   # Install a locally-built .deb (CI build mode, unpublished versions):
+#   docker build \
+#     --build-arg PG_MAJOR=18 \
+#     --build-arg DOCUMENTDB_DEB_PACKAGE=packages/postgresql-18-documentdb_0.111-0_amd64.deb \
 #     -t documentdb-extension:latest \
 #     -f Dockerfile_extension .
 
@@ -29,10 +42,17 @@ ARG PG_MAJOR=18
 # this per build for reproducibility. If empty, the latest version in the
 # 'stable' channel is used.
 ARG DOCUMENTDB_APT_VERSION
+# Optional path (relative to the build context) to a locally-built
+# postgresql-${PG_MAJOR}-documentdb .deb. When set, the extension is installed
+# from this file instead of the APT repo — used by CI build mode to validate
+# source-built / unpublished versions. Takes precedence over
+# DOCUMENTDB_APT_VERSION. Runtime dependencies (Citus, RUM, pgvector, PostGIS,
+# ...) are still resolved from the official APT repo configured below.
+ARG DOCUMENTDB_DEB_PACKAGE
 
 USER 0
 
-RUN set -eux && \
+RUN --mount=type=bind,target=/ctx set -eux && \
     # Snapshot base image system libraries for later diffing
     ldconfig -p | awk '{print $NF}' | grep '^/' | sort | uniq > /tmp/base-image-libs.out && \
     # Tools needed to add the official DocumentDB APT repository
@@ -44,8 +64,11 @@ RUN set -eux && \
     echo "deb [signed-by=/usr/share/keyrings/documentdb-archive-keyring.gpg] https://documentdb.io/deb stable main" \
         > /etc/apt/sources.list.d/documentdb.list && \
     apt-get update && \
-    # Install the DocumentDB extension meta-package from the official repo.
-    if [ -n "${DOCUMENTDB_APT_VERSION}" ]; then \
+    # Install the DocumentDB extension: a locally-built .deb (CI build mode)
+    # takes precedence, then a pinned APT version, otherwise latest stable.
+    if [ -n "${DOCUMENTDB_DEB_PACKAGE}" ]; then \
+        apt-get install -y --no-install-recommends "/ctx/${DOCUMENTDB_DEB_PACKAGE}"; \
+    elif [ -n "${DOCUMENTDB_APT_VERSION}" ]; then \
         apt-get install -y --no-install-recommends \
             "postgresql-${PG_MAJOR}-documentdb=${DOCUMENTDB_APT_VERSION}"; \
     else \
