@@ -140,12 +140,15 @@ jobs:
           # release images exist for this version. If just one is present (a
           # partial/aborted promotion), fall through and rebuild to converge.
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          # GHCR repository names must be lowercase; the owner login may contain
+          # uppercase characters (e.g. on forks), so normalize it.
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           DOCDB_EXISTS=false
           GW_EXISTS=false
-          if docker manifest inspect "ghcr.io/${{ github.repository }}/documentdb:${NEW}" >/dev/null 2>&1; then
+          if docker manifest inspect "ghcr.io/${REPO}/documentdb:${NEW}" >/dev/null 2>&1; then
             DOCDB_EXISTS=true
           fi
-          if docker manifest inspect "ghcr.io/${{ github.repository }}/gateway:${NEW}" >/dev/null 2>&1; then
+          if docker manifest inspect "ghcr.io/${REPO}/gateway:${NEW}" >/dev/null 2>&1; then
             GW_EXISTS=true
           fi
           if [[ "$DOCDB_EXISTS" == "true" && "$GW_EXISTS" == "true" ]]; then
