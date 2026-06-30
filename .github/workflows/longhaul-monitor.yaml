@@ -19,8 +19,8 @@ name: "Long Haul Monitor"
 
 on:
   schedule:
-    - cron: "0 * * * *" # Every hour (matches LONGHAUL_REPORT_INTERVAL)
-  workflow_dispatch: {} # Allow manual trigger
+    - cron: "0 * * * *"  # Every hour (matches LONGHAUL_REPORT_INTERVAL)
+  workflow_dispatch: {}  # Allow manual trigger
 
 permissions:
   contents: read
@@ -72,9 +72,11 @@ jobs:
           else
             echo "exists=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "ready=${READY:-0}"        >> "$GITHUB_OUTPUT"
-          echo "desired=${DESIRED:-0}"    >> "$GITHUB_OUTPUT"
-          echo "progressing_reason=${PROGRESSING_REASON}" >> "$GITHUB_OUTPUT"
+          {
+            echo "ready=${READY:-0}"
+            echo "desired=${DESIRED:-0}"
+            echo "progressing_reason=${PROGRESSING_REASON}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Check ConfigMap report
         id: report-check
@@ -86,9 +88,11 @@ jobs:
           echo "last_updated=$LAST_UPDATED" >> "$GITHUB_OUTPUT"
 
           REPORT=$(kubectl get configmap longhaul-report -n ${{ env.NAMESPACE }} -o jsonpath='{.data.latest-report}' 2>/dev/null || echo "No report available")
-          echo "report<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$REPORT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "report<<EOF"
+            echo "$REPORT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Evaluate status
         run: |
@@ -122,7 +126,8 @@ jobs:
           fi
 
           # Fail if no replicas are ready.
-          if [ "${{ steps.deploy-check.outputs.ready }}" -lt 1 ]; then
+          READY="${{ steps.deploy-check.outputs.ready }}"
+          if [ "${READY:-0}" -lt 1 ]; then
             echo "::error::Long haul Deployment has 0 ready replicas"
             exit 1
           fi
@@ -171,7 +176,7 @@ jobs:
   upgrade-if-needed:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
-    needs: check-longhaul # Only upgrade if cluster is healthy
+    needs: check-longhaul  # Only upgrade if cluster is healthy
     steps:
       - uses: actions/checkout@v4
 

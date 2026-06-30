@@ -72,9 +72,11 @@ jobs:
             TAGS="${TAGS},${IMG}:${{ github.event.inputs.extra_tag }}"
           fi
 
-          echo "image=${IMG}"           >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "tags=${TAGS}"           >> "$GITHUB_OUTPUT"
+          {
+            echo "image=${IMG}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "tags=${TAGS}"
+          } >> "$GITHUB_OUTPUT"
           echo "Will push: ${TAGS}"
 
       - name: Login to GHCR
@@ -95,7 +97,7 @@ jobs:
           # GHA cache instead of a :buildcache image tag — keeps GHCR clean
           # and is automatically GC'd by GitHub.
           cache-from: type=gha,scope=longhaul-test
-          cache-to:   type=gha,scope=longhaul-test,mode=max
+          cache-to: type=gha,scope=longhaul-test,mode=max
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

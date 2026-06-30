@@ -111,9 +111,11 @@ jobs:
           fi
 
           IMAGE="ghcr.io/${OWNER_LC}/${REPO_NAME}/longhaul-test:${TAG}"
-          echo "tag=${TAG}"         >> "$GITHUB_OUTPUT"
-          echo "image=${IMAGE}"     >> "$GITHUB_OUTPUT"
-          echo "mutable=${MUTABLE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=${TAG}"
+            echo "image=${IMAGE}"
+            echo "mutable=${MUTABLE}"
+          } >> "$GITHUB_OUTPUT"
           echo "Resolved image: ${IMAGE} (mutable=${MUTABLE})"
 
       - name: Apply Deployment manifest
