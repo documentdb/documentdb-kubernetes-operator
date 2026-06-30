@@ -5,10 +5,18 @@ name: LONGHAUL - Deploy Test Driver to AKS
 
 # Rolls a longhaul-test image onto the long-haul AKS cluster.
 #
-# Auth: long-lived ServiceAccount-token kubeconfig stored as the
-# LONGHAUL_KUBECONFIG repo secret. Scoped to namespace
-# documentdb-test-ns via Role/RoleBinding (see
-# test/longhaul/deploy/rbac.yaml). No Azure auth on the runner.
+# Auth: a kubeconfig for the long-haul AKS cluster, provisioned out of band
+# and stored as the LONGHAUL_KUBECONFIG repo secret. The kubeconfig MUST be
+# privileged enough to:
+#   * apply Deployments + ConfigMaps in documentdb-test-ns (this workflow)
+#   * roll the operator via Helm in documentdb-operator + apply CRDs
+#     cluster-wide (longhaul-monitor.yaml's upgrade job)
+# In practice that means cluster-admin or a sufficiently broad ClusterRole.
+#
+# Note: test/longhaul/deploy/rbac.yaml is the in-cluster RBAC granted to
+# the long-haul *driver pod* (its ServiceAccount), not to this workflow.
+# The two are independent: the pod's SA only needs namespace-scoped pod /
+# documentdb / configmap access; this workflow needs more.
 #
 # Triggers:
 #   * workflow_run — auto-deploys after a successful build on main, pinning
@@ -37,10 +45,15 @@ env:
   DEPLOYMENT: longhaul-test
   CONTAINER: driver
 
+concurrency:
+  group: longhaul-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy to AKS
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     # When triggered by workflow_run, only proceed if the upstream build succeeded.
     # workflow_dispatch always proceeds.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
@@ -49,11 +62,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Write kubeconfig
+        # Pass the secret via env, not ${{ }} expression. Expression-style
+        # interpolation pastes the secret value directly into the shell
+        # script before execution, which can lead to subtle shell-injection
+        # if the secret contains characters like $ or backticks. Using env:
+        # keeps the value as a literal string in the runner's environment.
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.LONGHAUL_KUBECONFIG }}
         run: |
           set -euo pipefail
           install -m 700 -d "$RUNNER_TEMP/.kube"
           KCFG="$RUNNER_TEMP/.kube/config"
-          printf '%s' "${{ secrets.LONGHAUL_KUBECONFIG }}" > "$KCFG"
+          printf '%s' "$KUBECONFIG_CONTENT" > "$KCFG"
           chmod 600 "$KCFG"
           echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
 
@@ -79,22 +99,32 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             SHORT_SHA="$(echo "${UPSTREAM_SHA}" | cut -c1-7)"
             TAG="sha-${SHORT_SHA}"
+            MUTABLE=false
           else
             TAG="${DISPATCH_TAG}"
+            # Treat anything that isn't an immutable sha-* tag as mutable
+            # (e.g. :main) so we force a rollout restart to re-pull.
+            case "$TAG" in
+              sha-*) MUTABLE=false ;;
+              *)     MUTABLE=true  ;;
+            esac
           fi
 
           IMAGE="ghcr.io/${OWNER_LC}/${REPO_NAME}/longhaul-test:${TAG}"
-          echo "tag=${TAG}"     >> "$GITHUB_OUTPUT"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "Resolved image: ${IMAGE}"
+          echo "tag=${TAG}"         >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}"     >> "$GITHUB_OUTPUT"
+          echo "mutable=${MUTABLE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved image: ${IMAGE} (mutable=${MUTABLE})"
 
       - name: Apply Deployment manifest
         # The Deployment manifest is the only thing the deploy workflow
         # owns. Bootstrap resources (namespace, DocumentDB CR, credentials
         # secret, driver ServiceAccount/Role/ClusterRole) live in
-        # setup.yaml + rbac.yaml and are applied once by a cluster admin
-        # (the deployer SA is intentionally namespace-scoped and cannot
-        # create those).
+        # setup.yaml + rbac.yaml and are applied once by a cluster admin.
+        #
+        # `kubectl apply` with the substituted image tag is sufficient to
+        # trigger a rollout when the tag changes — no extra `set image`
+        # call needed.
         run: |
           set -euo pipefail
           OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
@@ -104,20 +134,14 @@ jobs:
               -e "s|__IMAGE_TAG__|${TAG}|g" \
               test/longhaul/deploy/deployment.yaml | kubectl apply -f -
 
-      - name: Roll image
+      - name: Force re-pull for mutable tags
+        # `kubectl apply` only triggers a rollout when the pod-spec changes.
+        # For mutable tags like :main, the spec stays identical even when
+        # the underlying image moves — so we need an explicit restart to
+        # re-pull. Immutable :sha-<short> tags don't need this.
+        if: steps.img.outputs.mutable == 'true'
         run: |
           set -euo pipefail
-          IMAGE='${{ steps.img.outputs.image }}'
-
-          # `set image` is a no-op if the manifest already pinned this image
-          # (apply step above), but harmless. The rollout restart below is
-          # what guarantees a re-pull when the tag is mutable (e.g. :main).
-          kubectl -n "$NAMESPACE" set image \
-            "deployment/${DEPLOYMENT}" \
-            "${CONTAINER}=${IMAGE}" \
-            --record=false || true
-
-          # Force a restart so the same tag (e.g. :main) re-pulls if image changed.
           kubectl -n "$NAMESPACE" rollout restart "deployment/${DEPLOYMENT}"
 
       - name: Wait for rollout

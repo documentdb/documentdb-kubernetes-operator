@@ -42,6 +42,20 @@ data:
   # Operation scheduling.
   LONGHAUL_OP_COOLDOWN: "10m"
   LONGHAUL_RECOVERY_TIMEOUT: "5m"
+  # How long the cluster must be observed healthy before the next
+  # operation fires. Matches the in-code default (60s) and the design doc
+  # (Section "Steady-state gate"). Keep explicit so operators can lower
+  # it for chaos runs or raise it during incident triage without a
+  # rebuild.
+  LONGHAUL_STEADY_STATE_WAIT: "60s"
+  # Checkpoint report cadence. Matches the monitor workflow cron (hourly)
+  # — bump both together if changed.
+  LONGHAUL_REPORT_INTERVAL: "1h"
+  # Whether to drop the workload collection on startup. MUST stay "false"
+  # on the long-haul cluster — restarts of the driver pod (rolling image
+  # updates, node drains) need to resume durability state from PVC.
+  # Override to "true" only for local/dev iterations.
+  LONGHAUL_RESET_DATA: "false"
   # Replica range for scale operations.
   # Bounds for spec.instancesPerNode (CRD allows 1-3). Default Min=1, Max=3
   # exercises full scale-up/down cycle. Set Min=Max to disable scale ops.

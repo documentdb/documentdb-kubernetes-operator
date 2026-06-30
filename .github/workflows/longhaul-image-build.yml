@@ -39,13 +39,21 @@ permissions:
 
 env:
   IMAGE_NAME: longhaul-test
-  CONTEXT: test/longhaul
+  # Build context MUST be the repo root, not test/longhaul/, because
+  # test/longhaul/go.mod has `replace` directives pointing to
+  # ../shared and ../../operator/src (see Dockerfile header at line 5-8).
+  CONTEXT: .
   DOCKERFILE: test/longhaul/Dockerfile
+
+concurrency:
+  group: longhaul-image-build
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
     name: Build and push longhaul image
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,8 +92,10 @@ jobs:
           push: true
           tags: ${{ steps.refs.outputs.tags }}
           provenance: false
-          cache-from: type=registry,ref=${{ steps.refs.outputs.image }}:buildcache
-          cache-to:   type=registry,ref=${{ steps.refs.outputs.image }}:buildcache,mode=max
+          # GHA cache instead of a :buildcache image tag — keeps GHCR clean
+          # and is automatically GC'd by GitHub.
+          cache-from: type=gha,scope=longhaul-test
+          cache-to:   type=gha,scope=longhaul-test,mode=max
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

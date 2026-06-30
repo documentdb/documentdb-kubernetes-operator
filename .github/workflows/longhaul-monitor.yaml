@@ -22,23 +22,35 @@ on:
     - cron: "0 * * * *" # Every hour (matches LONGHAUL_REPORT_INTERVAL)
   workflow_dispatch: {} # Allow manual trigger
 
+permissions:
+  contents: read
+  packages: read  # Required: gh api /orgs/.../packages/container/.../versions
+
+concurrency:
+  group: longhaul-monitor
+  cancel-in-progress: false
+
 env:
   NAMESPACE: documentdb-test-ns
   DEPLOYMENT_NAME: longhaul-test
   OPERATOR_NAMESPACE: documentdb-operator
+  OPERATOR_DEPLOYMENT: documentdb-operator
 
 jobs:
   check-longhaul:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - name: Set up kubeconfig
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.LONGHAUL_KUBECONFIG }}
         run: |
           set -euo pipefail
           install -m 700 -d "$RUNNER_TEMP/.kube"
           KCFG="$RUNNER_TEMP/.kube/config"
           # Secret is raw kubeconfig YAML (not base64). Same format the
           # deploy workflow uses; keep these in sync.
-          printf '%s' "${{ secrets.LONGHAUL_KUBECONFIG }}" > "$KCFG"
+          printf '%s' "$KUBECONFIG_CONTENT" > "$KCFG"
           chmod 600 "$KCFG"
           echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
 
@@ -135,18 +147,42 @@ jobs:
 
           echo "✅ Long haul test is healthy"
 
+      - name: Dump driver logs on failure
+        # Tail recent driver logs whenever the evaluate step (or any prior
+        # step) fails, so the run summary contains enough context to
+        # triage without a kubectl session.
+        if: failure()
+        run: |
+          set +e
+          POD="$(kubectl -n "${{ env.NAMESPACE }}" get pod \
+                  -l app.kubernetes.io/name=longhaul-test \
+                  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+          if [ -n "$POD" ]; then
+            echo "::group::Driver logs ($POD, last 200 lines)"
+            kubectl -n "${{ env.NAMESPACE }}" logs "$POD" --tail=200 || true
+            echo "::endgroup::"
+            echo "::group::Pod describe"
+            kubectl -n "${{ env.NAMESPACE }}" describe pod "$POD" || true
+            echo "::endgroup::"
+          else
+            echo "No long-haul driver pod found in ${{ env.NAMESPACE }}."
+          fi
+
   upgrade-if-needed:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     needs: check-longhaul # Only upgrade if cluster is healthy
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up kubeconfig
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.LONGHAUL_KUBECONFIG }}
         run: |
           set -euo pipefail
           install -m 700 -d "$RUNNER_TEMP/.kube"
           KCFG="$RUNNER_TEMP/.kube/config"
-          printf '%s' "${{ secrets.LONGHAUL_KUBECONFIG }}" > "$KCFG"
+          printf '%s' "$KUBECONFIG_CONTENT" > "$KCFG"
           chmod 600 "$KCFG"
           echo "KUBECONFIG=$KCFG" >> "$GITHUB_ENV"
 
@@ -157,6 +193,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           # Get latest published operator tag from GHCR (strict semver only)
           EXPECTED=$(gh api /orgs/documentdb/packages/container/documentdb-operator/versions \
             --jq '[.[].metadata.container.tags[] | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | sort_by(. | split(".") | map(tonumber)) | last' 2>/dev/null || echo "")
@@ -167,9 +204,14 @@ jobs:
             echo "ℹ️ GHCR query failed, using Chart.yaml: $EXPECTED"
           fi
 
-          # Running version from cluster
-          RUNNING=$(kubectl get deployment -n ${{ env.OPERATOR_NAMESPACE }} -l app.kubernetes.io/name=documentdb-operator \
-            -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
+          # Running version from cluster. Target the operator Deployment by
+          # NAME, not by app.kubernetes.io/name label — the chart applies
+          # the same label to three Deployments (operator, sidecar-injector
+          # in cnpg-system, wal-replica in cnpg-system); even though the
+          # ns filter excludes the cnpg-system ones today, naming is safer.
+          RUNNING=$(kubectl get deployment "${{ env.OPERATOR_DEPLOYMENT }}" \
+            -n "${{ env.OPERATOR_NAMESPACE }}" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null | sed 's/.*://')
 
           echo "Operator: expected=$EXPECTED running=$RUNNING"
 
@@ -185,14 +227,16 @@ jobs:
             kubectl apply -f operator/documentdb-helm-chart/crds/
 
             helm upgrade documentdb-operator operator/documentdb-helm-chart \
-              -n ${{ env.OPERATOR_NAMESPACE }} \
+              -n "${{ env.OPERATOR_NAMESPACE }}" \
               --set image.tag="$EXPECTED" \
               --wait --timeout 5m
 
-            # Verify rollout completed
-            kubectl rollout status deployment -n ${{ env.OPERATOR_NAMESPACE }} -l app.kubernetes.io/name=documentdb-operator --timeout=3m
-            ACTUAL=$(kubectl get deployment -n ${{ env.OPERATOR_NAMESPACE }} -l app.kubernetes.io/name=documentdb-operator \
-              -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' | sed 's/.*://')
+            # Verify rollout completed on the operator Deployment specifically.
+            kubectl rollout status deployment "${{ env.OPERATOR_DEPLOYMENT }}" \
+              -n "${{ env.OPERATOR_NAMESPACE }}" --timeout=3m
+            ACTUAL=$(kubectl get deployment "${{ env.OPERATOR_DEPLOYMENT }}" \
+              -n "${{ env.OPERATOR_NAMESPACE }}" \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://')
             if [ "$ACTUAL" = "$EXPECTED" ]; then
               echo "✅ Operator upgraded and verified: $ACTUAL"
             else
@@ -207,6 +251,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           # Determine the latest published DocumentDB tag and publish it to a
           # ConfigMap. The long-haul test reads this and performs the actual
           # upgrade as a load-aware operation (so continuous verifiers can
@@ -225,12 +270,17 @@ jobs:
           fi
 
           echo "📣 Publishing desired DocumentDB version: $EXPECTED"
+          # Use server-side apply so we can co-own this ConfigMap with the
+          # driver (the driver may add keys like last-applied-version or
+          # upgrade-attempt counters). Client-side apply with a full
+          # generated body would clobber any field we don't set here.
           kubectl create configmap longhaul-versions \
-            -n ${{ env.NAMESPACE }} \
+            -n "${{ env.NAMESPACE }}" \
             --from-literal=desired-documentdb-version="$EXPECTED" \
             --from-literal=last-updated="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --dry-run=client -o yaml \
+            | kubectl apply --server-side --field-manager=longhaul-monitor -f -
 
-          RUNNING=$(kubectl get documentdb documentdb-cluster -n ${{ env.NAMESPACE }} \
+          RUNNING=$(kubectl get documentdb documentdb-cluster -n "${{ env.NAMESPACE }}" \
             -o jsonpath='{.status.documentDBImage}' 2>/dev/null | sed 's/.*://')
           echo "DocumentDB: desired=$EXPECTED running=$RUNNING (test will upgrade if drifted)"
