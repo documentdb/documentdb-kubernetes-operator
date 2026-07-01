@@ -23,6 +23,8 @@ const (
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
 	prometheusPortParameter             = "prometheusPort"
+	gatewayTracingEnabledParameter      = "gatewayTracingEnabled"
+	gatewaySQLCommenterEnabledParameter = "gatewaySqlCommenterEnabled"
 )
 
 // Configuration represents the plugin configuration parameters
@@ -35,6 +37,12 @@ type Configuration struct {
 	OtelCollectorImage         string
 	OtelConfigMapName          string
 	PrometheusPort             int32
+	// GatewayTracingEnabled turns on the gateway's OTLP trace exporter
+	// (OTEL_TRACES_ENABLED) so it pushes spans to the sidecar collector.
+	GatewayTracingEnabled bool
+	// GatewaySQLCommenterEnabled injects a W3C traceparent SQL comment into
+	// gateway-issued Postgres queries for trace/log correlation.
+	GatewaySQLCommenterEnabled bool
 }
 
 // FromParameters builds a plugin configuration from the configuration parameters
@@ -90,6 +98,8 @@ func FromParameters(
 		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
 		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
 		PrometheusPort:             prometheusPort,
+		GatewayTracingEnabled:      helper.Parameters[gatewayTracingEnabledParameter] == "true",
+		GatewaySQLCommenterEnabled: helper.Parameters[gatewaySQLCommenterEnabledParameter] == "true",
 	}
 
 	configuration.applyDefaults()

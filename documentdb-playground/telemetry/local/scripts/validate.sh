@@ -15,7 +15,7 @@ echo ""
 # 1. Check observability deployments (no central OTel collector — every
 # DocumentDB pod runs its own sidecar via spec.monitoring).
 echo "--- Observability Stack ---"
-for deploy in prometheus grafana; do
+for deploy in prometheus grafana tempo; do
   if kubectl get deployment "$deploy" -n observability --context "$CONTEXT" &>/dev/null; then
     ready=$(kubectl get deployment "$deploy" -n observability --context "$CONTEXT" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
     if [ "${ready:-0}" -ge 1 ]; then
@@ -105,6 +105,32 @@ if [ -n "$PROM_POD" ]; then
   fi
 else
   red "Prometheus pod not found"
+fi
+
+# 4. Check tracing: Tempo readiness + gateway spans present.
+echo ""
+echo "--- Tracing ---"
+TEMPO_POD=$(kubectl get pod -l app=tempo -n observability --context "$CONTEXT" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [ -z "$TEMPO_POD" ]; then
+  warn "Tempo pod not found — tracing backend not deployed"
+else
+  if kubectl exec "$TEMPO_POD" -n observability --context "$CONTEXT" -- \
+       wget -qO- "http://localhost:3200/ready" 2>/dev/null | grep -q "ready"; then
+    green "Tempo is ready"
+  else
+    warn "Tempo not ready yet (may still be starting)"
+  fi
+
+  # Query Tempo for any gateway-emitted spans. Absence is a warning (not a
+  # failure): a pre-0.115 gateway image produces no spans even though the
+  # pipeline is wired correctly (see DOCUMENTDB_VERSION in deploy.sh).
+  traces=$(kubectl exec "$TEMPO_POD" -n observability --context "$CONTEXT" -- \
+    wget -qO- "http://localhost:3200/api/search?tags=service.name%3Ddocumentdb_gateway&limit=1" 2>/dev/null || echo "")
+  if echo "$traces" | grep -q '"traceID"'; then
+    green "Tempo has documentdb_gateway traces"
+  else
+    warn "No gateway traces in Tempo yet — send traffic, and ensure the gateway image supports tracing (DOCUMENTDB_VERSION >= 0.115)."
+  fi
 fi
 
 # Summary

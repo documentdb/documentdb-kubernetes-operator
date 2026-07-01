@@ -485,7 +485,8 @@ spec:
       storageClass: documentdb-storage  # Custom Premium SSD
   exposeViaService:
     serviceType: LoadBalancer
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
 EOF
     else
         # Use AKS default storage (StandardSSD_LRS)
@@ -506,7 +507,8 @@ spec:
       # storageClass omitted - uses AKS default (StandardSSD_LRS)
   exposeViaService:
     serviceType: LoadBalancer
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
 EOF
     fi
     

@@ -1286,6 +1286,26 @@ spec:
                             type: integer
                         type: object
                     type: object
+                  tracing:
+                    description: |-
+                      Tracing configures distributed tracing (spans) export from the gateway.
+                      Requires Enabled=true (the traces share the same sidecar collector).
+                    properties:
+                      enabled:
+                        description: Enabled turns on gateway trace export and the
+                          sidecar traces pipeline.
+                        type: boolean
+                      otlpEndpoint:
+                        description: |-
+                          OTLPEndpoint is the OTLP/gRPC endpoint the sidecar pushes spans to
+                          (e.g., "tempo.observability:4317"). Required when Enabled is true.
+                        type: string
+                      sqlCommenterEnabled:
+                        description: |-
+                          SQLCommenterEnabled injects a W3C `traceparent` SQL comment into
+                          gateway-issued Postgres queries so database logs correlate to traces.
+                        type: boolean
+                    type: object
                 type: object
               nodeCount:
                 description: NodeCount is the number of nodes in the DocumentDB cluster.

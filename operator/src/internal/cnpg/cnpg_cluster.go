@@ -106,6 +106,15 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						} else {
 							log.Error(err, "Failed to generate OTel config hash; config changes may not trigger rolling restart")
 						}
+						// Tracing is opt-in and shares the sidecar collector. Surface
+						// it as plugin parameters so the injector enables the gateway's
+						// OTLP trace exporter (and optional SQLCommenter) env vars.
+						if tracing := documentdb.Spec.Monitoring.Tracing; tracing != nil && tracing.Enabled {
+							params["gatewayTracingEnabled"] = "true"
+							if tracing.SQLCommenterEnabled {
+								params["gatewaySqlCommenterEnabled"] = "true"
+							}
+						}
 					}
 					return []cnpgv1.PluginConfiguration{{
 						Name:       sidecarPluginName,

@@ -296,11 +296,11 @@ func (impl Implementation) reconcileMetadata(
 		}
 
 		// Set OTel-related env vars on the gateway container so it can push its
-		// own metrics (traces pipeline TBD) to the co-located OTel Collector
+		// own metrics (and traces, when enabled) to the co-located OTel Collector
 		// sidecar and so that every signal carries a per-pod service.instance.id
 		// resource attribute. Only set when the sidecar is present to avoid
 		// connection errors and resource-attribute drift.
-		injectGatewayOTelEnv(mutatedPod)
+		injectGatewayOTelEnv(mutatedPod, configuration)
 
 		log.Printf("OTel Collector sidecar injected successfully")
 	}
@@ -366,14 +366,14 @@ func hardenedSecurityContext() *corev1.SecurityContext {
 }
 
 // gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
-// injector adds to the gateway container so it can push metrics to the
-// co-located OTel Collector sidecar.
+// injector adds to the gateway container so it can push metrics (and, when
+// tracing is enabled, spans) to the co-located OTel Collector sidecar.
 //
 // Per-pod attribution (k8s.pod.name) is added by the collector's resource
-// processor on every exported metric, so we don't need to set
+// processor on every exported signal, so we don't need to set
 // OTEL_RESOURCE_ATTRIBUTES / service.instance.id here.
-func gatewayOTelEnvVars() []corev1.EnvVar {
-	return []corev1.EnvVar{
+func gatewayOTelEnvVars(cfg *config.Configuration) []corev1.EnvVar {
+	envs := []corev1.EnvVar{
 		{
 			Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
 			Value: "http://127.0.0.1:4317",
@@ -386,6 +386,26 @@ func gatewayOTelEnvVars() []corev1.EnvVar {
 			Value: "true",
 		},
 	}
+
+	// Tracing is opt-in (spec.monitoring.tracing.enabled). The gateway gates
+	// its OTLP trace exporter behind OTEL_TRACES_ENABLED; the matching traces
+	// pipeline is added to the sidecar collector by the operator.
+	if cfg != nil && cfg.GatewayTracingEnabled {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "OTEL_TRACES_ENABLED",
+			Value: "true",
+		})
+		if cfg.GatewaySQLCommenterEnabled {
+			// Injects a W3C traceparent SQL comment into gateway-issued
+			// Postgres queries so database logs correlate to traces.
+			envs = append(envs, corev1.EnvVar{
+				Name:  "DOCUMENTDB_SQL_COMMENTER_ENABLED",
+				Value: "true",
+			})
+		}
+	}
+
+	return envs
 }
 
 // injectGatewayOTelEnv mutates `pod` to append OTel env vars to the gateway
@@ -397,8 +417,8 @@ func gatewayOTelEnvVars() []corev1.EnvVar {
 // entries and CNPG's pod metadata reconciler would fail with
 // "Pod is invalid: spec: Forbidden: pod updates may not change fields other
 // than ...".
-func injectGatewayOTelEnv(pod *corev1.Pod) {
-	envs := gatewayOTelEnvVars()
+func injectGatewayOTelEnv(pod *corev1.Pod, cfg *config.Configuration) {
+	envs := gatewayOTelEnvVars(cfg)
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Name != gatewayContainerName {
 			continue
