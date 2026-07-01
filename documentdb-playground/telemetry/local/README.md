@@ -1,6 +1,6 @@
 # DocumentDB Telemetry Playground (Local)
 
-A metrics-focused observability stack for DocumentDB on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel sidecar enabled, a reference container-metrics DaemonSet, and a pre-configured Grafana dashboard for container/pod resource metrics.
+An observability stack for DocumentDB on a local Kind cluster. Deploys a 3-instance HA cluster with the in-pod OTel sidecar enabled, a reference container-metrics DaemonSet, **distributed tracing** (gateway spans → Tempo), and pre-configured Grafana dashboards + datasources for metrics and traces.
 
 ## Prerequisites
 
@@ -26,6 +26,10 @@ kubectl port-forward svc/grafana 3000:3000 -n observability --context kind-docum
 kubectl port-forward svc/prometheus 9090:9090 -n observability --context kind-documentdb-telemetry
 # → http://localhost:9090
 
+# 3b. Open Tempo directly (optional — Grafana already queries it)
+kubectl port-forward svc/tempo 3200:3200 -n observability --context kind-documentdb-telemetry
+# → http://localhost:3200
+
 # 4. Validate data is flowing
 ./scripts/validate.sh
 ```
@@ -42,13 +46,14 @@ The operator chart is installed **from this branch** (`operator/documentdb-helm-
 | cert-manager | `cert-manager` | TLS certificate management |
 | DocumentDB operator | `documentdb-operator` | Operator + CNPG (Helm chart from this branch) |
 | DocumentDB HA cluster | `documentdb-preview-ns` | 1 primary + 2 streaming replicas |
-| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. Receives gateway OTLP metrics and runs the `sqlquery` Postgres-health receiver. |
+| OTel Collector sidecar | `documentdb-preview-ns` | One per pod, injected by the operator's CNPG sidecar plugin when `spec.monitoring.enabled=true`. Receives gateway OTLP metrics **and traces** and runs the `sqlquery` Postgres-health receiver. |
 | Container-metrics DaemonSet | `documentdb-operator` | One OTel Collector per node from `documentdb-playground/telemetry/container-metrics/`. Scrapes each node's local kubelet for container/pod/node CPU, memory, network, filesystem metrics. |
 | Prometheus | `observability` | Metrics storage + alerting rules; scrapes the per-pod sidecar and reference DaemonSet via annotation discovery |
-| Grafana | `observability` | Dashboard (Internals — container/pod resources) |
+| Tempo | `observability` | Trace storage. Receives OTLP spans pushed by the per-pod sidecars' traces pipeline and serves them to Grafana. Enabled by `spec.monitoring.tracing`. |
+| Grafana | `observability` | Dashboards + Prometheus/Tempo datasources with trace→metrics correlation |
 | Traffic generators | `documentdb-preview-ns` | Read/write workload via mongosh |
 
-There is **no central OTel Collector Deployment**. Per-pod sidecars handle pod-local signals (Postgres health, gateway OTLP); the playground's reference DaemonSet handles node-local kubelet scraping for container resource metrics.
+There is **no central OTel Collector Deployment**. Per-pod sidecars handle pod-local signals (Postgres health, gateway OTLP metrics/traces); the playground's reference DaemonSet handles node-local kubelet scraping for container resource metrics. Metrics are *scraped* by Prometheus from each sidecar; traces are *pushed* (OTLP) from each sidecar to the central Tempo backend, because traces cannot be scraped.
 
 ## Architecture
 
@@ -57,15 +62,17 @@ graph TB
     subgraph cluster["Kind Cluster (documentdb-telemetry)"]
         subgraph obs["observability namespace"]
             prometheus["Prometheus<br/>annotation discovery"]
-            grafana["Grafana<br/>:3000<br/>Internals dashboard"]
+            tempo["Tempo<br/>:3200 (query) / :4317 (OTLP)<br/>traces store"]
+            grafana["Grafana<br/>:3000<br/>Prometheus + Tempo"]
             prometheus --> grafana
+            tempo --> grafana
         end
 
         subgraph docdb["documentdb-preview-ns"]
             subgraph pod1["Pod: preview-1 (primary)"]
                 pg1["postgres :5432"]
                 gw1["documentdb-gateway :10260"]
-                otel1["otel-collector sidecar<br/>sqlquery + otlp / Prom :9188"]
+                otel1["otel-collector sidecar<br/>sqlquery + otlp / Prom :9188<br/>traces pipeline"]
             end
             subgraph pod2["Pod: preview-2 (replica)"]
                 pg2["postgres :5432"]
@@ -92,6 +99,9 @@ graph TB
         prometheus -- "scrape :9188 (annotation)" --> otel2
         prometheus -- "scrape :9188 (annotation)" --> otel3
         prometheus -- "scrape :8889 (annotation)" --> ds
+        otel1 -- "push spans OTLP :4317" --> tempo
+        otel2 -- "push spans OTLP :4317" --> tempo
+        otel3 -- "push spans OTLP :4317" --> tempo
     end
 
     user["Browser"] --> grafana
@@ -107,8 +117,8 @@ local/
 │   ├── validate.sh            # Health check — verifies sidecar + data flow
 │   └── teardown.sh            # Deletes cluster and proxy containers
 ├── k8s/
-│   ├── observability/         # Namespace, Prometheus (annotation discovery), Grafana
-│   ├── documentdb/            # DocumentDB CR (with spec.monitoring.enabled) + credentials
+│   ├── observability/         # Namespace, Prometheus (annotation discovery), Grafana, Tempo (traces)
+│   ├── documentdb/            # DocumentDB CR (spec.monitoring.enabled + spec.monitoring.tracing) + credentials
 │   └── traffic/               # Traffic generator services + jobs
 └── dashboards/
     └── internals.json         # Container & pod resources dashboard (DaemonSet kubeletstats)
@@ -125,6 +135,54 @@ One dashboard is auto-provisioned in the **DocumentDB** folder:
 | **Internals** | Container CPU / memory (working set, RSS), pod network rx/tx, container filesystem usage. Sourced from the reference container-metrics DaemonSet. |
 
 Dashboards auto-refresh every 30 seconds. Edits made in the Grafana UI persist until the pod restarts.
+
+## Tracing
+
+Distributed tracing is enabled via `spec.monitoring.tracing` on the DocumentDB CR
+(`k8s/documentdb/cluster.yaml`):
+
+```yaml
+monitoring:
+  enabled: true
+  exporter:
+    prometheus:
+      port: 9188
+  tracing:
+    enabled: true
+    otlpEndpoint: tempo.observability.svc.cluster.local:4317
+    sqlCommenterEnabled: true
+```
+
+When enabled, the operator:
+
+1. Sets `OTEL_TRACES_ENABLED=true` (and, with `sqlCommenterEnabled`,
+   `DOCUMENTDB_SQL_COMMENTER_ENABLED=true`) on the gateway container so it exports
+   OTLP spans to the co-located sidecar.
+2. Adds a **traces pipeline** to the sidecar collector (`otlp` receiver →
+   `resource`/`batch` → `otlp/traces` exporter) that pushes spans to **Tempo**.
+
+Unlike metrics — which Prometheus *scrapes* from each sidecar — traces are
+*pushed* to the central Tempo backend, since traces cannot be scraped.
+
+**View traces:** Grafana → **Explore → Tempo**, search `service.name = documentdb_gateway`.
+A single request produces `gateway.request → gateway.process_request →
+postgres.*` spans. With `sqlCommenterEnabled`, gateway-issued Postgres queries
+carry a `/* traceparent=… */` comment so database logs correlate to the trace.
+
+> **Gateway image requirement:** tracing requires a gateway built with OTLP
+> trace support (the feature landed in gateway **0.115**). The chart's default
+> gateway version predates it. Set `DOCUMENTDB_VERSION` to a tracing-capable
+> version when deploying, e.g.:
+>
+> ```bash
+> DOCUMENTDB_VERSION=0.115.0 ./scripts/deploy.sh
+> ```
+>
+> With a pre-0.115 gateway the pipeline is wired correctly but no spans are
+> produced (`validate.sh` reports this as a warning, not a failure). For
+> client → gateway → Postgres trace linking, use a fully OTel-instrumented
+> client that passes a W3C `traceparent` in the Mongo `comment` field (the
+> mongosh-based traffic generators here do not emit client spans).
 
 ## Alerting Rules
 

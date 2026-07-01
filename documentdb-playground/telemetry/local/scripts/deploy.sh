@@ -74,6 +74,21 @@ else
     )
   fi
 
+  # Tracing (spec.monitoring.tracing) needs a gateway image built with OTLP
+  # trace support (the feature landed in gateway 0.115). The chart derives the
+  # gateway tag from documentDbVersion. Override it here to pull a
+  # tracing-capable gateway; leave unset to keep the chart default (metrics
+  # still work, but no spans are produced by a pre-0.115 gateway).
+  DOCUMENTDB_VERSION="${DOCUMENTDB_VERSION:-}"
+  if [[ -n "$DOCUMENTDB_VERSION" ]]; then
+    echo "  Overriding gateway/extension version -> ${DOCUMENTDB_VERSION}"
+    HELM_IMAGE_FLAGS+=( --set "documentDbVersion=${DOCUMENTDB_VERSION}" )
+  else
+    echo "  NOTE: using chart-default gateway version. Tracing spans require a"
+    echo "        gateway >= 0.115 — set DOCUMENTDB_VERSION to a tracing-capable"
+    echo "        version if no traces appear in Tempo/Grafana."
+  fi
+
   echo "  Installing DocumentDB operator from ${OPERATOR_CHART_DIR}..."
   helm install documentdb-operator "$OPERATOR_CHART_DIR" \
     --namespace documentdb-operator \
@@ -124,4 +139,5 @@ echo ""
 echo "=== Deployment Complete ==="
 echo "Grafana:    kubectl port-forward svc/grafana 3000:3000 -n observability --context $CONTEXT"
 echo "Prometheus: kubectl port-forward svc/prometheus 9090:9090 -n observability --context $CONTEXT"
+echo "Tempo:      kubectl port-forward svc/tempo 3200:3200 -n observability --context $CONTEXT"
 echo "Validate:   ./scripts/validate.sh"

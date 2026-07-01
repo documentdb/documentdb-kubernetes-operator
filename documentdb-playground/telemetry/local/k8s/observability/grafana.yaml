@@ -65,6 +65,19 @@ data:
         access: proxy
         url: http://prometheus.observability.svc:9090
         isDefault: true
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo.observability.svc:3200
+        jsonData:
+          # Trace -> metrics correlation via Tempo-generated span metrics.
+          tracesToMetrics:
+            datasourceUid: prometheus
+          serviceMap:
+            datasourceUid: prometheus
+          nodeGraph:
+            enabled: true
 ---
 apiVersion: v1
 kind: ConfigMap

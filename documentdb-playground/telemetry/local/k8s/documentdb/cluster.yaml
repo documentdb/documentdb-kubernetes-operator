@@ -29,7 +29,8 @@ spec:
   resource:
     storage:
       pvcSize: 5Gi
-  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
   # Enable the OTel Collector sidecar (one per pod). The sidecar:
   #   - receives OTLP metrics from the documentdb-gateway on localhost:4317
   #   - exposes Prometheus /metrics on the configured port
@@ -43,3 +44,17 @@ spec:
     exporter:
       prometheus:
         port: 9188
+    # Distributed tracing (opt-in). The gateway exports OTLP spans to the
+    # co-located sidecar, which forwards them to the central Tempo backend in
+    # the observability namespace. Unlike metrics (scraped by Prometheus),
+    # traces must be pushed to a trace store.
+    #
+    # NOTE: requires a gateway image built with tracing support (>= 0.115).
+    # The operator's default gateway image predates this; override it via the
+    # chart value image.gateway (or spec.image.gateway) when deploying.
+    tracing:
+      enabled: true
+      otlpEndpoint: tempo.observability.svc.cluster.local:4317
+      # Inject a W3C traceparent SQL comment into gateway-issued Postgres
+      # queries so PostgreSQL logs correlate to gateway traces.
+      sqlCommenterEnabled: true
