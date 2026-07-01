@@ -76,7 +76,7 @@ spec:
     - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns.svc
     - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns
     - documentdb-preview-8377bf145d2df796-rw
-    - *.fleet-system.svc
+    - "*.fleet-system.svc"
   issuerRef:
     name: selfsigned-cross-region-issuer
     kind: Issuer

@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
-	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -58,11 +57,6 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {
-	/*
-	if err := r.ensurePostgresCertificates(ctx, ddb); err != nil {
-		return ctrl.Result{}, err
-	}
-		*/
 
 	// TLS is always enabled. When tls or tls.gateway is unset, default to SelfSigned
 	// so the operator provisions a managed cert (issue #356 - no plaintext path).
@@ -106,46 +100,6 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 		)
 		return r.ensureSelfSignedCert(ctx, ddb)
 	}
-}
-
-func (r *CertificateReconciler) ensurePostgresCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) error {
-	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *ddb)
-	if err != nil {
-		return err
-	}
-	if replicationContext.IsNotPresent() {
-		return nil
-	}
-	if !cnpg.PostgresTLSEnabled(ddb.Spec.TLS) {
-		log.FromContext(ctx).Info("Postgres TLS disabled; skipping Postgres certificate provisioning")
-		return nil
-	}
-
-	configuration := cnpg.BuildPostgresCertificatesConfiguration(ddb.Name, replicationContext.CNPGClusterName, ddb.Namespace, ddb.Spec.TLS)
-
-	selfSignedIssuerRef, err := r.ensurePostgresSelfSignedIssuer(ctx, ddb)
-	if err != nil {
-		return err
-	}
-	if err := r.ensurePostgresCACertificate(ctx, ddb, configuration, selfSignedIssuerRef); err != nil {
-		return err
-	}
-	serverIssuerRef, err := r.ensurePostgresCAIssuer(ctx, ddb, ddb.Name+"-postgres-server-issuer", configuration.ServerCASecret)
-	if err != nil {
-		return err
-	}
-	if err := r.ensurePostgresServerCertificate(ctx, ddb, configuration, serverIssuerRef); err != nil {
-		return err
-	}
-	clientIssuerRef, err := r.ensurePostgresCAIssuer(ctx, ddb, ddb.Name+"-postgres-client-issuer", configuration.ClientCASecret)
-	if err != nil {
-		return err
-	}
-	if err := r.ensurePostgresReplicationCertificate(ctx, ddb, configuration, clientIssuerRef); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *CertificateReconciler) ensurePostgresCAIssuer(ctx context.Context, ddb *dbpreview.DocumentDB, issuerName, secretName string) (cmmeta.ObjectReference, error) {

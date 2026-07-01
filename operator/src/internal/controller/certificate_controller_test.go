@@ -60,6 +60,24 @@ func baseDocumentDB(name, ns string) *dbpreview.DocumentDB {
 	}
 }
 
+func enableAzureFleetReplication(ddb *dbpreview.DocumentDB) {
+	ddb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		CrossCloudNetworkingStrategy: string(util.AzureFleet),
+		Primary:                      "member-a",
+		ClusterList: []dbpreview.MemberCluster{
+			{Name: "member-a"},
+			{Name: "member-b"},
+		},
+	}
+}
+
+func fleetMemberNameConfigMap(memberName string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster-name", Namespace: "kube-system"},
+		Data:       map[string]string{"name": memberName},
+	}
+}
+
 func TestEnsureProvidedSecret(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-prov", "default")
@@ -147,69 +165,104 @@ func TestEnsureSelfSignedCert(t *testing.T) {
 	require.NotEmpty(t, ddb.Status.TLS.SecretName)
 }
 
-func TestEnsurePostgresCertificatesDefaults(t *testing.T) {
+func TestReconcileCertificatesDoesNotManagePostgresCertificates(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-pg", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
-		Postgres: &v1.CertificatesConfiguration{},
-	}
-	r := buildCertificateReconciler(t, ddb)
+	enableAzureFleetReplication(ddb)
+	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
 
 	res, err := r.reconcileCertificates(ctx, ddb)
 	require.NoError(t, err)
 	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
 
 	issuer := &cmapi.Issuer{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-selfsigned", Namespace: "default"}, issuer))
-	require.NotNil(t, issuer.Spec.SelfSigned)
-
-	serverIssuer := &cmapi.Issuer{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-server-issuer", Namespace: "default"}, serverIssuer))
-	require.NotNil(t, serverIssuer.Spec.CA)
-	require.Equal(t, "ddb-pg-postgres-ca", serverIssuer.Spec.CA.SecretName)
-
-	clientIssuer := &cmapi.Issuer{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-client-issuer", Namespace: "default"}, clientIssuer))
-	require.NotNil(t, clientIssuer.Spec.CA)
-	require.Equal(t, "ddb-pg-postgres-ca", clientIssuer.Spec.CA.SecretName)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-selfsigned", Namespace: "default"}, issuer)
+	require.True(t, errors.IsNotFound(err))
 
 	caCert := &cmapi.Certificate{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-ca", Namespace: "default"}, caCert))
-	require.Equal(t, "ddb-pg-postgres-ca", caCert.Spec.SecretName)
-	require.True(t, caCert.Spec.IsCA)
-	require.Contains(t, caCert.Spec.Usages, cmapi.UsageCertSign)
-	require.Contains(t, caCert.Spec.Usages, cmapi.UsageCRLSign)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-ca", Namespace: "default"}, caCert)
+	require.True(t, errors.IsNotFound(err))
 
 	serverCert := &cmapi.Certificate{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-server", Namespace: "default"}, serverCert))
-	require.Equal(t, "ddb-pg-postgres-server", serverCert.Spec.SecretName)
-	require.Equal(t, "ddb-pg-postgres-server-issuer", serverCert.Spec.IssuerRef.Name)
-	require.Contains(t, serverCert.Spec.DNSNames, "ddb-pg-rw.default.svc")
-	require.Contains(t, serverCert.Spec.Usages, cmapi.UsageServerAuth)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-server", Namespace: "default"}, serverCert)
+	require.True(t, errors.IsNotFound(err))
 
 	replicationCert := &cmapi.Certificate{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-replication", Namespace: "default"}, replicationCert))
-	require.Equal(t, "ddb-pg-postgres-replication", replicationCert.Spec.SecretName)
-	require.Equal(t, "ddb-pg-postgres-client-issuer", replicationCert.Spec.IssuerRef.Name)
-	require.Equal(t, "streaming_replica", replicationCert.Spec.CommonName)
-	require.Contains(t, replicationCert.Spec.Usages, cmapi.UsageClientAuth)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-postgres-replication", Namespace: "default"}, replicationCert)
+	require.True(t, errors.IsNotFound(err))
+
+	gatewayIssuer := &cmapi.Issuer{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-gateway-selfsigned", Namespace: "default"}, gatewayIssuer))
 }
 
-func TestEnsurePostgresCertificatesWhenPostgresTLSIsPresent(t *testing.T) {
+func TestEnsurePostgresCertificatesWithPartialPostgresTLSDoesNotFillDefaults(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-pg-provided", "default")
+	enableAzureFleetReplication(ddb)
 	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
-		Postgres: &v1.CertificatesConfiguration{},
+		Postgres: &v1.CertificatesConfiguration{ServerCASecret: "provided-server-ca"},
 	}
-	r := buildCertificateReconciler(t, ddb)
+	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
 
 	res, err := r.reconcileCertificates(ctx, ddb)
 	require.NoError(t, err)
 	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
 
 	replicationCert := &cmapi.Certificate{}
-	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-provided-postgres-replication", Namespace: "default"}, replicationCert))
-	require.Equal(t, "ddb-pg-provided-postgres-replication", replicationCert.Spec.SecretName)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-provided-postgres-replication", Namespace: "default"}, replicationCert)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestEnsurePostgresCertificatesAzureFleetWithProvidedCertsSkipsPostgresResources(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-pg-explicit", "default")
+	enableAzureFleetReplication(ddb)
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+		Postgres: &v1.CertificatesConfiguration{
+			ServerCASecret:       "provided-server-ca",
+			ServerTLSSecret:      "provided-server-tls",
+			ReplicationTLSSecret: "provided-replication-tls",
+			ClientCASecret:       "provided-client-ca",
+		},
+	}
+	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	postgresIssuer := &cmapi.Issuer{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-explicit-postgres-selfsigned", Namespace: "default"}, postgresIssuer)
+	require.True(t, errors.IsNotFound(err))
+
+	providedCert := &cmapi.Certificate{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "provided-server-ca", Namespace: "default"}, providedCert)
+	require.True(t, errors.IsNotFound(err))
+}
+
+func TestEnsurePostgresCertificatesIstioSkipsPostgresResources(t *testing.T) {
+	ctx := context.Background()
+	ddb := baseDocumentDB("ddb-pg-istio", "default")
+	ddb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		CrossCloudNetworkingStrategy: string(util.Istio),
+		Primary:                      "member-a",
+		ClusterList: []dbpreview.MemberCluster{
+			{Name: "member-a"},
+			{Name: "member-b"},
+		},
+	}
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+		Postgres: &v1.CertificatesConfiguration{},
+	}
+	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
+
+	res, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+	require.Equal(t, RequeueAfterShort, res.RequeueAfter)
+
+	postgresIssuer := &cmapi.Issuer{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: "ddb-pg-istio-postgres-selfsigned", Namespace: "default"}, postgresIssuer)
+	require.True(t, errors.IsNotFound(err))
 }
 
 func TestEnsurePostgresCertificatesOmittedSkipsPostgresResources(t *testing.T) {

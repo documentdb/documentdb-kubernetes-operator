@@ -107,9 +107,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		Self:    replicationContext.CNPGClusterName,
 	}
 
-	// If we are multi-cluster and no certs are provided, trust that the cluster is running in a secure environment and allow replication without TLS
+	// If we are multi-cluster and no certs are provided, trust that the DocumentDB cluster is running in a secure environment and allow replication without TLS
 	// (probably istio or some other service mesh)
-	if !cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
+	postgresCertificatesProvided := cnpgCluster.Spec.Certificates != nil
+	if !postgresCertificatesProvided {
 		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
 			"host all all localhost trust",
 			"host replication streaming_replica all trust",
@@ -154,7 +155,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			"dbname": "postgres",
 			"user":   "streaming_replica",
 		}
-		if cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
+		if postgresCertificatesProvided {
 			connectionParameters["sslmode"] = "verify-full"
 		}
 
@@ -162,7 +163,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			Name:                 clusterName,
 			ConnectionParameters: connectionParameters,
 		}
-		if cnpg.PostgresTLSEnabled(documentdb.Spec.TLS) {
+		if postgresCertificatesProvided {
 			externalCluster.SSLCert = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: cnpgCluster.Spec.Certificates.ReplicationTLSSecret,

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	v1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -192,24 +191,24 @@ var _ = Describe("getDefaultBootstrapConfiguration", func() {
 	})
 })
 
-var _ = Describe("BuildPostgresCertificatesConfiguration", func() {
-	It("fills all missing Postgres certificate fields with deterministic names", func() {
-		tls := &dbpreview.TLSConfiguration{Postgres: &v1.CertificatesConfiguration{}}
+var _ = Describe("Postgres certificate configuration", func() {
+	It("omits Postgres certificate configuration", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
 
-		result := BuildPostgresCertificatesConfiguration("docdb", "docdb-cnpg", "default", tls)
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+			},
+		}
 
-		Expect(result).ToNot(BeNil())
-		Expect(result.ServerCASecret).To(Equal("docdb-postgres-ca"))
-		Expect(result.ClientCASecret).To(Equal("docdb-postgres-ca"))
-		Expect(result.ServerTLSSecret).To(Equal("docdb-postgres-server"))
-		Expect(result.ReplicationTLSSecret).To(Equal("docdb-postgres-replication"))
-		Expect(result.ServerAltDNSNames).To(BeEmpty())
-	})
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, zap.New(zap.WriteTo(GinkgoWriter)))
 
-	It("returns nil when Postgres TLS is omitted", func() {
-		result := BuildPostgresCertificatesConfiguration("docdb", "docdb-cnpg", "default", nil)
-
-		Expect(result).To(BeNil())
+		Expect(result.Spec.Certificates).To(BeNil())
 	})
 })
 
