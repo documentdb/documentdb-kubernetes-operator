@@ -153,46 +153,118 @@ spec:
       - name: member-westus3-cluster
 ```
 
-#### Securing replication with TLS
+#### Securing replication with verify-full mTLS
 
 Cross-Kubernetes-cluster streaming replication flows over the network between
-member Kubernetes clusters, so the operator secures it with TLS instead
-of password or trust-based authentication. Each replica connects to the primary
-as the dedicated `streaming_replica` PostgreSQL role and presents a client
-certificate that the primary verifies against a shared certificate authority (CA).
+member Kubernetes clusters. When you set `spec.tls.postgres`, the operator enables
+PostgreSQL TLS for replication and configures each generated CloudNative-PG
+external cluster connection with `sslmode=verify-full`.
 
-!!! important "Insecure by default"
-    If no cert is provided, the operator defaults to trusting all external replication
-    connections
+With this configuration, replication uses mutual TLS (mTLS):
 
-When you provide a replication cert for your multi-regional setup, the operator
-configures PostgreSQL to only accepts replication connections over TLS with a valid
-client certificate (`hostssl replication streaming_replica all cert` in `pg_hba.conf`).
-Each member Kubernetes cluster must use the same replication certificate and CA,
-so any replica can authenticate to any primary after a failover. Put the cert into
-a Kubernetes Secret, then pass the name in using the following fields.
+- The replica presents the certificate from `replicationTLSSecret` as the
+  `streaming_replica` client identity.
+- The primary verifies that client certificate against `clientCASecret` and only
+  accepts replication over TLS (`hostssl replication streaming_replica all cert`
+  in `pg_hba.conf`).
+- The replica verifies the primary server certificate against `serverCASecret`.
+- Because `sslmode=verify-full` is used, the primary server certificate must also
+  include a subject alternative name (SAN) that matches the host name the replica
+  uses to connect.
 
-| Field | Type | Description |
+!!! important "Use an explicit Postgres TLS configuration for encrypted replication"
+    If `spec.tls.postgres` is omitted, the operator assumes another layer, such
+    as Istio mTLS, secures the cross-Kubernetes-cluster path. In that mode, the
+    generated PostgreSQL replication configuration doesn't set `sslmode`,
+    `sslCert`, `sslKey`, or `sslRootCert`.
+
+All member Kubernetes clusters must receive Secrets with the same names and the
+same certificate material in the DocumentDB namespace. This is what lets any
+member Kubernetes cluster become primary after failover while replicas continue
+to authenticate both sides of the connection.
+
+```yaml title="documentdb-postgres-mtls.yaml"
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  tls:
+    postgres:
+      replicationTLSSecret: cross-region-client-cert
+      clientCASecret: cross-region-client-cert
+      serverTLSSecret: cross-region-server-cert
+      serverCASecret: cross-region-server-cert
+```
+
+| Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `replicationTLSSecret` | string | Name of a Kubernetes Secret that contains the `streaming_replica` client certificate and key. Must contain `tls.crt` and `tls.key`. Must be the same name and value in every member Kubernetes cluster. |
-| `clientCASecret` | string | Name of a Kubernetes Secret that contains the CA certificate (`ca.crt`) used to verify the client certificate. If omitted, the CNPG operator falls back to it's own generated CA, and replication will fail. Must be the same name and value in every member Kubernetes cluster. |
+| `spec.tls.postgres.replicationTLSSecret` | string | Yes | Name of the Kubernetes Secret that contains the `streaming_replica` client certificate and key. The Secret must contain `tls.crt` and `tls.key`. |
+| `spec.tls.postgres.clientCASecret` | string | Yes | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the replication client certificate. PostgreSQL uses this CA to verify replicas. |
+| `spec.tls.postgres.serverTLSSecret` | string | Yes | Name of the Kubernetes Secret that contains the PostgreSQL server certificate and key. The Secret must contain `tls.crt` and `tls.key`. |
+| `spec.tls.postgres.serverCASecret` | string | Yes | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the PostgreSQL server certificate. Replicas use this CA as `sslRootCert` for `verify-full` validation. |
 
-The operator looks up the secrets by name in the DocumentDB namespace on each member
-Kubernetes cluster. Both the secret name and the certificate material must match
-across Kubernetes clusters — otherwise the replica can't authenticate to the primary.
+For `verify-full`, the server certificate SANs must cover every host name that a
+replica might use for the primary. Include the generated CloudNative-PG read-write
+service names for each member Kubernetes cluster and, when using Azure Fleet
+Networking, the fleet service DNS name pattern:
 
-For a working KubeFleet example that propagates a Secret to every member Kubernetes
-cluster via `ClusterResourcePlacement`, see [`documentdb-resource-crp.yaml`](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/documentdb-resource-crp.yaml)
+```yaml title="postgres-server-certificate.yaml"
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cross-region-server-cert
+  namespace: documentdb-preview-ns
+spec:
+  secretName: cross-region-server-cert
+  usages:
+    - server auth
+  dnsNames:
+    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns.svc
+    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns
+    - documentdb-preview-bb8b4c62e10c285b-rw
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns.svc
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns
+    - documentdb-preview-f5d2b7e6d7a5bd04-rw
+    - "*.fleet-system.svc"
+  issuerRef:
+    name: selfsigned-cross-region-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
+The client certificate should use the replication role identity:
+
+```yaml title="postgres-client-certificate.yaml"
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cross-region-client-cert
+  namespace: documentdb-preview-ns
+spec:
+  secretName: cross-region-client-cert
+  usages:
+    - client auth
+  commonName: streaming_replica
+  issuerRef:
+    name: selfsigned-cross-region-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
+For a working KubeFleet example that propagates the certificate Secrets to every
+member Kubernetes cluster with `ResourcePlacement`, see
+[documentdb-resource-crp.yaml](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/documentdb-resource-crp.yaml)
 in the playground.
 
 !!! tip "Single-region deployments"
-    The `replicationTLSSecret` and `clientCASecret` fields aren't required for
-    single-region clusters. Intra-Kubernetes-cluster replication between CloudNative-PG
-    pods is already secured by the certificates CloudNative-PG provisions for each
-    cluster.
+    The `spec.tls.postgres` fields aren't required for single-region deployments.
+    Intra-Kubernetes-cluster replication between CloudNative-PG pods is already
+    secured by the certificates CloudNative-PG provisions for each DocumentDB cluster.
 
-See the [ClusterReplication API Reference](../api-reference.md#clusterreplication)
-for the full field list.
+See [TLSConfiguration](../api-reference.md#tlsconfiguration) in the API Reference
+for where Postgres TLS is configured on the DocumentDB resource.
 
 ## Deployment options
 
@@ -443,6 +515,6 @@ If PVCs aren't provisioning:
 ## Next steps
 
 - [Failover procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
-- [Backup and restore](../backup-and-restore.md) - Configure multi-region backup strategies
+- [Backup and restore](../operations/backup-and-restore.md) - Configure multi-region backup strategies
 - [TLS configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
 - [AKS Fleet deployment example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup
