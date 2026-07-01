@@ -1,0 +1,83 @@
+# Mongoose demo app: Deployment + Service.
+#
+# The MONGO_URI is supplied via the `mongoose-app-secret` Secret, which
+# scripts/deploy.sh creates from the DocumentDB resource's connection string.
+# The image reference is patched by scripts/deploy.sh (default: a locally built
+# image loaded into kind).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongoose-demo
+  namespace: mongoose-demo
+  labels:
+    app: mongoose-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongoose-demo
+  template:
+    metadata:
+      labels:
+        app: mongoose-demo
+    spec:
+      containers:
+        - name: mongoose-demo
+          image: documentdb/mongoose-demo:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: MONGO_DB
+              value: "mongoose_demo"
+            - name: TLS_INSECURE
+              value: "true"
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongoose-app-secret
+                  key: MONGO_URI
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongoose-demo
+  namespace: mongoose-demo
+  labels:
+    app: mongoose-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: mongoose-demo
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
