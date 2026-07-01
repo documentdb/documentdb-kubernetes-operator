@@ -139,23 +139,53 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		}
 	}
 
-	// Wire pipeline: receivers + batch from static.yaml, resource from this dynamic config.
-	// Disable the collector's internal telemetry to avoid port conflicts with the
-	// Prometheus exporter (both default to 8888).
-	if len(exporterNames) > 0 {
+	// Traces pipeline: the gateway pushes spans to the sidecar's otlp receiver
+	// and the sidecar forwards them (OTLP/gRPC) to a central trace backend.
+	// Unlike metrics, traces cannot be scraped by Prometheus and must be
+	// exported to a store such as Tempo or Jaeger.
+	tracesEnabled := false
+	if spec.Tracing != nil && spec.Tracing.Enabled && spec.Tracing.OTLPEndpoint != "" {
+		if cfg.Exporters == nil {
+			cfg.Exporters = map[string]any{}
+		}
+		cfg.Exporters["otlp/traces"] = map[string]any{
+			"endpoint": spec.Tracing.OTLPEndpoint,
+			"tls": map[string]any{
+				// TODO: Support TLS for the traces exporter alongside the
+				// metrics OTLP exporter. Insecure is fine for in-cluster paths.
+				"insecure": true,
+			},
+		}
+		tracesEnabled = true
+	}
+
+	// Wire pipelines: receivers + batch from static.yaml, resource from this
+	// dynamic config. Disable the collector's internal telemetry to avoid port
+	// conflicts with the Prometheus exporter (both default to 8888).
+	if len(exporterNames) > 0 || tracesEnabled {
+		pipelines := map[string]pipelineConfig{}
+		if len(exporterNames) > 0 {
+			pipelines["metrics"] = pipelineConfig{
+				Receivers:  receiverNames,
+				Processors: []string{"resource", "batch"},
+				Exporters:  exporterNames,
+			}
+		}
+		if tracesEnabled {
+			// Only the otlp receiver carries gateway spans; sqlquery is metrics-only.
+			pipelines["traces"] = pipelineConfig{
+				Receivers:  []string{"otlp"},
+				Processors: []string{"resource", "batch"},
+				Exporters:  []string{"otlp/traces"},
+			}
+		}
 		cfg.Service = &serviceConfig{
 			Telemetry: &telemetryConfig{
 				Metrics: &telemetryMetricsConfig{
 					Level: "none",
 				},
 			},
-			Pipelines: map[string]pipelineConfig{
-				"metrics": {
-					Receivers:  receiverNames,
-					Processors: []string{"resource", "batch"},
-					Exporters:  exporterNames,
-				},
-			},
+			Pipelines: pipelines,
 		}
 	}
 

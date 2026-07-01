@@ -416,6 +416,31 @@ type MonitoringSpec struct {
 	// Exporter configures where metrics are sent.
 	// +optional
 	Exporter *ExporterSpec `json:"exporter,omitempty"`
+
+	// Tracing configures distributed tracing (spans) export from the gateway.
+	// Requires Enabled=true (the traces share the same sidecar collector).
+	// +optional
+	Tracing *TracingSpec `json:"tracing,omitempty"`
+}
+
+// TracingSpec configures distributed tracing from the documentdb-gateway. When
+// enabled, the operator turns on the gateway's OTLP trace exporter and adds a
+// traces pipeline to the OTel Collector sidecar that pushes spans (OTLP/gRPC)
+// to OTLPEndpoint. Unlike metrics — which Prometheus scrapes from each sidecar —
+// traces must be pushed to a central trace backend (e.g. Tempo or Jaeger).
+type TracingSpec struct {
+	// Enabled turns on gateway trace export and the sidecar traces pipeline.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// OTLPEndpoint is the OTLP/gRPC endpoint the sidecar pushes spans to
+	// (e.g., "tempo.observability:4317"). Required when Enabled is true.
+	// +optional
+	OTLPEndpoint string `json:"otlpEndpoint,omitempty"`
+
+	// SQLCommenterEnabled injects a W3C `traceparent` SQL comment into
+	// gateway-issued Postgres queries so database logs correlate to traces.
+	// +optional
+	SQLCommenterEnabled bool `json:"sqlCommenterEnabled,omitempty"`
 }
 
 // ExporterSpec configures metric export destinations.

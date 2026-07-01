@@ -196,6 +196,67 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(dynCfg.Exporters).To(BeEmpty())
 	})
 
+	It("adds a traces pipeline and otlp/traces exporter when tracing is enabled", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+			Tracing: &dbpreview.TracingSpec{
+				Enabled:      true,
+				OTLPEndpoint: "tempo.observability:4317",
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).To(HaveKey("otlp/traces"))
+		traceExp, ok := dynCfg.Exporters["otlp/traces"].(map[string]any)
+		Expect(ok).To(BeTrue())
+		Expect(traceExp["endpoint"]).To(Equal("tempo.observability:4317"))
+
+		Expect(dynCfg.Service.Pipelines).To(HaveKey("traces"))
+		Expect(dynCfg.Service.Pipelines["traces"].Exporters).To(ContainElement("otlp/traces"))
+		// sqlquery is metrics-only; the traces pipeline must use only the otlp receiver.
+		Expect(dynCfg.Service.Pipelines["traces"].Receivers).To(Equal([]string{"otlp"}))
+		// The metrics pipeline still exists alongside traces.
+		Expect(dynCfg.Service.Pipelines).To(HaveKey("metrics"))
+	})
+
+	It("skips the traces pipeline when tracing is enabled but endpoint is empty", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Exporter: &dbpreview.ExporterSpec{
+				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			},
+			Tracing: &dbpreview.TracingSpec{Enabled: true, OTLPEndpoint: ""},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Exporters).NotTo(HaveKey("otlp/traces"))
+		Expect(dynCfg.Service.Pipelines).NotTo(HaveKey("traces"))
+	})
+
+	It("generates a traces pipeline even when no metrics exporters are configured", func() {
+		spec := &dbpreview.MonitoringSpec{
+			Enabled: true,
+			Tracing: &dbpreview.TracingSpec{
+				Enabled:      true,
+				OTLPEndpoint: "tempo.observability:4317",
+			},
+		}
+		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+
+		dynCfg := parseCfg(data["dynamic.yaml"])
+		Expect(dynCfg.Service).NotTo(BeNil())
+		Expect(dynCfg.Service.Pipelines).To(HaveKey("traces"))
+		Expect(dynCfg.Service.Pipelines).NotTo(HaveKey("metrics"))
+	})
+
 	// Regression guards — see comments in config.go for the why behind each.
 	It("uses 'insert' (not 'upsert') on the resource processor so per-datapoint k8s attrs survive", func() {
 		spec := &dbpreview.MonitoringSpec{
