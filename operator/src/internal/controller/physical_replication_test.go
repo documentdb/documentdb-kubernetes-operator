@@ -5,7 +5,6 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	v1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -654,6 +653,92 @@ var _ = Describe("Physical Replication", func() {
 		Expect(updated.Spec.ExternalClusters).To(HaveLen(3))
 		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
 	})
+
+	It("applies external cluster detail changes for non-HA primary without synchronous config", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-repl-nonha", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      documentdb.Name,
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: documentdb.Name},
+				{Name: "member-2"},
+			},
+		}
+
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-repl-nonha",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:    documentdb.Name,
+					Primary: documentdb.Name,
+					Source:  documentdb.Name,
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{
+						Name: documentdb.Name,
+						ConnectionParameters: map[string]string{
+							"host":   documentdb.Name + "-rw." + namespace + ".svc",
+							"port":   "5432",
+							"dbname": "postgres",
+							"user":   "postgres",
+						},
+					},
+					{
+						Name: "member-2",
+						ConnectionParameters: map[string]string{
+							"host":   "member-2-rw." + namespace + ".svc",
+							"port":   "5432",
+							"dbname": "postgres",
+							"user":   "postgres",
+						},
+					},
+				},
+			},
+		}
+
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters[1].ConnectionParameters["user"] = "streaming_replica"
+		desired.Spec.ExternalClusters[1].ConnectionParameters["sslmode"] = "verify-full"
+		desired.Spec.ExternalClusters[1].SSLCert = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "replication-tls"},
+			Key:                  "tls.crt",
+		}
+		desired.Spec.ExternalClusters[1].SSLKey = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "replication-tls"},
+			Key:                  "tls.key",
+		}
+		desired.Spec.ExternalClusters[1].SSLRootCert = &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "server-ca"},
+			Key:                  "ca.crt",
+		}
+
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext, err := util.GetReplicationContext(ctx, reconciler.Client, *documentdb)
+		Expect(err).ToNot(HaveOccurred())
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		Expect(current.Spec.PostgresConfiguration.Synchronous).To(BeNil())
+		Expect(desired.Spec.PostgresConfiguration.Synchronous).To(BeNil())
+		for _, op := range patchOps {
+			Expect(op.Path).ToNot(Equal(cnpg.PatchPathSynchronous))
+		}
+
+		syncErr := cnpg.SyncCnpgCluster(ctx, reconciler.Client, current, desired, patchOps)
+		Expect(syncErr).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.ExternalClusters).To(Equal(desired.Spec.ExternalClusters))
+		Expect(updated.Spec.PostgresConfiguration.Synchronous).To(BeNil())
+	})
 })
 
 var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", func() {
@@ -678,8 +763,6 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			OtherCNPGClusterNames:        []string{name + "-remote-a", name + "-remote-b"},
 			PrimaryCNPGClusterName:       name + "-local",
 			CrossCloudNetworkingStrategy: util.None,
-			ReplicationTLSSecret:         tlsSecret,
-			ClientCASecret:               caSecret,
 		}
 	}
 
@@ -697,7 +780,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			},
 		}
 		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
-			Postgres: &v1.CertificatesConfiguration{
+			Postgres: &cnpgv1.CertificatesConfiguration{
 				ServerCASecret:       "provided-server-ca",
 				ClientCASecret:       "provided-client-ca",
 				ServerTLSSecret:      "provided-server-tls",
@@ -749,7 +832,10 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			},
 		}
 		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
-			Postgres: &v1.CertificatesConfiguration{ReplicationTLSSecret: "replication-tls"},
+			Postgres: &cnpgv1.CertificatesConfiguration{
+				ReplicationTLSSecret: "replication-tls",
+				ClientCASecret:       "replication-tls",
+			},
 		}
 
 		cnpgCluster := buildCnpgCluster("docdb-cert-partial", namespace)
@@ -785,7 +871,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			},
 		}
 		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
-			Postgres: &v1.CertificatesConfiguration{
+			Postgres: &cnpgv1.CertificatesConfiguration{
 				ReplicationTLSSecret: "cross-region-client-cert",
 				ClientCASecret:       "cross-region-client-cert",
 				ServerTLSSecret:      "cross-region-server-cert",
@@ -841,59 +927,5 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			Expect(ec.SSLKey).To(BeNil())
 			Expect(ec.SSLRootCert).To(BeNil())
 		}
-	})
-})
-
-var _ = Describe("getReplicasChangePatchOps - cert management fields", func() {
-	It("emits a replace patch for spec.certificates alongside externalClusters", func() {
-		desired := &cnpgv1.Cluster{
-			Spec: cnpgv1.ClusterSpec{
-				ExternalClusters: []cnpgv1.ExternalCluster{{Name: "cluster-a"}},
-				Certificates: &cnpgv1.CertificatesConfiguration{
-					ReplicationTLSSecret: "replication-tls",
-					ClientCASecret:       "client-ca",
-				},
-			},
-		}
-		replicationContext := &util.ReplicationContext{
-			CrossCloudNetworkingStrategy: util.None,
-		}
-
-		var patchOps []cnpg.JSONPatch
-		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
-
-		hasCerts := false
-		for _, op := range patchOps {
-			if op.Path == cnpg.PatchPathCertificates {
-				Expect(op.Op).To(Equal(cnpg.PatchOpReplace))
-				Expect(op.Value).To(Equal(desired.Spec.Certificates))
-				hasCerts = true
-			}
-		}
-		Expect(hasCerts).To(BeTrue())
-	})
-
-	It("emits a replace patch for spec.certificates with a nil value when TLS is disabled", func() {
-		desired := &cnpgv1.Cluster{
-			Spec: cnpgv1.ClusterSpec{
-				ExternalClusters: []cnpgv1.ExternalCluster{{Name: "cluster-a"}},
-			},
-		}
-		replicationContext := &util.ReplicationContext{
-			CrossCloudNetworkingStrategy: util.None,
-		}
-
-		var patchOps []cnpg.JSONPatch
-		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
-
-		hasCerts := false
-		for _, op := range patchOps {
-			if op.Path == cnpg.PatchPathCertificates {
-				Expect(op.Op).To(Equal(cnpg.PatchOpReplace))
-				Expect(op.Value).To(BeNil())
-				hasCerts = true
-			}
-		}
-		Expect(hasCerts).To(BeTrue())
 	})
 })

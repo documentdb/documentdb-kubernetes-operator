@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -411,11 +412,8 @@ func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, curre
 		log.Log.Info("Clearing stale promotionToken", "cluster", current.Name)
 	}
 
-	// Update if the cluster list has changed
-	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
-	if replicasChanged {
-		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
-	}
+	// Update if replication connection entries or their PgHBA rules have changed.
+	getReplicasChangePatchOps(&patchOps, current, desired, replicationContext)
 
 	return patchOps, nil, -1
 }
@@ -531,54 +529,48 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 	return nil, -1
 }
 
-func externalClusterNamesChanged(currentClusters, desiredClusters []cnpgv1.ExternalCluster) bool {
-	if len(currentClusters) != len(desiredClusters) {
-		return true
+func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, current, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
+	externalClusterSpecChanged := !reflect.DeepEqual(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
+	if externalClusterSpecChanged {
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathExternalClusters,
+			Value: desired.Spec.ExternalClusters,
+		})
 	}
-
-	if len(currentClusters) == 0 {
-		return false
+	if !reflect.DeepEqual(current.Spec.PostgresConfiguration.PgHBA, desired.Spec.PostgresConfiguration.PgHBA) {
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathPostgresPgHBA,
+			Value: desired.Spec.PostgresConfiguration.PgHBA,
+		})
 	}
-
-	nameSet := make(map[string]bool, len(currentClusters))
-	for _, cluster := range currentClusters {
-		nameSet[cluster.Name] = true
-	}
-
-	for _, cluster := range desiredClusters {
-		if found := nameSet[cluster.Name]; !found {
-			return true
-		}
-		delete(nameSet, cluster.Name)
-	}
-
-	return len(nameSet) != 0
-}
-
-func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
-	*patchOps = append(*patchOps, cnpg.JSONPatch{
-		Op:    cnpg.PatchOpReplace,
-		Path:  cnpg.PatchPathExternalClusters,
-		Value: desired.Spec.ExternalClusters,
-	})
-	*patchOps = append(*patchOps, cnpg.JSONPatch{
-		Op:    cnpg.PatchOpReplace,
-		Path:  cnpg.PatchPathCertificates,
-		Value: desired.Spec.Certificates,
-	})
-	if replicationContext.IsAzureFleetNetworking() {
+	if externalClusterSpecChanged && replicationContext.IsAzureFleetNetworking() {
 		*patchOps = append(*patchOps, cnpg.JSONPatch{
 			Op:    cnpg.PatchOpReplace,
 			Path:  cnpg.PatchPathManagedServices,
 			Value: desired.Spec.Managed.Services.Additional,
 		})
 	}
-	if replicationContext.IsPrimary() {
-		*patchOps = append(*patchOps, cnpg.JSONPatch{
-			Op:    cnpg.PatchOpReplace,
-			Path:  cnpg.PatchPathSynchronous,
-			Value: desired.Spec.PostgresConfiguration.Synchronous,
-		})
+	if externalClusterSpecChanged && replicationContext.IsPrimary() {
+		currentSynchronous := current.Spec.PostgresConfiguration.Synchronous
+		desiredSynchronous := desired.Spec.PostgresConfiguration.Synchronous
+		if !reflect.DeepEqual(currentSynchronous, desiredSynchronous) {
+			synchronousPatch := cnpg.JSONPatch{
+				Path:  cnpg.PatchPathSynchronous,
+				Value: desiredSynchronous,
+			}
+			switch {
+			case currentSynchronous == nil:
+				synchronousPatch.Op = cnpg.PatchOpAdd
+			case desiredSynchronous == nil:
+				synchronousPatch.Op = cnpg.PatchOpRemove
+				synchronousPatch.Value = nil
+			default:
+				synchronousPatch.Op = cnpg.PatchOpReplace
+			}
+			*patchOps = append(*patchOps, synchronousPatch)
+		}
 	}
 }
 

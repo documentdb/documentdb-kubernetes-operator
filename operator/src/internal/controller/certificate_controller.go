@@ -9,7 +9,6 @@ import (
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +56,6 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {
-
 	// TLS is always enabled. When tls or tls.gateway is unset, default to SelfSigned
 	// so the operator provisions a managed cert (issue #356 - no plaintext path).
 	var gatewayCfg *dbpreview.GatewayTLS
@@ -100,89 +98,6 @@ func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *
 		)
 		return r.ensureSelfSignedCert(ctx, ddb)
 	}
-}
-
-func (r *CertificateReconciler) ensurePostgresCAIssuer(ctx context.Context, ddb *dbpreview.DocumentDB, issuerName, secretName string) (cmmeta.ObjectReference, error) {
-	issuer := &cmapi.Issuer{ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: ddb.Namespace}}
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, issuer, func() error {
-		issuer.Spec = cmapi.IssuerSpec{IssuerConfig: cmapi.IssuerConfig{CA: &cmapi.CAIssuer{SecretName: secretName}}}
-		return controllerutil.SetControllerReference(ddb, issuer, r.Scheme)
-	})
-	if err != nil {
-		return cmmeta.ObjectReference{}, err
-	}
-	return cmmeta.ObjectReference{Name: issuerName, Kind: "Issuer", Group: "cert-manager.io"}, nil
-}
-
-func (r *CertificateReconciler) ensurePostgresSelfSignedIssuer(ctx context.Context, ddb *dbpreview.DocumentDB) (cmmeta.ObjectReference, error) {
-	issuerName := ddb.Name + "-postgres-selfsigned"
-	issuer := &cmapi.Issuer{ObjectMeta: metav1.ObjectMeta{Name: issuerName, Namespace: ddb.Namespace}}
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, issuer, func() error {
-		issuer.Spec = cmapi.IssuerSpec{IssuerConfig: cmapi.IssuerConfig{SelfSigned: &cmapi.SelfSignedIssuer{}}}
-		return controllerutil.SetControllerReference(ddb, issuer, r.Scheme)
-	})
-	if err != nil {
-		return cmmeta.ObjectReference{}, err
-	}
-	return cmmeta.ObjectReference{Name: issuerName, Kind: "Issuer", Group: "cert-manager.io"}, nil
-}
-
-func (r *CertificateReconciler) ensurePostgresCACertificate(ctx context.Context, ddb *dbpreview.DocumentDB, configuration *cnpgv1.CertificatesConfiguration, issuerRef cmmeta.ObjectReference) error {
-	cert := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: configuration.ServerCASecret, Namespace: ddb.Namespace}}
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, cert, func() error {
-		cert.Spec = cmapi.CertificateSpec{
-			SecretName:  configuration.ServerCASecret,
-			CommonName:  ddb.Name + " postgres ca",
-			IsCA:        true,
-			IssuerRef:   issuerRef,
-			Duration:    &metav1.Duration{Duration: 90 * 24 * time.Hour},
-			RenewBefore: &metav1.Duration{Duration: 15 * 24 * time.Hour},
-			Usages:      []cmapi.KeyUsage{cmapi.UsageCertSign, cmapi.UsageCRLSign},
-		}
-		return controllerutil.SetControllerReference(ddb, cert, r.Scheme)
-	})
-	return err
-}
-
-func (r *CertificateReconciler) ensurePostgresServerCertificate(ctx context.Context, ddb *dbpreview.DocumentDB, configuration *cnpgv1.CertificatesConfiguration, issuerRef cmmeta.ObjectReference) error {
-	dnsNames := append([]string(nil), configuration.ServerAltDNSNames...)
-	if len(dnsNames) == 0 {
-		replicationContext, err := util.GetReplicationContext(ctx, r.Client, *ddb)
-		if err != nil {
-			return err
-		}
-		dnsNames = []string{replicationContext.CNPGClusterName + "-rw." + ddb.Namespace + ".svc"}
-	}
-
-	cert := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: configuration.ServerTLSSecret, Namespace: ddb.Namespace}}
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, cert, func() error {
-		cert.Spec = cmapi.CertificateSpec{
-			SecretName:  configuration.ServerTLSSecret,
-			DNSNames:    dnsNames,
-			IssuerRef:   issuerRef,
-			Duration:    &metav1.Duration{Duration: 90 * 24 * time.Hour},
-			RenewBefore: &metav1.Duration{Duration: 15 * 24 * time.Hour},
-			Usages:      []cmapi.KeyUsage{cmapi.UsageServerAuth},
-		}
-		return controllerutil.SetControllerReference(ddb, cert, r.Scheme)
-	})
-	return err
-}
-
-func (r *CertificateReconciler) ensurePostgresReplicationCertificate(ctx context.Context, ddb *dbpreview.DocumentDB, configuration *cnpgv1.CertificatesConfiguration, issuerRef cmmeta.ObjectReference) error {
-	cert := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: configuration.ReplicationTLSSecret, Namespace: ddb.Namespace}}
-	_, err := controllerutil.CreateOrPatch(ctx, r.Client, cert, func() error {
-		cert.Spec = cmapi.CertificateSpec{
-			SecretName:  configuration.ReplicationTLSSecret,
-			CommonName:  "streaming_replica",
-			IssuerRef:   issuerRef,
-			Duration:    &metav1.Duration{Duration: 90 * 24 * time.Hour},
-			RenewBefore: &metav1.Duration{Duration: 15 * 24 * time.Hour},
-			Usages:      []cmapi.KeyUsage{cmapi.UsageClientAuth},
-		}
-		return controllerutil.SetControllerReference(ddb, cert, r.Scheme)
-	})
-	return err
 }
 
 func (r *CertificateReconciler) ensureProvidedSecret(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {

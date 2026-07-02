@@ -353,7 +353,7 @@ type Timeouts struct {
 }
 
 // TLSConfiguration aggregates TLS settings across DocumentDB components.
-// +kubebuilder:validation:XValidation:rule="!has(self.postgres) || (has(self.postgres.replicationTLSSecret) && size(self.postgres.replicationTLSSecret) > 0 && (((!has(self.postgres.serverCASecret) || size(self.postgres.serverCASecret) == 0) && (!has(self.postgres.serverTLSSecret) || size(self.postgres.serverTLSSecret) == 0) && (!has(self.postgres.clientCASecret) || size(self.postgres.clientCASecret) == 0)) || (has(self.postgres.serverCASecret) && size(self.postgres.serverCASecret) > 0 && has(self.postgres.serverTLSSecret) && size(self.postgres.serverTLSSecret) > 0 && has(self.postgres.clientCASecret) && size(self.postgres.clientCASecret) > 0)))",message="spec.tls.postgres must be omitted, provide replicationTLSSecret only, or provide replicationTLSSecret with serverCASecret, serverTLSSecret, and clientCASecret together"
+// +kubebuilder:validation:XValidation:rule="!has(self.postgres) || (has(self.postgres.replicationTLSSecret) == has(self.postgres.clientCASecret) && has(self.postgres.serverTLSSecret) == has(self.postgres.serverCASecret) && (!has(self.postgres.serverTLSSecret) || has(self.postgres.replicationTLSSecret)))",message="spec.tls.postgres replicationTLSSecret and clientCASecret must be provided together; serverTLSSecret and serverCASecret must be provided together; serverTLSSecret requires replicationTLSSecret"
 type TLSConfiguration struct {
 	// Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only).
 	Gateway *GatewayTLS `json:"gateway,omitempty"`

@@ -23,8 +23,6 @@ type ReplicationContext struct {
 	StorageClass                 string
 	FleetMemberName              string
 	OtherFleetMemberNames        []string
-	ReplicationTLSSecret         string
-	ClientCASecret               string
 	currentLocalPrimary          string
 	targetLocalPrimary           string
 	state                        replicationState

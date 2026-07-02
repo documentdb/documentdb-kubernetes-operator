@@ -67,16 +67,7 @@ spec:
   usages:
     - server auth
   dnsNames:
-    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns.svc
-    - documentdb-preview-bb8b4c62e10c285b-rw.documentdb-preview-ns
-    - documentdb-preview-bb8b4c62e10c285b-rw
-    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns.svc
-    - documentdb-preview-f5d2b7e6d7a5bd04-rw.documentdb-preview-ns
-    - documentdb-preview-f5d2b7e6d7a5bd04-rw
-    - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns.svc
-    - documentdb-preview-8377bf145d2df796-rw.documentdb-preview-ns
-    - documentdb-preview-8377bf145d2df796-rw
-    - "*.fleet-system.svc"
+{{CROSS_REGION_DNS_NAMES}}
   issuerRef:
     name: selfsigned-cross-region-issuer
     kind: Issuer

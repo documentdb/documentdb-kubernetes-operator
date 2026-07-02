@@ -19,6 +19,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 WEBHOOK_WAIT_TIMEOUT_SECONDS="${WEBHOOK_WAIT_TIMEOUT_SECONDS:-300}"
 APPLY_RETRY_COUNT="${APPLY_RETRY_COUNT:-4}"
+DOCDB_NAME="documentdb-preview"
+DOCDB_NAMESPACE="documentdb-preview-ns"
+
+generate_cnpg_cluster_name() {
+  local docdb_name="$1"
+  local cluster="$2"
+  local h=0xcbf29ce484222325
+  local prime=0x100000001b3
+  local max_docdb_len=$((50 - 9))
+  local i byte hash
+  local LC_ALL=C
+
+  for ((i = 0; i < ${#cluster}; i++)); do
+    printf -v byte '%d' "'${cluster:i:1}"
+    h=$(((h ^ byte) * prime))
+  done
+
+  printf -v hash '%x' "$h"
+  printf '%s\n' "${docdb_name:0:max_docdb_len}-${hash}" | cut -c1-50
+}
 
 wait_for_context_connectivity() {
   local context="$1"
@@ -54,7 +74,7 @@ wait_for_service_endpoints() {
     fi
 
     local endpoint_count
-    endpoint_count=$(kubectl --context "$context" get endpoints "$service" -n "$namespace" -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}' 2>/dev/null | grep -c '.')
+    endpoint_count=$(kubectl --context "$context" get endpoints "$service" -n "$namespace" -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}' 2>/dev/null | wc -l )
     if [ "$endpoint_count" -gt 0 ]; then
       echo "✓ Ready endpoints found for ${namespace}/${service}: ${endpoint_count}"
       return 0
@@ -180,6 +200,23 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   fi
 done
 
+# Build the certificate SAN list for CNPG cross-region replication services.
+CROSS_REGION_DNS_NAMES=""
+for cluster in "${CLUSTER_ARRAY[@]}"; do
+  CNPG_CLUSTER_NAME=$(generate_cnpg_cluster_name "$DOCDB_NAME" "$cluster")
+  for dns_name in \
+    "${CNPG_CLUSTER_NAME}-rw.${DOCDB_NAMESPACE}.svc" \
+    "${CNPG_CLUSTER_NAME}-rw.${DOCDB_NAMESPACE}" \
+    "${CNPG_CLUSTER_NAME}-rw"; do
+    if [ -z "$CROSS_REGION_DNS_NAMES" ]; then
+      CROSS_REGION_DNS_NAMES="    - ${dns_name}"
+    else
+      CROSS_REGION_DNS_NAMES="${CROSS_REGION_DNS_NAMES}"$'\n'"    - ${dns_name}"
+    fi
+  done
+done
+CROSS_REGION_DNS_NAMES="${CROSS_REGION_DNS_NAMES}"$'\n'"    - \"*.fleet-system.svc\""
+
 # Step 1: Create cluster identification ConfigMaps on each member cluster
 echo ""
 echo "======================================="
@@ -300,6 +337,8 @@ sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then
     echo "$CLUSTER_LIST"
+  elif [[ "$line" == '{{CROSS_REGION_DNS_NAMES}}' ]]; then
+    echo "$CROSS_REGION_DNS_NAMES"
   else
     echo "$line"
   fi
@@ -312,6 +351,8 @@ echo "--------------------------------"
 echo "Primary cluster: $PRIMARY_CLUSTER"
 echo "Cluster list:"
 echo "$CLUSTER_LIST"
+echo "Cross-region certificate SANs:"
+echo "$CROSS_REGION_DNS_NAMES"
 echo "--------------------------------"
 
 # cat "$TEMP_YAML" 

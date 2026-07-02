@@ -216,21 +216,18 @@ func SyncCnpgCluster(
 	}
 
 	if !reflect.DeepEqual(current.Spec.Certificates, desired.Spec.Certificates) {
-		// TODO remove this first block, only applicable for upgrades since from
-		// this version forward there should ALWAYS be certificates
-		if current.Spec.Certificates == nil {
-			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpAdd,
-				Path:  PatchPathCertificates,
-				Value: desired.Spec.Certificates,
-			})
-		} else {
-			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpReplace,
-				Path:  PatchPathCertificates,
-				Value: desired.Spec.Certificates,
-			})
+		certificatesPatch := JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathCertificates,
+			Value: desired.Spec.Certificates,
 		}
+		if current.Spec.Certificates == nil {
+			certificatesPatch.Op = PatchOpAdd
+		} else if desired.Spec.Certificates == nil {
+			certificatesPatch.Op = PatchOpRemove
+			certificatesPatch.Value = nil
+		}
+		patchOps = append(patchOps, certificatesPatch)
 	}
 
 	// Extra operations (e.g., replication changes)
