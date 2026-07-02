@@ -1568,13 +1568,17 @@ spec:
                     type: object
                 type: object
                 x-kubernetes-validations:
-                - message: spec.tls.postgres must be omitted or provide serverCASecret,
-                    serverTLSSecret, replicationTLSSecret, and clientCASecret together
-                  rule: '!has(self.postgres) || (has(self.postgres.serverCASecret)
+                - message: spec.tls.postgres must be omitted, provide replicationTLSSecret
+                    only, or provide replicationTLSSecret with serverCASecret, serverTLSSecret,
+                    and clientCASecret together
+                  rule: '!has(self.postgres) || (has(self.postgres.replicationTLSSecret)
+                    && size(self.postgres.replicationTLSSecret) > 0 && (((!has(self.postgres.serverCASecret)
+                    || size(self.postgres.serverCASecret) == 0) && (!has(self.postgres.serverTLSSecret)
+                    || size(self.postgres.serverTLSSecret) == 0) && (!has(self.postgres.clientCASecret)
+                    || size(self.postgres.clientCASecret) == 0)) || (has(self.postgres.serverCASecret)
                     && size(self.postgres.serverCASecret) > 0 && has(self.postgres.serverTLSSecret)
-                    && size(self.postgres.serverTLSSecret) > 0 && has(self.postgres.replicationTLSSecret)
-                    && size(self.postgres.replicationTLSSecret) > 0 && has(self.postgres.clientCASecret)
-                    && size(self.postgres.clientCASecret) > 0)'
+                    && size(self.postgres.serverTLSSecret) > 0 && has(self.postgres.clientCASecret)
+                    && size(self.postgres.clientCASecret) > 0)))'
             required:
             - instancesPerNode
             - nodeCount

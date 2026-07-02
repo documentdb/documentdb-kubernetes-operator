@@ -153,14 +153,21 @@ spec:
       - name: member-westus3-cluster
 ```
 
-#### Securing replication with verify-full mTLS
+#### Securing replication with Postgres TLS
 
 Cross-Kubernetes-cluster streaming replication flows over the network between
-member Kubernetes clusters. When you set `spec.tls.postgres`, the operator enables
-PostgreSQL TLS for replication and configures each generated CloudNative-PG
-external cluster connection with `sslmode=verify-full`.
+member Kubernetes clusters. When you set `spec.tls.postgres.replicationTLSSecret`,
+the operator configures each generated CloudNative-PG external cluster connection
+to use the `streaming_replica` client certificate.
 
-With this configuration, replication uses mutual TLS (mTLS):
+The supported configuration paths are:
+
+| Configuration path | Fields | Operator behavior |
+| --- | --- | --- |
+| Client certificate only | `spec.tls.postgres.replicationTLSSecret` | References the `streaming_replica` client certificate and key and sets `sslmode=require`. The replica encrypts replication traffic but doesn't verify the primary server certificate through `sslRootCert`. |
+| Full server verification | `spec.tls.postgres.replicationTLSSecret`, `spec.tls.postgres.clientCASecret`, `spec.tls.postgres.serverTLSSecret`, `spec.tls.postgres.serverCASecret` | References the `streaming_replica` client certificate and key, references `serverCASecret` as `sslRootCert`, and sets `sslmode=verify-full`. |
+
+With the full server verification path, replication uses mutual TLS (mTLS):
 
 - The replica presents the certificate from `replicationTLSSecret` as the
   `streaming_replica` client identity.
@@ -193,6 +200,18 @@ spec:
   tls:
     postgres:
       replicationTLSSecret: cross-region-client-cert
+```
+
+```yaml title="documentdb-postgres-verify-full-mtls.yaml"
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  tls:
+    postgres:
+      replicationTLSSecret: cross-region-client-cert
       clientCASecret: cross-region-client-cert
       serverTLSSecret: cross-region-server-cert
       serverCASecret: cross-region-server-cert
@@ -201,9 +220,9 @@ spec:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `spec.tls.postgres.replicationTLSSecret` | string | Yes | Name of the Kubernetes Secret that contains the `streaming_replica` client certificate and key. The Secret must contain `tls.crt` and `tls.key`. |
-| `spec.tls.postgres.clientCASecret` | string | Yes | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the replication client certificate. PostgreSQL uses this CA to verify replicas. |
-| `spec.tls.postgres.serverTLSSecret` | string | Yes | Name of the Kubernetes Secret that contains the PostgreSQL server certificate and key. The Secret must contain `tls.crt` and `tls.key`. |
-| `spec.tls.postgres.serverCASecret` | string | Yes | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the PostgreSQL server certificate. Replicas use this CA as `sslRootCert` for `verify-full` validation. |
+| `spec.tls.postgres.clientCASecret` | string | Only with `verify-full` | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the replication client certificate. PostgreSQL uses this CA to verify replicas. |
+| `spec.tls.postgres.serverTLSSecret` | string | Only with `verify-full` | Name of the Kubernetes Secret that contains the PostgreSQL server certificate and key. The Secret must contain `tls.crt` and `tls.key`. |
+| `spec.tls.postgres.serverCASecret` | string | Only with `verify-full` | Name of the Kubernetes Secret that contains `ca.crt` for the CA that signs the PostgreSQL server certificate. Replicas use this CA as `sslRootCert` for `verify-full` validation. |
 
 For `verify-full`, the server certificate SANs must cover every host name that a
 replica might use for the primary. Include the generated CloudNative-PG read-write

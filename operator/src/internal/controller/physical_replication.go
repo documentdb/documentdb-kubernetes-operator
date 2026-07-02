@@ -109,8 +109,15 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 
 	// If we are multi-cluster and no certs are provided, trust that the DocumentDB cluster is running in a secure environment and allow replication without TLS
 	// (probably istio or some other service mesh)
-	postgresCertificatesProvided := cnpgCluster.Spec.Certificates != nil
-	if !postgresCertificatesProvided {
+	postgresReplicationTLSSecret := ""
+	postgresServerCASecret := ""
+	if cnpgCluster.Spec.Certificates != nil {
+		postgresReplicationTLSSecret = cnpgCluster.Spec.Certificates.ReplicationTLSSecret
+		postgresServerCASecret = cnpgCluster.Spec.Certificates.ServerCASecret
+	}
+	postgresClientCertificateProvided := postgresReplicationTLSSecret != ""
+	postgresServerCAProvided := postgresServerCASecret != ""
+	if !postgresClientCertificateProvided {
 		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
 			"host all all localhost trust",
 			"host replication streaming_replica all trust",
@@ -155,30 +162,35 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			"dbname": "postgres",
 			"user":   "streaming_replica",
 		}
-		if postgresCertificatesProvided {
-			connectionParameters["sslmode"] = "verify-full"
+		if postgresClientCertificateProvided {
+			connectionParameters["sslmode"] = "require"
+			if postgresServerCAProvided {
+				connectionParameters["sslmode"] = "verify-full"
+			}
 		}
 
 		externalCluster := cnpgv1.ExternalCluster{
 			Name:                 clusterName,
 			ConnectionParameters: connectionParameters,
 		}
-		if postgresCertificatesProvided {
+		if postgresClientCertificateProvided {
 			externalCluster.SSLCert = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: cnpgCluster.Spec.Certificates.ReplicationTLSSecret,
+					Name: postgresReplicationTLSSecret,
 				},
 				Key: "tls.crt",
 			}
 			externalCluster.SSLKey = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: cnpgCluster.Spec.Certificates.ReplicationTLSSecret,
+					Name: postgresReplicationTLSSecret,
 				},
 				Key: "tls.key",
 			}
+		}
+		if postgresClientCertificateProvided && postgresServerCAProvided {
 			externalCluster.SSLRootCert = &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
-					Name: cnpgCluster.Spec.Certificates.ServerCASecret,
+					Name: postgresServerCASecret,
 				},
 				Key: "ca.crt",
 			}

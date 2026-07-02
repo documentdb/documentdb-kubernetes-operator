@@ -117,8 +117,6 @@ _Appears in:_
 | `primary` _string_ | Primary is the name of the primary cluster for replication. |  |  |
 | `clusterList` _[MemberCluster](#membercluster) array_ | ClusterList is the list of clusters participating in replication. |  |  |
 | `highAvailability` _boolean_ | Whether or not to have replicas on the primary cluster. |  |  |
-| `replicationTLSSecret` _string_ | ReplicationTLSSecret is the name of a Kubernetes Secret containing TLS certificates<br />for the streaming_replica user used in physical replication. The secret must contain<br />"tls.crt" and "tls.key" keys. When specified, the operator references this secret in<br />clusters participating in replication.<br />NOTE: It needs to be the same for all clusters |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
-| `clientCASecret` _string_ | ClientCASecret is the name of a Kubernetes Secret containing the CA certificate<br />used to verify the streaming_replica client certificate. The secret must contain<br />a "ca.crt" key. When specified, the operator references this secret in<br />clusters participating in replication.<br />NOTE: It needs to be the same for all clusters |  | MaxLength: 253 <br />Pattern: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### DocumentDB
@@ -378,19 +376,7 @@ _Appears in:_
 | `uid` _integer_ | UID is the numeric user ID under which the PostgreSQL server process runs.<br />When set, GID must also be set. |  | Optional: \{\} <br /> |
 | `gid` _integer_ | GID is the numeric group ID under which the PostgreSQL server process runs.<br />When set, UID must also be set. |  | Optional: \{\} <br /> |
 | `postInitSQL` _string array_ | PostInitSQL is an ordered list of SQL statements executed after the<br />cluster is initialized. These statements run AFTER the operator's<br />mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE<br />documentdb, ALTER ROLE documentdb), so they can safely reference the<br />documentdb extension and role. |  | Optional: \{\} <br /> |
-
-
-#### PostgresTLS
-
-
-
-PostgresTLS acts as a placeholder for future Postgres TLS settings.
-
-
-
-_Appears in:_
-- [TLSConfiguration](#tlsconfiguration)
-
+| `parameters` _object (keys:string, values:string)_ | Parameters allows users to override PostgreSQL configuration parameters<br />(postgresql.conf settings) passed through to the underlying CNPG Cluster.<br />The operator applies memory-aware defaults (shared_buffers, effective_cache_size,<br />work_mem, maintenance_work_mem) computed from the pod memory limit, plus static<br />best-practice defaults for autovacuum, IO, WAL, and connection settings.<br />Values specified here override computed and static defaults.<br />Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,<br />max_prepared_transactions) cannot be overridden. |  | Optional: \{\} <br /> |
 
 
 #### PrometheusExporterSpec
@@ -456,6 +442,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `storage` _[StorageConfiguration](#storageconfiguration)_ | Storage configuration for DocumentDB persistent volumes. |  |  |
+| `memory` _string_ | Memory specifies the memory limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.memory<br />and spec.resources.requests.memory (Guaranteed QoS).<br />Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)<br />are auto-computed from this value.<br />If not specified or set to "0", no memory limit is applied and static<br />defaults are used for memory-aware parameters.<br />Examples: "2Gi", "4Gi", "8Gi" |  | Optional: \{\} <br /> |
+| `cpu` _string_ | CPU specifies the CPU limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.cpu<br />and spec.resources.requests.cpu (Guaranteed QoS).<br />If not specified or set to "0", no CPU limit is applied.<br />Examples: "2", "4", "500m" |  | Optional: \{\} <br /> |
 
 
 #### ScheduledBackup
@@ -526,7 +514,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `gateway` _[GatewayTLS](#gatewaytls)_ | Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only). |  |  |
-| `postgres` _[PostgresTLS](#postgrestls)_ | Postgres configures TLS for the Postgres server (placeholder for future phases). |  |  |
+| `postgres` _[CertificatesConfiguration](https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#CertificatesConfiguration)_ | Postgres configures TLS for the Postgres server. |  |  |
 | `globalEndpoints` _[GlobalEndpointsTLS](#globalendpointstls)_ | GlobalEndpoints configures TLS for global endpoints (placeholder for future phases). |  |  |
 
 

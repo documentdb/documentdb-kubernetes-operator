@@ -706,6 +706,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		}
 
 		cnpgCluster := buildCnpgCluster("docdb-cert-provided", namespace)
+		cnpgCluster.Spec.Certificates = documentdb.Spec.TLS.Postgres
 		replicationContext := buildPrimaryReplicationContext("docdb-cert-provided", "", "")
 
 		reconciler := buildDocumentDBReconciler()
@@ -730,10 +731,11 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			Expect(ec.ConnectionParameters).To(HaveKeyWithValue("sslmode", "verify-full"))
 			Expect(ec.SSLCert.Name).To(Equal("provided-replication-tls"))
 			Expect(ec.SSLKey.Name).To(Equal("provided-replication-tls"))
+			Expect(ec.SSLRootCert.Name).To(Equal("provided-server-ca"))
 		}
 	})
 
-	It("omits certificate configuration when Postgres cert secrets are partially configured", func() {
+	It("uses provided replication client certificate with sslmode require when server CA is omitted", func() {
 		ctx := context.Background()
 		namespace := "default"
 
@@ -751,19 +753,20 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		}
 
 		cnpgCluster := buildCnpgCluster("docdb-cert-partial", namespace)
+		cnpgCluster.Spec.Certificates = documentdb.Spec.TLS.Postgres
 		replicationContext := buildPrimaryReplicationContext("docdb-cert-partial", "", "")
 
 		reconciler := buildDocumentDBReconciler()
 		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
 
-		Expect(cnpgCluster.Spec.Certificates).To(BeNil())
+		Expect(cnpgCluster.Spec.Certificates).ToNot(BeNil())
 		for _, ec := range cnpgCluster.Spec.ExternalClusters {
 			if ec.Name == replicationContext.CNPGClusterName {
 				continue
 			}
-			Expect(ec.ConnectionParameters).NotTo(HaveKey("sslmode"))
-			Expect(ec.SSLCert).To(BeNil())
-			Expect(ec.SSLKey).To(BeNil())
+			Expect(ec.ConnectionParameters).To(HaveKeyWithValue("sslmode", "require"))
+			Expect(ec.SSLCert.Name).To(Equal("replication-tls"))
+			Expect(ec.SSLKey.Name).To(Equal("replication-tls"))
 			Expect(ec.SSLRootCert).To(BeNil())
 		}
 	})
