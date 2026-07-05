@@ -279,12 +279,16 @@ jobs:
           # driver (the driver may add keys like last-applied-version or
           # upgrade-attempt counters). Client-side apply with a full
           # generated body would clobber any field we don't set here.
+          # --force-conflicts lets longhaul-monitor take ownership of the
+          # fields it manages (desired-documentdb-version, last-updated) even
+          # if the ConfigMap was originally created by a different field
+          # manager (e.g. an earlier `kubectl create`/client-side apply).
           kubectl create configmap longhaul-versions \
             -n "${{ env.NAMESPACE }}" \
             --from-literal=desired-documentdb-version="$EXPECTED" \
             --from-literal=last-updated="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --dry-run=client -o yaml \
-            | kubectl apply --server-side --field-manager=longhaul-monitor -f -
+            | kubectl apply --server-side --force-conflicts --field-manager=longhaul-monitor -f -
 
           RUNNING=$(kubectl get documentdb documentdb-cluster -n "${{ env.NAMESPACE }}" \
             -o jsonpath='{.status.documentDBImage}' 2>/dev/null | sed 's/.*://')
