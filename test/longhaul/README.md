@@ -12,7 +12,7 @@ See the [design document](../../docs/designs/long-haul-test-design.md) for archi
 
 - A running Kubernetes cluster with DocumentDB deployed
 - `kubectl` configured to access the cluster
-- Go 1.25+
+- Go 1.26+
 
 > **HA topology required for upgrade tests.** The `upgrade-documentdb` operation
 > auto-skips when `spec.instancesPerNode < 2` because a single-instance cluster

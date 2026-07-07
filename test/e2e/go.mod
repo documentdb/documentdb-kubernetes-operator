@@ -1,9 +1,9 @@
 module github.com/documentdb/documentdb-operator/test/e2e
 
-go 1.25.11
+go 1.26.4
 
 require (
-	github.com/cloudnative-pg/cloudnative-pg v1.28.1
+	github.com/cloudnative-pg/cloudnative-pg v1.29.2
 	github.com/documentdb/documentdb-operator v0.0.0-00010101000000-000000000000
 	github.com/documentdb/documentdb-operator/test/shared v0.0.0-00010101000000-000000000000
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.4.0

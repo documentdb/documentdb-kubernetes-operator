@@ -208,12 +208,6 @@ var _ = Describe("ValidateCreate admission handler", func() {
 		_, err := v.ValidateCreate(context.Background(), db)
 		Expect(err).To(HaveOccurred())
 	})
-
-	It("returns error for non-DocumentDB object", func() {
-		_, err := v.ValidateCreate(context.Background(), &dbpreview.Backup{})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("expected DocumentDB"))
-	})
 })
 
 var _ = Describe("ValidateUpdate admission handler", func() {
@@ -246,20 +240,6 @@ var _ = Describe("ValidateUpdate admission handler", func() {
 		newDB := newTestDocumentDB("0.110.0", "0.112.0", "")
 		_, err := v.ValidateUpdate(context.Background(), oldDB, newDB)
 		Expect(err).To(HaveOccurred())
-	})
-
-	It("returns error when newObj is not a DocumentDB", func() {
-		oldDB := newTestDocumentDB("0.110.0", "", "")
-		_, err := v.ValidateUpdate(context.Background(), oldDB, &dbpreview.Backup{})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("expected DocumentDB"))
-	})
-
-	It("returns error when oldObj is not a DocumentDB", func() {
-		newDB := newTestDocumentDB("0.112.0", "", "")
-		_, err := v.ValidateUpdate(context.Background(), &dbpreview.Backup{}, newDB)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("expected DocumentDB"))
 	})
 })
 

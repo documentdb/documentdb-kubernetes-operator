@@ -17,7 +17,7 @@ scope: [`docs/designs/e2e-test-suite.md`](../../docs/designs/e2e-test-suite.md).
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | 1.25.x (match `test/e2e/go.mod` — currently `go 1.25.8`) | Separate module from the operator |
+| Go | 1.26.x (match `test/e2e/go.mod` — currently `go 1.26.4`) | Separate module from the operator |
 | Docker | any recent | Required for kind |
 | kind | any recent | Local Kubernetes |
 | kubectl | matching the target Kubernetes cluster | |
@@ -258,7 +258,7 @@ Each job runs `setup-test-environment` → `ginkgo -r --label-filter=…
 The suite imports CloudNative-PG's `tests/utils/*` packages as a library
 (Apache-2.0, compatible with our MIT). The version is pinned in
 [`go.mod`](go.mod) — currently `github.com/cloudnative-pg/cloudnative-pg
-v1.28.1`. `tests/utils/*` is exported (not `internal/`) but has no stability
+v1.28.3`. `tests/utils/*` is exported (not `internal/`) but has no stability
 contract; budget roughly half a day per CNPG version bump for compat fixes
 in our wrappers (`testenv`, `operatorhealth`, `portforward`). Bumps should
 be single-purpose PRs gated on the full suite.

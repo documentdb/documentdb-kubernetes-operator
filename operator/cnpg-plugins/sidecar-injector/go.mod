@@ -1,6 +1,6 @@
 module github.com/documentdb/cnpg-i-sidecar-injector
 
-go 1.25.11
+go 1.26.4
 
 require (
 	github.com/cloudnative-pg/api v1.25.1
