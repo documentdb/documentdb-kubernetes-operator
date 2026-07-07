@@ -175,7 +175,10 @@ jobs:
         run: |
           # In-cluster DNS for the ClusterIP gateway service the operator creates.
           HOST="documentdb-service-${DB_NAME}.${DB_NS}.svc"
-          URI="mongodb://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:${GATEWAY_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+          # tlsInsecure=true (NOT tlsAllowInvalidCertificates) is the option the
+          # Go mongo driver v2 honors to skip verification of the self-signed
+          # gateway cert — this matches test/longhaul/README.md.
+          URI="mongodb://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:${GATEWAY_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true"
           kubectl create secret generic longhaul-documentdb-credentials \
             -n "${DB_NS}" \
             --from-literal=uri="${URI}" \
