@@ -10,9 +10,39 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
+
+type fakeWebhookManager struct {
+	ctrl.Manager
+	client        ctrlclient.Client
+	scheme        *runtime.Scheme
+	config        *rest.Config
+	webhookServer webhook.Server
+}
+
+func (m *fakeWebhookManager) GetClient() ctrlclient.Client {
+	return m.client
+}
+
+func (m *fakeWebhookManager) GetScheme() *runtime.Scheme {
+	return m.scheme
+}
+
+func (m *fakeWebhookManager) GetConfig() *rest.Config {
+	return m.config
+}
+
+func (m *fakeWebhookManager) GetWebhookServer() webhook.Server {
+	return m.webhookServer
+}
 
 func newTestDocumentDB(version, schemaVersion, image string) *dbpreview.DocumentDB {
 	db := &dbpreview.DocumentDB{
@@ -103,6 +133,25 @@ var _ = Describe("schema version validation", func() {
 		result := v.validateSchemaVersionNotExceedsBinary(db)
 		Expect(result).To(HaveLen(1))
 		Expect(result[0].Detail).To(ContainSubstring("version comparison failed"))
+	})
+})
+
+var _ = Describe("SetupWebhookWithManager", func() {
+	It("wires client and registers webhook", func() {
+		scheme := runtime.NewScheme()
+		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		mgr := &fakeWebhookManager{
+			client:        fakeClient,
+			scheme:        scheme,
+			config:        &rest.Config{Host: "https://127.0.0.1"},
+			webhookServer: webhook.NewServer(webhook.Options{}),
+		}
+
+		v := &DocumentDBValidator{}
+		Expect(v.SetupWebhookWithManager(mgr)).To(Succeed())
+		Expect(v.Client).To(Equal(fakeClient))
 	})
 })
 
