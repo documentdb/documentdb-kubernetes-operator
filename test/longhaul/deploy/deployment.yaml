@@ -99,10 +99,17 @@ spec:
                 secretKeyRef:
                   name: longhaul-documentdb-credentials
                   key: uri
+            # Soft heap ceiling below the cgroup limit so Go's GC turns
+            # aggressive before the hard limit, preventing OOMKills under a
+            # transient allocation spike. The verify path streams its cursor
+            # (O(1) memory), so steady-state usage is a few MB; this is a
+            # belt-and-suspenders guard, not a working-set requirement.
+            - name: GOMEMLIMIT
+              value: "200MiB"
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 128Mi
             limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 256Mi

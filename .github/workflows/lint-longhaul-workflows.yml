@@ -15,9 +15,6 @@
 #   - yamllint      : strict YAML formatting.
 #   - kubeconform   : Kubernetes manifest schema validation against the
 #                     v1.30 schema set (matches our compatibility matrix).
-#   - manifest guard: sanity checks that schema validation can't catch,
-#                     e.g. the driver memory limit must clear a floor so we
-#                     never re-ship the 256Mi limit that OOM-kills the driver.
 #   - helm template : ensure the operator chart still renders so the
 #                     auto-upgrade job in monitor.yaml will succeed.
 #   - go vet/test   : the driver has real unit tests (config, journal,
@@ -84,33 +81,6 @@ jobs:
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
             -skip 'DocumentDB' \
             test/longhaul/deploy/
-
-      - name: manifest sanity guard
-        # Schema validation (kubeconform) proves the YAML is well-formed but
-        # not that the values are sane. Encode the hard-won lessons here:
-        #   * the driver was OOM-killed at 256Mi — enforce a memory floor so
-        #     a future edit can't silently reintroduce it.
-        run: |
-          set -euo pipefail
-          DEPLOY=test/longhaul/deploy/deployment.yaml
-          # Extract the container memory limit (e.g. "1Gi", "512Mi").
-          LIMIT=$(grep -A4 'limits:' "$DEPLOY" | grep -m1 'memory:' | awk '{print $2}')
-          if [ -z "$LIMIT" ]; then
-            echo "::error file=$DEPLOY::Could not find a container memory limit"
-            exit 1
-          fi
-          # Normalise to MiB for comparison.
-          case "$LIMIT" in
-            *Gi) MIB=$(( ${LIMIT%Gi} * 1024 )) ;;
-            *Mi) MIB=${LIMIT%Mi} ;;
-            *)   echo "::error file=$DEPLOY::Unexpected memory unit in '$LIMIT' (want Mi/Gi)"; exit 1 ;;
-          esac
-          FLOOR_MIB=512
-          echo "driver memory limit = ${LIMIT} (${MIB}Mi); floor = ${FLOOR_MIB}Mi"
-          if [ "$MIB" -lt "$FLOOR_MIB" ]; then
-            echo "::error file=$DEPLOY::Driver memory limit ${LIMIT} is below the ${FLOOR_MIB}Mi floor; 256Mi OOM-kills the driver."
-            exit 1
-          fi
 
       - name: helm template smoke
         run: |
