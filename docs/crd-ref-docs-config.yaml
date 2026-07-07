@@ -22,3 +22,6 @@ render:
     - name: AffinityConfiguration
       package: github.com/cloudnative-pg/cloudnative-pg/api/v1
       link: https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#AffinityConfiguration
+    - name: CertificatesConfiguration
+      package: github.com/cloudnative-pg/cloudnative-pg/api/v1
+      link: https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#CertificatesConfiguration
