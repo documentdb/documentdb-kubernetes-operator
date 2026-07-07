@@ -6,21 +6,26 @@
 # Purpose
 #   A PR gate that stands up a *real* DocumentDB on an ephemeral kind cluster
 #   and runs the actual long-haul driver against it for a short, bounded
-#   window. Unlike lint-longhaul-workflows.yml (which statically validates the
-#   YAML/manifests) this workflow proves the driver + deploy manifests actually
+#   window. Where lint-longhaul-workflows.yml statically validates the
+#   YAML/manifests, this workflow proves the driver + deploy manifests actually
 #   function end-to-end: the image builds, the container starts, it connects to
 #   DocumentDB over the gateway, writers + verifier run, and the driver reports
 #   PASS with a clean exit code.
 #
-# Environment setup is delegated to the shared composite action
+# Images under test
+#   The operator + sidecar are built from THIS PR's source (via the shared
+#   test-build-and-package.yml reusable workflow) so a code change that breaks
+#   the operator is caught. The documentdb + gateway (database) images are NOT
+#   rebuilt: test-build-and-package.yml probes the public registry for the
+#   pinned documentDbVersion and, when present, runs in "registry mode" and
+#   simply re-tags the public images into the build artifact. The long-haul
+#   driver image is the only extra image this workflow builds.
+#
+# Environment bring-up is delegated to the shared composite action
 #   .github/actions/setup-test-environment
-# in its "released-chart" mode (released-chart-version: latest). That path
-# installs the operator from the public GHCR OCI Helm chart and lets the
-# operator use its own default (public) documentdb/gateway images, so NO
-# operator/database image build is required — the gate runs on a fork PR with
-# only the lightweight long-haul driver image built locally. Reusing the action
-# keeps cert-manager / CSI / kind / operator-install logic in one place instead
-# of duplicating it here.
+# (use-external-images: false — load operator/sidecar/documentdb/gateway from
+# the build artifacts into kind), exactly like test-e2e.yml. No operator-install
+# logic is duplicated here.
 #
 # Why reuse test/longhaul/deploy/{deployment,rbac}.yaml as-is
 #   The whole point of the gate is to exercise the SAME manifests the long-haul
@@ -40,17 +45,19 @@
 #   Scale/upgrade disruption ops are disabled for the smoke run
 #   (LONGHAUL_MIN_INSTANCES == LONGHAUL_MAX_INSTANCES) so the gate is a fast,
 #   deterministic data-durability check (writers + verifier) that fits a
-#   7 GB GitHub-hosted runner and finishes in a few minutes.
+#   GitHub-hosted runner and finishes in a few minutes.
 
 name: Long-Haul Smoke Gate
 
 on:
   pull_request:
+    branches: [main]
     paths:
       - "test/longhaul/**"
       - "test/shared/**"
       - ".github/workflows/longhaul-smoke.yml"
-      - ".github/actions/setup-test-environment/**"
+      - ".github/workflows/test-build-and-package.yml"
+      - ".github/actions/**"
   workflow_dispatch:
     inputs:
       max_duration:
@@ -60,6 +67,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   packages: read
 
 concurrency:
@@ -78,16 +86,36 @@ env:
   # destroyed at the end of the job. Not a secret; never reused elsewhere.
   DB_PASSWORD: SmokeTest123!
   GATEWAY_PORT: "10260"
-  DRIVER_IMAGE: longhaul-test:smoke
-  # Must match the cluster name the composite action derives:
-  #   documentdb-<test-type>-<architecture>-<test-scenario-name>
-  KIND_CLUSTER: documentdb-longhaul-smoke-amd64-smoke
-  MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Build operator + sidecar from this PR's source; reuse public documentdb /
+  # gateway images (registry mode) so the database images are NOT rebuilt.
+  # Produces the platform-images tar + helm chart artifacts the setup action
+  # loads into kind.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Images and Charts
+    uses: ./.github/workflows/test-build-and-package.yml
+    with:
+      version: "0.2.0"
+    secrets: inherit
+
   smoke:
-    runs-on: ubuntu-latest
+    name: Long-Haul Smoke
+    needs: build
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-22.04
     timeout-minutes: 40
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag }}
+      CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
+      DRIVER_IMAGE: longhaul-test:smoke
+      # Must match the cluster name the composite action derives:
+      #   documentdb-<test-type>-<architecture>-<test-scenario-name>
+      KIND_CLUSTER: documentdb-longhaul-amd64-smoke
+      MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,12 +130,27 @@ jobs:
             -t "${DRIVER_IMAGE}" \
             .
 
+      # Only the artifacts the setup action consumes: the consolidated
+      # platform-specific image tarball (operator/sidecar/documentdb/gateway,
+      # loaded into kind) and the amd64 helm chart.
+      - name: Download platform images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-platform-images
+          path: ./artifacts/build-platform-images
+
+      - name: Download helm chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-helm-chart-amd64
+          path: ./artifacts/build-helm-chart-amd64
+
       - name: Set up DocumentDB test environment (kind + operator + cluster)
         uses: ./.github/actions/setup-test-environment
         with:
           test-type: "longhaul"
           architecture: "amd64"
-          runner: "ubuntu-latest"
+          runner: "ubuntu-22.04"
           test-scenario-name: "smoke"
           node-count: "1"
           instances-per-node: "1"
@@ -118,12 +161,10 @@ jobs:
           db-username: ${{ env.DB_USERNAME }}
           db-password: ${{ env.DB_PASSWORD }}
           db-port: ${{ env.GATEWAY_PORT }}
-          # image-tag / chart-version are required inputs but unused in
-          # released-chart mode; pass placeholders.
-          image-tag: "released"
-          chart-version: "released"
-          use-external-images: "true"
-          released-chart-version: "latest"
+          image-tag: ${{ env.IMAGE_TAG }}
+          documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
+          chart-version: ${{ env.CHART_VERSION }}
+          use-external-images: "false"
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
