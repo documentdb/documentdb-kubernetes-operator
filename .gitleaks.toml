@@ -1,0 +1,78 @@
+# Gitleaks configuration for the DocumentDB Kubernetes Operator.
+# Extends the built-in ruleset (API keys, cloud creds, tokens, PEM keys, etc.)
+# and adds project-specific rules for passwords and certificates.
+#
+# Run locally:  gitleaks detect --config .gitleaks.toml --redact -v
+# Scan staged:  gitleaks protect --staged --config .gitleaks.toml --redact -v
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-password-assignment"
+description = "Hardcoded password / secret assignment"
+regex = '''(?i)(password|passwd|pwd|secret|token|apikey|api_key)\s*[:=]\s*['"][^'"\s]{6,}['"]'''
+keywords = ["password", "passwd", "pwd", "secret", "token", "apikey", "api_key"]
+
+[[rules]]
+id = "private-key-block"
+description = "PEM private key / certificate private material"
+regex = '''-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----'''
+keywords = ["PRIVATE KEY"]
+
+[[rules]]
+id = "connection-string-with-credentials"
+description = "Connection string embedding credentials (e.g. mongodb://user:pass@host)"
+regex = '''(?i)(mongodb|postgres|postgresql|amqp|redis|https?)://[^:\s]+:[^@\s]+@'''
+keywords = ["mongodb://", "postgres://", "postgresql://", "redis://"]
+
+[[rules]]
+id = "documentdb-connection-string"
+description = "DocumentDB / Cosmos Mongo connection string with embedded credentials (gateway port 10260, mongodb+srv, or *.mongocluster.cosmos.azure.com)"
+regex = '''(?i)mongodb(\+srv)?://[^:\s/'"]+:[^@\s/'"]+@[^\s/'"]*(:10260|\.mongocluster\.cosmos\.azure\.com)'''
+keywords = ["mongodb://", "mongodb+srv://", "10260", "mongocluster.cosmos.azure.com"]
+
+[[rules]]
+id = "azure-appinsights-instrumentation-key"
+description = "Azure Application Insights instrumentation key (GUID)"
+regex = '''(?i)instrumentationkey\s*[:=]\s*['"]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['"]?'''
+keywords = ["instrumentationkey"]
+
+[[rules]]
+id = "azure-appinsights-connection-string"
+description = "Azure Application Insights connection string (InstrumentationKey + IngestionEndpoint)"
+regex = '''(?i)InstrumentationKey=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12};.*IngestionEndpoint=https?://[^\s'";]+'''
+keywords = ["instrumentationkey", "ingestionendpoint"]
+
+[[rules]]
+id = "azure-appinsights-connstring-env"
+description = "Application Insights connection string in APPLICATIONINSIGHTS_CONNECTION_STRING"
+regex = '''(?i)APPLICATIONINSIGHTS_CONNECTION_STRING\s*[:=]\s*['"]?InstrumentationKey=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+keywords = ["applicationinsights_connection_string"]
+
+[[rules]]
+id = "azure-subscription-id"
+description = "Azure subscription ID (GUID assigned to a subscription field or in a resource ID)"
+regex = '''(?i)(subscription[_-]?id|subscriptionid|azure_subscription_id|arm_subscription_id|/subscriptions/)\s*['":=/]{0,3}\s*['"]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}['"]?'''
+keywords = ["subscription_id", "subscriptionid", "arm_subscription_id", "azure_subscription_id", "/subscriptions/"]
+
+[allowlist]
+description = "Paths and patterns that are safe to ignore"
+# Match the regexes below against the full line, not just the extracted secret,
+# so context-prefixed placeholders (e.g. password = "changeme") are recognized.
+regexTarget = "line"
+paths = [
+  '''(^|/)test(s)?/''',
+  '''(^|/)e2e/''',
+  '''(^|/)examples?/''',
+  '''(^|/)documentdb-playground/''',
+  '''\.md$''',
+]
+# Common non-secret placeholders used in docs/tests.
+regexes = [
+  '''(?i)(password|secret|token)\s*[:=]\s*['"]?(changeme|example|placeholder|redacted|xxx+|<[^>]+>|\$\{[^}]+\})['"]?''',
+  # Placeholder / empty instrumentation-key GUIDs used in docs and samples.
+  '''(?i)instrumentationkey\s*[:=]\s*['"]?0{8}-0{4}-0{4}-0{4}-0{12}['"]?''',
+  # Placeholder credentials in example connection strings (username:password, user:pass, <...>).
+  '''(?i)mongodb(\+srv)?://(<[^>]+>|username|user):(<[^>]+>|password|pass)@''',
+]
