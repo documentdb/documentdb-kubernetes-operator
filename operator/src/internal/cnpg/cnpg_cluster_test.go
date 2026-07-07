@@ -210,6 +210,39 @@ var _ = Describe("Postgres certificate configuration", func() {
 
 		Expect(result.Spec.Certificates).To(BeNil())
 	})
+
+	It("includes Postgres certificate configuration when TLS is set", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		// Create a certificates configuration
+		certificatesConfig := &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:       "server-tls-secret",
+			ServerCASecret:        "server-ca-secret",
+			ReplicationTLSSecret:  "replication-tls-secret",
+			ClientCASecret:        "client-ca-secret",
+		}
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				},
+				TLS: &dbpreview.TLSConfiguration{
+					Postgres: certificatesConfig,
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "ext:1.0", "test-sa", "", true, zap.New(zap.WriteTo(GinkgoWriter)))
+
+		Expect(result.Spec.Certificates).ToNot(BeNil())
+		Expect(result.Spec.Certificates).To(Equal(certificatesConfig))
+		Expect(result.Spec.Certificates.ServerTLSSecret).To(Equal("server-tls-secret"))
+		Expect(result.Spec.Certificates.ClientCASecret).To(Equal("client-ca-secret"))
+	})
 })
 
 var _ = Describe("GetCnpgClusterSpec", func() {
@@ -253,6 +286,8 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.PostgresConfiguration.AdditionalLibraries).To(ConsistOf("pg_cron", "pg_documentdb_core", "pg_documentdb"))
 		Expect(result.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("cron.database_name", "postgres"))
 		Expect(result.Spec.PostgresConfiguration.PgHBA).To(HaveLen(2))
+		Expect(result.Spec.PostgresConfiguration.PgHBA[0]).To(Equal("host all all localhost trust"))
+		Expect(result.Spec.PostgresConfiguration.PgHBA[1]).To(Equal("hostssl replication streaming_replica all cert"))
 		Expect(result.Spec.PostgresUID).To(Equal(int64(0)))
 		Expect(result.Spec.PostgresGID).To(Equal(int64(0)))
 	})
@@ -394,6 +429,88 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(result.Spec.Plugins).To(HaveLen(1))
 		Expect(result.Spec.Plugins[0].Parameters).To(HaveKey("gatewayTLSSecret"))
 		Expect(result.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("my-tls-secret"))
+	})
+
+	It("uses custom SidecarInjectorName when specified", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 3,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+				Plugins: &dbpreview.PluginsSpec{
+					SidecarInjectorName: "custom-injector",
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Plugins).To(HaveLen(1))
+		Expect(result.Spec.Plugins[0].Name).To(Equal("custom-injector"))
+	})
+
+	It("applies TLS and certificate configuration together", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		certificatesConfig := &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:       "server-tls-secret",
+			ServerCASecret:        "server-ca-secret",
+			ReplicationTLSSecret:  "replication-tls-secret",
+			ClientCASecret:        "client-ca-secret",
+		}
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 3,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+				TLS: &dbpreview.TLSConfiguration{
+					Postgres: certificatesConfig,
+				},
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Certificates).ToNot(BeNil())
+		Expect(result.Spec.Certificates).To(Equal(certificatesConfig))
+	})
+
+	It("handles nil plugins and nil TLS gracefully", func() {
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+				},
+				Plugins: nil,
+				TLS:     nil,
+			},
+		}
+
+		result := GetCnpgClusterSpec(req, documentdb, "postgres:16", "test-sa", "", true, log)
+		Expect(result).ToNot(BeNil())
+		Expect(result.Spec.Plugins).To(HaveLen(1))
+		Expect(result.Spec.Plugins[0].Name).To(Equal(util.DEFAULT_SIDECAR_INJECTOR_PLUGIN))
+		Expect(result.Spec.Certificates).To(BeNil())
 	})
 
 	It("passes gatewayImagePullPolicy to plugin params when env var is set", func() {

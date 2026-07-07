@@ -739,6 +739,282 @@ var _ = Describe("Physical Replication", func() {
 		Expect(updated.Spec.ExternalClusters).To(Equal(desired.Spec.ExternalClusters))
 		Expect(updated.Spec.PostgresConfiguration.Synchronous).To(BeNil())
 	})
+
+	It("applies synchronous config when HA primary gains synchronous replica configuration", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		// Current: HA primary with no synchronous config
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-ha-primary",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				Instances: 1,
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:  "primary-cluster",
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "standby-1"},
+					{Name: "standby-2"},
+				},
+			},
+		}
+
+		// Desired: HA primary WITH synchronous config and additional external cluster
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = append(desired.Spec.ExternalClusters,
+			cnpgv1.ExternalCluster{Name: "standby-3"})
+		desired.Spec.PostgresConfiguration = cnpgv1.PostgresConfiguration{
+			Synchronous: &cnpgv1.SynchronousReplicaConfiguration{
+				Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+				Number: 2,
+			},
+		}
+
+		documentdb := &dbpreview.DocumentDB{}
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext := &util.ReplicationContext{
+			OtherCNPGClusterNames: []string{"standby-1", "standby-2", "standby-3"},
+		}
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		// Should include patches for external clusters and synchronous config
+		Expect(len(patchOps)).To(BeNumerically(">", 0))
+	})
+
+	It("removes synchronous config when HA primary replication is downgraded", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		// Current: HA primary WITH synchronous config
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-ha-primary-sync",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				Instances: 1,
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:  "primary-cluster",
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "standby-1"},
+				},
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Synchronous: &cnpgv1.SynchronousReplicaConfiguration{
+						Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+						Number: 1,
+					},
+				},
+			},
+		}
+
+		// Desired: HA primary WITHOUT synchronous config, with different external cluster
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
+			{Name: "standby-2"},
+		}
+		desired.Spec.PostgresConfiguration.Synchronous = nil
+
+		documentdb := &dbpreview.DocumentDB{}
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext := &util.ReplicationContext{
+			OtherCNPGClusterNames: []string{"standby-2"},
+		}
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		// Should include patches for external clusters and synchronous config removal
+		Expect(len(patchOps)).To(BeNumerically(">", 0))
+	})
+
+	It("handles synchronous replica config change on HA primary", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		// Current: HA primary with synchronous config
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-ha-primary-sync-update",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				Instances: 1,
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:  "primary-cluster",
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{Name: "standby-1"},
+					{Name: "standby-2"},
+				},
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Synchronous: &cnpgv1.SynchronousReplicaConfiguration{
+						Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+						Number: 1,
+					},
+				},
+			},
+		}
+
+		// Desired: HA primary with DIFFERENT synchronous config and different external cluster
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
+			{Name: "standby-3"},
+			{Name: "standby-4"},
+		}
+		desired.Spec.PostgresConfiguration.Synchronous = &cnpgv1.SynchronousReplicaConfiguration{
+			Method: cnpgv1.SynchronousReplicaConfigurationMethodAny,
+			Number: 2,
+		}
+
+		documentdb := &dbpreview.DocumentDB{}
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext := &util.ReplicationContext{
+			OtherCNPGClusterNames: []string{"standby-3", "standby-4"},
+		}
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+		// Synchronous config change + external cluster changes should generate patches
+		Expect(len(patchOps)).To(BeNumerically(">", 0))
+	})
+
+	It("propagates external cluster changes with PgHBA updates", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-repl-pghba", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      documentdb.Name,
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: documentdb.Name},
+				{Name: "member-2"},
+			},
+		}
+
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-repl-pghba",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:    documentdb.Name,
+					Primary: documentdb.Name,
+					Source:  documentdb.Name,
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{
+						Name: documentdb.Name,
+						ConnectionParameters: map[string]string{
+							"host": documentdb.Name + "-rw." + namespace + ".svc",
+						},
+					},
+				},
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					PgHBA: []string{
+						"host all all localhost trust",
+					},
+				},
+			},
+		}
+
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = append(desired.Spec.ExternalClusters, cnpgv1.ExternalCluster{
+			Name: "member-2",
+			ConnectionParameters: map[string]string{
+				"host": "member-2-rw." + namespace + ".svc",
+			},
+		})
+
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext, err := util.GetReplicationContext(ctx, reconciler.Client, *documentdb)
+		Expect(err).ToNot(HaveOccurred())
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+
+		// Should have patch operations when external clusters change
+		Expect(patchOps).ToNot(BeEmpty())
+
+		syncErr := cnpg.SyncCnpgCluster(ctx, reconciler.Client, current, desired, patchOps)
+		Expect(syncErr).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
+		// Verify clusters were added
+		Expect(updated.Spec.ExternalClusters).To(HaveLen(2))
+		Expect(updated.Spec.ExternalClusters[1].Name).To(Equal("member-2"))
+	})
+
+	It("applies synchronous config changes for HA primary on external cluster changes", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-repl-ha-sync", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.None),
+			Primary:                      documentdb.Name,
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: documentdb.Name},
+				{Name: "member-2"},
+			},
+		}
+
+		current := &cnpgv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "docdb-repl-ha-sync",
+				Namespace: namespace,
+			},
+			Spec: cnpgv1.ClusterSpec{
+				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
+					Self:    documentdb.Name,
+					Primary: documentdb.Name,
+					Source:  documentdb.Name,
+				},
+				ExternalClusters: []cnpgv1.ExternalCluster{
+					{
+						Name: documentdb.Name,
+						ConnectionParameters: map[string]string{
+							"host": documentdb.Name + "-rw." + namespace + ".svc",
+						},
+					},
+				},
+			},
+		}
+
+		desired := current.DeepCopy()
+		desired.Spec.ExternalClusters = append(desired.Spec.ExternalClusters, cnpgv1.ExternalCluster{
+			Name: "member-2",
+			ConnectionParameters: map[string]string{
+				"host": "member-2-rw." + namespace + ".svc",
+			},
+		})
+
+		reconciler := buildDocumentDBReconciler(current)
+		replicationContext, err := util.GetReplicationContext(ctx, reconciler.Client, *documentdb)
+		Expect(err).ToNot(HaveOccurred())
+
+		patchOps, err, requeue := reconciler.syncReplicationChanges(ctx, current, desired, documentdb, replicationContext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(requeue).To(Equal(time.Duration(-1)))
+
+		syncErr := cnpg.SyncCnpgCluster(ctx, reconciler.Client, current, desired, patchOps)
+		Expect(syncErr).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(reconciler.Client.Get(ctx, types.NamespacedName{Name: current.Name, Namespace: namespace}, updated)).To(Succeed())
+		// Verify clusters were added
+		Expect(updated.Spec.ExternalClusters).To(HaveLen(2))
+	})
 })
 
 var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", func() {
