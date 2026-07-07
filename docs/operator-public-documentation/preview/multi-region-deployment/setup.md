@@ -181,7 +181,7 @@ The supported configuration paths are:
 
 For `verify-full`, the server certificate SANs must cover every host name that a
 replica might use for the primary. Include the generated service names for each
-member Kubernetes cluster's PostgresSQL backend and, when using Azure Fleet
+member Kubernetes cluster's PostgreSQL backend and, when using Azure Fleet
 Networking, the fleet service DNS name pattern:
 
 In multi-region mode, the CloudNative-PG cluster name isn't the raw DocumentDB
