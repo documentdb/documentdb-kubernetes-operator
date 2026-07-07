@@ -111,7 +111,7 @@ runs:
         echo "✅ Architecture validation passed: $EXPECTED_ARCH"
 
     - name: Download and load Docker images (local build)
-      if: inputs.use-external-images == 'false'
+      if: inputs.use-external-images == 'false' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Loading platform-specific Docker images from artifacts for ${{ inputs.architecture }}..."
@@ -156,7 +156,7 @@ runs:
         echo "✓ All required Docker images for $ARCH architecture are available"
 
     - name: Verify external Docker images (external images)
-      if: inputs.use-external-images == 'true'
+      if: inputs.use-external-images == 'true' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Using external Docker images with tag: ${{ inputs.image-tag }}"
@@ -263,7 +263,7 @@ runs:
         echo "Resolved Gateway image: $GW_IMAGE"
 
     - name: Load Docker images into kind cluster (local build)
-      if: inputs.use-external-images == 'false'
+      if: inputs.use-external-images == 'false' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Loading local Docker images into kind cluster..."
@@ -302,7 +302,7 @@ runs:
         echo "✓ All Docker images loaded into kind cluster successfully"
 
     - name: Pre-pull external images for kind cluster (external images)
-      if: inputs.use-external-images == 'true'
+      if: inputs.use-external-images == 'true' && inputs.released-chart-version == ''
       shell: bash
       run: |
         echo "Pre-pulling external Docker images for kind cluster..."
@@ -726,27 +726,45 @@ runs:
       run: |
         echo "Deploying DocumentDB cluster on ${{ inputs.architecture }} architecture..."
         echo "Configuration: ${{ inputs.test-scenario-name }} (${{ inputs.node-count }} nodes, ${{ inputs.instances-per-node }} instances per node)"
-        
+
+        # Decide whether to pin documentdb/gateway images on the CR.
+        #
+        # In released-chart mode (released-chart-version != '') with no explicit
+        # image overrides, we omit the image block so the released operator uses
+        # its own tested default (public) documentdb/gateway images. That is what
+        # lets a fork stand up a cluster without building/loading database images.
+        # In all other modes (the artifact/local/external build pipelines) we keep
+        # the resolved, loaded-into-kind images so behavior is unchanged.
+        INCLUDE_IMAGE_BLOCK="true"
+        if [[ -n "${{ inputs.released-chart-version }}" \
+              && -z "${{ inputs.documentdb-image }}" \
+              && -z "${{ inputs.gateway-image }}" ]]; then
+          INCLUDE_IMAGE_BLOCK="false"
+          echo "Released-chart mode with no image overrides: operator default images will be used."
+        fi
+
         # Create DocumentDB resource
-        cat <<EOF | kubectl apply -f -
-        apiVersion: documentdb.io/preview
-        kind: DocumentDB
-        metadata:
-          name: ${{ inputs.db-cluster-name }}
-          namespace: ${{ inputs.db-namespace }}
-        spec:
-          nodeCount: ${{ inputs.node-count }}
-          instancesPerNode: ${{ inputs.instances-per-node }}
-          image:
-            documentDB: ${DOCUMENTDB_IMAGE_RESOLVED}
-            gateway: ${GATEWAY_IMAGE_RESOLVED}
-          resource:
-            storage:
-              pvcSize: 5Gi
-              storageClass: csi-hostpath-sc
-          exposeViaService:
-            serviceType: ClusterIP
-        EOF
+        {
+          echo "apiVersion: documentdb.io/preview"
+          echo "kind: DocumentDB"
+          echo "metadata:"
+          echo "  name: ${{ inputs.db-cluster-name }}"
+          echo "  namespace: ${{ inputs.db-namespace }}"
+          echo "spec:"
+          echo "  nodeCount: ${{ inputs.node-count }}"
+          echo "  instancesPerNode: ${{ inputs.instances-per-node }}"
+          if [[ "${INCLUDE_IMAGE_BLOCK}" == "true" ]]; then
+            echo "  image:"
+            echo "    documentDB: ${DOCUMENTDB_IMAGE_RESOLVED}"
+            echo "    gateway: ${GATEWAY_IMAGE_RESOLVED}"
+          fi
+          echo "  resource:"
+          echo "    storage:"
+          echo "      pvcSize: 5Gi"
+          echo "      storageClass: csi-hostpath-sc"
+          echo "  exposeViaService:"
+          echo "    serviceType: ClusterIP"
+        } | kubectl apply -f -
         
         echo "DocumentDB resource created on ${{ inputs.architecture }}, waiting for cluster to be ready..."
         

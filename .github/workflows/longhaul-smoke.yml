@@ -12,6 +12,16 @@
 #   DocumentDB over the gateway, writers + verifier run, and the driver reports
 #   PASS with a clean exit code.
 #
+# Environment setup is delegated to the shared composite action
+#   .github/actions/setup-test-environment
+# in its "released-chart" mode (released-chart-version: latest). That path
+# installs the operator from the public GHCR OCI Helm chart and lets the
+# operator use its own default (public) documentdb/gateway images, so NO
+# operator/database image build is required — the gate runs on a fork PR with
+# only the lightweight long-haul driver image built locally. Reusing the action
+# keeps cert-manager / CSI / kind / operator-install logic in one place instead
+# of duplicating it here.
+#
 # Why reuse test/longhaul/deploy/{deployment,rbac}.yaml as-is
 #   The whole point of the gate is to exercise the SAME manifests the long-haul
 #   cluster ships, so a regression in the ConfigMap/Deployment (bad env key,
@@ -40,6 +50,7 @@ on:
       - "test/longhaul/**"
       - "test/shared/**"
       - ".github/workflows/longhaul-smoke.yml"
+      - ".github/actions/setup-test-environment/**"
   workflow_dispatch:
     inputs:
       max_duration:
@@ -49,6 +60,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: longhaul-smoke-${{ github.ref }}
@@ -66,14 +78,16 @@ env:
   # destroyed at the end of the job. Not a secret; never reused elsewhere.
   DB_PASSWORD: SmokeTest123!
   GATEWAY_PORT: "10260"
-  KIND_CLUSTER: longhaul-smoke
   DRIVER_IMAGE: longhaul-test:smoke
+  # Must match the cluster name the composite action derives:
+  #   documentdb-<test-type>-<architecture>-<test-scenario-name>
+  KIND_CLUSTER: documentdb-longhaul-smoke-amd64-smoke
   MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,155 +95,40 @@ jobs:
       - name: Build long-haul driver image
         run: |
           # Context MUST be the repo root: the Dockerfile copies ../shared and
-          # ../../operator/src (see test/longhaul/Dockerfile header).
+          # ../../operator/src (see test/longhaul/Dockerfile header). Built now,
+          # before the cluster exists, and loaded into kind after setup.
           docker build \
             -f test/longhaul/Dockerfile \
             -t "${DRIVER_IMAGE}" \
             .
 
-      - name: Create kind cluster
-        uses: helm/kind-action@v1.12.0
+      - name: Set up DocumentDB test environment (kind + operator + cluster)
+        uses: ./.github/actions/setup-test-environment
         with:
-          version: v0.31.0
-          node_image: kindest/node:v1.30.4
-          cluster_name: ${{ env.KIND_CLUSTER }}
+          test-type: "longhaul"
+          architecture: "amd64"
+          runner: "ubuntu-latest"
+          test-scenario-name: "smoke"
+          node-count: "1"
+          instances-per-node: "1"
+          cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}
+          operator-namespace: ${{ env.OPERATOR_NS }}
+          db-namespace: ${{ env.DB_NS }}
+          db-cluster-name: ${{ env.DB_NAME }}
+          db-username: ${{ env.DB_USERNAME }}
+          db-password: ${{ env.DB_PASSWORD }}
+          db-port: ${{ env.GATEWAY_PORT }}
+          # image-tag / chart-version are required inputs but unused in
+          # released-chart mode; pass placeholders.
+          image-tag: "released"
+          chart-version: "released"
+          use-external-images: "true"
+          released-chart-version: "latest"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository-owner: ${{ github.repository_owner }}
 
       - name: Load driver image into kind
         run: kind load docker-image "${DRIVER_IMAGE}" --name "${KIND_CLUSTER}"
-
-      - name: Install cert-manager
-        run: |
-          helm repo add jetstack https://charts.jetstack.io
-          helm repo update
-          helm install cert-manager jetstack/cert-manager \
-            --namespace "${CERT_MANAGER_NS}" \
-            --create-namespace \
-            --version v1.15.3 \
-            --set installCRDs=true \
-            --wait --timeout=5m
-
-      - name: Deploy CSI hostpath driver
-        run: |
-          chmod +x ./operator/src/scripts/test-scripts/deploy-csi-driver.sh
-          ./operator/src/scripts/test-scripts/deploy-csi-driver.sh
-
-      - name: Install DocumentDB operator (public OCI chart)
-        env:
-          GHCR_LOGIN_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_LOGIN_USERNAME: ${{ github.actor }}
-        run: |
-          # The released chart is published from the canonical documentdb org
-          # and is public, so forks install it anonymously — no operator build
-          # required for the smoke gate.
-          OCI_CHART="oci://ghcr.io/documentdb/documentdb-operator"
-
-          if [[ -n "$GHCR_LOGIN_TOKEN" ]]; then
-            printf '%s' "$GHCR_LOGIN_TOKEN" \
-              | helm registry login ghcr.io --username "$GHCR_LOGIN_USERNAME" --password-stdin \
-              || echo "GHCR login failed; continuing anonymously for the public chart."
-          fi
-
-          # Resolve the highest stable released chart version from GHCR OCI tags
-          # (OCI registries don't support `helm search repo`).
-          GHCR_TOKEN=$(curl -sSL 'https://ghcr.io/token?scope=repository:documentdb/documentdb-operator:pull' | jq -r '.token // empty' 2>/dev/null || true)
-          CURL_ARGS=(-sSL "https://ghcr.io/v2/documentdb/documentdb-operator/tags/list")
-          if [[ -n "$GHCR_TOKEN" ]]; then
-            CURL_ARGS+=(-H "Authorization: Bearer $GHCR_TOKEN")
-          fi
-          CHART_VERSION=$(curl "${CURL_ARGS[@]}" 2>/dev/null \
-            | jq -r '.tags[]?' 2>/dev/null \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -V | tail -1 || echo "")
-          if [[ -z "$CHART_VERSION" ]]; then
-            echo "::error::Could not resolve a released operator chart version from GHCR."
-            exit 1
-          fi
-          echo "Installing operator chart version ${CHART_VERSION}"
-
-          helm install documentdb-operator "$OCI_CHART" \
-            --namespace "${OPERATOR_NS}" \
-            --create-namespace \
-            --version "$CHART_VERSION" \
-            --wait --timeout=15m
-
-          kubectl wait --for=condition=Available deployment/documentdb-operator \
-            -n "${OPERATOR_NS}" --timeout=300s
-
-      - name: Create DocumentDB credentials secret
-        run: |
-          kubectl create namespace "${DB_NS}" --dry-run=client -o yaml | kubectl apply -f -
-          # Sidecar injector plugin requires a secret named documentdb-credentials
-          # with username/password keys in the database namespace.
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: documentdb-credentials
-            namespace: ${DB_NS}
-          type: Opaque
-          stringData:
-            username: ${DB_USERNAME}
-            password: ${DB_PASSWORD}
-          EOF
-
-      - name: Deploy DocumentDB cluster
-        run: |
-          # Single-instance ClusterIP cluster using the operator's default
-          # (public) documentdb + gateway images. Small footprint for a
-          # GitHub-hosted runner.
-          cat <<EOF | kubectl apply -f -
-          apiVersion: documentdb.io/preview
-          kind: DocumentDB
-          metadata:
-            name: ${DB_NAME}
-            namespace: ${DB_NS}
-          spec:
-            nodeCount: 1
-            instancesPerNode: 1
-            resource:
-              storage:
-                pvcSize: 5Gi
-                storageClass: csi-hostpath-sc
-            exposeViaService:
-              serviceType: ClusterIP
-          EOF
-
-      - name: Wait for DocumentDB to be ready
-        run: |
-          echo "Waiting for the CNPG cluster pod to become Ready..."
-          # Give the operator time to create the CNPG Cluster + pod.
-          for i in $(seq 1 40); do
-            ready=$(kubectl get pods -n "${DB_NS}" \
-              -l cnpg.io/cluster="${DB_NAME}" \
-              -o json 2>/dev/null \
-              | jq '[.items[] | select(.status.phase=="Running" and ([.status.containerStatuses[]?.ready] | all))] | length' 2>/dev/null || echo 0)
-            echo "  attempt ${i}: ${ready} ready pod(s)"
-            if [[ "${ready}" -ge 1 ]]; then
-              echo "DocumentDB pod is Ready."
-              break
-            fi
-            if [[ "${i}" -eq 40 ]]; then
-              echo "::error::DocumentDB cluster did not become ready in time."
-              kubectl get pods -n "${DB_NS}" -o wide || true
-              kubectl describe documentdb "${DB_NAME}" -n "${DB_NS}" || true
-              kubectl logs -n "${OPERATOR_NS}" deployment/documentdb-operator --tail=50 || true
-              exit 1
-            fi
-            sleep 15
-          done
-
-          # The gateway sidecar needs a moment after the pod is Ready before it
-          # accepts Mongo-wire connections; wait for the service endpoints.
-          echo "Waiting for gateway service endpoints..."
-          for i in $(seq 1 20); do
-            eps=$(kubectl get endpoints "documentdb-service-${DB_NAME}" -n "${DB_NS}" \
-              -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || echo "")
-            if [[ -n "${eps}" ]]; then
-              echo "Gateway endpoints ready: ${eps}"
-              break
-            fi
-            sleep 6
-          done
 
       - name: Create driver connection secret (longhaul-documentdb-credentials)
         run: |
