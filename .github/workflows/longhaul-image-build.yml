@@ -113,5 +113,5 @@ jobs:
             echo "| Immutable | \`${{ steps.refs.outputs.image }}:sha-${{ steps.refs.outputs.short_sha }}\` |"
             echo "| Rolling   | \`${{ steps.refs.outputs.image }}:main\` |"
             echo ""
-            echo "Deploy by setting the Job spec image to the immutable tag."
+            echo "Deploy by setting the driver Deployment image to the immutable tag."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -7,11 +7,13 @@
 #   A Job's pod spec is immutable, so rolling a new image requires
 #   delete-and-recreate. Using Deployment(replicas=1) lets the deploy
 #   workflow do `kubectl set image deployment/longhaul-test ...` for
-#   one-line image rolls. The driver itself is restart-safe: it persists
-#   journal/checkpoint state to PVC and resumes from it.
+#   one-line image rolls. The driver itself is restart-safe: it resumes
+#   each writer's sequence from the DocumentDB workload collection and
+#   reads/writes progress to the longhaul-report ConfigMap (no PVC).
 #
 # Strategy: Recreate (single-replica stateful driver — never run two
-# pods concurrently against the same PVC).
+# driver pods concurrently against the same DocumentDB cluster /
+# workload collection).
 #
 # Failure semantics: on critical failure (data loss, policy violation)
 # the driver exits non-zero. The Deployment auto-restarts the pod, which
@@ -53,7 +55,8 @@ data:
   LONGHAUL_REPORT_INTERVAL: "1h"
   # Whether to drop the workload collection on startup. MUST stay "false"
   # on the long-haul cluster — restarts of the driver pod (rolling image
-  # updates, node drains) need to resume durability state from PVC.
+  # updates, node drains) need to resume durability state from the existing
+  # DocumentDB workload collection and longhaul-report ConfigMap checkpoints.
   # Override to "true" only for local/dev iterations.
   LONGHAUL_RESET_DATA: "false"
   # Replica range for scale operations.
@@ -89,7 +92,7 @@ spec:
       containers:
         - name: driver
           image: ghcr.io/__OWNER__/documentdb-kubernetes-operator/longhaul-test:__IMAGE_TAG__
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: longhaul-test-config

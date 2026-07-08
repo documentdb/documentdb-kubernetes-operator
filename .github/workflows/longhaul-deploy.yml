@@ -80,8 +80,11 @@ jobs:
       - name: Verify cluster access
         run: |
           set -euo pipefail
-          kubectl version --client=false --output=yaml | head -20 || true
-          kubectl -n "$NAMESPACE" get all || true
+          # No `|| true`: this step must fail fast if the cluster is
+          # unreachable (bad/expired kubeconfig), instead of silently
+          # continuing into the apply/rollout steps.
+          kubectl version --client=false --output=yaml
+          kubectl -n "$NAMESPACE" get all
 
       - name: Compute image ref
         id: img

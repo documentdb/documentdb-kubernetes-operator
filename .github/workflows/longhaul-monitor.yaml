@@ -4,7 +4,7 @@
 # Long Haul Test Monitor
 #
 # Polls the AKS cluster every hour to:
-# 1. Check health: Job status, report staleness, test result
+# 1. Check health: Deployment status, report staleness, test result
 # 2. Auto-upgrade operator: If healthy, upgrade the operator to the latest
 #    version published to GHCR (via Helm).
 # 3. Publish desired DocumentDB version: Write the latest published DocumentDB
@@ -13,7 +13,8 @@
 #    performs the upgrade in-band as a load-aware operation, so continuous
 #    writers/verifiers can catch any data-integrity issues caused by it.
 #
-# Fails if: Job failed, ConfigMap reports FAIL, report is stale (>2h), or Job not found.
+# Fails if: the driver Deployment is unhealthy, the report ConfigMap
+# reports FAIL, the report is stale (>2h), or the report ConfigMap is not found.
 #
 name: "Long Haul Monitor"
 
@@ -230,6 +231,13 @@ jobs:
             # CRD schema lacks (e.g., schemaVersion).
             echo "📦 Applying CRDs from chart..."
             kubectl apply -f operator/documentdb-helm-chart/crds/
+
+            # The chart's cloudnative-pg dependency is NOT vendored in git
+            # (charts/ and Chart.lock are gitignored), so resolve + download
+            # it before upgrading, otherwise `helm upgrade` fails with a
+            # missing-dependency error on a fresh checkout.
+            echo "📦 Resolving chart dependencies..."
+            helm dependency update operator/documentdb-helm-chart
 
             helm upgrade documentdb-operator operator/documentdb-helm-chart \
               -n "${{ env.OPERATOR_NAMESPACE }}" \

@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# ServiceAccount for the long-haul test Job.
+# ServiceAccount for the long-haul test driver Deployment.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
