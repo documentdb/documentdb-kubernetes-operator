@@ -68,19 +68,49 @@ jobs:
             .github/workflows/longhaul-monitor.yaml \
             test/longhaul/deploy/
 
+      - name: Cache kubeconform schemas
+        # Persist downloaded JSON schemas across runs so we don't re-hit
+        # raw.githubusercontent.com (which rate-limits with HTTP 429) on
+        # every run. Once populated, steady-state lint needs zero schema
+        # downloads; the retry loop below only covers a cold cache.
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kubeconform-cache
+          key: kubeconform-schemas-1.30.0-v1
+
       - name: kubeconform manifests
         run: |
           set -euo pipefail
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
             | tar -xz -C /usr/local/bin kubeconform
+          mkdir -p /tmp/kubeconform-cache
           # Skip CRD-typed resources (DocumentDB) since their schemas live
           # in operator/documentdb-helm-chart/crds — pass via -schema-location.
-          kubeconform -strict -summary \
-            -kubernetes-version 1.30.0 \
-            -schema-location default \
-            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-            -skip 'DocumentDB' \
-            test/longhaul/deploy/
+          #
+          # Schemas are fetched from raw.githubusercontent.com, which
+          # intermittently rate-limits shared CI runner IPs (HTTP 403 /
+          # "giving up after 3 attempts"). Cache downloaded schemas and retry
+          # with backoff so a transient rate limit doesn't fail the gate; the
+          # cache means each retry only re-fetches the schemas still missing.
+          run_kubeconform() {
+            kubeconform -strict -summary \
+              -cache /tmp/kubeconform-cache \
+              -kubernetes-version 1.30.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -skip 'DocumentDB' \
+              test/longhaul/deploy/
+          }
+          n=0
+          until run_kubeconform; do
+            n=$((n + 1))
+            if [ "$n" -ge 4 ]; then
+              echo "::error::kubeconform failed after $n attempts"
+              exit 1
+            fi
+            echo "kubeconform attempt $n failed (likely schema-download rate limit); retrying in $((n * 30))s..."
+            sleep "$((n * 30))"
+          done
 
       - name: helm template smoke
         run: |
