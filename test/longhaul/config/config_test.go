@@ -160,6 +160,37 @@ var _ = Describe("Config", func() {
 			cfg.MaxInstances = 4
 			Expect(cfg.Validate()).To(MatchError(ContainSubstring("must not exceed 3")))
 		})
+
+		It("fails when backups enabled but schedule is empty", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.BackupSchedule = ""
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("backup schedule")))
+		})
+
+		It("fails when backup retention days is below 1", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.BackupRetentionDays = 0
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("backup retention days")))
+		})
+
+		It("fails when backup verify interval is not positive", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.BackupVerifyInterval = 0
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("backup verify interval")))
+		})
+
+		It("skips backup validation when backups disabled", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.BackupEnabled = false
+			cfg.BackupSchedule = ""
+			cfg.BackupRetentionDays = 0
+			cfg.BackupVerifyInterval = 0
+			Expect(cfg.Validate()).To(Succeed())
+		})
 	})
 
 	Describe("IsEnabled", func() {

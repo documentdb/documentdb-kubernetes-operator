@@ -132,7 +132,37 @@ All configuration is via environment variables.
 | `LONGHAUL_MIN_INSTANCES` | No | `1` | Minimum `spec.instancesPerNode` for scale-down operations (CRD lower bound: 1). |
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
+| `LONGHAUL_BACKUP_ENABLED` | No | `true` | Enable the ScheduledBackup + retention verifier. |
+| `LONGHAUL_BACKUP_SCHEDULE` | No | `0 */6 * * *` | Cron schedule for the canary `ScheduledBackup`. |
+| `LONGHAUL_BACKUP_RETENTION_DAYS` | No | `1` | Retention window applied to child backups and validated against the operator-computed expiration. |
+| `LONGHAUL_BACKUP_VERIFY_INTERVAL` | No | `5m` | How often the backup verifier polls scheduling / completion / retention. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
+
+### Data Protection (ScheduledBackup + retention)
+
+When `LONGHAUL_BACKUP_ENABLED` is true, the driver bootstraps a `ScheduledBackup`
+named `<cluster>-longhaul` and runs a verifier concurrently with the operation
+scheduler (backup is deliberately **not** isolated from topology/chaos, per the
+design). Each verification cycle checks:
+
+- **Scheduling liveness** — `status.lastScheduledTime` advances; a stalled
+  scheduler (past `status.nextScheduledTime` + grace) raises a warning.
+- **Completion** — child `Backup` CRs reach the `completed` phase; terminal
+  failures (`failed` / `skipped`) are counted.
+- **Retention correctness** — every completed backup's `status.expiredAt`
+  equals `stoppedAt + retentionDays*24h` (within a 2m tolerance). A mismatch is
+  a **FAIL** (the operator miscalculated retention).
+- **Retention GC** — no backup lingers more than 10m past its `status.expiredAt`.
+  A lingering expired backup is a **FAIL** (retention garbage-collection leak).
+
+Because the minimum meaningful retention is 1 day, the GC check only fires on
+multi-day runs — exactly the accumulation window long-haul exists to cover.
+
+> **RBAC.** The driver ServiceAccount needs `create`/`get`/`list` on
+> `scheduledbackups.documentdb.io` and `list` on `backups.documentdb.io`. These
+> verbs must be present in `deploy/rbac.yaml` (added in the CI/CD PR) for the
+> backup verifier to function; without them it logs an error and the rest of the
+> run continues.
 
 ## CI Safety
 

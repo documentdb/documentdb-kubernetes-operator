@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -266,4 +268,66 @@ func (k *K8sClusterClient) GetPodMetrics(ctx context.Context) ([]PodMetrics, err
 // MetricsAvailable returns whether metrics-server is usable.
 func (k *K8sClusterClient) MetricsAvailable() bool {
 	return k.metricsAvail.Load()
+}
+
+// scheduledBackupLabel is the label the ScheduledBackup reconciler stamps
+// on every child Backup CR it creates (see
+// preview.ScheduledBackup.CreateBackup). Selecting on it isolates the
+// backups produced by our canary ScheduledBackup from any ad-hoc Backup
+// objects that might exist in the namespace.
+const scheduledBackupLabel = "scheduledbackup"
+
+// EnsureScheduledBackup creates the ScheduledBackup CR for the target
+// cluster if it does not already exist. It is idempotent: an existing
+// ScheduledBackup with the same name is left untouched (a restart of the
+// driver must not reset the accumulated backup history).
+func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, schedule string, retentionDays int) error {
+	existing := &previewv1.ScheduledBackup{}
+	err := k.crClient.Get(ctx, types.NamespacedName{Namespace: k.namespace, Name: name}, existing)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get ScheduledBackup %s/%s: %w", k.namespace, name, err)
+	}
+
+	rd := retentionDays
+	sb := &previewv1.ScheduledBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: k.namespace,
+		},
+		Spec: previewv1.ScheduledBackupSpec{
+			Cluster:       cnpgv1.LocalObjectReference{Name: k.clusterName},
+			Schedule:      schedule,
+			RetentionDays: &rd,
+		},
+	}
+	if err := k.crClient.Create(ctx, sb); err != nil {
+		return fmt.Errorf("failed to create ScheduledBackup %s/%s: %w", k.namespace, name, err)
+	}
+	return nil
+}
+
+// GetScheduledBackup fetches the ScheduledBackup CR by name in the target
+// namespace.
+func (k *K8sClusterClient) GetScheduledBackup(ctx context.Context, name string) (*previewv1.ScheduledBackup, error) {
+	sb := &previewv1.ScheduledBackup{}
+	if err := k.crClient.Get(ctx, types.NamespacedName{Namespace: k.namespace, Name: name}, sb); err != nil {
+		return nil, fmt.Errorf("failed to get ScheduledBackup %s/%s: %w", k.namespace, name, err)
+	}
+	return sb, nil
+}
+
+// ListScheduledChildBackups returns every Backup CR that the named
+// ScheduledBackup produced, identified by the "scheduledbackup" label.
+func (k *K8sClusterClient) ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]previewv1.Backup, error) {
+	var list previewv1.BackupList
+	if err := k.crClient.List(ctx, &list,
+		ctrlclient.InNamespace(k.namespace),
+		ctrlclient.MatchingLabels{scheduledBackupLabel: scheduledBackupName},
+	); err != nil {
+		return nil, fmt.Errorf("failed to list child Backups for ScheduledBackup %s: %w", scheduledBackupName, err)
+	}
+	return list.Items, nil
 }

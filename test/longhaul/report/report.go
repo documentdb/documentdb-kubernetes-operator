@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/documentdb/documentdb-operator/test/longhaul/backup"
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 	"github.com/documentdb/documentdb-operator/test/longhaul/monitor"
 	"github.com/documentdb/documentdb-operator/test/longhaul/workload"
@@ -37,6 +38,11 @@ type Summary struct {
 	// Metrics is a snapshot of the workload counters (writes attempted/acked/
 	// failed, verify passes, gaps, checksum errors).
 	Metrics workload.MetricsSnapshot
+
+	// Backup is a snapshot of the data-protection counters (backups
+	// scheduled/completed/failed, retention and GC violations). Retention or
+	// GC violations flip Result to FAIL.
+	Backup backup.MetricsSnapshot
 
 	// LeakAnalysis is the operator-pod resource trend (memory/CPU slope over
 	// the run); LeakAnalysis.HasLeak being true does NOT flip Result — it
@@ -88,6 +94,21 @@ func GenerateMarkdown(s Summary) string {
 	fmt.Fprintf(&b, "| Verify Passes | %d |\n", s.Metrics.VerifyPasses)
 	fmt.Fprintf(&b, "| Gaps Detected | %d |\n", s.Metrics.GapsDetected)
 	fmt.Fprintf(&b, "| Checksum Errors | %d |\n", s.Metrics.ChecksumErrors)
+	b.WriteString("\n")
+
+	// Data Protection (ScheduledBackup + retention)
+	b.WriteString("## Data Protection\n\n")
+	b.WriteString("| Metric | Value |\n")
+	b.WriteString("|--------|-------|\n")
+	fmt.Fprintf(&b, "| Backups Scheduled | %d |\n", s.Backup.Scheduled)
+	fmt.Fprintf(&b, "| Backups Completed | %d |\n", s.Backup.Completed)
+	fmt.Fprintf(&b, "| Backups Failed | %d |\n", s.Backup.Failed)
+	fmt.Fprintf(&b, "| Current Backup Count | %d |\n", s.Backup.LastChildCount)
+	fmt.Fprintf(&b, "| Retention Violations | %d |\n", s.Backup.RetentionViolations)
+	fmt.Fprintf(&b, "| Retention GC Violations | %d |\n", s.Backup.GCViolations)
+	if !s.Backup.LastScheduled.IsZero() {
+		fmt.Fprintf(&b, "| Last Scheduled | %s |\n", s.Backup.LastScheduled.Format(time.RFC3339))
+	}
 	b.WriteString("\n")
 
 	// Disruption Windows
