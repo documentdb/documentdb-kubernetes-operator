@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -1150,7 +1151,7 @@ func (r *DocumentDBReconciler) reconcileOtelMonitorSecret(ctx context.Context, d
 		// Generate the password only once; preserve it on subsequent reconciles so
 		// the managed role's password and the sidecar's cached env stay in sync.
 		if len(secret.Data[corev1.BasicAuthPasswordKey]) == 0 {
-			password, genErr := generateRandomPassword()
+			password, genErr := generateRandomPassword(rand.Reader)
 			if genErr != nil {
 				return fmt.Errorf("failed to generate monitoring password: %w", genErr)
 			}
@@ -1190,9 +1191,9 @@ func (r *DocumentDBReconciler) deleteOtelMonitorSecret(ctx context.Context, clus
 
 // generateRandomPassword returns a cryptographically random, URL-safe password
 // suitable for a PostgreSQL role.
-func generateRandomPassword() (string, error) {
+func generateRandomPassword(reader io.Reader) (string, error) {
 	buf := make([]byte, 24)
-	if _, err := rand.Read(buf); err != nil {
+	if _, err := io.ReadFull(reader, buf); err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil

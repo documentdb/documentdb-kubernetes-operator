@@ -3025,6 +3025,50 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: documentDBNamespace}, &corev1.ConfigMap{})).To(Succeed())
 		})
 
+		It("requeues when the OTel monitoring secret cannot be created", func() {
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"},
+					},
+					Monitoring: &dbpreview.MonitoringSpec{Enabled: true},
+				},
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+						if _, ok := obj.(*corev1.Secret); ok {
+							return fmt.Errorf("simulated secret create failure")
+						}
+						return c.Create(ctx, obj, opts...)
+					},
+				}).
+				Build()
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace},
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+		})
+
 		It("should add restart annotation when TLS secret name changes", func() {
 			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
@@ -3488,6 +3532,19 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: monitorSecretName, Namespace: documentDBNamespace}, second)).To(Succeed())
 			Expect(second.Data[corev1.BasicAuthPasswordKey]).To(Equal(original))
 		})
+
+		It("returns an error when the owner reference cannot be set", func() {
+			documentdb := newDocumentDB()
+			documentdb.Namespace = "different-namespace"
+			documentdb.UID = "test-uid"
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			err := reconciler.reconcileOtelMonitorSecret(ctx, documentdb, documentDBNamespace)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("owner reference"))
+		})
 	})
 
 	Describe("deleteOtelMonitorSecret", func() {
@@ -3511,6 +3568,30 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
 			Expect(reconciler.deleteOtelMonitorSecret(ctx, documentDBName, documentDBNamespace)).To(Succeed())
+		})
+
+		It("returns an error when deletion fails", func() {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
+						return fmt.Errorf("simulated delete failure")
+					},
+				}).
+				Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			err := reconciler.deleteOtelMonitorSecret(ctx, documentDBName, documentDBNamespace)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to delete OTel monitoring secret"))
+		})
+	})
+
+	Describe("generateRandomPassword", func() {
+		It("returns an error when the entropy source fails", func() {
+			_, err := generateRandomPassword(strings.NewReader(""))
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })
