@@ -134,8 +134,7 @@ All configuration is via environment variables.
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
 | `LONGHAUL_BACKUP_ENABLED` | No | `true` | Enable the ScheduledBackup + retention verifier. |
 | `LONGHAUL_BACKUP_SCHEDULE` | No | `0 */6 * * *` | Cron schedule for the canary `ScheduledBackup`. |
-| `LONGHAUL_BACKUP_RETENTION_DAYS` | No | `1` | Retention window applied to child backups and validated against the operator-computed expiration. |
-| `LONGHAUL_BACKUP_VERIFY_INTERVAL` | No | `5m` | How often the backup verifier polls scheduling / completion / retention. |
+| `LONGHAUL_BACKUP_RETENTION_DAYS` | No | `1` | Retention window applied to child backups; also used to derive the retention-leak deadline. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
 
 ### Data Protection (ScheduledBackup + retention)

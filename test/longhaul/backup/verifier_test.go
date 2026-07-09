@@ -68,7 +68,6 @@ func newTestVerifier(client Client) (*Verifier, *Metrics) {
 		ScheduledBackupName: "cluster-longhaul",
 		Schedule:            "0 */6 * * *",
 		RetentionDays:       1,
-		VerifyInterval:      time.Minute,
 	})
 	return v, m
 }

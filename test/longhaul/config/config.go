@@ -33,10 +33,9 @@ const (
 	EnvReportInterval = "LONGHAUL_REPORT_INTERVAL"
 
 	// Data protection (ScheduledBackup + retention verification).
-	EnvBackupEnabled        = "LONGHAUL_BACKUP_ENABLED"
-	EnvBackupSchedule       = "LONGHAUL_BACKUP_SCHEDULE"
-	EnvBackupRetentionDays  = "LONGHAUL_BACKUP_RETENTION_DAYS"
-	EnvBackupVerifyInterval = "LONGHAUL_BACKUP_VERIFY_INTERVAL"
+	EnvBackupEnabled       = "LONGHAUL_BACKUP_ENABLED"
+	EnvBackupSchedule      = "LONGHAUL_BACKUP_SCHEDULE"
+	EnvBackupRetentionDays = "LONGHAUL_BACKUP_RETENTION_DAYS"
 
 	// Operational toggles.
 	EnvResetData = "LONGHAUL_RESET_DATA"
@@ -90,9 +89,6 @@ type Config struct {
 	// and used to derive the retention-leak deadline.
 	BackupRetentionDays int
 
-	// BackupVerifyInterval is how often the backup verifier polls state.
-	BackupVerifyInterval time.Duration
-
 	// ResetData controls whether the workload collection is dropped on startup.
 	// Default false so that pod restarts preserve durability history; opt in
 	// for fresh local/dev iterations.
@@ -114,10 +110,9 @@ func DefaultConfig() Config {
 		MaxInstances:    3,
 		ReportInterval:  1 * time.Hour,
 
-		BackupEnabled:        true,
-		BackupSchedule:       "0 */6 * * *",
-		BackupRetentionDays:  1,
-		BackupVerifyInterval: 5 * time.Minute,
+		BackupEnabled:       true,
+		BackupSchedule:      "0 */6 * * *",
+		BackupRetentionDays: 1,
 	}
 }
 
@@ -218,14 +213,6 @@ func LoadFromEnv() (Config, error) {
 		cfg.BackupRetentionDays = n
 	}
 
-	if v := os.Getenv(EnvBackupVerifyInterval); v != "" {
-		d, err := time.ParseDuration(v)
-		if err != nil {
-			return cfg, fmt.Errorf("invalid %s=%q: %w", EnvBackupVerifyInterval, v, err)
-		}
-		cfg.BackupVerifyInterval = d
-	}
-
 	if v := strings.TrimSpace(strings.ToLower(os.Getenv(EnvResetData))); v != "" {
 		cfg.ResetData = v == "true" || v == "1" || v == "yes"
 	}
@@ -268,9 +255,6 @@ func (c *Config) Validate() error {
 		}
 		if c.BackupRetentionDays < 1 {
 			return fmt.Errorf("backup retention days must be at least 1, got %d", c.BackupRetentionDays)
-		}
-		if c.BackupVerifyInterval <= 0 {
-			return fmt.Errorf("backup verify interval must be positive, got %s", c.BackupVerifyInterval)
 		}
 	}
 	return nil

@@ -175,20 +175,12 @@ var _ = Describe("Config", func() {
 			Expect(cfg.Validate()).To(MatchError(ContainSubstring("backup retention days")))
 		})
 
-		It("fails when backup verify interval is not positive", func() {
-			cfg := DefaultConfig()
-			cfg.ClusterName = "test"
-			cfg.BackupVerifyInterval = 0
-			Expect(cfg.Validate()).To(MatchError(ContainSubstring("backup verify interval")))
-		})
-
 		It("skips backup validation when backups disabled", func() {
 			cfg := DefaultConfig()
 			cfg.ClusterName = "test"
 			cfg.BackupEnabled = false
 			cfg.BackupSchedule = ""
 			cfg.BackupRetentionDays = 0
-			cfg.BackupVerifyInterval = 0
 			Expect(cfg.Validate()).To(Succeed())
 		})
 	})

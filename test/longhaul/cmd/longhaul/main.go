@@ -156,7 +156,6 @@ func run(cfg config.Config) int {
 			ScheduledBackupName: cfg.ClusterName + "-longhaul",
 			Schedule:            cfg.BackupSchedule,
 			RetentionDays:       cfg.BackupRetentionDays,
-			VerifyInterval:      cfg.BackupVerifyInterval,
 		})
 		if err := verifier.Bootstrap(ctx); err != nil {
 			// A bootstrap failure is not fatal to the whole run — the workload

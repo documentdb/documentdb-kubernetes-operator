@@ -24,6 +24,9 @@ const (
 	// livenessGrace is how far past status.nextScheduledTime the scheduler
 	// may run before we warn that scheduling appears stalled.
 	livenessGrace = 5 * time.Minute
+
+	// verifyInterval is how often the verification loop runs.
+	verifyInterval = 5 * time.Minute
 )
 
 // Client is the subset of the cluster API the backup verifier needs.
@@ -39,7 +42,6 @@ type Config struct {
 	ScheduledBackupName string
 	Schedule            string
 	RetentionDays       int
-	VerifyInterval      time.Duration
 }
 
 // Verifier bootstraps a ScheduledBackup and continuously checks that the
@@ -92,7 +94,7 @@ func (v *Verifier) Run(ctx context.Context) {
 	v.journal.Info("backup", "backup verifier started")
 	defer v.journal.Info("backup", "backup verifier stopped")
 
-	ticker := time.NewTicker(v.cfg.VerifyInterval)
+	ticker := time.NewTicker(verifyInterval)
 	defer ticker.Stop()
 
 	for {
