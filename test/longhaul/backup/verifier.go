@@ -15,15 +15,10 @@ import (
 )
 
 const (
-	// retentionTolerance is the allowed skew between the operator-computed
-	// status.expiredAt and the value we recompute from stoppedAt +
-	// retentionDays*24h. The operator derives both from the same stoppedAt,
-	// so any real drift is tiny; the tolerance only absorbs clock rounding.
-	retentionTolerance = 2 * time.Minute
-
-	// gcGrace is how long past status.expiredAt a backup may still exist
-	// before we treat it as a garbage-collection failure. It absorbs the
-	// backup controller's requeue latency and apiserver propagation.
+	// gcGrace is how long past a backup's retention deadline
+	// (stoppedAt + retentionDays*24h) it may still exist before we treat it
+	// as a garbage-collection leak. It absorbs the backup controller's
+	// requeue latency and apiserver propagation.
 	gcGrace = 10 * time.Minute
 
 	// livenessGrace is how far past status.nextScheduledTime the scheduler
@@ -64,25 +59,23 @@ type Verifier struct {
 
 	// dedup state — the verification loop re-observes the same backups every
 	// cycle, so we count each transition/violation exactly once by name.
-	seenCompleted    map[string]struct{}
-	seenFailed       map[string]struct{}
-	retentionFlagged map[string]struct{}
-	gcFlagged        map[string]struct{}
-	lastScheduled    time.Time
-	stallWarnedFor   time.Time
+	seenCompleted  map[string]struct{}
+	seenFailed     map[string]struct{}
+	leakFlagged    map[string]struct{}
+	lastScheduled  time.Time
+	stallWarnedFor time.Time
 }
 
 // NewVerifier creates a backup verifier. metrics must be non-nil.
 func NewVerifier(client Client, j *journal.Journal, metrics *Metrics, cfg Config) *Verifier {
 	return &Verifier{
-		client:           client,
-		journal:          j,
-		metrics:          metrics,
-		cfg:              cfg,
-		seenCompleted:    make(map[string]struct{}),
-		seenFailed:       make(map[string]struct{}),
-		retentionFlagged: make(map[string]struct{}),
-		gcFlagged:        make(map[string]struct{}),
+		client:        client,
+		journal:       j,
+		metrics:       metrics,
+		cfg:           cfg,
+		seenCompleted: make(map[string]struct{}),
+		seenFailed:    make(map[string]struct{}),
+		leakFlagged:   make(map[string]struct{}),
 	}
 }
 
@@ -172,8 +165,7 @@ func (v *Verifier) checkChildBackups(ctx context.Context, now time.Time) {
 	for i := range children {
 		b := &children[i]
 		v.recordPhase(b)
-		v.checkRetention(b)
-		v.checkGarbageCollection(b, now)
+		v.checkRetentionLeak(b, now)
 	}
 }
 
@@ -197,51 +189,31 @@ func (v *Verifier) recordPhase(b *previewv1.Backup) {
 	}
 }
 
-// checkRetention verifies that a completed backup's status.expiredAt equals
-// stoppedAt + retentionDays*24h within tolerance. A mismatch is a Fatal
-// operator bug and is flagged exactly once per backup.
-func (v *Verifier) checkRetention(b *previewv1.Backup) {
-	if !isCompleted(b) || b.Status.StoppedAt == nil || b.Status.ExpiredAt == nil || b.Spec.RetentionDays == nil {
+// checkRetentionLeak flags a completed backup that has outlived its
+// retention window. The deadline is derived independently from our own
+// configured policy (stoppedAt + retentionDays*24h) rather than from the
+// operator-populated status.expiredAt — this keeps the oracle black-box:
+// it verifies the *outcome* (expired backups get deleted, so the
+// population stays bounded) without re-deriving the operator's internal
+// expiration formula, which the operator's own unit tests already cover.
+// Flagged once per backup.
+func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
+	if !isCompleted(b) || b.Status.StoppedAt == nil {
 		return
 	}
-	if _, done := v.retentionFlagged[b.Name]; done {
+	if _, done := v.leakFlagged[b.Name]; done {
 		return
 	}
-
-	expected := b.Status.StoppedAt.Time.Add(time.Duration(*b.Spec.RetentionDays) * 24 * time.Hour)
-	actual := b.Status.ExpiredAt.Time
-	skew := actual.Sub(expected)
-	if skew < 0 {
-		skew = -skew
-	}
-	if skew > retentionTolerance {
-		v.retentionFlagged[b.Name] = struct{}{}
-		v.metrics.RetentionViolations.Add(1)
+	deadline := b.Status.StoppedAt.Time.
+		Add(time.Duration(v.cfg.RetentionDays) * 24 * time.Hour).
+		Add(gcGrace)
+	if now.After(deadline) {
+		v.leakFlagged[b.Name] = struct{}{}
+		v.metrics.RetentionLeaks.Add(1)
 		v.journal.Error("backup", fmt.Sprintf(
-			"retention miscalculated for %q: retentionDays=%d stoppedAt=%s expiredAt=%s (expected %s, skew %s)",
-			b.Name, *b.Spec.RetentionDays,
-			b.Status.StoppedAt.Time.Format(time.RFC3339),
-			actual.Format(time.RFC3339), expected.Format(time.RFC3339), skew.Round(time.Second)))
-	}
-}
-
-// checkGarbageCollection flags a backup that still exists well past its
-// status.expiredAt — the operator failed to retire it. Flagged once per
-// backup.
-func (v *Verifier) checkGarbageCollection(b *previewv1.Backup, now time.Time) {
-	if b.Status.ExpiredAt == nil {
-		return
-	}
-	if _, done := v.gcFlagged[b.Name]; done {
-		return
-	}
-	if now.After(b.Status.ExpiredAt.Time.Add(gcGrace)) {
-		v.gcFlagged[b.Name] = struct{}{}
-		v.metrics.GCViolations.Add(1)
-		v.journal.Error("backup", fmt.Sprintf(
-			"retention GC failure: backup %q still present %s past expiredAt %s",
-			b.Name, now.Sub(b.Status.ExpiredAt.Time).Round(time.Second),
-			b.Status.ExpiredAt.Time.Format(time.RFC3339)))
+			"retention leak: backup %q still present %s past its %d-day retention window (stoppedAt %s)",
+			b.Name, now.Sub(b.Status.StoppedAt.Time).Round(time.Second),
+			v.cfg.RetentionDays, b.Status.StoppedAt.Time.Format(time.RFC3339)))
 	}
 }
 

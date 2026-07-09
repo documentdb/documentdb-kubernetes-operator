@@ -16,8 +16,7 @@ var _ = Describe("Metrics", func() {
 		m.Scheduled.Add(3)
 		m.Completed.Add(2)
 		m.Failed.Add(1)
-		m.RetentionViolations.Add(1)
-		m.GCViolations.Add(1)
+		m.RetentionLeaks.Add(1)
 		m.VerifyCycles.Add(5)
 		m.LastChildCount.Store(7)
 		now := time.Now()
@@ -27,8 +26,7 @@ var _ = Describe("Metrics", func() {
 		Expect(snap.Scheduled).To(Equal(int64(3)))
 		Expect(snap.Completed).To(Equal(int64(2)))
 		Expect(snap.Failed).To(Equal(int64(1)))
-		Expect(snap.RetentionViolations).To(Equal(int64(1)))
-		Expect(snap.GCViolations).To(Equal(int64(1)))
+		Expect(snap.RetentionLeaks).To(Equal(int64(1)))
 		Expect(snap.VerifyCycles).To(Equal(int64(5)))
 		Expect(snap.LastChildCount).To(Equal(int64(7)))
 		Expect(snap.LastScheduled.Unix()).To(Equal(now.Unix()))
@@ -39,16 +37,14 @@ var _ = Describe("Metrics", func() {
 		Expect(snap.LastScheduled.IsZero()).To(BeTrue())
 	})
 
-	DescribeTable("HasRetentionFailure",
-		func(retention, gc int64, want bool) {
+	DescribeTable("HasRetentionLeak",
+		func(leaks int64, want bool) {
 			m := NewMetrics()
-			m.RetentionViolations.Add(retention)
-			m.GCViolations.Add(gc)
-			Expect(m.Snapshot().HasRetentionFailure()).To(Equal(want))
+			m.RetentionLeaks.Add(leaks)
+			Expect(m.Snapshot().HasRetentionLeak()).To(Equal(want))
 		},
-		Entry("clean", int64(0), int64(0), false),
-		Entry("retention violated", int64(1), int64(0), true),
-		Entry("gc violated", int64(0), int64(1), true),
-		Entry("both", int64(2), int64(3), true),
+		Entry("clean", int64(0), false),
+		Entry("one leak", int64(1), true),
+		Entry("several leaks", int64(3), true),
 	)
 })

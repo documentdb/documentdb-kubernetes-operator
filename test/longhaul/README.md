@@ -143,20 +143,26 @@ All configuration is via environment variables.
 When `LONGHAUL_BACKUP_ENABLED` is true, the driver bootstraps a `ScheduledBackup`
 named `<cluster>-longhaul` and runs a verifier concurrently with the operation
 scheduler (backup is deliberately **not** isolated from topology/chaos, per the
-design). Each verification cycle checks:
+design).
 
-- **Scheduling liveness** — `status.lastScheduledTime` advances; a stalled
+The verifier only checks the properties a **multi-day** run can establish —
+things unit and e2e tests cannot:
+
+- **Scheduling liveness** — `status.lastScheduledTime` keeps advancing; a stalled
   scheduler (past `status.nextScheduledTime` + grace) raises a warning.
-- **Completion** — child `Backup` CRs reach the `completed` phase; terminal
+- **Completion** — child `Backup` CRs keep reaching `completed`; terminal
   failures (`failed` / `skipped`) are counted.
-- **Retention correctness** — every completed backup's `status.expiredAt`
-  equals `stoppedAt + retentionDays*24h` (within a 2m tolerance). A mismatch is
-  a **FAIL** (the operator miscalculated retention).
-- **Retention GC** — no backup lingers more than 10m past its `status.expiredAt`.
-  A lingering expired backup is a **FAIL** (retention garbage-collection leak).
+- **Retention leak** — no completed backup outlives its retention window
+  (`stoppedAt + retentionDays*24h` + grace). A lingering backup is a **FAIL**:
+  it means expired backups aren't garbage-collected and the population (and its
+  PVCs / VolumeSnapshots) grows unbounded.
 
-Because the minimum meaningful retention is 1 day, the GC check only fires on
-multi-day runs — exactly the accumulation window long-haul exists to cover.
+It deliberately does **not** re-verify the operator's retention *arithmetic*
+(`expiredAt == stoppedAt + retentionDays*24h`) — that is a pure function already
+covered by the operator's unit tests and needs no accumulation. The oracle here
+is black-box: expired backups disappear. Because the minimum meaningful
+retention is 1 day, the leak check only fires on multi-day runs — exactly the
+accumulation window long-haul exists to cover.
 
 > **RBAC.** The driver ServiceAccount needs `create`/`get`/`list` on
 > `scheduledbackups.documentdb.io` and `list` on `backups.documentdb.io`. These

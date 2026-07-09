@@ -40,8 +40,8 @@ type Summary struct {
 	Metrics workload.MetricsSnapshot
 
 	// Backup is a snapshot of the data-protection counters (backups
-	// scheduled/completed/failed, retention and GC violations). Retention or
-	// GC violations flip Result to FAIL.
+	// scheduled/completed/failed, live population, retention leaks). A
+	// retention leak flips Result to FAIL.
 	Backup backup.MetricsSnapshot
 
 	// LeakAnalysis is the operator-pod resource trend (memory/CPU slope over
@@ -103,9 +103,8 @@ func GenerateMarkdown(s Summary) string {
 	fmt.Fprintf(&b, "| Backups Scheduled | %d |\n", s.Backup.Scheduled)
 	fmt.Fprintf(&b, "| Backups Completed | %d |\n", s.Backup.Completed)
 	fmt.Fprintf(&b, "| Backups Failed | %d |\n", s.Backup.Failed)
-	fmt.Fprintf(&b, "| Current Backup Count | %d |\n", s.Backup.LastChildCount)
-	fmt.Fprintf(&b, "| Retention Violations | %d |\n", s.Backup.RetentionViolations)
-	fmt.Fprintf(&b, "| Retention GC Violations | %d |\n", s.Backup.GCViolations)
+	fmt.Fprintf(&b, "| Live Backup Count | %d |\n", s.Backup.LastChildCount)
+	fmt.Fprintf(&b, "| Retention Leaks | %d |\n", s.Backup.RetentionLeaks)
 	if !s.Backup.LastScheduled.IsZero() {
 		fmt.Fprintf(&b, "| Last Scheduled | %s |\n", s.Backup.LastScheduled.Format(time.RFC3339))
 	}

@@ -120,11 +120,10 @@ var _ = Describe("Verifier.checkOnce", func() {
 
 	It("counts completed and failed child backups once each", func() {
 		stopped := now.Add(-30 * time.Minute)
-		expired := stopped.Add(24 * time.Hour)
 		fc := &fakeBackupClient{
 			sb: &previewv1.ScheduledBackup{},
 			children: []previewv1.Backup{
-				mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, expired),
+				mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{}),
 				mkBackup("b2", previewv1.BackupPhaseSkipped, 1, time.Time{}, time.Time{}),
 				mkBackup("b3", cnpgv1.BackupPhaseFailed, 1, time.Time{}, time.Time{}),
 			},
@@ -138,74 +137,57 @@ var _ = Describe("Verifier.checkOnce", func() {
 		Expect(snap.Completed).To(Equal(int64(1)))
 		Expect(snap.Failed).To(Equal(int64(2))) // skipped + failed are both terminal
 		Expect(snap.LastChildCount).To(Equal(int64(3)))
-		Expect(snap.RetentionViolations).To(BeZero())
-		Expect(snap.GCViolations).To(BeZero())
+		Expect(snap.RetentionLeaks).To(BeZero())
 	})
 
-	It("passes retention when expiredAt matches stoppedAt + retention", func() {
+	It("does not flag a fresh completed backup within its retention window", func() {
+		// retentionDays=1; stopped 1h ago → well within the 1-day window.
 		stopped := now.Add(-time.Hour)
-		expired := stopped.Add(2 * 24 * time.Hour)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 2, stopped, expired)},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
-		Expect(m.Snapshot().RetentionViolations).To(BeZero())
+		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
 	})
 
-	It("flags a retention miscalculation once", func() {
-		stopped := now.Add(-time.Hour)
-		// Wrong: only 12h instead of 24h.
-		expired := stopped.Add(12 * time.Hour)
+	It("flags a retention leak when a backup outlives its window, once", func() {
+		// retentionDays=1 (verifier config); stopped 48h ago and still present
+		// → well past the 1-day window + grace.
+		stopped := now.Add(-48 * time.Hour)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, expired)},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 
 		v.checkOnce(context.Background(), now)
 		v.checkOnce(context.Background(), now) // must not double-count
-		Expect(m.Snapshot().RetentionViolations).To(Equal(int64(1)))
+		Expect(m.Snapshot().RetentionLeaks).To(Equal(int64(1)))
 	})
 
-	It("tolerates sub-tolerance skew", func() {
-		stopped := now.Add(-time.Hour)
-		expired := stopped.Add(24 * time.Hour).Add(30 * time.Second)
+	It("does not flag a leak within the GC grace window", func() {
+		// stopped just over 1 day ago but inside the 10m GC grace.
+		stopped := now.Add(-24 * time.Hour).Add(-1 * time.Minute)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, expired)},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
-		Expect(m.Snapshot().RetentionViolations).To(BeZero())
+		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
 	})
 
-	It("flags a garbage-collection failure once", func() {
-		stopped := now.Add(-48 * time.Hour)
-		// Expired 30m ago (well past gcGrace) but still present.
-		expired := now.Add(-30 * time.Minute)
+	It("ignores incomplete backups for leak detection", func() {
+		// A never-completed backup has no stoppedAt → not a leak candidate.
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, expired)},
-		}
-		v, m := newTestVerifier(fc)
-
-		v.checkOnce(context.Background(), now)
-		v.checkOnce(context.Background(), now)
-		Expect(m.Snapshot().GCViolations).To(Equal(int64(1)))
-	})
-
-	It("does not flag GC within the grace window", func() {
-		stopped := now.Add(-48 * time.Hour)
-		expired := now.Add(-1 * time.Minute) // within gcGrace
-		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, expired)},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseRunning, 1, time.Time{}, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
-		Expect(m.Snapshot().GCViolations).To(BeZero())
+		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
 	})
 
 	It("survives transient read errors without panicking", func() {
@@ -217,6 +199,6 @@ var _ = Describe("Verifier.checkOnce", func() {
 		v.checkOnce(context.Background(), now)
 		snap := m.Snapshot()
 		Expect(snap.VerifyCycles).To(Equal(int64(1)))
-		Expect(snap.HasRetentionFailure()).To(BeFalse())
+		Expect(snap.HasRetentionLeak()).To(BeFalse())
 	})
 })

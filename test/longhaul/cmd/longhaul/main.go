@@ -233,9 +233,9 @@ func buildSummary(metrics *workload.Metrics, backupMetrics *backup.Metrics, leak
 	if j.HasPolicyViolation() {
 		appendReason("outage policy violated")
 	}
-	if backupSnap.HasRetentionFailure() {
-		appendReason(fmt.Sprintf("backup retention violated: %d retention, %d GC",
-			backupSnap.RetentionViolations, backupSnap.GCViolations))
+	if backupSnap.HasRetentionLeak() {
+		appendReason(fmt.Sprintf("backup retention leak: %d expired backups not collected",
+			backupSnap.RetentionLeaks))
 	}
 
 	return report.Summary{
