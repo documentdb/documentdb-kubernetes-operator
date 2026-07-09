@@ -132,7 +132,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 
 		snap := m.Snapshot()
 		Expect(snap.Completed).To(Equal(int64(1)))
-		Expect(snap.Failed).To(Equal(int64(2))) // skipped + failed are both terminal
+		Expect(snap.Failed).To(Equal(int64(1))) // skipped is not a failure
 		Expect(snap.LastChildCount).To(Equal(int64(3)))
 		Expect(snap.RetentionLeaks).To(BeZero())
 	})

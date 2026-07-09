@@ -241,16 +241,11 @@ func isCompleted(b *previewv1.Backup) bool {
 	return b != nil && b.Status.Phase == cnpgv1.BackupPhaseCompleted
 }
 
-// isTerminalFailure reports whether a Backup reached a phase from which no
-// reconcile will recover it.
+// isTerminalFailure reports whether a Backup reached a genuine failure
+// phase from which no reconcile will recover it. BackupPhaseSkipped is
+// deliberately excluded: the operator emits it when a backup is
+// intentionally not taken (e.g. the cluster is a non-primary/standby), which
+// is an expected no-op, not a failure of the backup machinery.
 func isTerminalFailure(b *previewv1.Backup) bool {
-	if b == nil {
-		return false
-	}
-	switch b.Status.Phase {
-	case cnpgv1.BackupPhaseFailed, previewv1.BackupPhaseSkipped:
-		return true
-	default:
-		return false
-	}
+	return b != nil && b.Status.Phase == cnpgv1.BackupPhaseFailed
 }
