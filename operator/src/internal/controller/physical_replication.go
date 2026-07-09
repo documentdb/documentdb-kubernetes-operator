@@ -118,7 +118,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 	postgresClientCertificateProvided := postgresReplicationTLSSecret != ""
 	postgresServerCAProvided := postgresServerCASecret != ""
-	if !postgresClientCertificateProvided {
+	if documentdb.Spec.ClusterReplication.DisableTLS {
 		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
 			"host all all localhost trust",
 			"host replication streaming_replica all trust",

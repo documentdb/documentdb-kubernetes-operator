@@ -23,6 +23,7 @@ const (
 )
 
 // DocumentDBSpec defines the desired state of DocumentDB.
+// +kubebuilder:validation:XValidation:rule="!has(self.clusterReplication) || ((has(self.clusterReplication.disableTLS) && self.clusterReplication.disableTLS) || (has(self.tls) && has(self.tls.postgres) && has(self.tls.postgres.replicationTLSSecret) && has(self.tls.postgres.clientCASecret)))",message="when spec.clusterReplication is set, either spec.clusterReplication.disableTLS must be true or spec.tls.postgres.replicationTLSSecret and spec.tls.postgres.clientCASecret must be provided"
 type DocumentDBSpec struct {
 	// NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.
 	// +kubebuilder:validation:Minimum=1
@@ -327,6 +328,10 @@ type ClusterReplication struct {
 	ClusterList []MemberCluster `json:"clusterList"`
 	// Whether or not to have replicas on the primary cluster.
 	HighAvailability bool `json:"highAvailability,omitempty"`
+	// Disables TLS for replication traffic between clusters.
+	// Only for use when an existing mesh is already providing TLS.
+	// +kubebuilder:default=false
+	DisableTLS bool `json:"disableTLS,omitempty"`
 }
 
 type MemberCluster struct {

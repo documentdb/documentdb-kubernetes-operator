@@ -218,10 +218,10 @@ var _ = Describe("Postgres certificate configuration", func() {
 
 		// Create a certificates configuration
 		certificatesConfig := &cnpgv1.CertificatesConfiguration{
-			ServerTLSSecret:       "server-tls-secret",
-			ServerCASecret:        "server-ca-secret",
-			ReplicationTLSSecret:  "replication-tls-secret",
-			ClientCASecret:        "client-ca-secret",
+			ServerTLSSecret:      "server-tls-secret",
+			ServerCASecret:       "server-ca-secret",
+			ReplicationTLSSecret: "replication-tls-secret",
+			ClientCASecret:       "client-ca-secret",
 		}
 
 		documentdb := &dbpreview.DocumentDB{
@@ -462,10 +462,10 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Namespace = "default"
 
 		certificatesConfig := &cnpgv1.CertificatesConfiguration{
-			ServerTLSSecret:       "server-tls-secret",
-			ServerCASecret:        "server-ca-secret",
-			ReplicationTLSSecret:  "replication-tls-secret",
-			ClientCASecret:        "client-ca-secret",
+			ServerTLSSecret:      "server-tls-secret",
+			ServerCASecret:       "server-ca-secret",
+			ReplicationTLSSecret: "replication-tls-secret",
+			ClientCASecret:       "client-ca-secret",
 		}
 
 		documentdb := &dbpreview.DocumentDB{

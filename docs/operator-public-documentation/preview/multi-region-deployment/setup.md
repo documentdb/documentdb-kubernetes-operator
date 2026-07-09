@@ -157,7 +157,9 @@ spec:
 
 Cross-Kubernetes-cluster streaming replication flows over the network between
 member Kubernetes clusters. Set `spec.tls.postgres` to encrypt this traffic with
-mutual TLS (mTLS). Distribute the same certificate material to every member
+TLS. To enable mutual TLS (mTLS), include the full server verification fields so
+replicas both present a client certificate and verify the server certificate
+(`sslmode=verify-full`). Distribute the same certificate material to every member
 Kubernetes cluster so that any member Kubernetes cluster can become primary after
 failover.
 

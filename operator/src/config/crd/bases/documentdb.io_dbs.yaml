@@ -1125,6 +1125,12 @@ spec:
                     - Istio
                     - None
                     type: string
+                  disableTLS:
+                    default: false
+                    description: |-
+                      Disables TLS for replication traffic between clusters.
+                      Only for use when an existing mesh is already providing TLS.
+                    type: boolean
                   highAvailability:
                     description: Whether or not to have replicas on the primary cluster.
                     type: boolean
@@ -1580,6 +1586,13 @@ spec:
             - nodeCount
             - resource
             type: object
+            x-kubernetes-validations:
+            - message: when spec.clusterReplication is set, either spec.clusterReplication.disableTLS
+                must be true or spec.tls.postgres.replicationTLSSecret and spec.tls.postgres.clientCASecret
+                must be provided
+              rule: '!has(self.clusterReplication) || ((has(self.clusterReplication.disableTLS)
+                && self.clusterReplication.disableTLS) || (has(self.tls) && has(self.tls.postgres)
+                && has(self.tls.postgres.replicationTLSSecret) && has(self.tls.postgres.clientCASecret)))'
           status:
             description: DocumentDBStatus defines the observed state of DocumentDB.
             properties:

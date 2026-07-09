@@ -753,7 +753,7 @@ var _ = Describe("Physical Replication", func() {
 			Spec: cnpgv1.ClusterSpec{
 				Instances: 1,
 				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
-					Self:  "primary-cluster",
+					Self: "primary-cluster",
 				},
 				ExternalClusters: []cnpgv1.ExternalCluster{
 					{Name: "standby-1"},
@@ -799,7 +799,7 @@ var _ = Describe("Physical Replication", func() {
 			Spec: cnpgv1.ClusterSpec{
 				Instances: 1,
 				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
-					Self:  "primary-cluster",
+					Self: "primary-cluster",
 				},
 				ExternalClusters: []cnpgv1.ExternalCluster{
 					{Name: "standby-1"},
@@ -846,7 +846,7 @@ var _ = Describe("Physical Replication", func() {
 			Spec: cnpgv1.ClusterSpec{
 				Instances: 1,
 				ReplicaCluster: &cnpgv1.ReplicaClusterConfiguration{
-					Self:  "primary-cluster",
+					Self: "primary-cluster",
 				},
 				ExternalClusters: []cnpgv1.ExternalCluster{
 					{Name: "standby-1"},
@@ -1180,6 +1180,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.Istio),
 			Primary:                      "cluster-a",
+			DisableTLS:                   true,
 			ClusterList: []dbpreview.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
@@ -1193,6 +1194,10 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
 
 		Expect(cnpgCluster.Spec.Certificates).To(BeNil())
+		Expect(cnpgCluster.Spec.PostgresConfiguration.PgHBA).To(Equal([]string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}))
 		Expect(cnpgCluster.Spec.ExternalClusters).To(HaveLen(3))
 		for _, ec := range cnpgCluster.Spec.ExternalClusters {
 			if ec.Name == replicationContext.CNPGClusterName {
@@ -1203,5 +1208,36 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			Expect(ec.SSLKey).To(BeNil())
 			Expect(ec.SSLRootCert).To(BeNil())
 		}
+	})
+
+	It("does not downgrade PgHBA to trust when disableTLS is false and Postgres TLS is omitted", func() {
+		ctx := context.Background()
+		namespace := "default"
+
+		documentdb := baseDocumentDB("docdb-cert-omitted-default", namespace)
+		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+			CrossCloudNetworkingStrategy: string(util.Istio),
+			Primary:                      "cluster-a",
+			ClusterList: []dbpreview.MemberCluster{
+				{Name: "cluster-a"},
+				{Name: "cluster-b"},
+			},
+		}
+
+		cnpgCluster := buildCnpgCluster("docdb-cert-omitted-default", namespace)
+		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
+			"host all all localhost trust",
+			"hostssl replication streaming_replica all cert",
+		}
+		replicationContext := buildPrimaryReplicationContext("docdb-cert-omitted-default", "", "")
+
+		reconciler := buildDocumentDBReconciler()
+		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
+
+		Expect(cnpgCluster.Spec.Certificates).To(BeNil())
+		Expect(cnpgCluster.Spec.PostgresConfiguration.PgHBA).To(Equal([]string{
+			"host all all localhost trust",
+			"hostssl replication streaming_replica all cert",
+		}))
 	})
 })
