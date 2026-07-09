@@ -17,7 +17,7 @@ scope: [`docs/designs/e2e-test-suite.md`](../../docs/designs/e2e-test-suite.md).
 
 | Tool | Version | Notes |
 |---|---|---|
-| Go | 1.26.x (match `test/e2e/go.mod` — currently `go 1.26.4`) | Separate module from the operator |
+| Go | 1.26.x (match `test/e2e/go.mod` — currently `go 1.26.5`) | Separate module from the operator |
 | Docker | any recent | Required for kind |
 | kind | any recent | Local Kubernetes |
 | kubectl | matching the target Kubernetes cluster | |
