@@ -191,7 +191,12 @@ jobs:
 
           # Apply the real ConfigMap + Deployment, substituting only the
           # templated image ref with the locally built image loaded into kind.
+          # The shipped manifest uses imagePullPolicy: Always (correct for the
+          # registry-based long-haul deploy of mutable tags), but here the
+          # image is side-loaded into kind and exists on no registry, so
+          # override to IfNotPresent to use the local image instead of a pull.
           sed -e "s|ghcr.io/__OWNER__/documentdb-kubernetes-operator/longhaul-test:__IMAGE_TAG__|${DRIVER_IMAGE}|g" \
+            -e "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g" \
             test/longhaul/deploy/deployment.yaml | kubectl apply -f -
 
           # Bounded, deterministic smoke override — patch ONLY runtime knobs on
