@@ -140,10 +140,12 @@ All configuration is via environment variables.
 
 ### Data Protection (ScheduledBackup + retention)
 
-When `LONGHAUL_BACKUP_ENABLED` is true, the driver bootstraps a `ScheduledBackup`
-named `<cluster>-longhaul` and runs a verifier concurrently with the operation
-scheduler (backup is deliberately **not** isolated from topology/chaos, per the
-design).
+When `LONGHAUL_BACKUP_ENABLED` is true, the driver ensures a `ScheduledBackup`
+named `<cluster>-longhaul` exists and matches the run's schedule/retention
+(an existing CR is reconciled in place, never recreated, so backup history is
+preserved across restarts and parameter changes) and runs a verifier
+concurrently with the operation scheduler (backup is deliberately **not**
+isolated from topology/chaos, per the design).
 
 The verifier only checks the properties a **multi-day** run can establish —
 things unit and e2e tests cannot:
@@ -153,9 +155,11 @@ things unit and e2e tests cannot:
 - **Completion** — child `Backup` CRs keep reaching `completed`; terminal
   failures (`failed` / `skipped`) are counted.
 - **Retention leak** — no completed backup outlives its retention window
-  (`stoppedAt + retentionDays*24h` + grace). A lingering backup is a **FAIL**:
-  it means expired backups aren't garbage-collected and the population (and its
-  PVCs / VolumeSnapshots) grows unbounded.
+  (`stoppedAt + spec.retentionDays*24h` + grace). The window is taken from each
+  backup's **own** `spec.retentionDays` (stamped at creation), so the check
+  stays correct even if a later run uses a different retention. A lingering
+  backup is a **FAIL**: expired backups aren't garbage-collected and the
+  population (and its PVCs / VolumeSnapshots) grows unbounded.
 
 It deliberately does **not** re-verify the operator's retention *arithmetic*
 (`expiredAt == stoppedAt + retentionDays*24h`) — that is a pure function already
@@ -164,7 +168,7 @@ is black-box: expired backups disappear. Because the minimum meaningful
 retention is 1 day, the leak check only fires on multi-day runs — exactly the
 accumulation window long-haul exists to cover.
 
-> **RBAC.** The driver ServiceAccount needs `create`/`get`/`list` on
+> **RBAC.** The driver ServiceAccount needs `create`/`get`/`list`/`update` on
 > `scheduledbackups.documentdb.io` and `list` on `backups.documentdb.io`. These
 > verbs must be present in `deploy/rbac.yaml` (added in the CI/CD PR) for the
 > backup verifier to function; without them it logs an error and the rest of the

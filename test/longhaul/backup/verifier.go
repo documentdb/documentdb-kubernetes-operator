@@ -72,9 +72,10 @@ func NewVerifier(client Client, j *journal.Journal, metrics *Metrics, cfg Config
 	}
 }
 
-// Bootstrap ensures the ScheduledBackup CR exists. It is safe to call on
-// every startup; an existing ScheduledBackup is left untouched so the
-// accumulated backup history survives driver restarts.
+// Bootstrap ensures the ScheduledBackup CR exists and matches this run's
+// schedule/retention. It is safe to call on every startup: an existing CR is
+// reconciled in place (never recreated), so the accumulated backup history
+// survives driver restarts and parameter changes.
 func (v *Verifier) Bootstrap(ctx context.Context) error {
 	if err := v.client.EnsureScheduledBackup(ctx, v.cfg.ScheduledBackupName, v.cfg.Schedule, v.cfg.RetentionDays); err != nil {
 		return fmt.Errorf("ensure ScheduledBackup: %w", err)
@@ -182,9 +183,12 @@ func (v *Verifier) recordPhase(b *previewv1.Backup) {
 }
 
 // checkRetentionLeak flags a completed backup still present past its
-// retention window. The deadline is derived from our own configured policy
-// (stoppedAt + retentionDays*24h + gcGrace), not the operator-populated
-// status.expiredAt, so the oracle stays black-box (see package doc).
+// retention window. The deadline is derived from the backup's own declared
+// retention (spec.retentionDays, stamped by the ScheduledBackup) plus
+// gcGrace — not the operator-populated status.expiredAt — so the oracle
+// stays black-box (see package doc) and stays correct even when the run's
+// configured retention differs from what an older backup was created under.
+// Falls back to the run config if a backup carries no retention.
 // Flagged once per backup.
 func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
 	if !isCompleted(b) || b.Status.StoppedAt == nil {
@@ -193,8 +197,12 @@ func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
 	if _, done := v.leakFlagged[b.Name]; done {
 		return
 	}
+	retentionDays := v.cfg.RetentionDays
+	if b.Spec.RetentionDays != nil {
+		retentionDays = *b.Spec.RetentionDays
+	}
 	deadline := b.Status.StoppedAt.Time.
-		Add(time.Duration(v.cfg.RetentionDays) * 24 * time.Hour).
+		Add(time.Duration(retentionDays) * 24 * time.Hour).
 		Add(gcGrace)
 	if now.After(deadline) {
 		v.leakFlagged[b.Name] = struct{}{}
@@ -202,7 +210,7 @@ func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
 		v.journal.Error("backup", fmt.Sprintf(
 			"retention leak: backup %q still present %s past its %d-day retention window (stoppedAt %s)",
 			b.Name, now.Sub(b.Status.StoppedAt.Time).Round(time.Second),
-			v.cfg.RetentionDays, b.Status.StoppedAt.Time.Format(time.RFC3339)))
+			retentionDays, b.Status.StoppedAt.Time.Format(time.RFC3339)))
 	}
 }
 

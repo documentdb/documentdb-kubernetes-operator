@@ -278,14 +278,15 @@ func (k *K8sClusterClient) MetricsAvailable() bool {
 const scheduledBackupLabel = "scheduledbackup"
 
 // EnsureScheduledBackup creates the ScheduledBackup CR for the target
-// cluster if it does not already exist. It is idempotent: an existing
-// ScheduledBackup with the same name is left untouched (a restart of the
-// driver must not reset the accumulated backup history).
+// cluster, or reconciles an existing one so a run started with a different
+// schedule/retention actually takes effect. Existing child backups and their
+// accumulated history are preserved — the CR is updated in place, never
+// recreated — so only backups created after the update pick up the new spec.
 func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, schedule string, retentionDays int) error {
 	existing := &previewv1.ScheduledBackup{}
 	err := k.crClient.Get(ctx, types.NamespacedName{Namespace: k.namespace, Name: name}, existing)
 	if err == nil {
-		return nil
+		return k.reconcileScheduledBackup(ctx, existing, schedule, retentionDays)
 	}
 	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to get ScheduledBackup %s/%s: %w", k.namespace, name, err)
@@ -305,6 +306,29 @@ func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, sche
 	}
 	if err := k.crClient.Create(ctx, sb); err != nil {
 		return fmt.Errorf("failed to create ScheduledBackup %s/%s: %w", k.namespace, name, err)
+	}
+	return nil
+}
+
+// reconcileScheduledBackup updates an existing ScheduledBackup in place when
+// its schedule or retention differs from what this run requested.
+func (k *K8sClusterClient) reconcileScheduledBackup(ctx context.Context, existing *previewv1.ScheduledBackup, schedule string, retentionDays int) error {
+	curRetention := 0
+	if existing.Spec.RetentionDays != nil {
+		curRetention = *existing.Spec.RetentionDays
+	}
+	if existing.Spec.Schedule == schedule && curRetention == retentionDays {
+		return nil
+	}
+
+	log.Printf("[k8sclient] ScheduledBackup %s/%s spec drift; updating (schedule %q->%q, retentionDays %d->%d)",
+		k.namespace, existing.Name, existing.Spec.Schedule, schedule, curRetention, retentionDays)
+
+	rd := retentionDays
+	existing.Spec.Schedule = schedule
+	existing.Spec.RetentionDays = &rd
+	if err := k.crClient.Update(ctx, existing); err != nil {
+		return fmt.Errorf("failed to update ScheduledBackup %s/%s: %w", k.namespace, existing.Name, err)
 	}
 	return nil
 }

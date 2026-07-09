@@ -187,6 +187,23 @@ var _ = Describe("Verifier.checkOnce", func() {
 		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
 	})
 
+	It("uses the backup's own retention, not the run config, for the deadline", func() {
+		// Run config is retentionDays=1, but this backup was created under a
+		// 7-day policy (e.g. a run started earlier with different params).
+		// At 2 days old it is well within its own window → not a leak.
+		stopped := now.Add(-48 * time.Hour)
+		b := mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)
+		rd := 7
+		b.Spec.RetentionDays = &rd
+		fc := &fakeBackupClient{
+			sb:       &previewv1.ScheduledBackup{},
+			children: []previewv1.Backup{b},
+		}
+		v, m := newTestVerifier(fc)
+		v.checkOnce(context.Background(), now)
+		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
+	})
+
 	It("survives transient read errors without panicking", func() {
 		fc := &fakeBackupClient{
 			sbErr:    errors.New("apiserver throttled"),
