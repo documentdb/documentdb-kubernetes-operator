@@ -654,3 +654,44 @@ var _ = Describe("Physical Replication", func() {
 		Expect(updated.Spec.PostgresConfiguration.Synchronous.Number).To(Equal(2))
 	})
 })
+
+var _ = Describe("addAzureFleetManagedServices", func() {
+	newContext := func() *util.ReplicationContext {
+		return &util.ReplicationContext{
+			CrossCloudNetworkingStrategy: util.AzureFleet,
+			CNPGClusterName:              "cluster-a",
+			OtherCNPGClusterNames:        []string{"cluster-b"},
+		}
+	}
+
+	It("adds managed RW services for outgoing fleet members", func() {
+		documentdb := baseDocumentDB("docdb-fleet", "default")
+		cnpgCluster := &cnpgv1.Cluster{}
+
+		addAzureFleetManagedServices(cnpgCluster, newContext(), documentdb)
+
+		Expect(cnpgCluster.Spec.Managed).NotTo(BeNil())
+		Expect(cnpgCluster.Spec.Managed.Services).NotTo(BeNil())
+		Expect(cnpgCluster.Spec.Managed.Services.Additional).To(HaveLen(1))
+		Expect(cnpgCluster.Spec.Managed.Services.Additional[0].SelectorType).To(Equal(cnpgv1.ServiceSelectorTypeRW))
+	})
+
+	It("preserves pre-existing managed roles when adding fleet services", func() {
+		documentdb := baseDocumentDB("docdb-fleet", "default")
+		cnpgCluster := &cnpgv1.Cluster{
+			Spec: cnpgv1.ClusterSpec{
+				Managed: &cnpgv1.ManagedConfiguration{
+					Roles: []cnpgv1.RoleConfiguration{
+						{Name: "otel_monitor", Login: true, InRoles: []string{"pg_monitor"}},
+					},
+				},
+			},
+		}
+
+		addAzureFleetManagedServices(cnpgCluster, newContext(), documentdb)
+
+		Expect(cnpgCluster.Spec.Managed.Roles).To(HaveLen(1))
+		Expect(cnpgCluster.Spec.Managed.Roles[0].Name).To(Equal("otel_monitor"))
+		Expect(cnpgCluster.Spec.Managed.Services.Additional).To(HaveLen(1))
+	})
+})

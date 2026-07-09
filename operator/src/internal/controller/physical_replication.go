@@ -109,22 +109,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 
 	if replicationContext.IsAzureFleetNetworking() {
 		// need to create services for each of the other clusters
-		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{
-			Services: &cnpgv1.ManagedServices{
-				Additional: []cnpgv1.ManagedService{},
-			},
-		}
-		for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
-			cnpgCluster.Spec.Managed.Services.Additional = append(cnpgCluster.Spec.Managed.Services.Additional,
-				cnpgv1.ManagedService{
-					SelectorType: cnpgv1.ServiceSelectorTypeRW,
-					ServiceTemplate: cnpgv1.ServiceTemplateSpec{
-						ObjectMeta: cnpgv1.Metadata{
-							Name: serviceName,
-						},
-					},
-				})
-		}
+		addAzureFleetManagedServices(cnpgCluster, replicationContext, documentdb)
 	}
 	selfHost := replicationContext.CNPGClusterName + "-rw." + documentdb.Namespace + ".svc"
 	cnpgCluster.Spec.ExternalClusters = []cnpgv1.ExternalCluster{
@@ -151,6 +136,31 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 
 	return nil
+}
+
+// addAzureFleetManagedServices populates spec.managed.services.additional with a
+// managed RW service per outgoing fleet member. It preserves any existing managed
+// configuration (e.g. the OTel monitoring role set by GetCnpgClusterSpec) rather
+// than replacing the whole managed block, so enabling fleet networking does not
+// drop managed roles.
+func addAzureFleetManagedServices(cnpgCluster *cnpgv1.Cluster, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) {
+	if cnpgCluster.Spec.Managed == nil {
+		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{}
+	}
+	cnpgCluster.Spec.Managed.Services = &cnpgv1.ManagedServices{
+		Additional: []cnpgv1.ManagedService{},
+	}
+	for serviceName := range replicationContext.GenerateOutgoingServiceNames(documentdb.Name, documentdb.Namespace) {
+		cnpgCluster.Spec.Managed.Services.Additional = append(cnpgCluster.Spec.Managed.Services.Additional,
+			cnpgv1.ManagedService{
+				SelectorType: cnpgv1.ServiceSelectorTypeRW,
+				ServiceTemplate: cnpgv1.ServiceTemplateSpec{
+					ObjectMeta: cnpgv1.Metadata{
+						Name: serviceName,
+					},
+				},
+			})
+	}
 }
 
 func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {

@@ -3342,4 +3342,74 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to delete OTel ConfigMap"))
 		})
 	})
+
+	Describe("reconcileOtelMonitorSecret", func() {
+		monitorSecretName := documentDBName + "-otel-monitor"
+
+		newDocumentDB := func() *dbpreview.DocumentDB {
+			return &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					Monitoring: &dbpreview.MonitoringSpec{Enabled: true},
+				},
+			}
+		}
+
+		It("creates a basic-auth secret with the otel_monitor username and a generated password", func() {
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			Expect(reconciler.reconcileOtelMonitorSecret(ctx, newDocumentDB(), documentDBNamespace)).To(Succeed())
+
+			secret := &corev1.Secret{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: monitorSecretName, Namespace: documentDBNamespace}, secret)).To(Succeed())
+			Expect(secret.Type).To(Equal(corev1.SecretTypeBasicAuth))
+			Expect(string(secret.Data[corev1.BasicAuthUsernameKey])).To(Equal("otel_monitor"))
+			Expect(secret.Data[corev1.BasicAuthPasswordKey]).ToNot(BeEmpty())
+			Expect(secret.OwnerReferences).To(HaveLen(1))
+			Expect(secret.OwnerReferences[0].Name).To(Equal(documentDBName))
+		})
+
+		It("preserves the existing password across reconciles", func() {
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			Expect(reconciler.reconcileOtelMonitorSecret(ctx, newDocumentDB(), documentDBNamespace)).To(Succeed())
+			first := &corev1.Secret{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: monitorSecretName, Namespace: documentDBNamespace}, first)).To(Succeed())
+			original := append([]byte(nil), first.Data[corev1.BasicAuthPasswordKey]...)
+
+			Expect(reconciler.reconcileOtelMonitorSecret(ctx, newDocumentDB(), documentDBNamespace)).To(Succeed())
+			second := &corev1.Secret{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: monitorSecretName, Namespace: documentDBNamespace}, second)).To(Succeed())
+			Expect(second.Data[corev1.BasicAuthPasswordKey]).To(Equal(original))
+		})
+	})
+
+	Describe("deleteOtelMonitorSecret", func() {
+		monitorSecretName := documentDBName + "-otel-monitor"
+
+		It("deletes the monitoring secret when present", func() {
+			existing := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: monitorSecretName, Namespace: documentDBNamespace},
+				Type:       corev1.SecretTypeBasicAuth,
+			}
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			Expect(reconciler.deleteOtelMonitorSecret(ctx, documentDBName, documentDBNamespace)).To(Succeed())
+			secret := &corev1.Secret{}
+			err := fakeClient.Get(ctx, types.NamespacedName{Name: monitorSecretName, Namespace: documentDBNamespace}, secret)
+			Expect(errors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("is a no-op when the monitoring secret does not exist", func() {
+			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+			Expect(reconciler.deleteOtelMonitorSecret(ctx, documentDBName, documentDBNamespace)).To(Succeed())
+		})
+	})
 })

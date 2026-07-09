@@ -83,6 +83,27 @@ func TestFromParameters(t *testing.T) {
 			t.Errorf("GatewayImagePullPolicy = %q, want IfNotPresent", config.GatewayImagePullPolicy)
 		}
 	})
+
+	t.Run("parses OTel monitoring parameters", func(t *testing.T) {
+		helper := &common.Plugin{Parameters: map[string]string{
+			"otelCollectorImage": "otel/opentelemetry-collector-contrib:test",
+			"otelConfigMapName":  "demo-otel-config",
+			"otelMonitorSecret":  "demo-otel-monitor",
+		}}
+		config, errs := FromParameters(helper)
+		if len(errs) != 0 {
+			t.Fatalf("unexpected validation errors: %v", errs)
+		}
+		if config.OtelCollectorImage != "otel/opentelemetry-collector-contrib:test" {
+			t.Errorf("OtelCollectorImage = %q", config.OtelCollectorImage)
+		}
+		if config.OtelConfigMapName != "demo-otel-config" {
+			t.Errorf("OtelConfigMapName = %q", config.OtelConfigMapName)
+		}
+		if config.OtelMonitorSecret != "demo-otel-monitor" {
+			t.Errorf("OtelMonitorSecret = %q, want demo-otel-monitor", config.OtelMonitorSecret)
+		}
+	})
 }
 
 func TestToParametersRoundTrip(t *testing.T) {

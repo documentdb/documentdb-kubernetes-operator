@@ -25,6 +25,18 @@ var _ = Describe("ConfigMapName", func() {
 	})
 })
 
+var _ = Describe("MonitorSecretName", func() {
+	It("returns the expected monitoring secret name", func() {
+		Expect(MonitorSecretName("my-cluster")).To(Equal("my-cluster-otel-monitor"))
+	})
+})
+
+var _ = Describe("MonitorRoleName", func() {
+	It("is the dedicated least-privilege monitoring role", func() {
+		Expect(MonitorRoleName).To(Equal("otel_monitor"))
+	})
+})
+
 // parseCfg is a helper to unmarshal YAML into a collectorConfig struct.
 func parseCfg(yamlStr string) collectorConfig {
 	var cfg collectorConfig

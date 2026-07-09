@@ -95,6 +95,9 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
 						params["otelCollectorImage"] = util.DEFAULT_OTEL_COLLECTOR_IMAGE
 						params["otelConfigMapName"] = otelcfg.ConfigMapName(documentdb.Name)
+						// Sidecar sources PGUSER/PGPASSWORD from the dedicated
+						// least-privilege monitoring secret rather than the app secret.
+						params["otelMonitorSecret"] = otelcfg.MonitorSecretName(documentdb.Name)
 						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {
 							params["prometheusPort"] = fmt.Sprintf("%d", promPort)
 						}
@@ -128,6 +131,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
 			applyPostgresProcessIdentity(&spec, documentdb)
 			applyIOUringSeccomp(&spec, documentdb)
+			applyOtelMonitorRole(&spec, documentdb)
 
 			return spec
 		}(),
@@ -348,7 +352,40 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.Documen
 	}
 }
 
-// buildPostgresConfiguration returns the cnpgv1.PostgresConfiguration block
+// applyOtelMonitorRole declares a dedicated least-privilege PostgreSQL role for
+// the OTel Collector sidecar via CNPG's managed-roles reconciler. The role has
+// LOGIN and is a member of the built-in pg_monitor role (read access to all
+// pg_stat_* views) and nothing else — following the principle of least
+// privilege, the monitoring sidecar cannot read or modify application data.
+//
+// The role password is sourced from the operator-generated basic-auth secret
+// (<cluster>-otel-monitor); CNPG requires the secret's "username" to match the
+// role name exactly. No-op when monitoring is disabled, so clusters without
+// monitoring keep no managed roles.
+func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
+	if documentdb == nil || documentdb.Spec.Monitoring == nil || !documentdb.Spec.Monitoring.Enabled {
+		return
+	}
+	if spec.Managed == nil {
+		spec.Managed = &cnpgv1.ManagedConfiguration{}
+	}
+	spec.Managed.Roles = append(spec.Managed.Roles, cnpgv1.RoleConfiguration{
+		Name:    otelcfg.MonitorRoleName,
+		Comment: "Least-privilege role for the OTel Collector monitoring sidecar",
+		Ensure:  cnpgv1.EnsurePresent,
+		Login:   true,
+		InRoles: []string{"pg_monitor"},
+		PasswordSecret: &cnpgv1.LocalObjectReference{
+			Name: otelcfg.MonitorSecretName(documentdb.Name),
+		},
+		// Set the CNPG/CRD-defaulted fields explicitly so the desired role
+		// matches the API-server-defaulted form stored on the live cluster,
+		// keeping SyncCnpgCluster's diff stable (no perpetual re-patching).
+		ConnectionLimit: -1,
+		Inherit:         pointer.Bool(true),
+	})
+}
+
 // for the cluster.
 //
 // The operator declares the DocumentDB extension via CNPG's Extensions

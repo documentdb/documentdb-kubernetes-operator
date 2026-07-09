@@ -103,7 +103,7 @@ func SyncCnpgCluster(
 			// (e.g. Prometheus port, collector image) can take effect without restarting
 			// database pods — for example, by updating the ConfigMap in-place and
 			// signalling the OTel Collector to reload its configuration.
-			otelKeys := []string{"otelCollectorImage", "otelConfigMapName", "prometheusPort", "otelConfigHash"}
+			otelKeys := []string{"otelCollectorImage", "otelConfigMapName", "prometheusPort", "otelConfigHash", "otelMonitorSecret"}
 			for _, key := range otelKeys {
 				desiredVal := getParam(desiredPlugin.Parameters, key)
 				currentVal := getParam(currentPlugin.Parameters, key)
@@ -215,6 +215,29 @@ func SyncCnpgCluster(
 		})
 	}
 
+	// Managed roles (the OTel monitoring role) — added when monitoring is
+	// enabled, cleared when disabled. Reconciled independently of
+	// managed.services (owned by the replication flow via extraOps) so the two
+	// never clobber each other. When the cluster has no managed config yet, add
+	// the whole desired managed block (which also carries any services the
+	// replication flow populated on the same desired object); otherwise patch
+	// only the roles subtree to preserve existing services.
+	if !reflect.DeepEqual(managedRoles(current), managedRoles(desired)) {
+		if current.Spec.Managed == nil {
+			patchOps = append(patchOps, JSONPatch{
+				Op:    PatchOpAdd,
+				Path:  PatchPathManaged,
+				Value: desired.Spec.Managed,
+			})
+		} else {
+			patchOps = append(patchOps, JSONPatch{
+				Op:    PatchOpAdd,
+				Path:  PatchPathManagedRoles,
+				Value: managedRoles(desired),
+			})
+		}
+	}
+
 	// Extra operations (e.g., replication changes)
 	patchOps = append(patchOps, extraOps...)
 
@@ -289,4 +312,13 @@ func getParam(params map[string]string, key string) string {
 		return ""
 	}
 	return params[key]
+}
+
+// managedRoles returns the cluster's managed roles, nil-safe against an absent
+// managed configuration.
+func managedRoles(cluster *cnpgv1.Cluster) []cnpgv1.RoleConfiguration {
+	if cluster == nil || cluster.Spec.Managed == nil {
+		return nil
+	}
+	return cluster.Spec.Managed.Roles
 }

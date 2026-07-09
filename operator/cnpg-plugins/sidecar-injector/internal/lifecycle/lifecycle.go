@@ -233,9 +233,11 @@ func (impl Implementation) reconcileMetadata(
 	}
 
 	// Inject OTel Collector sidecar when monitoring is enabled.
-	// The sidecar is only injected when the operator passes otelCollectorImage
-	// and otelConfigMapName parameters (i.e., monitoring.enabled is true).
-	if configuration.OtelCollectorImage != "" && configuration.OtelConfigMapName != "" {
+	// The sidecar is only injected when the operator passes otelCollectorImage,
+	// otelConfigMapName and otelMonitorSecret parameters (i.e., monitoring.enabled
+	// is true). otelMonitorSecret is required because the sidecar sources its
+	// PGUSER/PGPASSWORD from that secret.
+	if configuration.OtelCollectorImage != "" && configuration.OtelConfigMapName != "" && configuration.OtelMonitorSecret != "" {
 		log.Printf("Injecting OTel Collector sidecar with image: %s", configuration.OtelCollectorImage)
 
 		// Add ConfigMap volume for operator-generated config files (static.yaml + dynamic.yaml)
@@ -260,7 +262,7 @@ func (impl Implementation) reconcileMetadata(
 			})
 		}
 
-		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage, cluster.Name)
+		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage, configuration.OtelMonitorSecret)
 
 		// Expose Prometheus metrics port when configured
 		if configuration.PrometheusPort > 0 {
@@ -435,8 +437,9 @@ func gatewaySecurityContext() *corev1.SecurityContext {
 // the caller). It carries the shared PSA-restricted SecurityContext without an
 // explicit UID so the upstream collector image keeps its own baked-in non-root
 // user (UID 10001); PSA "restricted" only requires runAsNonRoot, not a fixed
-// UID. clusterName selects the CNPG-managed "<cluster>-app" credential secret.
-func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
+// UID. monitorSecret is the operator-managed basic-auth secret holding the
+// dedicated least-privilege monitoring role's credentials.
+func newOtelCollectorSidecar(image, monitorSecret string) *corev1.Container {
 	return &corev1.Container{
 		Name:  otelCollectorContainerName,
 		Image: image,
@@ -444,10 +447,11 @@ func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
 			"--config=file:/config/static.yaml",
 			"--config=file:/config/dynamic.yaml",
 		},
-		// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
-		// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
-		// keys for the application database user. The OTel Collector's sqlquery receiver
-		// uses these credentials to connect to PostgreSQL and collect health metrics.
+		// PGUSER and PGPASSWORD are sourced from the operator-managed monitoring
+		// secret ("<cluster>-otel-monitor"), which holds the credentials for the
+		// dedicated least-privilege "otel_monitor" role (member of pg_monitor).
+		// The OTel Collector's sqlquery receiver uses these credentials to connect
+		// to PostgreSQL and collect health metrics without application-level access.
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
@@ -462,7 +466,7 @@ func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: clusterName + "-app",
+							Name: monitorSecret,
 						},
 						Key: "username",
 					},
@@ -473,7 +477,7 @@ func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: clusterName + "-app",
+							Name: monitorSecret,
 						},
 						Key: "password",
 					},

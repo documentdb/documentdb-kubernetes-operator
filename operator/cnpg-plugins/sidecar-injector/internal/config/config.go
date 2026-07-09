@@ -22,6 +22,7 @@ const (
 	documentDbCredentialSecretParameter = "documentDbCredentialSecret"
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
+	otelMonitorSecretParameter          = "otelMonitorSecret"
 	prometheusPortParameter             = "prometheusPort"
 )
 
@@ -34,6 +35,7 @@ type Configuration struct {
 	DocumentDbCredentialSecret string
 	OtelCollectorImage         string
 	OtelConfigMapName          string
+	OtelMonitorSecret          string
 	PrometheusPort             int32
 }
 
@@ -89,6 +91,7 @@ func FromParameters(
 		DocumentDbCredentialSecret: credentialSecret,
 		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
 		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
+		OtelMonitorSecret:          helper.Parameters[otelMonitorSecretParameter],
 		PrometheusPort:             prometheusPort,
 	}
 

@@ -186,7 +186,7 @@ func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
 // restricted and, unlike the gateway, does not force a UID so the collector
 // image keeps its own non-root user (UID 10001).
 func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "demo")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "demo-otel-monitor")
 
 	if c.Name != otelCollectorContainerName {
 		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
@@ -197,5 +197,36 @@ func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
 	}
 	if c.SecurityContext.RunAsGroup != nil {
 		t.Errorf("otel-collector must not force a GID, got %d", *c.SecurityContext.RunAsGroup)
+	}
+}
+
+// TestNewOtelCollectorSidecar_MonitorSecret asserts the sidecar sources its
+// PostgreSQL credentials from the dedicated least-privilege monitoring secret
+// (not the app secret), so the collector connects as the pg_monitor-only role.
+func TestNewOtelCollectorSidecar_MonitorSecret(t *testing.T) {
+	const secretName = "demo-otel-monitor"
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", secretName)
+
+	want := map[string]string{"PGUSER": "username", "PGPASSWORD": "password"}
+	for envName, key := range want {
+		var found bool
+		for _, e := range c.Env {
+			if e.Name != envName {
+				continue
+			}
+			found = true
+			if e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
+				t.Fatalf("%s must be sourced from a secret key ref", envName)
+			}
+			if got := e.ValueFrom.SecretKeyRef.Name; got != secretName {
+				t.Errorf("%s secret = %q, want %q", envName, got, secretName)
+			}
+			if got := e.ValueFrom.SecretKeyRef.Key; got != key {
+				t.Errorf("%s key = %q, want %q", envName, got, key)
+			}
+		}
+		if !found {
+			t.Errorf("missing %s env var", envName)
+		}
 	}
 }

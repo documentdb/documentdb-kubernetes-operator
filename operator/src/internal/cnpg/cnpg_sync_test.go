@@ -479,6 +479,102 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 	})
 })
 
+var _ = Describe("SyncCnpgCluster - managed roles", func() {
+	const namespace = "test-ns"
+
+	otelRole := func(secret string) cnpgv1.RoleConfiguration {
+		return cnpgv1.RoleConfiguration{
+			Name:            "otel_monitor",
+			Ensure:          cnpgv1.EnsurePresent,
+			Login:           true,
+			InRoles:         []string{"pg_monitor"},
+			PasswordSecret:  &cnpgv1.LocalObjectReference{Name: secret},
+			ConnectionLimit: -1,
+			Inherit:         pointer.Bool(true),
+		}
+	}
+
+	It("adds the managed role when monitoring is enabled on a cluster without managed config", func() {
+		current := baseCluster("test-cluster", namespace)
+		Expect(current.Spec.Managed).To(BeNil())
+		desired := current.DeepCopy()
+		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+		}
+
+		c := buildFakeClient(current).Build()
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Managed).NotTo(BeNil())
+		Expect(updated.Spec.Managed.Roles).To(HaveLen(1))
+		Expect(updated.Spec.Managed.Roles[0].Name).To(Equal("otel_monitor"))
+		Expect(updated.Spec.Managed.Roles[0].PasswordSecret.Name).To(Equal("test-cluster-otel-monitor"))
+	})
+
+	It("removes the managed role when monitoring is disabled", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+		}
+		desired := current.DeepCopy()
+		desired.Spec.Managed = nil
+
+		c := buildFakeClient(current).Build()
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(managedRoles(updated)).To(BeEmpty())
+	})
+
+	It("preserves managed.services when patching only roles", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Services: &cnpgv1.ManagedServices{
+				Additional: []cnpgv1.ManagedService{
+					{
+						SelectorType: cnpgv1.ServiceSelectorTypeRW,
+						ServiceTemplate: cnpgv1.ServiceTemplateSpec{
+							ObjectMeta: cnpgv1.Metadata{Name: "extra-svc"},
+						},
+					},
+				},
+			},
+		}
+		desired := current.DeepCopy()
+		desired.Spec.Managed.Roles = []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")}
+
+		c := buildFakeClient(current).Build()
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Managed.Roles).To(HaveLen(1))
+		Expect(updated.Spec.Managed.Services).NotTo(BeNil())
+		Expect(updated.Spec.Managed.Services.Additional).To(HaveLen(1))
+		Expect(updated.Spec.Managed.Services.Additional[0].ServiceTemplate.ObjectMeta.Name).To(Equal("extra-svc"))
+	})
+
+	It("does not patch when managed roles are unchanged", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+		}
+		desired := current.DeepCopy()
+
+		c := buildFakeClient(current).Build()
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Managed.Roles).To(HaveLen(1))
+		// No spec drift, so no restart annotation is added.
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+})
+
 var _ = Describe("Helper functions", func() {
 	It("findExtensionImage returns -1 for cluster without extensions", func() {
 		cluster := &cnpgv1.Cluster{

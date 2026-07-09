@@ -8,10 +8,20 @@ rules:
   - ""
   resources:
   - persistentvolumeclaims
-  - secrets
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - ""
