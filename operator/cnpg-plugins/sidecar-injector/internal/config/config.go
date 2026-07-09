@@ -22,6 +22,7 @@ const (
 	documentDbCredentialSecretParameter = "documentDbCredentialSecret"
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
+	otelConfigHashParameter             = "otelConfigHash"
 	otelMonitorSecretParameter          = "otelMonitorSecret"
 	prometheusPortParameter             = "prometheusPort"
 )
@@ -69,6 +70,9 @@ func FromParameters(
 	gatewayImage := helper.Parameters[gatewayImageParameter]
 	credentialSecret := helper.Parameters[documentDbCredentialSecretParameter]
 	pullPolicy := parsePullPolicy(helper.Parameters[gatewayImagePullPolicyParameter])
+	otelCollectorImage := helper.Parameters[otelCollectorImageParameter]
+	otelConfigMapName := helper.Parameters[otelConfigMapNameParameter]
+	otelMonitorSecret := helper.Parameters[otelMonitorSecretParameter]
 
 	var prometheusPort int32
 	if portStr := helper.Parameters[prometheusPortParameter]; portStr != "" {
@@ -83,15 +87,40 @@ func FromParameters(
 		}
 	}
 
+	requiredOtelParameters := []string{
+		otelCollectorImageParameter,
+		otelConfigMapNameParameter,
+		otelMonitorSecretParameter,
+	}
+	otelConfigured := helper.Parameters[prometheusPortParameter] != "" ||
+		helper.Parameters[otelConfigHashParameter] != ""
+	for _, parameter := range requiredOtelParameters {
+		otelConfigured = otelConfigured || helper.Parameters[parameter] != ""
+	}
+	if otelConfigured {
+		for _, parameter := range requiredOtelParameters {
+			if helper.Parameters[parameter] == "" {
+				validationErrors = append(
+					validationErrors,
+					validation.BuildErrorForParameter(
+						helper,
+						parameter,
+						"required when any OTel sidecar parameter is configured",
+					),
+				)
+			}
+		}
+	}
+
 	configuration := &Configuration{
 		Labels:                     labels,
 		Annotations:                annotations,
 		GatewayImage:               gatewayImage,
 		GatewayImagePullPolicy:     pullPolicy,
 		DocumentDbCredentialSecret: credentialSecret,
-		OtelCollectorImage:         helper.Parameters[otelCollectorImageParameter],
-		OtelConfigMapName:          helper.Parameters[otelConfigMapNameParameter],
-		OtelMonitorSecret:          helper.Parameters[otelMonitorSecretParameter],
+		OtelCollectorImage:         otelCollectorImage,
+		OtelConfigMapName:          otelConfigMapName,
+		OtelMonitorSecret:          otelMonitorSecret,
 		PrometheusPort:             prometheusPort,
 	}
 

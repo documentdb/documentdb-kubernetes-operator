@@ -104,6 +104,42 @@ func TestFromParameters(t *testing.T) {
 			t.Errorf("OtelMonitorSecret = %q, want demo-otel-monitor", config.OtelMonitorSecret)
 		}
 	})
+
+	for _, tt := range []struct {
+		name       string
+		parameters map[string]string
+		wantErrors int
+	}{
+		{
+			name: "rejects collector image without config map and monitor secret",
+			parameters: map[string]string{
+				"otelCollectorImage": "otel/opentelemetry-collector-contrib:test",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects config map and monitor secret without collector image",
+			parameters: map[string]string{
+				"otelConfigMapName": "demo-otel-config",
+				"otelMonitorSecret": "demo-otel-monitor",
+			},
+			wantErrors: 1,
+		},
+		{
+			name: "rejects optional OTel parameter without required parameters",
+			parameters: map[string]string{
+				"prometheusPort": "8888",
+			},
+			wantErrors: 3,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, errs := FromParameters(&common.Plugin{Parameters: tt.parameters})
+			if len(errs) != tt.wantErrors {
+				t.Fatalf("validation errors = %d, want %d: %v", len(errs), tt.wantErrors, errs)
+			}
+		})
+	}
 }
 
 func TestToParametersRoundTrip(t *testing.T) {

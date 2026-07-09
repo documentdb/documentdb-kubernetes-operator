@@ -521,6 +521,12 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		desired := current.DeepCopy()
 		desired.Spec.Managed = nil
 
+		patch := managedRolesPatch(current, desired)
+		Expect(patch).NotTo(BeNil())
+		Expect(patch.Op).To(Equal(PatchOpRemove))
+		Expect(patch.Path).To(Equal(PatchPathManagedRoles))
+		Expect(patch.Value).To(BeNil())
+
 		c := buildFakeClient(current).Build()
 		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
 
@@ -572,6 +578,16 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		Expect(updated.Spec.Managed.Roles).To(HaveLen(1))
 		// No spec drift, so no restart annotation is added.
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("treats nil and empty managed role lists as equivalent", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{},
+		}
+
+		Expect(managedRolesPatch(current, desired)).To(BeNil())
 	})
 })
 

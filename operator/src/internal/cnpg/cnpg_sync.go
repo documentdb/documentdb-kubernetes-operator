@@ -215,27 +215,11 @@ func SyncCnpgCluster(
 		})
 	}
 
-	// Managed roles (the OTel monitoring role) — added when monitoring is
-	// enabled, cleared when disabled. Reconciled independently of
+	// Managed roles (the OTel monitoring role) are reconciled independently of
 	// managed.services (owned by the replication flow via extraOps) so the two
-	// never clobber each other. When the cluster has no managed config yet, add
-	// the whole desired managed block (which also carries any services the
-	// replication flow populated on the same desired object); otherwise patch
-	// only the roles subtree to preserve existing services.
-	if !reflect.DeepEqual(managedRoles(current), managedRoles(desired)) {
-		if current.Spec.Managed == nil {
-			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpAdd,
-				Path:  PatchPathManaged,
-				Value: desired.Spec.Managed,
-			})
-		} else {
-			patchOps = append(patchOps, JSONPatch{
-				Op:    PatchOpAdd,
-				Path:  PatchPathManagedRoles,
-				Value: managedRoles(desired),
-			})
-		}
+	// never clobber each other.
+	if patch := managedRolesPatch(current, desired); patch != nil {
+		patchOps = append(patchOps, *patch)
 	}
 
 	// Extra operations (e.g., replication changes)
@@ -321,4 +305,39 @@ func managedRoles(cluster *cnpgv1.Cluster) []cnpgv1.RoleConfiguration {
 		return nil
 	}
 	return cluster.Spec.Managed.Roles
+}
+
+// managedRolesPatch returns the JSON Patch operation needed to reconcile
+// spec.managed.roles. Removing the field when no roles are desired avoids
+// assigning JSON null to the CRD array field, which Kubernetes validation can
+// reject. Other managed configuration, such as services, remains untouched.
+func managedRolesPatch(current, desired *cnpgv1.Cluster) *JSONPatch {
+	currentRoles := managedRoles(current)
+	desiredRoles := managedRoles(desired)
+
+	// Treat nil and empty role lists as equivalent.
+	if len(currentRoles) == 0 && len(desiredRoles) == 0 {
+		return nil
+	}
+	if reflect.DeepEqual(currentRoles, desiredRoles) {
+		return nil
+	}
+	if len(desiredRoles) == 0 {
+		return &JSONPatch{
+			Op:   PatchOpRemove,
+			Path: PatchPathManagedRoles,
+		}
+	}
+	if current.Spec.Managed == nil {
+		return &JSONPatch{
+			Op:    PatchOpAdd,
+			Path:  PatchPathManaged,
+			Value: desired.Spec.Managed,
+		}
+	}
+	return &JSONPatch{
+		Op:    PatchOpAdd,
+		Path:  PatchPathManagedRoles,
+		Value: desiredRoles,
+	}
 }
