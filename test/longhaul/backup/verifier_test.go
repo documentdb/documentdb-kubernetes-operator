@@ -194,8 +194,6 @@ var _ = Describe("Verifier.checkOnce", func() {
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
-		snap := m.Snapshot()
-		Expect(snap.VerifyCycles).To(Equal(int64(1)))
-		Expect(snap.HasRetentionLeak()).To(BeFalse())
+		Expect(m.Snapshot().HasRetentionLeak()).To(BeFalse())
 	})
 })

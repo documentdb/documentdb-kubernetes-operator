@@ -48,9 +48,6 @@ type Metrics struct {
 	// retention window (stoppedAt + retentionDays*24h). Non-zero => FAIL.
 	RetentionLeaks atomic.Int64
 
-	// VerifyCycles is the number of completed verification passes.
-	VerifyCycles atomic.Int64
-
 	// LastChildCount is the number of child backups observed on the most
 	// recent verification cycle (the live backup population — expected to
 	// stabilize near retentionWindow/scheduleInterval at steady state).
@@ -59,14 +56,11 @@ type Metrics struct {
 	// LastScheduledUnix is the Unix timestamp of the most recently observed
 	// status.lastScheduledTime; 0 until the first backup is scheduled.
 	LastScheduledUnix atomic.Int64
-
-	// StartTime is when this Metrics was constructed; resets on pod restart.
-	StartTime time.Time
 }
 
-// NewMetrics creates a Metrics with the start time set to now.
+// NewMetrics creates an empty Metrics.
 func NewMetrics() *Metrics {
-	return &Metrics{StartTime: time.Now()}
+	return &Metrics{}
 }
 
 // MetricsSnapshot is a point-in-time copy of Metrics.
@@ -75,10 +69,8 @@ type MetricsSnapshot struct {
 	Completed      int64
 	Failed         int64
 	RetentionLeaks int64
-	VerifyCycles   int64
 	LastChildCount int64
 	LastScheduled  time.Time
-	Elapsed        time.Duration
 }
 
 // Snapshot captures the current metric values atomically.
@@ -92,10 +84,8 @@ func (m *Metrics) Snapshot() MetricsSnapshot {
 		Completed:      m.Completed.Load(),
 		Failed:         m.Failed.Load(),
 		RetentionLeaks: m.RetentionLeaks.Load(),
-		VerifyCycles:   m.VerifyCycles.Load(),
 		LastChildCount: m.LastChildCount.Load(),
 		LastScheduled:  lastScheduled,
-		Elapsed:        time.Since(m.StartTime),
 	}
 }
 

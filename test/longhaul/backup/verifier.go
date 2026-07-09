@@ -107,7 +107,6 @@ func (v *Verifier) Run(ctx context.Context) {
 func (v *Verifier) checkOnce(ctx context.Context, now time.Time) {
 	v.checkScheduling(ctx, now)
 	v.checkChildBackups(ctx, now)
-	v.metrics.VerifyCycles.Add(1)
 }
 
 // checkScheduling inspects the ScheduledBackup status: it counts new
