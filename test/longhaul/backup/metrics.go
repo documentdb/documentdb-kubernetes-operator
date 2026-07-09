@@ -44,12 +44,8 @@ type Metrics struct {
 	// phase (deduplicated by name).
 	Failed atomic.Int64
 
-	// RetentionLeaks counts completed backups that remain present well past
-	// their retention window (stoppedAt + retentionDays*24h) — i.e. the
-	// operator failed to garbage-collect an expired backup, so the backup
-	// population (and its PVCs/VolumeSnapshots) grows unbounded.
-	// Non-zero => FAIL. This is the accumulation bug long-haul exists to
-	// catch; it cannot fire until real retention time has elapsed.
+	// RetentionLeaks counts completed backups still present past their
+	// retention window (stoppedAt + retentionDays*24h). Non-zero => FAIL.
 	RetentionLeaks atomic.Int64
 
 	// VerifyCycles is the number of completed verification passes.

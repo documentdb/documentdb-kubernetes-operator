@@ -47,20 +47,17 @@ func (f *fakeBackupClient) ListScheduledChildBackups(_ context.Context, _ string
 	return f.children, f.childErr
 }
 
-// mkBackup builds a child Backup with the given phase, retention and
-// stopped/expired times. Zero times are left nil.
-func mkBackup(name string, phase cnpgv1.BackupPhase, retentionDays int, stopped, expired time.Time) previewv1.Backup {
-	rd := retentionDays
+// mkBackup builds a child Backup with the given phase and stopped time.
+// A zero stopped time is left nil. RetentionDays/ExpiredAt are omitted
+// because the leak oracle derives its deadline from the verifier config,
+// not from the backup's own fields.
+func mkBackup(name string, phase cnpgv1.BackupPhase, stopped time.Time) previewv1.Backup {
 	b := previewv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Spec:       previewv1.BackupSpec{RetentionDays: &rd},
 		Status:     previewv1.BackupStatus{Phase: phase},
 	}
 	if !stopped.IsZero() {
 		b.Status.StoppedAt = &metav1.Time{Time: stopped}
-	}
-	if !expired.IsZero() {
-		b.Status.ExpiredAt = &metav1.Time{Time: expired}
 	}
 	return b
 }
@@ -123,9 +120,9 @@ var _ = Describe("Verifier.checkOnce", func() {
 		fc := &fakeBackupClient{
 			sb: &previewv1.ScheduledBackup{},
 			children: []previewv1.Backup{
-				mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{}),
-				mkBackup("b2", previewv1.BackupPhaseSkipped, 1, time.Time{}, time.Time{}),
-				mkBackup("b3", cnpgv1.BackupPhaseFailed, 1, time.Time{}, time.Time{}),
+				mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped),
+				mkBackup("b2", previewv1.BackupPhaseSkipped, time.Time{}),
+				mkBackup("b3", cnpgv1.BackupPhaseFailed, time.Time{}),
 			},
 		}
 		v, m := newTestVerifier(fc)
@@ -145,7 +142,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 		stopped := now.Add(-time.Hour)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -158,7 +155,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 		stopped := now.Add(-48 * time.Hour)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 
@@ -172,7 +169,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 		stopped := now.Add(-24 * time.Hour).Add(-1 * time.Minute)
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, 1, stopped, time.Time{})},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -183,7 +180,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 		// A never-completed backup has no stoppedAt → not a leak candidate.
 		fc := &fakeBackupClient{
 			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseRunning, 1, time.Time{}, time.Time{})},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseRunning, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)

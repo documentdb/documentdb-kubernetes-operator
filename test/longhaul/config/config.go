@@ -87,7 +87,7 @@ type Config struct {
 	BackupSchedule string
 
 	// BackupRetentionDays is the retention window applied to child backups
-	// and validated against the operator-computed expiration.
+	// and used to derive the retention-leak deadline.
 	BackupRetentionDays int
 
 	// BackupVerifyInterval is how often the backup verifier polls state.

@@ -29,24 +29,17 @@ const (
 // Client is the subset of the cluster API the backup verifier needs.
 // monitor.K8sClusterClient satisfies it structurally.
 type Client interface {
-	// EnsureScheduledBackup idempotently creates the ScheduledBackup CR.
 	EnsureScheduledBackup(ctx context.Context, name, schedule string, retentionDays int) error
-	// GetScheduledBackup fetches the ScheduledBackup CR by name.
 	GetScheduledBackup(ctx context.Context, name string) (*previewv1.ScheduledBackup, error)
-	// ListScheduledChildBackups lists the Backup CRs the ScheduledBackup produced.
 	ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]previewv1.Backup, error)
 }
 
 // Config parameterizes the backup verifier.
 type Config struct {
-	// ScheduledBackupName is the name of the ScheduledBackup CR to manage.
 	ScheduledBackupName string
-	// Schedule is the cron expression for the ScheduledBackup.
-	Schedule string
-	// RetentionDays is the retention window applied to every child backup.
-	RetentionDays int
-	// VerifyInterval is how often the verification loop runs.
-	VerifyInterval time.Duration
+	Schedule            string
+	RetentionDays       int
+	VerifyInterval      time.Duration
 }
 
 // Verifier bootstraps a ScheduledBackup and continuously checks that the
@@ -152,7 +145,7 @@ func (v *Verifier) checkScheduling(ctx context.Context, now time.Time) {
 }
 
 // checkChildBackups inspects every child Backup for completion, terminal
-// failure, retention-calculation correctness, and garbage collection.
+// failure, and retention leaks.
 func (v *Verifier) checkChildBackups(ctx context.Context, now time.Time) {
 	children, err := v.client.ListScheduledChildBackups(ctx, v.cfg.ScheduledBackupName)
 	if err != nil {
@@ -189,13 +182,10 @@ func (v *Verifier) recordPhase(b *previewv1.Backup) {
 	}
 }
 
-// checkRetentionLeak flags a completed backup that has outlived its
-// retention window. The deadline is derived independently from our own
-// configured policy (stoppedAt + retentionDays*24h) rather than from the
-// operator-populated status.expiredAt — this keeps the oracle black-box:
-// it verifies the *outcome* (expired backups get deleted, so the
-// population stays bounded) without re-deriving the operator's internal
-// expiration formula, which the operator's own unit tests already cover.
+// checkRetentionLeak flags a completed backup still present past its
+// retention window. The deadline is derived from our own configured policy
+// (stoppedAt + retentionDays*24h + gcGrace), not the operator-populated
+// status.expiredAt, so the oracle stays black-box (see package doc).
 // Flagged once per backup.
 func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
 	if !isCompleted(b) || b.Status.StoppedAt == nil {
