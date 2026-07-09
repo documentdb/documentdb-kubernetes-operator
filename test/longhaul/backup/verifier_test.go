@@ -204,6 +204,27 @@ var _ = Describe("Verifier.checkOnce", func() {
 		Expect(m.Snapshot().RetentionLeaks).To(BeZero())
 	})
 
+	It("prunes dedup state for garbage-collected backups without double-counting", func() {
+		stopped := now.Add(-30 * time.Minute)
+		fc := &fakeBackupClient{
+			sb:       &previewv1.ScheduledBackup{},
+			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
+		}
+		v, m := newTestVerifier(fc)
+
+		v.checkOnce(context.Background(), now)
+		Expect(v.seenCompleted).To(HaveLen(1))
+		Expect(m.Snapshot().Completed).To(Equal(int64(1)))
+
+		// b1 is garbage-collected and replaced by a new backup b2.
+		fc.children = []previewv1.Backup{mkBackup("b2", cnpgv1.BackupPhaseCompleted, stopped)}
+		v.checkOnce(context.Background(), now)
+
+		// Map stays bounded to the live set; b1 pruned, b2 counted once.
+		Expect(v.seenCompleted).To(HaveLen(1))
+		Expect(m.Snapshot().Completed).To(Equal(int64(2)))
+	})
+
 	It("survives transient read errors without panicking", func() {
 		fc := &fakeBackupClient{
 			sbErr:    errors.New("apiserver throttled"),

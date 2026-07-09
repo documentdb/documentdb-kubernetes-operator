@@ -52,6 +52,8 @@ type Verifier struct {
 
 	// dedup state — the verification loop re-observes the same backups every
 	// cycle, so we count each transition/violation exactly once by name.
+	// Pruned to the live backup set each cycle (see checkChildBackups) so
+	// these maps stay bounded over a multi-day run.
 	seenCompleted  map[string]struct{}
 	seenFailed     map[string]struct{}
 	leakFlagged    map[string]struct{}
@@ -155,10 +157,30 @@ func (v *Verifier) checkChildBackups(ctx context.Context, now time.Time) {
 
 	v.metrics.LastChildCount.Store(int64(len(children)))
 
+	present := make(map[string]struct{}, len(children))
 	for i := range children {
 		b := &children[i]
+		present[b.Name] = struct{}{}
 		v.recordPhase(b)
 		v.checkRetentionLeak(b, now)
+	}
+
+	// Prune dedup state for backups the operator has garbage-collected, so
+	// the maps stay bounded by the live population over a multi-day run
+	// instead of growing for the life of the process. Backup names are
+	// timestamp-unique and never reused, so a pruned entry cannot reappear
+	// and be double-counted.
+	pruneAbsent(v.seenCompleted, present)
+	pruneAbsent(v.seenFailed, present)
+	pruneAbsent(v.leakFlagged, present)
+}
+
+// pruneAbsent deletes keys from seen that are not in present.
+func pruneAbsent(seen, present map[string]struct{}) {
+	for name := range seen {
+		if _, ok := present[name]; !ok {
+			delete(seen, name)
+		}
 	}
 }
 
