@@ -49,6 +49,15 @@ type ClusterClient interface {
 
 	// UpgradeDocumentDB patches spec.documentDBVersion and spec.schemaVersion="auto".
 	UpgradeDocumentDB(ctx context.Context, version string) error
+
+	// GetPrimaryInstance returns the name of the pod currently serving as the
+	// CNPG primary (from Cluster.status.currentPrimary). The pod name equals
+	// the CNPG instance name. Returns an error if no primary is known yet.
+	GetPrimaryInstance(ctx context.Context) (string, error)
+
+	// DeletePod deletes the named pod in the cluster namespace. Used by chaos
+	// operations to inject pod-loss faults.
+	DeletePod(ctx context.Context, name string) error
 }
 
 // HealthMonitor continuously monitors cluster health and tracks steady-state.

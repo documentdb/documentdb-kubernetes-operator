@@ -140,6 +140,8 @@ func run(cfg config.Config) int {
 		operations.NewScaleUp(clusterClient, healthMon, cfg.MaxInstances, cfg.RecoveryTimeout),
 		operations.NewScaleDown(clusterClient, healthMon, cfg.MinInstances, cfg.RecoveryTimeout),
 		operations.NewUpgradeDocumentDB(clusterClient, k8sClientset, healthMon, j, cfg.Namespace, cfg.RecoveryTimeout),
+		operations.NewKillOperatorPod(k8sClientset, cfg.OperatorNamespace, cfg.RecoveryTimeout),
+		operations.NewKillPrimaryPod(clusterClient, healthMon, cfg.RecoveryTimeout),
 	}
 
 	// Start operation scheduler.

@@ -23,6 +23,10 @@ type fakeClient struct {
 	imageTag         string
 	scaleCalls       []int
 	upgradeCalls     []string
+	primary          string
+	primaryErr       error
+	deleteErr        error
+	deletedPods      []string
 }
 
 func (f *fakeClient) GetClusterHealth(_ context.Context) (monitor.ClusterHealth, error) {
@@ -49,6 +53,20 @@ func (f *fakeClient) UpgradeDocumentDB(_ context.Context, v string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upgradeCalls = append(f.upgradeCalls, v)
+	return nil
+}
+func (f *fakeClient) GetPrimaryInstance(_ context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.primary, f.primaryErr
+}
+func (f *fakeClient) DeletePod(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deletedPods = append(f.deletedPods, name)
 	return nil
 }
 

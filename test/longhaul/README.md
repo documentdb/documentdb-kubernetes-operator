@@ -125,6 +125,7 @@ All configuration is via environment variables.
 | `LONGHAUL_DOCUMENTDB_URI` | Yes | — | Connection string to the DocumentDB gateway. |
 | `LONGHAUL_CLUSTER_NAME` | Yes | — | Name of the target DocumentDB cluster CR. |
 | `LONGHAUL_NAMESPACE` | No | `default` | Kubernetes namespace of the target cluster. |
+| `LONGHAUL_OPERATOR_NAMESPACE` | No | `documentdb-operator` | Namespace of the DocumentDB operator Deployment (target of the `kill-operator-pod` chaos op). |
 | `LONGHAUL_MAX_DURATION` | No | `30m` | Max test duration. Use `0s` for run-until-failure. |
 | `LONGHAUL_NUM_WRITERS` | No | `5` | Number of concurrent writers. |
 | `LONGHAUL_OP_COOLDOWN` | No | `5m` | Cooldown between management operations. |
@@ -133,6 +134,28 @@ All configuration is via environment variables.
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
+
+## Operations
+
+The scheduler runs one disruptive operation at a time, gated by steady state and
+a global cooldown. Current operations:
+
+| Operation | Kind | Notes |
+|-----------|------|-------|
+| `scale-up` / `scale-down` | Topology | Adjusts `spec.instancesPerNode` within `[MIN, MAX]`. |
+| `upgrade-documentdb` | Topology | In-place version upgrade; requires HA (`instancesPerNode>=2`). |
+| `kill-operator-pod` | Chaos | Deletes the operator pod; asserts the data plane keeps serving (small write-failure budget). |
+| `kill-primary-pod` | Chaos | Deletes the CNPG primary pod to exercise automatic failover; requires HA (`instancesPerNode>=2`). |
+
+### RBAC for chaos operations
+
+Beyond the base RBAC the driver already needs, the chaos operations require the
+driver ServiceAccount to be granted (in `deploy/rbac.yaml`):
+
+- **`kill-primary-pod`** — `get`/`list` on `clusters.postgresql.cnpg.io` (to read
+  `status.currentPrimary`) and `delete` on `pods` in the cluster namespace.
+- **`kill-operator-pod`** — `get` on `deployments` and `get`/`list`/`delete` on
+  `pods` in the operator namespace (`LONGHAUL_OPERATOR_NAMESPACE`).
 
 ## CI Safety
 
