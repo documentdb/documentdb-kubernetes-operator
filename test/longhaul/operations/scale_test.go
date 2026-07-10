@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 	"github.com/documentdb/documentdb-operator/test/longhaul/monitor"
 )
 
@@ -105,10 +106,10 @@ var _ = Describe("ScaleUp", func() {
 		Entry("blocked: ipn read error", 0, errors.New("apiserver down"), 3, false, "cannot get instancesPerNode"),
 	)
 
-	It("OutagePolicy uses tighter budgets and echoes MustRecoverWithin", func() {
+	It("OutagePolicy uses the near-zero NoOutagePolicy budget and echoes MustRecoverWithin", func() {
 		s := NewScaleUp(&fakeClient{}, nil, 3, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(20)))
+		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
 		Expect(p.MustRecoverWithin).To(Equal(5 * time.Minute))
 	})
 })
@@ -148,9 +149,9 @@ var _ = Describe("ScaleDown", func() {
 		Entry("blocked: ipn read error", 0, errors.New("apiserver down"), 1, false, "cannot get instancesPerNode"),
 	)
 
-	It("OutagePolicy is more lenient than scale-up", func() {
+	It("OutagePolicy shares the near-zero NoOutagePolicy budget with scale-up", func() {
 		s := NewScaleDown(&fakeClient{}, nil, 1, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(50)))
+		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
 	})
 })

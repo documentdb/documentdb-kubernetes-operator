@@ -142,10 +142,15 @@ a global cooldown. Current operations:
 
 | Operation | Kind | Notes |
 |-----------|------|-------|
-| `scale-up` / `scale-down` | Topology | Adjusts `spec.instancesPerNode` within `[MIN, MAX]`. |
+| `scale-up` / `scale-down` | Topology | Adjusts `spec.instancesPerNode` within `[MIN, MAX]`. Only adds/removes a standby, so the primary write path is untouched (near-zero outage budget). |
 | `upgrade-documentdb` | Topology | In-place version upgrade; requires HA (`instancesPerNode>=2`). |
-| `kill-operator-pod` | Chaos | Deletes the operator pod; asserts the data plane keeps serving (small write-failure budget). |
+| `kill-operator-pod` | Chaos | Deletes the operator pod; asserts the data plane keeps serving (near-zero outage budget). |
 | `kill-primary-pod` | Chaos | Deletes the CNPG primary pod to exercise automatic failover; requires HA (`instancesPerNode>=2`). |
+
+Operations that keep the write path up throughout — the scale ops and
+`kill-operator-pod` — share the near-zero `journal.NoOutagePolicy` budget instead
+of ad-hoc per-op numbers, so a regression that unexpectedly disrupts writes
+during a "safe" operation trips the policy.
 
 ### RBAC for chaos operations
 

@@ -22,6 +22,32 @@ func DefaultOutagePolicy() OutagePolicy {
 	}
 }
 
+// NoOutageWriteFailureCushion is the small write-failure budget granted to
+// operations that are expected NOT to disrupt the data plane. It is not a
+// tolerance for real outages: at the default workload rate (~50 writes/s
+// aggregate, 5 writers x 100ms) this corresponds to well under a second of
+// stray errors, so any genuine primary disruption still trips the policy. The
+// non-zero value only absorbs unrelated background noise (a client reconnect,
+// service-endpoint churn) that would otherwise cause flaky false positives
+// against a strict 0. Centralized here so the single value can be recalibrated
+// against real long-haul runs.
+const NoOutageWriteFailureCushion int64 = 5
+
+// NoOutagePolicy is the outage budget for operations that keep the write path
+// (client -> gateway -> primary) up throughout and therefore must not cause
+// write failures. It is shared by every "no data-plane impact" operation:
+//   - control-plane faults, e.g. an operator pod restart, and
+//   - scaling that only adds or removes a standby replica (the primary, and
+//     thus the write path, is never touched).
+//
+// recovery bounds how long the cluster may take to return to steady state.
+func NoOutagePolicy(recovery time.Duration) OutagePolicy {
+	return OutagePolicy{
+		AllowedWriteFailures: NoOutageWriteFailureCushion,
+		MustRecoverWithin:    recovery,
+	}
+}
+
 // DisruptionWindow represents an active or closed disruption period.
 type DisruptionWindow struct {
 	// OperationName identifies which operation opened this window.

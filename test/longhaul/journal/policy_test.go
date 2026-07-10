@@ -81,4 +81,14 @@ var _ = Describe("DisruptionWindow", func() {
 		Expect(p.MustRecoverWithin).NotTo(BeZero())
 		Expect(p.AllowedWriteFailures).NotTo(BeZero())
 	})
+
+	It("NoOutagePolicy grants the near-zero cushion and echoes recovery", func() {
+		p := NoOutagePolicy(3 * time.Minute)
+		Expect(p.AllowedWriteFailures).To(Equal(NoOutageWriteFailureCushion))
+		Expect(p.MustRecoverWithin).To(Equal(3 * time.Minute))
+	})
+
+	It("NoOutagePolicy is far tighter than DefaultOutagePolicy", func() {
+		Expect(NoOutageWriteFailureCushion).To(BeNumerically("<", DefaultOutagePolicy().AllowedWriteFailures))
+	})
 })

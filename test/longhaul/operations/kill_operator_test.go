@@ -10,6 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,10 +58,10 @@ var _ = Describe("KillOperatorPod", func() {
 		Expect(k.Weight()).To(Equal(2))
 	})
 
-	It("OutagePolicy tolerates only a small write-failure budget", func() {
+	It("OutagePolicy uses the near-zero NoOutagePolicy budget", func() {
 		k := NewKillOperatorPod(fake.NewSimpleClientset(), opNS, 2*time.Minute)
 		p := k.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(5)))
+		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
 		Expect(p.MustRecoverWithin).To(Equal(2 * time.Minute))
 	})
 

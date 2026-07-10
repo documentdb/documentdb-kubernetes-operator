@@ -89,15 +89,10 @@ func (k *KillOperatorPod) Execute(ctx context.Context) error {
 	return k.waitForDeploymentAvailable(recoveryCtx)
 }
 
-// OutagePolicy tolerates only a small number of write failures: an operator
-// restart must not take down the data plane. A non-zero budget absorbs
-// coincidental blips (e.g. a scrape or client reconnect) without flagging a
-// false policy violation.
+// OutagePolicy: an operator restart is a control-plane fault that must not take
+// down the data plane, so it shares the near-zero NoOutagePolicy budget.
 func (k *KillOperatorPod) OutagePolicy() journal.OutagePolicy {
-	return journal.OutagePolicy{
-		AllowedWriteFailures: 5,
-		MustRecoverWithin:    k.recovery,
-	}
+	return journal.NoOutagePolicy(k.recovery)
 }
 
 func (k *KillOperatorPod) getDeployment(ctx context.Context) (*appsv1.Deployment, error) {
