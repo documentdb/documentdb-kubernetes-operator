@@ -157,8 +157,11 @@ Outage budgets are expressed as **wall-clock write-outage durations**
 converts the observed failure count into an estimated outage using the workload's
 aggregate write rate (`workload.AggregateWriteRate(NumWriters)`), so the budgets
 are independent of `LONGHAUL_NUM_WRITERS`: `NoOutagePolicy` ≈ 300ms (noise
-cushion), `kill-primary-pod` = 30s (single automatic failover), and
-`upgrade-documentdb` = 45s (primary switchover during the rolling upgrade).
+cushion), while `kill-primary-pod` and `upgrade-documentdb` share the
+`journal.PrimaryHandoverPolicy` budget of 30s — both interrupt writes for a
+single primary handover (an ungraceful failover vs. a graceful switchover), and
+an upgrade's longer whole-topology restart is bounded by `MustRecoverWithin`,
+not the write-outage budget.
 
 ### RBAC for chaos operations
 

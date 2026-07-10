@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -22,10 +23,10 @@ var _ = Describe("UpgradeDocumentDB", func() {
 		Expect(u.Weight()).To(Equal(1))
 	})
 
-	It("OutagePolicy gives upgrades a more lenient write-outage budget", func() {
+	It("OutagePolicy shares the single-primary-handover budget with kill-primary", func() {
 		u := NewUpgradeDocumentDB(&fakeClient{}, fake.NewSimpleClientset(), nil, nil, "ns", 10*time.Minute)
 		p := u.OutagePolicy()
-		Expect(p.MaxWriteOutage).To(Equal(45 * time.Second))
+		Expect(p.MaxWriteOutage).To(Equal(journal.PrimaryHandoverWriteOutage))
 		Expect(p.MustRecoverWithin).To(Equal(10 * time.Minute))
 	})
 

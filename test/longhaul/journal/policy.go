@@ -62,6 +62,34 @@ func NoOutagePolicy(recovery time.Duration) OutagePolicy {
 	}
 }
 
+// PrimaryHandoverWriteOutage is the write-outage budget for operations that
+// interrupt writes for exactly one primary handover. It is shared so the two
+// such operations cannot drift apart:
+//   - kill-primary-pod — an *ungraceful* failover (detect the lost pod, then
+//     promote a standby), and
+//   - upgrade-documentdb — a *graceful* switchover of the primary; the standby
+//     pod restarts during the rolling upgrade do NOT interrupt writes, so the
+//     write outage is just the one switchover (and a graceful switchover is
+//     typically no worse than an ungraceful failover, which pays a detection
+//     delay). The upgrade's longer, whole-topology restart is bounded by
+//     MustRecoverWithin, not here.
+//
+// Sized to comfortably cover a healthy single CNPG failover; heuristic pending
+// calibration against real long-haul runs.
+const PrimaryHandoverWriteOutage = 30 * time.Second
+
+// PrimaryHandoverPolicy is the outage budget for operations whose write path is
+// interrupted for a single primary handover (see PrimaryHandoverWriteOutage).
+// recovery bounds how long the cluster may take to return to full topology,
+// which can legitimately differ per operation (a rolling upgrade restarts every
+// pod and takes longer than a single failover).
+func PrimaryHandoverPolicy(recovery time.Duration) OutagePolicy {
+	return OutagePolicy{
+		MaxWriteOutage:    PrimaryHandoverWriteOutage,
+		MustRecoverWithin: recovery,
+	}
+}
+
 // DisruptionWindow represents an active or closed disruption period.
 type DisruptionWindow struct {
 	// OperationName identifies which operation opened this window.

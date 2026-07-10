@@ -67,13 +67,9 @@ func (k *KillPrimaryPod) Execute(ctx context.Context) error {
 }
 
 // OutagePolicy bounds the write outage of an automatic failover. Killing the
-// primary interrupts writes until CNPG detects the loss and promotes a standby;
-// a healthy single failover should restore the write path well within this
-// budget. Expressed as wall-clock outage time, so it is independent of the
-// configured writer count.
+// primary interrupts writes until CNPG detects the loss and promotes a standby.
+// It shares the single-primary-handover budget with upgrade-documentdb (see
+// journal.PrimaryHandoverPolicy).
 func (k *KillPrimaryPod) OutagePolicy() journal.OutagePolicy {
-	return journal.OutagePolicy{
-		MaxWriteOutage:    30 * time.Second,
-		MustRecoverWithin: k.recovery,
-	}
+	return journal.PrimaryHandoverPolicy(k.recovery)
 }
