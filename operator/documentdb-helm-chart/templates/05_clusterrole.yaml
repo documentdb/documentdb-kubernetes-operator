@@ -35,7 +35,7 @@ rules:
 # the per-cluster OTel monitoring credential secret (<cluster>-otel-monitor).
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["postgresql.cnpg.io"]
   resources: ["clusters", "publications", "subscriptions", "clusters/status"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
