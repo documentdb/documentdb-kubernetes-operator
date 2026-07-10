@@ -5,7 +5,13 @@ package journal
 
 import "time"
 
-// OutagePolicy defines acceptable disruption bounds for an operation.
+// OutagePolicy defines acceptable disruption bounds for an operation. Its two
+// fields assert on different subsystems and fail independently (ExceededPolicy
+// trips if either is exceeded): MaxWriteOutage bounds the client-visible write
+// interruption (data plane), while MustRecoverWithin bounds full cluster
+// recovery (control plane). Each can be violated while the other is fine — e.g.
+// a promoted standby that never rejoins keeps writes flowing yet leaves the
+// cluster degraded, and only MustRecoverWithin catches it.
 type OutagePolicy struct {
 	// MaxWriteOutage bounds how long the write path (client -> gateway ->
 	// primary) may be unavailable during the window. It is evaluated from the
@@ -15,7 +21,10 @@ type OutagePolicy struct {
 	// goroutines (LONGHAUL_NUM_WRITERS) are configured.
 	MaxWriteOutage time.Duration
 
-	// MustRecoverWithin is the maximum time from operation start to full recovery.
+	// MustRecoverWithin is the maximum time from operation start to full cluster
+	// recovery (steady state). Because a failed op is only logged, not counted
+	// toward the run verdict, this is the sole mechanism that turns a cluster
+	// that never converges back into a FAIL.
 	MustRecoverWithin time.Duration
 }
 
