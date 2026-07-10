@@ -152,6 +152,14 @@ Operations that keep the write path up throughout — the scale ops and
 of ad-hoc per-op numbers, so a regression that unexpectedly disrupts writes
 during a "safe" operation trips the policy.
 
+Outage budgets are expressed as **wall-clock write-outage durations**
+(`OutagePolicy.MaxWriteOutage`), not raw write-failure counts. The journal
+converts the observed failure count into an estimated outage using the workload's
+aggregate write rate (`workload.AggregateWriteRate(NumWriters)`), so the budgets
+are independent of `LONGHAUL_NUM_WRITERS`: `NoOutagePolicy` ≈ 300ms (noise
+cushion), `kill-primary-pod` = 30s (single automatic failover), and
+`upgrade-documentdb` = 45s (primary switchover during the rolling upgrade).
+
 ### RBAC for chaos operations
 
 Beyond the base RBAC the driver already needs, the chaos operations require the

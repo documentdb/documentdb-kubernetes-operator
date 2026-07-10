@@ -57,6 +57,7 @@ func run(cfg config.Config) int {
 
 	// Initialize components.
 	j := journal.New()
+	j.SetWriteRate(workload.AggregateWriteRate(cfg.NumWriters))
 	metrics := workload.NewMetrics()
 
 	// Connect to DocumentDB.

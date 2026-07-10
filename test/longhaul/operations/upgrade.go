@@ -170,11 +170,14 @@ func (u *UpgradeDocumentDB) readDesiredVersion(ctx context.Context) (string, err
 	return cm.Data[VersionConfigMapKey], nil
 }
 
-// OutagePolicy allows for a longer disruption window during an upgrade
-// because rolling restarts touch every pod sequentially.
+// OutagePolicy bounds the write outage of a rolling upgrade. Standby restarts
+// do not block writes; the write path is only interrupted during the primary
+// switchover, so the outage is comparable to a failover with some extra slack
+// for the graceful switchover coordination. Expressed as wall-clock outage
+// time, independent of the configured writer count.
 func (u *UpgradeDocumentDB) OutagePolicy() journal.OutagePolicy {
 	return journal.OutagePolicy{
-		AllowedWriteFailures: 200,
-		MustRecoverWithin:    u.recovery,
+		MaxWriteOutage:    45 * time.Second,
+		MustRecoverWithin: u.recovery,
 	}
 }

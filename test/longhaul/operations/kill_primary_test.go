@@ -22,10 +22,10 @@ var _ = Describe("KillPrimaryPod", func() {
 		Expect(k.Weight()).To(Equal(2))
 	})
 
-	It("OutagePolicy allows a moderate failover write-failure budget", func() {
+	It("OutagePolicy bounds the failover write outage in wall-clock time", func() {
 		k := NewKillPrimaryPod(&fakeClient{}, nil, 3*time.Minute)
 		p := k.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(50)))
+		Expect(p.MaxWriteOutage).To(Equal(30 * time.Second))
 		Expect(p.MustRecoverWithin).To(Equal(3 * time.Minute))
 	})
 

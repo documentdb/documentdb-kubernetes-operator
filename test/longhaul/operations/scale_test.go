@@ -109,7 +109,7 @@ var _ = Describe("ScaleUp", func() {
 	It("OutagePolicy uses the near-zero NoOutagePolicy budget and echoes MustRecoverWithin", func() {
 		s := NewScaleUp(&fakeClient{}, nil, 3, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
+		Expect(p.MaxWriteOutage).To(Equal(journal.NoOutageWriteOutageCushion))
 		Expect(p.MustRecoverWithin).To(Equal(5 * time.Minute))
 	})
 })
@@ -152,6 +152,6 @@ var _ = Describe("ScaleDown", func() {
 	It("OutagePolicy shares the near-zero NoOutagePolicy budget with scale-up", func() {
 		s := NewScaleDown(&fakeClient{}, nil, 1, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
+		Expect(p.MaxWriteOutage).To(Equal(journal.NoOutageWriteOutageCushion))
 	})
 })

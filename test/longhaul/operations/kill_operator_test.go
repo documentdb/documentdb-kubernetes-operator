@@ -61,7 +61,7 @@ var _ = Describe("KillOperatorPod", func() {
 	It("OutagePolicy uses the near-zero NoOutagePolicy budget", func() {
 		k := NewKillOperatorPod(fake.NewSimpleClientset(), opNS, 2*time.Minute)
 		p := k.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(journal.NoOutageWriteFailureCushion))
+		Expect(p.MaxWriteOutage).To(Equal(journal.NoOutageWriteOutageCushion))
 		Expect(p.MustRecoverWithin).To(Equal(2 * time.Minute))
 	})
 

@@ -43,52 +43,65 @@ var _ = Describe("DisruptionWindow", func() {
 		},
 		Entry("within all budgets",
 			DisruptionWindow{
-				StartTime:     time.Now().Add(-10 * time.Second),
-				EndTime:       time.Now(),
-				WriteFailures: 5,
-				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
+				StartTime:       time.Now().Add(-10 * time.Second),
+				EndTime:         time.Now(),
+				WriteFailures:   5, // 5/50 = 0.1s < 1s
+				WritesPerSecond: 50,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
 			}, false),
 		Entry("exceeds MustRecoverWithin",
 			DisruptionWindow{
-				StartTime:     time.Now().Add(-2 * time.Minute),
-				EndTime:       time.Now(),
-				WriteFailures: 1,
-				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
+				StartTime:       time.Now().Add(-2 * time.Minute),
+				EndTime:         time.Now(),
+				WriteFailures:   1,
+				WritesPerSecond: 50,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
 			}, true),
-		Entry("exceeds AllowedWriteFailures",
+		Entry("exceeds MaxWriteOutage",
 			DisruptionWindow{
-				StartTime:     time.Now().Add(-10 * time.Second),
-				EndTime:       time.Now(),
-				WriteFailures: 100,
-				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
+				StartTime:       time.Now().Add(-10 * time.Second),
+				EndTime:         time.Now(),
+				WriteFailures:   100, // 100/50 = 2s > 1s
+				WritesPerSecond: 50,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
 			}, true),
-		Entry("boundary: equal to write-failure budget is allowed",
+		Entry("boundary: estimated outage equal to budget is allowed",
 			DisruptionWindow{
-				StartTime:     time.Now().Add(-10 * time.Second),
-				EndTime:       time.Now(),
-				WriteFailures: 50,
-				Policy:        OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
+				StartTime:       time.Now().Add(-10 * time.Second),
+				EndTime:         time.Now(),
+				WriteFailures:   50, // 50/50 = exactly 1s
+				WritesPerSecond: 50,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
+			}, false),
+		Entry("unknown write rate disables the write-outage check",
+			DisruptionWindow{
+				StartTime:       time.Now().Add(-10 * time.Second),
+				EndTime:         time.Now(),
+				WriteFailures:   100000,
+				WritesPerSecond: 0,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
 			}, false),
 		Entry("active window also evaluated against MustRecoverWithin",
 			DisruptionWindow{
-				StartTime: time.Now().Add(-2 * time.Minute),
-				Policy:    OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 50},
+				StartTime:       time.Now().Add(-2 * time.Minute),
+				WritesPerSecond: 50,
+				Policy:          OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second},
 			}, true),
 	)
 
 	It("DefaultOutagePolicy returns no zero-valued field", func() {
 		p := DefaultOutagePolicy()
 		Expect(p.MustRecoverWithin).NotTo(BeZero())
-		Expect(p.AllowedWriteFailures).NotTo(BeZero())
+		Expect(p.MaxWriteOutage).NotTo(BeZero())
 	})
 
 	It("NoOutagePolicy grants the near-zero cushion and echoes recovery", func() {
 		p := NoOutagePolicy(3 * time.Minute)
-		Expect(p.AllowedWriteFailures).To(Equal(NoOutageWriteFailureCushion))
+		Expect(p.MaxWriteOutage).To(Equal(NoOutageWriteOutageCushion))
 		Expect(p.MustRecoverWithin).To(Equal(3 * time.Minute))
 	})
 
 	It("NoOutagePolicy is far tighter than DefaultOutagePolicy", func() {
-		Expect(NoOutageWriteFailureCushion).To(BeNumerically("<", DefaultOutagePolicy().AllowedWriteFailures))
+		Expect(NoOutageWriteOutageCushion).To(BeNumerically("<", DefaultOutagePolicy().MaxWriteOutage))
 	})
 })
