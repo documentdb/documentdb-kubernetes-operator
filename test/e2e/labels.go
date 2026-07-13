@@ -44,6 +44,13 @@ const (
 	// plus a resize-capable CSI driver). Environments that lack this
 	// capability should filter with `--label-filter='!needs-csi-resize'`.
 	NeedsCSIResizeLabel = "needs-csi-resize"
+	// NeedsIOUringLabel marks specs that require io_uring to actually work
+	// on the cluster nodes: an io_uring-capable kernel (io_uring_disabled=0)
+	// plus the documentdb-iouring Localhost seccomp profile installed under
+	// the kubelet seccomp root. Environments that lack this capability should
+	// filter with `--label-filter='!needs-iouring'`; the specs additionally
+	// self-skip unless E2E_IOURING=1 (see tests/feature_gates/iouring_test.go).
+	NeedsIOUringLabel = "needs-iouring"
 )
 
 // Level labels expose the depth tier of a spec to Ginkgo's label filter.

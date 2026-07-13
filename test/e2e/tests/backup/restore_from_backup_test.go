@@ -102,6 +102,15 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Succeed(), "recovery DocumentDB %s/%s did not become ready", ns, recoveryName)
 
+			// Restored cluster pods must also be PSA "restricted" compliant
+			// (#387): the recovery cluster gets the same injected sidecars as a
+			// fresh deploy, and the namespace enforces restricted, so verify the
+			// injected sidecars on the restored pods carry the hardened context.
+			Eventually(assertions.AssertInjectedSidecarsPSARestricted(ctx, c, ns, recoveryName),
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Succeed(), "restored cluster pods must carry PSA-restricted securityContext")
+
 			// 4. Data survived the restore.
 			rh, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, recoveryName)
 			Expect(err).NotTo(HaveOccurred(), "connect to recovery DocumentDB")

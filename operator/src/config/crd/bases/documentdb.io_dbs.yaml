@@ -1190,8 +1190,9 @@ spec:
                   3. Add a default entry in the featureGateDefaults map in documentdb_types.go
                 type: object
                 x-kubernetes-validations:
-                - message: 'unsupported feature gate key; allowed keys: ChangeStreams'
-                  rule: self.all(key, key in ['ChangeStreams'])
+                - message: 'unsupported feature gate key; allowed keys: ChangeStreams,
+                    IOUring'
+                  rule: self.all(key, key in ['ChangeStreams', 'IOUring'])
               image:
                 description: |-
                   Image groups container image settings for the DocumentDB stack

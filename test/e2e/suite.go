@@ -18,6 +18,7 @@ import (
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/operatorhealth"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/testenv"
+	sharedk8s "github.com/documentdb/documentdb-operator/test/shared/k8s"
 )
 
 // suiteEnv holds the process-wide CNPG TestingEnvironment used by every
@@ -120,7 +121,7 @@ func gateOperatorReady(ctx context.Context, c client.Client, ns string, timeout 
 	for {
 		pod, err := findOperatorPodForGate(ctx, c, ns)
 		switch {
-		case err == nil && podReady(pod):
+		case err == nil && sharedk8s.IsPodRunningAndReady(pod):
 			g, gateErr := operatorhealth.NewGate(ctx, c, ns)
 			if gateErr != nil {
 				return fmt.Errorf("snapshot operator gate: %w", gateErr)
@@ -160,18 +161,6 @@ func findOperatorPodForGate(ctx context.Context, c client.Client, ns string) (*c
 			operatorhealth.PodLabelKey, operatorhealth.PodLabelValue, ns)
 	}
 	return &pods.Items[0], nil
-}
-
-func podReady(pod *corev1.Pod) bool {
-	if pod == nil || pod.Status.Phase != corev1.PodRunning {
-		return false
-	}
-	for _, cond := range pod.Status.Conditions {
-		if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-			return true
-		}
-	}
-	return false
 }
 
 // isNotFound detects "resource gone" errors returned by fixture

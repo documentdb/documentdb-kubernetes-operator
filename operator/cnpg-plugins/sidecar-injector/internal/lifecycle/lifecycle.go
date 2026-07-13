@@ -174,11 +174,8 @@ func (impl Implementation) reconcileMetadata(
 				ContainerPort: 10260,
 			},
 		},
-		Env: envVars,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser:  pointer.Int64(1000),
-			RunAsGroup: pointer.Int64(1000),
-		},
+		Env:             envVars,
+		SecurityContext: gatewaySecurityContext(),
 	}
 	if resources := buildResources(
 		configuration.GatewayCPURequest,
@@ -273,57 +270,7 @@ func (impl Implementation) reconcileMetadata(
 			})
 		}
 
-		otelSidecar := &corev1.Container{
-			Name:  "otel-collector",
-			Image: configuration.OtelCollectorImage,
-			Args: []string{
-				"--config=file:/config/static.yaml",
-				"--config=file:/config/dynamic.yaml",
-			},
-			// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
-			// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
-			// keys for the application database user. The OTel Collector's sqlquery receiver
-			// uses these credentials to connect to PostgreSQL and collect health metrics.
-			Env: []corev1.EnvVar{
-				{
-					Name: "POD_NAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "metadata.name",
-						},
-					},
-				},
-				{
-					Name: "PGUSER",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: cluster.Name + "-app",
-							},
-							Key: "username",
-						},
-					},
-				},
-				{
-					Name: "PGPASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: cluster.Name + "-app",
-							},
-							Key: "password",
-						},
-					},
-				},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "otel-config",
-					MountPath: "/config",
-					ReadOnly:  true,
-				},
-			},
-		}
+		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage, cluster.Name)
 		if resources := buildResources(
 			configuration.OTelCPURequest,
 			configuration.OTelCPULimit,
@@ -453,6 +400,42 @@ func buildGoMemLimitEnv(memoryLimit string) (corev1.EnvVar, bool) {
 	}, true
 }
 
+// hardenedSecurityContext returns a container SecurityContext that satisfies
+// the Kubernetes Pod Security Admission (PSA) "restricted" profile. It is
+// applied to every sidecar this plugin injects (documentdb-gateway and
+// otel-collector) so that DocumentDB cluster pods are admitted on clusters
+// that enforce `pod-security.kubernetes.io/enforce=restricted` (e.g. GKE
+// Autopilot, OpenShift, AKS with the Azure Policy security baseline).
+//
+// PSA requires these fields to be set per-container; pod-level inheritance
+// does not satisfy the checks. This mirrors how CloudNativePG hardens its own
+// built-in containers (see pkg/specs GetSecurityContext) and how the CNPG
+// barman-cloud plugin hardens its injected sidecar.
+//
+// It deliberately does NOT pin RunAsUser/RunAsGroup: PSA "restricted" only
+// requires RunAsNonRoot=true, not a specific UID. Each caller adds an explicit
+// UID only where the image needs one (the gateway runs as 1000); third-party
+// images such as otel-collector keep their own baked-in non-root user.
+//
+// readOnlyRootFilesystem is intentionally NOT set: it is not required by the
+// PSA "restricted" profile, and the upstream gateway / OTel collector images
+// have not been verified to run on a read-only root filesystem. It can be
+// added later (with an emptyDir scratch mount) once validated, without
+// affecting admission compliance.
+func hardenedSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		RunAsNonRoot:             pointer.Bool(true),
+		Privileged:               pointer.Bool(false),
+		AllowPrivilegeEscalation: pointer.Bool(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+}
+
 // gatewayOTelEnvVars returns the OTel-related env vars that the sidecar
 // injector adds to the gateway container so it can push metrics to the
 // co-located OTel Collector sidecar.
@@ -501,5 +484,80 @@ func injectGatewayOTelEnv(pod *corev1.Pod) {
 			}
 		}
 		return
+	}
+}
+
+// otelCollectorContainerName is the name of the injected OpenTelemetry
+// Collector sidecar.
+const otelCollectorContainerName = "otel-collector"
+
+// gatewaySecurityContext returns the SecurityContext for the documentdb-gateway
+// sidecar: the shared PSA-restricted hardening plus an explicit UID/GID of
+// 1000, the non-root user the gateway image is built to run as.
+func gatewaySecurityContext() *corev1.SecurityContext {
+	sc := hardenedSecurityContext()
+	sc.RunAsUser = pointer.Int64(1000)
+	sc.RunAsGroup = pointer.Int64(1000)
+	return sc
+}
+
+// newOtelCollectorSidecar builds the base OpenTelemetry Collector sidecar
+// container (ports, scrape annotations and readiness probe are layered on by
+// the caller). It carries the shared PSA-restricted SecurityContext without an
+// explicit UID so the upstream collector image keeps its own baked-in non-root
+// user (UID 10001); PSA "restricted" only requires runAsNonRoot, not a fixed
+// UID. clusterName selects the CNPG-managed "<cluster>-app" credential secret.
+func newOtelCollectorSidecar(image, clusterName string) *corev1.Container {
+	return &corev1.Container{
+		Name:  otelCollectorContainerName,
+		Image: image,
+		Args: []string{
+			"--config=file:/config/static.yaml",
+			"--config=file:/config/dynamic.yaml",
+		},
+		// PGUSER and PGPASSWORD are sourced from the CNPG-managed application secret
+		// ("<cluster>-app"). CNPG auto-creates this secret with "username" and "password"
+		// keys for the application database user. The OTel Collector's sqlquery receiver
+		// uses these credentials to connect to PostgreSQL and collect health metrics.
+		Env: []corev1.EnvVar{
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			},
+			{
+				Name: "PGUSER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: clusterName + "-app",
+						},
+						Key: "username",
+					},
+				},
+			},
+			{
+				Name: "PGPASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: clusterName + "-app",
+						},
+						Key: "password",
+					},
+				},
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "otel-config",
+				MountPath: "/config",
+				ReadOnly:  true,
+			},
+		},
+		SecurityContext: hardenedSecurityContext(),
 	}
 }

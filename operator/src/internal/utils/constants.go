@@ -17,6 +17,17 @@ const (
 	// DocumentDB extension image pull policy environment variable
 	DOCUMENTDB_IMAGE_PULL_POLICY_ENV = "DOCUMENTDB_IMAGE_PULL_POLICY"
 
+	// IOURING_SECCOMP_PROFILE_ENV overrides the Localhost seccomp profile path
+	// applied to the postgres pods when the IOUring feature gate is enabled. The
+	// path is relative to the node's kubelet seccomp root (/var/lib/kubelet/seccomp).
+	IOURING_SECCOMP_PROFILE_ENV = "DOCUMENTDB_IOURING_SECCOMP_PROFILE"
+
+	// DEFAULT_IOURING_SECCOMP_PROFILE is the default Localhost profile path for
+	// the IOUring feature gate. It must be installed on every node that runs
+	// postgres pods (see the io-uring feature playground) and is the upstream
+	// RuntimeDefault profile plus the io_uring_{setup,enter,register} syscalls.
+	DEFAULT_IOURING_SECCOMP_PROFILE = "profiles/documentdb-iouring.json"
+
 	// Image repositories for deb-based images (must match build_images.yml naming)
 	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
 	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"

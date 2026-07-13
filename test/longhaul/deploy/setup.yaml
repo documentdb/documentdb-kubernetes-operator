@@ -1,0 +1,87 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Long Haul Test — DocumentDB Cluster Setup
+#
+# This manifest deploys a DocumentDB cluster for long-haul testing.
+# It creates the target namespace, credentials secret, and DocumentDB CR.
+#
+# Prerequisites:
+#   1. AKS cluster with k8s >= 1.30
+#   2. cert-manager installed:
+#      helm repo add jetstack https://charts.jetstack.io && helm repo update
+#      helm install cert-manager jetstack/cert-manager --namespace cert-manager \
+#        --create-namespace --set crds.enabled=true
+#   3. DocumentDB operator installed:
+#      helm install documentdb-operator \
+#        oci://ghcr.io/documentdb/documentdb-operator \
+#        --namespace documentdb-operator --create-namespace --wait --timeout 10m
+#
+# Usage:
+#   kubectl apply -f deploy/setup.yaml
+#
+# After the cluster is healthy (~3-5 min), deploy the long-haul test:
+#   kubectl apply -f deploy/rbac.yaml
+#   kubectl apply -f deploy/deployment.yaml
+#
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-test-ns
+  labels:
+    app.kubernetes.io/part-of: longhaul-test
+---
+# Credentials for the DocumentDB cluster.
+# The operator creates the DocumentDB user with these credentials.
+#
+# NOTE: This is a placeholder. Before applying, substitute a real password
+# (e.g. `sed -i "s/__LONGHAUL_PASSWORD__/$(openssl rand -base64 24)/" deploy/setup.yaml`)
+# or generate the secret out-of-band:
+#   kubectl create secret generic documentdb-credentials -n documentdb-test-ns \
+#     --type=kubernetes.io/basic-auth \
+#     --from-literal=username=longhaul-user \
+#     --from-literal=password="$(openssl rand -base64 24)"
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-test-ns
+type: kubernetes.io/basic-auth
+stringData:
+  username: longhaul-user
+  password: __LONGHAUL_PASSWORD__
+---
+# DocumentDB cluster for long-haul testing.
+#
+# Spec notes:
+#   - nodeCount: 1 (CRD hard-caps this to 1; the long-haul test scales the
+#     instancesPerNode dimension instead via the operations scheduler).
+#   - instancesPerNode: 2 (HA topology: 1 primary + 1 standby). Required for
+#     the upgrade-documentdb operation to fire — UpgradeDocumentDB.Precondition
+#     skips when instancesPerNode<2 because a single-instance cluster has no
+#     standby and a rolling upgrade would produce real (unavoidable) downtime.
+#   - pvcSize: 10Gi (sufficient for continuous writes over 72h)
+#   - LoadBalancer exposes the cluster for monitoring/debugging
+#
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-cluster
+  namespace: documentdb-test-ns
+  labels:
+    app.kubernetes.io/part-of: longhaul-test
+    app.kubernetes.io/component: database
+spec:
+  environment: aks
+  nodeCount: 1
+  instancesPerNode: 2
+  schemaVersion: "auto"
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 10Gi
+  exposeViaService:
+    serviceType: LoadBalancer
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io

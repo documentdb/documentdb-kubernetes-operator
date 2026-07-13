@@ -123,6 +123,10 @@ spec:
         - name: DOCUMENTDB_IMAGE_PULL_POLICY
           value: "{{ .Values.documentDbImagePullPolicy }}"
         {{- end }}
+        {{- if .Values.operator.ioUring.seccompProfile }}
+        - name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+          value: "{{ .Values.operator.ioUring.seccompProfile }}"
+        {{- end }}
       volumes:
       - name: webhook-cert
         secret:

@@ -13,6 +13,13 @@ import (
 const (
 	// FeatureGateChangeStreams enables change stream support by setting wal_level=logical.
 	FeatureGateChangeStreams = "ChangeStreams"
+
+	// FeatureGateIOUring enables PostgreSQL 18 asynchronous I/O via io_method=io_uring
+	// and relaxes the postgres container seccomp profile so the io_uring_setup/enter/register
+	// syscalls (stripped from the container runtime's default profile) are allowed.
+	// Opt-in only: io_uring has been a recurring kernel-exploit surface, so it is disabled
+	// by default. See docs/operator-public-documentation/io-uring.md.
+	FeatureGateIOUring = "IOUring"
 )
 
 // DocumentDBSpec defines the desired state of DocumentDB.
@@ -103,7 +110,7 @@ type DocumentDBSpec struct {
 	// 3. Add a default entry in the featureGateDefaults map in documentdb_types.go
 	//
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams'])",message="unsupported feature gate key; allowed keys: ChangeStreams"
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams', 'IOUring'])",message="unsupported feature gate key; allowed keys: ChangeStreams, IOUring"
 	FeatureGates map[string]bool `json:"featureGates,omitempty"`
 
 	// SchemaVersion controls the desired schema version for the DocumentDB extension.

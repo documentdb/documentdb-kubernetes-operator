@@ -530,6 +530,66 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		})
 	})
 
+	Context("IOUring seccomp profile", func() {
+		var req ctrl.Request
+
+		BeforeEach(func() {
+			req = ctrl.Request{}
+			req.Name = "test-cluster"
+			req.Namespace = "default"
+		})
+
+		createDocumentDB := func(featureGateEnabled bool) *dbpreview.DocumentDB {
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PvcSize: "10Gi",
+						},
+					},
+				},
+			}
+			if featureGateEnabled {
+				documentdb.Spec.FeatureGates = map[string]bool{
+					dbpreview.FeatureGateIOUring: true,
+				}
+			}
+			return documentdb
+		}
+
+		It("does not set seccomp profile or io_method when IOUring is disabled", func() {
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(false), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).To(BeNil())
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).NotTo(HaveKey("io_method"))
+		})
+
+		It("uses the default Localhost seccomp profile when IOUring is enabled and env is unset", func() {
+			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "")
+
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).ToNot(BeNil())
+			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeLocalhost))
+			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).ToNot(BeNil())
+			Expect(*cluster.Spec.SeccompProfile.LocalhostProfile).To(Equal(util.DEFAULT_IOURING_SECCOMP_PROFILE))
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
+		})
+
+		It("uses the custom Localhost seccomp profile when configured", func() {
+			GinkgoT().Setenv(util.IOURING_SECCOMP_PROFILE_ENV, "profiles/custom-iouring.json")
+
+			cluster := GetCnpgClusterSpec(req, createDocumentDB(true), "test-image:latest", "test-sa", "", true, log)
+
+			Expect(cluster.Spec.SeccompProfile).ToNot(BeNil())
+			Expect(cluster.Spec.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeLocalhost))
+			Expect(cluster.Spec.SeccompProfile.LocalhostProfile).ToNot(BeNil())
+			Expect(*cluster.Spec.SeccompProfile.LocalhostProfile).To(Equal("profiles/custom-iouring.json"))
+			Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("io_method", "io_uring"))
+		})
+	})
+
 	It("always includes default PostgreSQL parameters", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"

@@ -195,3 +195,82 @@ func AssertConnectionStringMatches(ctx context.Context, c client.Client, key cli
 		return nil
 	}
 }
+
+// injectedSidecarNames are the containers the CNPG-I sidecar-injector adds to
+// every DocumentDB cluster pod. otel-collector is only present when monitoring
+// is enabled; documentdb-gateway is always present.
+var injectedSidecarNames = map[string]bool{
+	"documentdb-gateway": true,
+	"otel-collector":     true,
+}
+
+// checkPSARestricted returns an error if ctr lacks any SecurityContext field
+// required by the Kubernetes Pod Security Admission "restricted" profile.
+func checkPSARestricted(podName string, ctr corev1.Container) error {
+	sc := ctr.SecurityContext
+	if sc == nil {
+		return fmt.Errorf("pod %s container %q has no securityContext", podName, ctr.Name)
+	}
+	if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+		return fmt.Errorf("pod %s container %q: runAsNonRoot must be true", podName, ctr.Name)
+	}
+	if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+		return fmt.Errorf("pod %s container %q: allowPrivilegeEscalation must be false", podName, ctr.Name)
+	}
+	if sc.Capabilities == nil || !containsCapability(sc.Capabilities.Drop, "ALL") {
+		return fmt.Errorf("pod %s container %q: capabilities.drop must contain ALL", podName, ctr.Name)
+	}
+	if sc.SeccompProfile == nil || sc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+		return fmt.Errorf("pod %s container %q: seccompProfile.type must be RuntimeDefault", podName, ctr.Name)
+	}
+	return nil
+}
+
+func containsCapability(caps []corev1.Capability, want corev1.Capability) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
+}
+
+// AssertInjectedSidecarsPSARestricted returns a checker that succeeds when
+// every CNPG-I-injected sidecar (documentdb-gateway, and otel-collector when
+// present) on the pods backing clusterName in ns carries a Pod Security
+// Admission "restricted" compliant SecurityContext. Reaching this state in a
+// restricted-labeled namespace already implies the pods passed admission; the
+// explicit field checks turn an otherwise opaque CNPG pod-creation failure into
+// a precise message. Regression guard for #387 — works for both freshly
+// deployed and restored (recovery) clusters. It errors if no injected sidecar
+// is found so it cannot pass vacuously.
+func AssertInjectedSidecarsPSARestricted(ctx context.Context, c client.Client, ns, clusterName string) func() error {
+	return func() error {
+		var pods corev1.PodList
+		if err := c.List(ctx, &pods,
+			client.InNamespace(ns),
+			client.MatchingLabels{"cnpg.io/cluster": clusterName}); err != nil {
+			return fmt.Errorf("list pods for cluster %s/%s: %w", ns, clusterName, err)
+		}
+		if len(pods.Items) == 0 {
+			return fmt.Errorf("no pods found for cluster %s/%s", ns, clusterName)
+		}
+		matched := 0
+		for i := range pods.Items {
+			for j := range pods.Items[i].Spec.Containers {
+				ctr := pods.Items[i].Spec.Containers[j]
+				if !injectedSidecarNames[ctr.Name] {
+					continue
+				}
+				matched++
+				if err := checkPSARestricted(pods.Items[i].Name, ctr); err != nil {
+					return err
+				}
+			}
+		}
+		if matched == 0 {
+			return fmt.Errorf("no injected sidecar containers found on pods for cluster %s/%s", ns, clusterName)
+		}
+		return nil
+	}
+}
