@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -36,7 +37,7 @@ func envNames(env []corev1.EnvVar) []string {
 // so we don't need POD_NAME / OTEL_RESOURCE_ATTRIBUTES on the gateway.
 func TestInjectGatewayOTelEnv_AllAppended(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 
 	got := envNames(pod.Spec.Containers[1].Env)
 	want := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED"}
@@ -50,7 +51,7 @@ func TestInjectGatewayOTelEnv_AllAppended(t *testing.T) {
 // silently disables OTLP metrics export.
 func TestInjectGatewayOTelEnv_MetricsEnabledPresent(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 	for _, e := range pod.Spec.Containers[1].Env {
 		if e.Name == "OTEL_METRICS_ENABLED" {
 			if e.Value != "true" {
@@ -67,7 +68,7 @@ func TestInjectGatewayOTelEnv_MetricsEnabledPresent(t *testing.T) {
 // untouched (we don't overwrite), and the others are still appended.
 func TestInjectGatewayOTelEnv_PreservesExisting(t *testing.T) {
 	pod := gatewayContainer(corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "http://custom:4317"})
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 
 	env := pod.Spec.Containers[1].Env
 	if len(env) != 2 {
@@ -87,10 +88,10 @@ func TestInjectGatewayOTelEnv_PreservesExisting(t *testing.T) {
 // may not change fields other than ...".
 func TestInjectGatewayOTelEnv_Idempotent(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 	first := append([]corev1.EnvVar(nil), pod.Spec.Containers[1].Env...)
 
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 	second := pod.Spec.Containers[1].Env
 
 	if !reflect.DeepEqual(first, second) {
@@ -105,9 +106,70 @@ func TestInjectGatewayOTelEnv_NoGatewayContainer(t *testing.T) {
 			Containers: []corev1.Container{{Name: "postgres"}},
 		},
 	}
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, nil)
 	if len(pod.Spec.Containers[0].Env) != 0 {
 		t.Errorf("expected no envs on non-gateway container, got %v", envNames(pod.Spec.Containers[0].Env))
+	}
+}
+
+// TestInjectGatewayOTelEnv_TracingDisabledByDefault verifies that a config
+// without tracing yields only the metrics env vars (no OTEL_TRACES_ENABLED).
+func TestInjectGatewayOTelEnv_TracingDisabledByDefault(t *testing.T) {
+	pod := gatewayContainer()
+	injectGatewayOTelEnv(pod, &config.Configuration{})
+
+	got := envNames(pod.Spec.Containers[1].Env)
+	want := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("envs got %v, want %v", got, want)
+	}
+}
+
+// TestInjectGatewayOTelEnv_TracingEnabled verifies that enabling tracing adds
+// OTEL_TRACES_ENABLED (the pgmongo gateway gates its trace exporter on it).
+func TestInjectGatewayOTelEnv_TracingEnabled(t *testing.T) {
+	pod := gatewayContainer()
+	injectGatewayOTelEnv(pod, &config.Configuration{GatewayTracingEnabled: true})
+
+	got := envNames(pod.Spec.Containers[1].Env)
+	want := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED", "OTEL_TRACES_ENABLED"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("envs got %v, want %v", got, want)
+	}
+}
+
+// TestInjectGatewayOTelEnv_SQLCommenterEnabled verifies the optional
+// DOCUMENTDB_SQL_COMMENTER_ENABLED env is added only when both tracing and
+// SQLCommenter are on.
+func TestInjectGatewayOTelEnv_SQLCommenterEnabled(t *testing.T) {
+	pod := gatewayContainer()
+	injectGatewayOTelEnv(pod, &config.Configuration{
+		GatewayTracingEnabled:      true,
+		GatewaySQLCommenterEnabled: true,
+	})
+
+	got := envNames(pod.Spec.Containers[1].Env)
+	want := []string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_METRICS_ENABLED",
+		"OTEL_TRACES_ENABLED",
+		"DOCUMENTDB_SQL_COMMENTER_ENABLED",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("envs got %v, want %v", got, want)
+	}
+}
+
+// TestInjectGatewayOTelEnv_SQLCommenterRequiresTracing verifies SQLCommenter
+// is not injected when tracing itself is disabled (traceparent needs a span).
+func TestInjectGatewayOTelEnv_SQLCommenterRequiresTracing(t *testing.T) {
+	pod := gatewayContainer()
+	injectGatewayOTelEnv(pod, &config.Configuration{GatewaySQLCommenterEnabled: true})
+
+	for _, e := range pod.Spec.Containers[1].Env {
+		if e.Name == "DOCUMENTDB_SQL_COMMENTER_ENABLED" {
+			t.Error("DOCUMENTDB_SQL_COMMENTER_ENABLED must not be set when tracing is disabled")
+		}
 	}
 }
 
