@@ -14,7 +14,7 @@ permissions:
   pull-requests: write
 
 env:
-  GO_VERSION: '1.25.9'
+  GO_VERSION: '1.26.5'
 
 jobs:
   coverage:

@@ -222,7 +222,7 @@ The build process:
 ### Dockerfile Details
 
 #### Operator (`operator/src/Dockerfile`)
-- **Base**: `mcr.microsoft.com/oss/go/microsoft/golang:1.25-azurelinux3.0` → `scratch`
+- **Base**: `mcr.microsoft.com/oss/go/microsoft/golang:1.26-azurelinux3.0` → `scratch`
 - **Multi-stage**: 2 stages (builder → scratch)
 - **Entrypoint**: `/manager`
 
