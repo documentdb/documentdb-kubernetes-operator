@@ -509,3 +509,49 @@ var _ = Describe("validateStorageResize", func() {
 		Expect(errs[0].Detail).To(ContainSubstring("pvcSize must be a valid resource quantity"))
 	})
 })
+
+var _ = Describe("resource envelope validation", func() {
+	var v *DocumentDBValidator
+
+	BeforeEach(func() { v = &DocumentDBValidator{} })
+
+	newDB := func() *dbpreview.DocumentDB {
+		return newTestDocumentDB("", "", "")
+	}
+
+	It("allows an explicit pod memory envelope", func() {
+		db := newDB()
+		db.Spec.Resource.Memory = "8Gi"
+		Expect(v.validateResources(db)).To(BeEmpty())
+	})
+
+	It("allows omitting the envelope when gateway and database memory are both set", func() {
+		db := newDB()
+		db.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+		db.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi"}
+		Expect(v.validateResources(db)).To(BeEmpty())
+	})
+
+	It("rejects a partially specified memory split with no envelope", func() {
+		db := newDB()
+		db.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+		Expect(v.validateResources(db)).ToNot(BeEmpty())
+	})
+
+	It("allows leaving a dimension entirely unmanaged", func() {
+		Expect(v.validateResources(newDB())).To(BeEmpty())
+	})
+
+	It("rejects explicit database memory exceeding the envelope", func() {
+		db := newDB()
+		db.Spec.Resource.Memory = "4Gi"
+		db.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "8Gi"}
+		Expect(v.validateResources(db)).ToNot(BeEmpty())
+	})
+
+	It("rejects a partially specified cpu split with no envelope", func() {
+		db := newDB()
+		db.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+		Expect(v.validateResources(db)).ToNot(BeEmpty())
+	})
+})

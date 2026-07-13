@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -88,12 +89,21 @@ func (v *DocumentDBValidator) validate(db *dbpreview.DocumentDB) (allErrs field.
 	type validationFunc func(*dbpreview.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateSchemaVersionNotExceedsBinary,
+		v.validateResources,
 		// Add new spec-level validations here.
 	}
 	for _, fn := range validations {
 		allErrs = append(allErrs, fn(db)...)
 	}
 	return allErrs
+}
+
+// validateResources ensures spec.resource is consistent under the
+// envelope-optional model: the pod memory/cpu envelope may be omitted only when
+// the gateway and database both specify that dimension, and an explicit envelope
+// must leave room for PostgreSQL after the sidecar reservations.
+func (v *DocumentDBValidator) validateResources(db *dbpreview.DocumentDB) field.ErrorList {
+	return cnpg.ValidateResources(db, cnpg.DefaultSplitConfig())
 }
 
 // validateSchemaVersionNotExceedsBinary ensures spec.schemaVersion <= binary version.

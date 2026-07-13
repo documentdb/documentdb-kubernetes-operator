@@ -1,0 +1,13 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  # No top-level resource.memory/cpu — the envelope is derived from the
+  # per-container values below (gateway + database fully specified).
+  resource:
+    gateway:
+      memory: ${GW_MEMORY}
+    database:
+      memory: ${DB_MEMORY}
