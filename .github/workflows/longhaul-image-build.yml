@@ -60,6 +60,12 @@ jobs:
 
       - name: Compute image refs
         id: refs
+        env:
+          # Pass the dispatch input through the environment instead of
+          # interpolating it directly into the script, so a crafted value
+          # (e.g. `$(...)` or a quote breakout) can't execute as a command
+          # on this packages:write runner.
+          EXTRA_TAG: ${{ github.event.inputs.extra_tag }}
         run: |
           set -euo pipefail
           OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
@@ -68,8 +74,17 @@ jobs:
           SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
 
           TAGS="${IMG}:sha-${SHORT_SHA},${IMG}:main"
-          if [ -n "${{ github.event.inputs.extra_tag }}" ]; then
-            TAGS="${TAGS},${IMG}:${{ github.event.inputs.extra_tag }}"
+          if [ -n "$EXTRA_TAG" ]; then
+            # Docker tags allow [A-Za-z0-9._-] (max 128 chars) and must not
+            # start with . or -. Reject anything else — both to avoid a
+            # malformed ref and to defend in depth against injection.
+            case "$EXTRA_TAG" in
+              [.-]* | *[!A-Za-z0-9._-]*)
+                echo "::error::invalid extra_tag '$EXTRA_TAG' (allowed: A-Za-z0-9._-, not starting with . or -)"
+                exit 1
+                ;;
+            esac
+            TAGS="${TAGS},${IMG}:${EXTRA_TAG}"
           fi
 
           {

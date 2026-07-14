@@ -14,7 +14,8 @@
 #    writers/verifiers can catch any data-integrity issues caused by it.
 #
 # Fails if: the driver Deployment is unhealthy, the report ConfigMap
-# reports FAIL, the report is stale (>2h), or the report ConfigMap is not found.
+# reports FAIL, the report is stale (>2h), or the report ConfigMap is
+# missing / has no result past the 2h startup grace.
 #
 name: "Long Haul Monitor"
 
@@ -67,6 +68,11 @@ jobs:
           # Detect "rollout is failing" via the Progressing condition.
           PROGRESSING_REASON=$(kubectl get deployment "${{ env.DEPLOYMENT_NAME }}" -n "${{ env.NAMESPACE }}" \
             -o jsonpath='{.status.conditions[?(@.type=="Progressing")].reason}' 2>/dev/null || true)
+          # Creation timestamp lets "Evaluate status" tell a fresh deploy
+          # (report not written yet) apart from a hung run (no report long
+          # after startup).
+          CREATED=$(kubectl get deployment "${{ env.DEPLOYMENT_NAME }}" -n "${{ env.NAMESPACE }}" \
+            -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || true)
 
           if [ -z "$DESIRED" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -77,6 +83,7 @@ jobs:
             echo "ready=${READY:-0}"
             echo "desired=${DESIRED:-0}"
             echo "progressing_reason=${PROGRESSING_REASON}"
+            echo "created=${CREATED}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check ConfigMap report
@@ -143,6 +150,27 @@ jobs:
               echo "::error::Long haul report is stale (last updated ${AGE_SECONDS}s ago, threshold 7200s). Test may be hung."
               exit 1
             fi
+          fi
+
+          # Fail if the report ConfigMap is missing or carries no verdict.
+          # The driver writes its first report only on the first
+          # REPORT_INTERVAL tick, so a missing report is legitimate during
+          # the initial startup window — tolerate it under the same 2h grace
+          # as the staleness threshold. Past that, a missing/empty result
+          # means the driver is hung or never began reporting, which is
+          # exactly what this hourly gate must page on (a ready Deployment
+          # alone is not proof the workload is running).
+          RESULT="${{ steps.report-check.outputs.result }}"
+          if [ -z "$RESULT" ] || [ "$RESULT" = "UNKNOWN" ]; then
+            CREATED="${{ steps.deploy-check.outputs.created }}"
+            CREATED_EPOCH=$(date -d "$CREATED" +%s 2>/dev/null || echo "0")
+            NOW_EPOCH=$(date +%s)
+            DEPLOY_AGE=$((NOW_EPOCH - CREATED_EPOCH))
+            if [ "$CREATED_EPOCH" -eq 0 ] || [ "$DEPLOY_AGE" -gt 7200 ]; then
+              echo "::error::Long haul report ConfigMap missing or has no result (deployment age ${DEPLOY_AGE}s). Driver may be hung or never started reporting."
+              exit 1
+            fi
+            echo "⏳ Report not written yet (deployment age ${DEPLOY_AGE}s < 7200s startup grace); skipping verdict check this run."
           fi
 
           # Fail if ConfigMap reports failure
