@@ -146,6 +146,7 @@ Configure inter-cluster networking using `spec.clusterReplication.crossCloudNetw
 ```yaml
 spec:
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     crossCloudNetworkingStrategy: Istio  # or AzureFleet, None
     clusterList:
@@ -332,6 +333,7 @@ spec:
       pvcSize: 100Gi
       storageClass: default-storage-class  # Fallback
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     clusterList:
       - name: member-westus3-cluster

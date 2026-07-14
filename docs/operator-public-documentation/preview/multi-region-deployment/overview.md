@@ -65,6 +65,7 @@ metadata:
   namespace: documentdb-preview-ns
 spec:
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     clusterList:
       - name: member-westus3-cluster
