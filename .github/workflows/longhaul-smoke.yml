@@ -1,0 +1,303 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Long-Haul Smoke Gate
+#
+# Purpose
+#   A PR gate that stands up a *real* DocumentDB on an ephemeral kind cluster
+#   and runs the actual long-haul driver against it for a short, bounded
+#   window. Where lint-longhaul-workflows.yml statically validates the
+#   YAML/manifests, this workflow proves the driver + deploy manifests actually
+#   function end-to-end: the image builds, the container starts, it connects to
+#   DocumentDB over the gateway, writers + verifier run, and the driver reports
+#   PASS with a clean exit code.
+#
+# Images under test
+#   The operator + sidecar are built from THIS PR's source (via the shared
+#   test-build-and-package.yml reusable workflow) so a code change that breaks
+#   the operator is caught. The documentdb + gateway (database) images are NOT
+#   rebuilt: test-build-and-package.yml probes the public registry for the
+#   pinned documentDbVersion and, when present, runs in "registry mode" and
+#   simply re-tags the public images into the build artifact. The long-haul
+#   driver image is the only extra image this workflow builds.
+#
+# Environment bring-up is delegated to the shared composite action
+#   .github/actions/setup-test-environment
+# (use-external-images: false — load operator/sidecar/documentdb/gateway from
+# the build artifacts into kind), exactly like test-e2e.yml. No operator-install
+# logic is duplicated here.
+#
+# Why reuse test/longhaul/deploy/{deployment,rbac}.yaml as-is
+#   The whole point of the gate is to exercise the SAME manifests the long-haul
+#   cluster ships, so a regression in the ConfigMap/Deployment (bad env key,
+#   too-low memory limit, wrong secret ref) fails the PR. We only override a
+#   handful of ConfigMap knobs (via a JSON merge patch) to make the run bounded
+#   and deterministic in CI — we never fork the manifest.
+#
+# Why not a Job
+#   deployment.yaml is a Deployment (restartPolicy: Always) so a bounded run
+#   that exits 0 would auto-restart. We handle that by scaling the Deployment
+#   to 0 the moment the driver's container first terminates, freezing the
+#   verdict, then asserting on BOTH the container exit code AND the
+#   longhaul-report ConfigMap's result field.
+#
+# CI budget
+#   Scale/upgrade disruption ops are disabled for the smoke run
+#   (LONGHAUL_MIN_INSTANCES == LONGHAUL_MAX_INSTANCES) so the gate is a fast,
+#   deterministic data-durability check (writers + verifier) that fits a
+#   GitHub-hosted runner and finishes in a few minutes.
+
+name: Long-Haul Smoke Gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "test/longhaul/**"
+      - "test/shared/**"
+      - ".github/workflows/longhaul-smoke.yml"
+      - ".github/workflows/test-build-and-package.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+    inputs:
+      max_duration:
+        description: "Bounded driver run length (Go duration, e.g. 3m)"
+        required: false
+        default: "3m"
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: longhaul-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Namespaces / names are aligned with the hardcoded values baked into
+  # test/longhaul/deploy/*.yaml so those manifests apply unmodified.
+  DB_NS: documentdb-test-ns
+  DB_NAME: documentdb-cluster
+  OPERATOR_NS: documentdb-operator
+  CERT_MANAGER_NS: cert-manager
+  DB_USERNAME: docdbuser
+  # Smoke-only credential for an ephemeral, throwaway kind cluster that is
+  # destroyed at the end of the job. Not a secret; never reused elsewhere.
+  DB_PASSWORD: SmokeTest123!
+  GATEWAY_PORT: "10260"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build operator + sidecar from this PR's source; reuse public documentdb /
+  # gateway images (registry mode) so the database images are NOT rebuilt.
+  # Produces the platform-images tar + helm chart artifacts the setup action
+  # loads into kind.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Images and Charts
+    uses: ./.github/workflows/test-build-and-package.yml
+    with:
+      version: "0.2.0"
+    secrets: inherit
+
+  smoke:
+    name: Long-Haul Smoke
+    needs: build
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+      EXT_IMAGE_TAG: ${{ needs.build.outputs.ext_image_tag }}
+      CHART_VERSION: ${{ needs.build.outputs.chart_version || '0.1.0' }}
+      DRIVER_IMAGE: longhaul-test:smoke
+      # Must match the cluster name the composite action derives:
+      #   documentdb-<test-type>-<architecture>-<test-scenario-name>
+      KIND_CLUSTER: documentdb-longhaul-amd64-smoke
+      MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build long-haul driver image
+        run: |
+          # Context MUST be the repo root: the Dockerfile copies ../shared and
+          # ../../operator/src (see test/longhaul/Dockerfile header). Built now,
+          # before the cluster exists, and loaded into kind after setup.
+          docker build \
+            -f test/longhaul/Dockerfile \
+            -t "${DRIVER_IMAGE}" \
+            .
+
+      # Only the artifacts the setup action consumes: the consolidated
+      # platform-specific image tarball (operator/sidecar/documentdb/gateway,
+      # loaded into kind) and the amd64 helm chart.
+      - name: Download platform images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-platform-images
+          path: ./artifacts/build-platform-images
+
+      - name: Download helm chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-helm-chart-amd64
+          path: ./artifacts/build-helm-chart-amd64
+
+      - name: Set up DocumentDB test environment (kind + operator + cluster)
+        uses: ./.github/actions/setup-test-environment
+        with:
+          test-type: "longhaul"
+          architecture: "amd64"
+          runner: "ubuntu-22.04"
+          test-scenario-name: "smoke"
+          node-count: "1"
+          instances-per-node: "1"
+          cert-manager-namespace: ${{ env.CERT_MANAGER_NS }}
+          operator-namespace: ${{ env.OPERATOR_NS }}
+          db-namespace: ${{ env.DB_NS }}
+          db-cluster-name: ${{ env.DB_NAME }}
+          db-username: ${{ env.DB_USERNAME }}
+          db-password: ${{ env.DB_PASSWORD }}
+          db-port: ${{ env.GATEWAY_PORT }}
+          image-tag: ${{ env.IMAGE_TAG }}
+          documentdb-image-tag: ${{ env.EXT_IMAGE_TAG }}
+          chart-version: ${{ env.CHART_VERSION }}
+          use-external-images: "false"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository-owner: ${{ github.repository_owner }}
+
+      - name: Load driver image into kind
+        run: kind load docker-image "${DRIVER_IMAGE}" --name "${KIND_CLUSTER}"
+
+      - name: Create driver connection secret (longhaul-documentdb-credentials)
+        run: |
+          # In-cluster DNS for the ClusterIP gateway service the operator creates.
+          HOST="documentdb-service-${DB_NAME}.${DB_NS}.svc"
+          # tlsInsecure=true (NOT tlsAllowInvalidCertificates) is the option the
+          # Go mongo driver v2 honors to skip verification of the self-signed
+          # gateway cert — this matches test/longhaul/README.md.
+          URI="mongodb://${DB_USERNAME}:${DB_PASSWORD}@${HOST}:${GATEWAY_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true"
+          kubectl create secret generic longhaul-documentdb-credentials \
+            -n "${DB_NS}" \
+            --from-literal=uri="${URI}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy long-haul driver (real manifests, bounded override)
+        run: |
+          # RBAC applies unmodified (namespace matches DB_NS).
+          kubectl apply -f test/longhaul/deploy/rbac.yaml
+
+          # Apply the real ConfigMap + Deployment, substituting only the
+          # templated image ref with the locally built image loaded into kind.
+          # The shipped manifest uses imagePullPolicy: Always (correct for the
+          # registry-based long-haul deploy of mutable tags), but here the
+          # image is side-loaded into kind and exists on no registry, so
+          # override to IfNotPresent to use the local image instead of a pull.
+          sed -e "s|ghcr.io/__OWNER__/documentdb-kubernetes-operator/longhaul-test:__IMAGE_TAG__|${DRIVER_IMAGE}|g" \
+            -e "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g" \
+            test/longhaul/deploy/deployment.yaml | kubectl apply -f -
+
+          # Bounded, deterministic smoke override — patch ONLY runtime knobs on
+          # the shipped ConfigMap; the manifest structure is unchanged.
+          #  - MAX_DURATION: finite run
+          #  - RESET_DATA: fresh collection each CI run
+          #  - MIN==MAX instances: disable disruptive scale ops (fast + stable)
+          #  - short cadences so the verifier gets several cycles in the window
+          PATCH=$(jq -nc \
+            --arg dur "${MAX_DURATION}" \
+            '{data: {
+              LONGHAUL_MAX_DURATION: $dur,
+              LONGHAUL_RESET_DATA: "true",
+              LONGHAUL_NUM_WRITERS: "2",
+              LONGHAUL_OP_COOLDOWN: "30s",
+              LONGHAUL_STEADY_STATE_WAIT: "10s",
+              LONGHAUL_RECOVERY_TIMEOUT: "2m",
+              LONGHAUL_REPORT_INTERVAL: "30s",
+              LONGHAUL_MIN_INSTANCES: "1",
+              LONGHAUL_MAX_INSTANCES: "1"
+            }}')
+          kubectl patch configmap longhaul-test-config -n "${DB_NS}" --type merge -p "${PATCH}"
+
+          # Restart so the pod picks up the patched ConfigMap (envFrom is only
+          # read at container start).
+          kubectl rollout restart deployment/longhaul-test -n "${DB_NS}"
+          kubectl rollout status deployment/longhaul-test -n "${DB_NS}" --timeout=120s
+
+      - name: Wait for driver to complete one bounded run
+        id: wait
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 900 ))  # 15 min hard cap
+          exit_code=""
+          while [[ $(date +%s) -lt ${deadline} ]]; do
+            pod=$(kubectl get pods -n "${DB_NS}" \
+              -l app.kubernetes.io/name=longhaul-test \
+              -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -z "${pod}" ]]; then
+              sleep 5; continue
+            fi
+
+            # Look for a terminated driver container (current or previous
+            # restart) — that is the terminal verdict of a bounded run.
+            term_cur=$(kubectl get pod "${pod}" -n "${DB_NS}" \
+              -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || echo "")
+            term_prev=$(kubectl get pod "${pod}" -n "${DB_NS}" \
+              -o jsonpath='{.status.containerStatuses[0].lastState.terminated.exitCode}' 2>/dev/null || echo "")
+
+            if [[ -n "${term_cur}" ]]; then
+              exit_code="${term_cur}"
+            elif [[ -n "${term_prev}" ]]; then
+              exit_code="${term_prev}"
+            fi
+
+            if [[ -n "${exit_code}" ]]; then
+              echo "Driver container terminated with exit code ${exit_code}."
+              # Freeze state before the Deployment restarts the pod again.
+              kubectl scale deployment/longhaul-test -n "${DB_NS}" --replicas=0 || true
+              break
+            fi
+            echo "  driver still running..."
+            sleep 10
+          done
+
+          if [[ -z "${exit_code}" ]]; then
+            echo "::error::Driver did not terminate within the smoke window."
+            exit 1
+          fi
+          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
+
+      - name: Assert PASS verdict
+        run: |
+          exit_code="${{ steps.wait.outputs.exit_code }}"
+          result=$(kubectl get configmap longhaul-report -n "${DB_NS}" \
+            -o jsonpath='{.data.result}' 2>/dev/null || echo "MISSING")
+          echo "Driver exit code : ${exit_code}"
+          echo "Report result    : ${result}"
+
+          if [[ "${exit_code}" != "0" ]]; then
+            echo "::error::Driver exited non-zero (${exit_code})."
+            exit 1
+          fi
+          if [[ "${result}" != "PASS" ]]; then
+            echo "::error::longhaul-report result is '${result}', expected PASS."
+            exit 1
+          fi
+          echo "✅ Long-haul smoke gate passed (exit 0, report PASS)."
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "===== DocumentDB pods ====="
+          kubectl get pods -n "${DB_NS}" -o wide || true
+          echo "===== Driver logs (current) ====="
+          kubectl logs -n "${DB_NS}" -l app.kubernetes.io/name=longhaul-test --tail=200 || true
+          echo "===== Driver logs (previous) ====="
+          kubectl logs -n "${DB_NS}" -l app.kubernetes.io/name=longhaul-test --previous --tail=200 || true
+          echo "===== longhaul-report ConfigMap ====="
+          kubectl get configmap longhaul-report -n "${DB_NS}" -o yaml || true
+          echo "===== DocumentDB describe ====="
+          kubectl describe documentdb "${DB_NAME}" -n "${DB_NS}" || true
+          echo "===== Operator logs ====="
+          kubectl logs -n "${OPERATOR_NS}" deployment/documentdb-operator --tail=100 || true
