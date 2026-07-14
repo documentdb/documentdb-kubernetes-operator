@@ -166,12 +166,16 @@ not the write-outage budget.
 ### RBAC for chaos operations
 
 Beyond the base RBAC the driver already needs, the chaos operations require the
-driver ServiceAccount to be granted (in `deploy/rbac.yaml`):
+driver ServiceAccount to be granted (all present in `deploy/rbac.yaml`):
 
 - **`kill-primary-pod`** — `get`/`list` on `clusters.postgresql.cnpg.io` (to read
-  `status.currentPrimary`) and `delete` on `pods` in the cluster namespace.
+  `status.currentPrimary`) and `delete` on `pods` in the cluster namespace; both
+  added to the `longhaul-test` Role.
 - **`kill-operator-pod`** — `get` on `deployments` and `get`/`list`/`delete` on
-  `pods` in the operator namespace (`LONGHAUL_OPERATOR_NAMESPACE`).
+  `pods` in the operator namespace (`LONGHAUL_OPERATOR_NAMESPACE`, default
+  `documentdb-operator`); granted by a separate `longhaul-test-operator`
+  Role/RoleBinding in that namespace, since the operator runs outside the
+  driver's own namespace.
 
 ## CI Safety
 

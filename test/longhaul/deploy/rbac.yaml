@@ -21,14 +21,19 @@ metadata:
     app.kubernetes.io/name: longhaul-test
     app.kubernetes.io/component: testing
 rules:
-  # Read pod status for health monitoring.
+  # Read pod status for health monitoring; delete pods for the kill-primary-pod
+  # chaos op (deletes the CNPG primary to exercise automatic failover).
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
   # Read and patch DocumentDB CRs for health check and scale operations.
   - apiGroups: ["documentdb.io"]
     resources: ["dbs"]
     verbs: ["get", "list", "patch"]
+  # Read the CNPG Cluster to resolve the current primary pod (kill-primary-pod).
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources: ["clusters"]
+    verbs: ["get", "list"]
   # Create/update ConfigMaps for periodic report persistence.
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -46,6 +51,43 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: longhaul-test
+subjects:
+  - kind: ServiceAccount
+    name: longhaul-test
+    namespace: documentdb-test-ns
+---
+# Role in the operator namespace for the kill-operator-pod chaos op: read the
+# operator Deployment (to build its pod selector and check availability) and
+# delete its pod. Namespaced separately because the operator runs outside the
+# driver's own namespace (LONGHAUL_OPERATOR_NAMESPACE, default documentdb-operator).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: longhaul-test-operator
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: longhaul-test-operator
+  namespace: documentdb-operator
+  labels:
+    app.kubernetes.io/name: longhaul-test
+    app.kubernetes.io/component: testing
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: longhaul-test-operator
 subjects:
   - kind: ServiceAccount
     name: longhaul-test
