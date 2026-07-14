@@ -4,6 +4,8 @@
 package workload
 
 import (
+	"sync/atomic"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -44,6 +46,24 @@ var _ = Describe("Verifier", func() {
 		// constructor wiring above + the table-driven gap-detection logic is
 		// what the verifier actually does. Document the boundary.
 		Skip("verifyAll requires a *mongo.Database; covered by long-haul integration runs")
+	})
+
+	Describe("ConfirmedFloor", func() {
+		It("returns 0 for a writer registered but not yet verified", func() {
+			v := &Verifier{floor: map[string]*atomic.Int64{"w000": {}}}
+			Expect(v.ConfirmedFloor("w000")).To(BeZero())
+		})
+
+		It("reflects the published floor and is isolated per writer", func() {
+			v := &Verifier{floor: map[string]*atomic.Int64{
+				"w000": {}, "w001": {},
+			}}
+			v.publishFloor("w000", 4_200)
+			Expect(v.ConfirmedFloor("w000")).To(Equal(int64(4_200)))
+			Expect(v.ConfirmedFloor("w001")).To(BeZero())
+			Expect(v.ConfirmedFloor("unknown")).To(BeZero(),
+				"unregistered writers read as 0 so the pruner never deletes for them")
+		})
 	})
 })
 

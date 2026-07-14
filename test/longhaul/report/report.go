@@ -88,6 +88,7 @@ func GenerateMarkdown(s Summary) string {
 	fmt.Fprintf(&b, "| Verify Passes | %d |\n", s.Metrics.VerifyPasses)
 	fmt.Fprintf(&b, "| Gaps Detected | %d |\n", s.Metrics.GapsDetected)
 	fmt.Fprintf(&b, "| Checksum Errors | %d |\n", s.Metrics.ChecksumErrors)
+	fmt.Fprintf(&b, "| Docs Pruned | %d |\n", s.Metrics.DocsPruned)
 	b.WriteString("\n")
 
 	// Disruption Windows
