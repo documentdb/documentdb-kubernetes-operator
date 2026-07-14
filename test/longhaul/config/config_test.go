@@ -35,6 +35,7 @@ var _ = Describe("Config", func() {
 				EnvDocumentDBURI, EnvNumWriters,
 				EnvOpCooldown, EnvRecoveryTimeout, EnvSteadyStateWait,
 				EnvMinInstances, EnvMaxInstances, EnvReportInterval,
+				EnvBackupEnabled, EnvBackupSchedule, EnvBackupRetentionDays,
 			} {
 				GinkgoT().Setenv(k, "")
 			}
@@ -102,6 +103,24 @@ var _ = Describe("Config", func() {
 			cfg, err := LoadFromEnv()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.DocumentDBURI).To(Equal("mongodb://localhost:27017"))
+		})
+
+		It("parses the backup env knobs", func() {
+			GinkgoT().Setenv(EnvBackupEnabled, "true")
+			GinkgoT().Setenv(EnvBackupSchedule, "0 */6 * * *")
+			GinkgoT().Setenv(EnvBackupRetentionDays, "7")
+			cfg, err := LoadFromEnv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.BackupEnabled).To(BeTrue())
+			Expect(cfg.BackupSchedule).To(Equal("0 */6 * * *"))
+			Expect(cfg.BackupRetentionDays).To(Equal(7))
+		})
+
+		It("returns error for invalid BackupRetentionDays", func() {
+			GinkgoT().Setenv(EnvBackupRetentionDays, "abc")
+			_, err := LoadFromEnv()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(EnvBackupRetentionDays))
 		})
 	})
 

@@ -151,8 +151,10 @@ things unit and e2e tests cannot:
 
 - **Scheduling liveness** — `status.lastScheduledTime` keeps advancing; a stalled
   scheduler (past `status.nextScheduledTime` + grace) raises a warning.
-- **Completion** — child `Backup` CRs keep reaching `completed`; terminal
-  failures (`failed` / `skipped`) are counted.
+- **Completion** — child `Backup` CRs keep reaching `completed`; only terminal
+  `failed` backups are counted as failures. A `skipped` backup is an intentional
+  no-op (e.g. the operator declines to back up a non-primary/standby) and is
+  **not** counted as a failure.
 - **Retention leak** — no completed backup outlives its retention window
   (`stoppedAt + spec.retentionDays*24h` + grace). The window is taken from each
   backup's **own** `spec.retentionDays` (stamped at creation), so the check
