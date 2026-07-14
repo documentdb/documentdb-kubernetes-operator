@@ -171,9 +171,8 @@ accumulation window long-haul exists to cover.
 
 > **RBAC.** The driver ServiceAccount needs `create`/`get`/`list`/`update` on
 > `scheduledbackups.documentdb.io` and `list` on `backups.documentdb.io`. These
-> verbs must be present in `deploy/rbac.yaml` (added in the CI/CD PR) for the
-> backup verifier to function; without them it logs an error and the rest of the
-> run continues.
+> verbs are granted by the `longhaul-test` Role in `deploy/rbac.yaml`; without
+> them the backup verifier logs an error and the rest of the run continues.
 
 ## CI Safety
 
