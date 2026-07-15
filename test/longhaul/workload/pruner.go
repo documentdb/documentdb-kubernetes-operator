@@ -60,6 +60,10 @@ func (m docdbPruneBackend) deleteThrough(ctx context.Context, writerID string, t
 // every removed document was already scanned, and the verifier's startup
 // DB-min seed keeps a post-restart scan from misreading the pruned prefix as a
 // gap.
+//
+// Pruning freezes permanently once the verifier reports any data loss (gap or
+// checksum mismatch): the run is already FAIL, so the collection is left intact
+// to preserve the corrupt document and its neighbours for post-mortem debugging.
 type Pruner struct {
 	writers         []*Writer
 	floor           floorProvider
@@ -67,6 +71,11 @@ type Pruner struct {
 	retainPerWriter int64
 	metrics         *Metrics
 	journal         *journal.Journal
+
+	// frozen is set once a data-loss failure freezes pruning, so the
+	// "pruning frozen" warning is logged exactly once. Only touched from the
+	// pruner goroutine.
+	frozen bool
 }
 
 // NewPruner constructs a Pruner. retainPerWriter must be > 0; callers gate on
@@ -101,6 +110,19 @@ func (p *Pruner) Run(ctx context.Context) {
 }
 
 func (p *Pruner) pruneAll(ctx context.Context) {
+	// Freeze pruning the moment the durability oracle detects a failure. Once a
+	// gap or checksum mismatch is seen the run is already FAIL, so bounding disk
+	// no longer matters — instead we preserve the collection exactly as it was
+	// at the failure so the corrupt document (and its neighbours) stay on disk
+	// for post-mortem debugging. HasDataLoss() is monotonic (the counters never
+	// reset within a run), so once frozen the pruner stays frozen.
+	if p.metrics.Snapshot().HasDataLoss() {
+		if !p.frozen {
+			p.frozen = true
+			p.journal.Warn("pruner", "data loss detected; pruning frozen to preserve evidence for debugging")
+		}
+		return
+	}
 	for _, w := range p.writers {
 		p.pruneWriter(ctx, w.id)
 	}

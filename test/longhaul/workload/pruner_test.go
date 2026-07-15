@@ -141,4 +141,41 @@ var _ = Describe("Pruner.pruneAll", func() {
 		))
 		Expect(m.DocsPruned.Load()).To(Equal(int64(30)))
 	})
+
+	It("freezes pruning when a checksum error has been detected (preserve evidence)", func() {
+		b := &fakePruneBackend{perWriterDeleted: map[string]int64{"w000": 10, "w001": 20}}
+		m := NewMetrics()
+		p := newTestPruner(b, fakeFloor{"w000": 5_000, "w001": 9_000}, 1_000, m)
+		m.ChecksumErrors.Add(1)
+
+		p.pruneAll(context.Background())
+
+		Expect(b.calls).To(BeEmpty(), "no deletes must be issued once data loss is detected")
+		Expect(m.DocsPruned.Load()).To(BeZero())
+		Expect(p.frozen).To(BeTrue())
+	})
+
+	It("freezes pruning when a gap has been detected", func() {
+		b := &fakePruneBackend{perWriterDeleted: map[string]int64{"w000": 10}}
+		m := NewMetrics()
+		p := newTestPruner(b, fakeFloor{"w000": 5_000}, 1_000, m)
+		m.VerifyGapsDetected.Add(1)
+
+		p.pruneAll(context.Background())
+
+		Expect(b.calls).To(BeEmpty())
+	})
+
+	It("stays frozen on later cycles even though the failure counters are unchanged", func() {
+		b := &fakePruneBackend{perWriterDeleted: map[string]int64{"w000": 10}}
+		m := NewMetrics()
+		p := newTestPruner(b, fakeFloor{"w000": 5_000}, 1_000, m)
+		m.ChecksumErrors.Add(1)
+
+		p.pruneAll(context.Background())
+		p.pruneAll(context.Background())
+
+		Expect(b.calls).To(BeEmpty())
+		Expect(p.frozen).To(BeTrue())
+	})
 })
