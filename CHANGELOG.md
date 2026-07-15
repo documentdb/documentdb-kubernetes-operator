@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 2026-07-15
 
 ### Security
 - **Bumped CloudNative-PG dependency from chart 0.27.0 (app 1.28.0) to 0.28.1 (app 1.29.1)** to pick up the fix for [CVE-2026-44477 / GHSA-423p-g724-fr39](https://github.com/cloudnative-pg/cloudnative-pg/security/advisories/GHSA-423p-g724-fr39): a privilege-escalation vulnerability in the CNPG metrics exporter that could allow a low-privilege PostgreSQL user to escalate to superuser and execute arbitrary commands in the database pod. Operators upgrading via `helm upgrade` will get the patched CNPG operator automatically.
