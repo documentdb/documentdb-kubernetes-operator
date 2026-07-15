@@ -68,7 +68,6 @@ type MetricsSnapshot struct {
 	VerifyPasses      int64
 	GapsDetected      int64
 	ChecksumErrors    int64
-	DocsPruned        int64
 	Elapsed           time.Duration
 }
 
@@ -81,7 +80,6 @@ func (m *Metrics) Snapshot() MetricsSnapshot {
 		VerifyPasses:      m.VerifyPasses.Load(),
 		GapsDetected:      m.VerifyGapsDetected.Load(),
 		ChecksumErrors:    m.ChecksumErrors.Load(),
-		DocsPruned:        m.DocsPruned.Load(),
 		Elapsed:           time.Since(m.StartTime),
 	}
 }
