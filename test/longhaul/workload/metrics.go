@@ -43,11 +43,6 @@ type Metrics struct {
 	// recomputed value. Non-zero => FAIL with reason "data loss".
 	ChecksumErrors atomic.Int64
 
-	// DocsPruned counts documents deleted by the retention pruner. Purely
-	// observational — pruning removes only already-verified history and never
-	// affects the durability verdict.
-	DocsPruned atomic.Int64
-
 	// StartTime is when this Metrics was constructed; resets on pod restart.
 	StartTime time.Time
 }

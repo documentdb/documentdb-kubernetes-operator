@@ -64,7 +64,6 @@ var _ = Describe("Pruner.pruneWriter", func() {
 
 		Expect(b.calls).To(HaveLen(1))
 		Expect(b.calls[0]).To(Equal(pruneCall{writerID: "w000", throughSeq: 8_000}))
-		Expect(m.DocsPruned.Load()).To(Equal(int64(500)))
 	})
 
 	It("does not delete when the floor is below the retention window", func() {
@@ -76,7 +75,6 @@ var _ = Describe("Pruner.pruneWriter", func() {
 		p.pruneWriter(context.Background(), "w000")
 
 		Expect(b.calls).To(BeEmpty())
-		Expect(m.DocsPruned.Load()).To(BeZero())
 	})
 
 	It("does not delete when the floor is exactly at the retention window", func() {
@@ -102,7 +100,7 @@ var _ = Describe("Pruner.pruneWriter", func() {
 		Expect(b.calls[0].throughSeq).To(Equal(int64(1)))
 	})
 
-	It("does not count deletions or advance metrics when the backend errors", func() {
+	It("swallows backend errors without issuing further deletes", func() {
 		b := &fakePruneBackend{err: errors.New("delete failed")}
 		m := NewMetrics()
 		p := newTestPruner(b, fakeFloor{"w000": 10_000}, 2_000, m)
@@ -110,7 +108,6 @@ var _ = Describe("Pruner.pruneWriter", func() {
 		p.pruneWriter(context.Background(), "w000")
 
 		Expect(b.calls).To(HaveLen(1))
-		Expect(m.DocsPruned.Load()).To(BeZero())
 	})
 
 	It("never deletes at or above the confirmed floor (safety invariant)", func() {
@@ -139,7 +136,6 @@ var _ = Describe("Pruner.pruneAll", func() {
 			pruneCall{writerID: "w000", throughSeq: 4_000},
 			pruneCall{writerID: "w001", throughSeq: 8_000},
 		))
-		Expect(m.DocsPruned.Load()).To(Equal(int64(30)))
 	})
 
 	It("freezes pruning when a checksum error has been detected (preserve evidence)", func() {
@@ -151,7 +147,6 @@ var _ = Describe("Pruner.pruneAll", func() {
 		p.pruneAll(context.Background())
 
 		Expect(b.calls).To(BeEmpty(), "no deletes must be issued once data loss is detected")
-		Expect(m.DocsPruned.Load()).To(BeZero())
 		Expect(p.frozen).To(BeTrue())
 	})
 
