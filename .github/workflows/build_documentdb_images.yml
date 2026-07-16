@@ -12,7 +12,7 @@ on:
       version:
         description: 'Released DocumentDB version to package (for example 0.110.0)'
         required: false
-        default: '0.113.0'
+        default: '0.110.0'
       documentdb_extension_github_repo:
         description: 'GitHub owner/repo for DocumentDB extension releases'
         required: false
@@ -32,7 +32,7 @@ permissions:
 
 env:
 
-  DEFAULT_DOCUMENTDB_VERSION: '0.113.0'
+  DEFAULT_DOCUMENTDB_VERSION: '0.110.0'
   DOCUMENTDB_EXTENSION_GITHUB_REPO: ${{ github.event.inputs.documentdb_extension_github_repo || 'documentdb/documentdb' }}
   DOCUMENTDB_GATEWAY_IMAGE_REPO: ${{ github.event.inputs.documentdb_gateway_image_repo || 'ghcr.io/documentdb/documentdb/documentdb-local' }}
 
