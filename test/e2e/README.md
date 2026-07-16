@@ -140,6 +140,8 @@ E2E_UPGRADE=1 E2E_UPGRADE_PREVIOUS_CHART=… \
 | `E2E_UPGRADE_OPERATOR_NS` | Operator namespace |
 | `E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE` | Extension image used before upgrade |
 | `E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE` | Extension image used after upgrade |
+| `E2E_UPGRADE_OLD_DOCUMENTDB_VERSION` | Schema-upgrade spec: `spec.documentDBVersion` to start from (default `0.109.0`) |
+| `E2E_UPGRADE_NEW_DOCUMENTDB_VERSION` | Schema-upgrade spec: `spec.documentDBVersion` to upgrade to (default `0.110.0`) |
 
 > A note on `E2E_KEEP_CLUSTERS`: the design doc discusses a flag for keeping
 > DocumentDB-cluster fixtures around after a failed spec, but no such knob is

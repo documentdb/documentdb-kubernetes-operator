@@ -191,6 +191,12 @@ jobs:
       E2E_UPGRADE_CURRENT_CHART: ${{ vars.E2E_UPGRADE_CURRENT_CHART || '' }}
       E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE: ${{ vars.E2E_UPGRADE_OLD_DOCUMENTDB_IMAGE || '' }}
       E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE: ${{ vars.E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE || '' }}
+      # Schema-upgrade spec knobs (spec.documentDBVersion + spec.schemaVersion).
+      # Set explicitly to the released pair so the two-phase migration spec
+      # runs on every e2e PR without depending on repo `vars`. Bump these
+      # when validating a newer old->new pair.
+      E2E_UPGRADE_OLD_DOCUMENTDB_VERSION: '0.109.0'
+      E2E_UPGRADE_NEW_DOCUMENTDB_VERSION: '0.110.0'
 
     steps:
       - name: Checkout repository
