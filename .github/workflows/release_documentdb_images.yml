@@ -117,12 +117,20 @@ jobs:
 
           echo "Updating default versions: $OLD_VERSION → $NEW_VERSION"
 
-          # 1. Update operator constants.go
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+          # Escape dots so OLD_VERSION is matched literally in the ERE patterns
+          # below (a bare '.' would otherwise match any character).
+          OLD_RE="${OLD_VERSION//./\\.}"
+
+          # 1. Update operator constants.go. Anchor each substitution to its
+          # specific constant so unrelated same-versioned tags in the file are
+          # never rewritten (e.g. DEFAULT_OTEL_COLLECTOR_IMAGE also lives here).
+          sed -i -E "s|(DEFAULT_DOCUMENTDB_IMAGE[[:space:]]*=.*:)${OLD_RE}\"|\1${NEW_VERSION}\"|" \
+            operator/src/internal/utils/constants.go
+          sed -i -E "s|(DEFAULT_GATEWAY_IMAGE[[:space:]]*=.*:)${OLD_RE}\"|\1${NEW_VERSION}\"|" \
             operator/src/internal/utils/constants.go
 
-          # 2. Update sidecar plugin config.go
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+          # 2. Update sidecar plugin config.go (anchored to the gateway image).
+          sed -i -E "s|(/gateway:)${OLD_RE}\"|\1${NEW_VERSION}\"|" \
             operator/cnpg-plugins/sidecar-injector/internal/config/config.go
 
           # 3. Update Helm chart values.yaml
@@ -136,8 +144,8 @@ jobs:
           # built-in defaults (constants.go) rather than per-workflow
           # fallback tags, so no sed is required here.
 
-          # 5. Update sidecar plugin config test (hardcoded expected gateway image)
-          sed -i "s|:${OLD_VERSION}\"|:${NEW_VERSION}\"|g" \
+          # 5. Update sidecar plugin config test (anchored to the gateway image).
+          sed -i -E "s|(/gateway:)${OLD_RE}\"|\1${NEW_VERSION}\"|" \
             operator/cnpg-plugins/sidecar-injector/internal/config/config_test.go
 
           # NOTE: Workflow files (build_documentdb_images.yml,

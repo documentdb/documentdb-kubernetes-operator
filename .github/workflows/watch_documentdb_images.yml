@@ -51,6 +51,14 @@ permissions:
   pull-requests: write
   id-token: write
 
+# Single-flight per upstream version: the daily cron, a repository_dispatch, and
+# a manual workflow_dispatch can otherwise overlap for the same version and race
+# the promote step and the auto/documentdb-<version> PR branch. Do not cancel an
+# in-progress run (a half-finished promotion should be allowed to converge).
+concurrency:
+  group: documentdb-watch-${{ github.event.client_payload.version || github.event.inputs.version || 'auto' }}
+  cancel-in-progress: false
+
 env:
   UPSTREAM_REPO: documentdb/documentdb
 
@@ -75,16 +83,23 @@ jobs:
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Externally-controlled values are passed via env (never interpolated
+          # as ${{ }} into the run script) so a crafted payload/tag cannot break
+          # out of the shell quoting and inject commands. The repository_dispatch
+          # payload in particular comes from the upstream release publisher, a
+          # broader trust boundary than this repo's maintainers.
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_APT_VERSION: ${{ github.event.client_payload.apt_version }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_APT_VERSION: ${{ github.event.inputs.documentdb_apt_version }}
         run: |
           set -euo pipefail
           # Precedence: repository_dispatch payload > manual override > auto-detect latest.
-          PAYLOAD_VERSION="${{ github.event.client_payload.version || '' }}"
-          OVERRIDE="${{ github.event.inputs.version || '' }}"
-          if [[ -n "$PAYLOAD_VERSION" ]]; then
-            RAW="$PAYLOAD_VERSION"
+          if [[ -n "${PAYLOAD_VERSION:-}" ]]; then
+            RAW="${PAYLOAD_VERSION}"
             echo "Using repository_dispatch payload version: $RAW"
-          elif [[ -n "$OVERRIDE" ]]; then
-            RAW="$OVERRIDE"
+          elif [[ -n "${INPUT_VERSION:-}" ]]; then
+            RAW="${INPUT_VERSION}"
             echo "Using manual version override: $RAW"
           else
             RAW=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')
@@ -102,7 +117,7 @@ jobs:
             exit 1
           fi
           # Optional APT package version to pin (payload or manual input).
-          APT_VERSION="${{ github.event.client_payload.apt_version || github.event.inputs.documentdb_apt_version || '' }}"
+          APT_VERSION="${PAYLOAD_APT_VERSION:-${INPUT_APT_VERSION:-}}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "apt_version=$APT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Upstream DocumentDB version: $VERSION"
