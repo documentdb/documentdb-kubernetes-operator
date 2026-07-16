@@ -77,12 +77,8 @@ func (h *Handle) Close(ctx context.Context) error {
 // local port, and on a busy CI runner the gateway sidecar may not
 // have its mongo listener fully ready the instant the CR reports
 // healthy. This budget therefore covers both the local-bind window
-// and a short gateway-listener-ready window. PollInterval keeps the
-// happy path fast.
-const (
-	connectRetryTimeout = 60 * time.Second
-	connectRetryBackoff = 100 * time.Millisecond
-)
+// and a short gateway-listener-ready window.
+const connectRetryTimeout = 60 * time.Second
 
 // ConnectOption customises NewFromDocumentDB. Options are composable
 // and apply in the order supplied; later options overwrite earlier
@@ -193,10 +189,11 @@ func NewFromDocumentDB(
 		return nil, fmt.Errorf("mongo: connect: %w", err)
 	}
 
-	// pingWithRetry owns the post-port-forward connection-refused
-	// window. No pre-ping sleep is needed: the retry loop at
-	// connectRetryBackoff cadence covers the forwarder bind delay.
-	if err := pingWithRetry(ctx, c, connectRetryTimeout); err != nil {
+	// PingWithRetry owns the post-port-forward connection-refused
+	// window. Lives in test/shared/mongo so the long-haul driver can
+	// reuse the same retry semantics. No pre-ping sleep is needed: the
+	// retry loop covers the forwarder bind delay.
+	if err := sharedmongo.PingWithRetry(ctx, c, connectRetryTimeout); err != nil {
 		_ = c.Disconnect(ctx)
 		_ = stop()
 		return nil, fmt.Errorf("mongo: post-connect ping: %w", err)
@@ -233,7 +230,8 @@ func readCredentialSecret(
 // pickFreePort asks the kernel for an unused TCP port by binding ":0"
 // and immediately closing the listener. There is a narrow race window
 // between Close and the port-forward goroutine binding the same port;
-// pingWithRetry absorbs that window without a fixed pre-ping sleep.
+// sharedmongo.PingWithRetry absorbs that window without a fixed
+// pre-ping sleep.
 func pickFreePort() (int, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -241,31 +239,4 @@ func pickFreePort() (int, error) {
 	}
 	defer func() { _ = l.Close() }()
 	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// pingWithRetry polls Ping until it succeeds or timeout elapses. The
-// port-forward goroutine needs a moment to bind the local port, so the
-// first few pings may fail with "connection refused". Short backoff
-// (connectRetryBackoff) keeps the happy path fast while still covering
-// slow CI nodes via the overall timeout budget.
-func pingWithRetry(ctx context.Context, c *driver.Client, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	var last error
-	for {
-		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err := c.Ping(pingCtx, nil)
-		cancel()
-		if err == nil {
-			return nil
-		}
-		last = err
-		if time.Now().After(deadline) {
-			return fmt.Errorf("ping did not succeed within %s: %w", timeout, last)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(connectRetryBackoff):
-		}
-	}
 }

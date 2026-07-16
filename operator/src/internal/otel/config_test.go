@@ -38,9 +38,21 @@ var _ = Describe("base_config.yaml embed", func() {
 		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
 		Expect(cfg.Receivers).To(HaveKey("sqlquery"))
 		Expect(cfg.Receivers).To(HaveKey("otlp"))
+		Expect(cfg.Processors).To(HaveKey("memory_limiter"))
 		Expect(cfg.Processors).To(HaveKey("batch"))
 		// Static config should NOT have exporters or service (those are dynamic)
 		Expect(cfg.Exporters).To(BeEmpty())
+	})
+
+	It("declares a cgroup-aware memory_limiter processor", func() {
+		var cfg collectorConfig
+		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+
+		memLimiter, ok := cfg.Processors["memory_limiter"].(map[string]any)
+		Expect(ok).To(BeTrue(), "memory_limiter processor must be a map")
+		Expect(memLimiter["check_interval"]).To(Equal("1s"))
+		Expect(memLimiter["limit_percentage"]).To(Equal(80))
+		Expect(memLimiter["spike_limit_percentage"]).To(Equal(25))
 	})
 
 	It("declares an OTLP gRPC receiver on port 4317", func() {
@@ -71,6 +83,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 		// static.yaml should contain the embedded base config
 		staticCfg := parseCfg(data["static.yaml"])
 		Expect(staticCfg.Receivers).To(HaveKey("sqlquery"))
+		Expect(staticCfg.Processors).To(HaveKey("memory_limiter"))
 		Expect(staticCfg.Processors).To(HaveKey("batch"))
 	})
 
@@ -99,7 +112,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 
 		// Pipeline wiring references receivers from static config
 		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery", "otlp"))
-		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(ConsistOf("resource", "batch"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(Equal([]string{"memory_limiter", "resource", "batch"}))
 		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ConsistOf("prometheus"))
 	})
 

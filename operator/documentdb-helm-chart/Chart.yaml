@@ -9,5 +9,5 @@ kubeVersion: ">= 1.35.0-0"
 appVersion: "0.3.0"
 dependencies:
   - name: cloudnative-pg
-    version: "0.28.1"
+    version: "0.28.3"
     repository: "https://cloudnative-pg.github.io/charts/"

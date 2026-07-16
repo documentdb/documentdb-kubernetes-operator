@@ -1,0 +1,21 @@
+# Apply with: kubectl apply -k seccomp/
+#
+# Generates the curated IOUring seccomp profile ConfigMap and deploys the
+# installer DaemonSet that writes it to each node's kubelet seccomp dir.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kube-system
+
+configMapGenerator:
+  - name: documentdb-iouring-seccomp-profile
+    files:
+      - documentdb-iouring.json=documentdb-iouring.json
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: io-uring-feature
+
+resources:
+  - deploy-seccomp-daemonset.yaml

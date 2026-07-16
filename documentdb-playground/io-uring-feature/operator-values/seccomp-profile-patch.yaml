@@ -1,0 +1,15 @@
+# OPTIONAL strategic-merge patch for an ALREADY-INSTALLED operator that needs a
+# CUSTOM Localhost seccomp profile path. The operator already defaults to
+# profiles/documentdb-iouring.json, so this is only needed to override that path.
+# For fresh installs prefer the first-class Helm value:
+#   --set operator.ioUring.seccompProfile=profiles/documentdb-iouring.json
+# Apply with:
+#   kubectl patch deployment documentdb-operator -n documentdb-operator --type strategic --patch-file operator-values/seccomp-profile-patch.yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: documentdb-operator
+          env:
+            - name: DOCUMENTDB_IOURING_SECCOMP_PROFILE
+              value: profiles/documentdb-iouring.json

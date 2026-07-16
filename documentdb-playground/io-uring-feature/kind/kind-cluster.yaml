@@ -1,0 +1,25 @@
+# Run from documentdb-playground/io-uring-feature:
+#   kind create cluster --config kind/kind-cluster.yaml
+#
+# Mounts ./seccomp/documentdb-iouring.json into each kind node at the kubelet
+# Localhost seccomp profile path used by the operator default:
+#   /var/lib/kubelet/seccomp/profiles/documentdb-iouring.json
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+name: documentdb-iouring
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: ./seccomp
+        containerPath: /var/lib/kubelet/seccomp/profiles
+        readOnly: true
+  - role: worker
+    extraMounts:
+      - hostPath: ./seccomp
+        containerPath: /var/lib/kubelet/seccomp/profiles
+        readOnly: true
+  - role: worker
+    extraMounts:
+      - hostPath: ./seccomp
+        containerPath: /var/lib/kubelet/seccomp/profiles
+        readOnly: true

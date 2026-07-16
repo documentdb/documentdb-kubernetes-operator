@@ -196,6 +196,10 @@ var _ = Describe("ProtectedParameters", func() {
 		It("does not contain wal_level", func() {
 			Expect(result).NotTo(HaveKey("wal_level"))
 		})
+
+		It("does not contain io_method", func() {
+			Expect(result).NotTo(HaveKey("io_method"))
+		})
 	})
 
 	Context("with ChangeStreams enabled", func() {
@@ -214,6 +218,29 @@ var _ = Describe("ProtectedParameters", func() {
 
 		It("sets wal_level to logical", func() {
 			Expect(result["wal_level"]).To(Equal("logical"))
+		})
+
+		It("still contains other protected params", func() {
+			Expect(result["cron.database_name"]).To(Equal("postgres"))
+		})
+	})
+
+	Context("with IOUring enabled", func() {
+		var result map[string]string
+
+		BeforeEach(func() {
+			documentdb := &dbpreview.DocumentDB{
+				Spec: dbpreview.DocumentDBSpec{
+					FeatureGates: map[string]bool{
+						dbpreview.FeatureGateIOUring: true,
+					},
+				},
+			}
+			result = ProtectedParameters(documentdb)
+		})
+
+		It("sets io_method to io_uring", func() {
+			Expect(result["io_method"]).To(Equal("io_uring"))
 		})
 
 		It("still contains other protected params", func() {

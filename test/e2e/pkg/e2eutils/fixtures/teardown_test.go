@@ -13,16 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 func newFakeScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
-	s := runtime.NewScheme()
-	if err := corev1.AddToScheme(s); err != nil {
-		t.Fatalf("corev1: %v", err)
-	}
-	if err := previewv1.AddToScheme(s); err != nil {
-		t.Fatalf("preview: %v", err)
+	s, err := shareddb.NewScheme(corev1.AddToScheme)
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
 	}
 	return s
 }

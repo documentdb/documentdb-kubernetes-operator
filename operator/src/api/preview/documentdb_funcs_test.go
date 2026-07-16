@@ -19,6 +19,10 @@ var _ = Describe("IsFeatureGateEnabled", func() {
 		It("returns the default value (false) for ChangeStreams", func() {
 			Expect(IsFeatureGateEnabled(documentdb, FeatureGateChangeStreams)).To(BeFalse())
 		})
+
+		It("returns the default value (false) for IOUring", func() {
+			Expect(IsFeatureGateEnabled(documentdb, FeatureGateIOUring)).To(BeFalse())
+		})
 	})
 
 	Context("when featureGates is an empty map", func() {
@@ -28,6 +32,10 @@ var _ = Describe("IsFeatureGateEnabled", func() {
 
 		It("returns the default value (false) for ChangeStreams", func() {
 			Expect(IsFeatureGateEnabled(documentdb, FeatureGateChangeStreams)).To(BeFalse())
+		})
+
+		It("returns the default value (false) for IOUring", func() {
+			Expect(IsFeatureGateEnabled(documentdb, FeatureGateIOUring)).To(BeFalse())
 		})
 	})
 
@@ -52,6 +60,30 @@ var _ = Describe("IsFeatureGateEnabled", func() {
 
 		It("returns false", func() {
 			Expect(IsFeatureGateEnabled(documentdb, FeatureGateChangeStreams)).To(BeFalse())
+		})
+	})
+
+	Context("when IOUring is explicitly enabled", func() {
+		BeforeEach(func() {
+			documentdb.Spec.FeatureGates = map[string]bool{
+				FeatureGateIOUring: true,
+			}
+		})
+
+		It("returns true", func() {
+			Expect(IsFeatureGateEnabled(documentdb, FeatureGateIOUring)).To(BeTrue())
+		})
+	})
+
+	Context("when IOUring is explicitly disabled", func() {
+		BeforeEach(func() {
+			documentdb.Spec.FeatureGates = map[string]bool{
+				FeatureGateIOUring: false,
+			}
+		})
+
+		It("returns false", func() {
+			Expect(IsFeatureGateEnabled(documentdb, FeatureGateIOUring)).To(BeFalse())
 		})
 	})
 

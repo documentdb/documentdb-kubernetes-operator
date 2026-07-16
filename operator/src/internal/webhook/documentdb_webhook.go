@@ -12,16 +12,15 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -32,13 +31,12 @@ type DocumentDBValidator struct {
 	client.Client
 }
 
-var _ webhook.CustomValidator = &DocumentDBValidator{}
+var _ admission.Validator[*dbpreview.DocumentDB] = &DocumentDBValidator{}
 
 // SetupWebhookWithManager registers the validating webhook with the manager.
 func (v *DocumentDBValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&dbpreview.DocumentDB{}).
+	return ctrl.NewWebhookManagedBy(mgr, &dbpreview.DocumentDB{}).
 		WithValidator(v).
 		Complete()
 }
@@ -49,11 +47,7 @@ func (v *DocumentDBValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:webhook:path=/validate-documentdb-io-preview-documentdb,mutating=false,failurePolicy=fail,sideEffects=None,groups=documentdb.io,resources=dbs,verbs=create;update,versions=preview,name=vdocumentdb.kb.io,admissionReviewVersions=v1
 
 // ValidateCreate validates a DocumentDB resource on creation.
-func (v *DocumentDBValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	documentdb, ok := obj.(*dbpreview.DocumentDB)
-	if !ok {
-		return nil, fmt.Errorf("expected DocumentDB but got %T", obj)
-	}
+func (v *DocumentDBValidator) ValidateCreate(_ context.Context, documentdb *dbpreview.DocumentDB) (admission.Warnings, error) {
 	documentdbLog.Info("Validation for DocumentDB upon creation", "name", documentdb.Name, "namespace", documentdb.Namespace)
 
 	allErrs := v.validate(documentdb)
@@ -66,15 +60,7 @@ func (v *DocumentDBValidator) ValidateCreate(_ context.Context, obj runtime.Obje
 }
 
 // ValidateUpdate validates a DocumentDB resource on update.
-func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	newDB, ok := newObj.(*dbpreview.DocumentDB)
-	if !ok {
-		return nil, fmt.Errorf("expected DocumentDB but got %T", newObj)
-	}
-	oldDB, ok := oldObj.(*dbpreview.DocumentDB)
-	if !ok {
-		return nil, fmt.Errorf("expected DocumentDB but got %T", oldObj)
-	}
+func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldDB, newDB *dbpreview.DocumentDB) (admission.Warnings, error) {
 	documentdbLog.Info("Validation for DocumentDB upon update", "name", newDB.Name, "namespace", newDB.Namespace)
 
 	allErrs := append(
@@ -90,7 +76,7 @@ func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldObj, newObj r
 }
 
 // ValidateDelete is a no-op for DocumentDB.
-func (v *DocumentDBValidator) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (v *DocumentDBValidator) ValidateDelete(_ context.Context, _ *dbpreview.DocumentDB) (admission.Warnings, error) {
 	return nil, nil
 }
 
@@ -103,12 +89,21 @@ func (v *DocumentDBValidator) validate(db *dbpreview.DocumentDB) (allErrs field.
 	type validationFunc func(*dbpreview.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateSchemaVersionNotExceedsBinary,
+		v.validateResources,
 		// Add new spec-level validations here.
 	}
 	for _, fn := range validations {
 		allErrs = append(allErrs, fn(db)...)
 	}
 	return allErrs
+}
+
+// validateResources ensures spec.resource is consistent under the
+// envelope-optional model: the pod memory/cpu envelope may be omitted only when
+// the gateway and database both specify that dimension, and an explicit envelope
+// must leave room for PostgreSQL after the sidecar reservations.
+func (v *DocumentDBValidator) validateResources(db *dbpreview.DocumentDB) field.ErrorList {
+	return cnpg.ValidateResources(db, cnpg.DefaultSplitConfig())
 }
 
 // validateSchemaVersionNotExceedsBinary ensures spec.schemaVersion <= binary version.

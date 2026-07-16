@@ -22,6 +22,8 @@ import (
 )
 
 func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+	split := ComputeResourceSplit(documentdb, DefaultSplitConfig())
+
 	sidecarPluginName := pluginsSidecarInjectorName(documentdb)
 	if sidecarPluginName == "" {
 		sidecarPluginName = util.DEFAULT_SIDECAR_INJECTOR_PLUGIN
@@ -85,6 +87,10 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					if pullPolicy := os.Getenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV); pullPolicy != "" {
 						params["gatewayImagePullPolicy"] = pullPolicy
 					}
+					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST, split.Gateway.MemoryRequest)
+					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT, split.Gateway.MemoryLimit)
+					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST, split.Gateway.CPURequest)
+					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT, split.Gateway.CPULimit)
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
 					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
 						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
@@ -92,9 +98,13 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					// Pass monitoring parameters to plugin for OTel sidecar injection.
 					// Sidecar is only injected when monitoring is enabled.
 					// Config hash triggers operator-initiated rolling restart on config changes.
-					if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+					if split.MonitoringEnabled {
 						params["otelCollectorImage"] = util.DEFAULT_OTEL_COLLECTOR_IMAGE
 						params["otelConfigMapName"] = otelcfg.ConfigMapName(documentdb.Name)
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST, split.OTel.MemoryRequest)
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT, split.OTel.MemoryLimit)
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_CPU_REQUEST, split.OTel.CPURequest)
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_CPU_LIMIT, split.OTel.CPULimit)
 						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {
 							params["prometheusPort"] = fmt.Sprintf("%d", promPort)
 						}
@@ -113,7 +123,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 						Parameters: params,
 					}}
 				}(),
-				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource),
+				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource, split.PostgresMemoryBytes),
 				Bootstrap:             getBootstrapConfiguration(documentdb, isPrimaryRegion, log),
 				LogLevel:              cmp.Or(documentdb.Spec.LogLevel, "info"),
 				Backup: &cnpgv1.BackupConfiguration{
@@ -123,13 +133,20 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					Target: cnpgv1.BackupTarget("primary"),
 				},
 				Affinity:  documentdb.Spec.Affinity,
-				Resources: buildResourceRequirements(documentdb),
+				Resources: buildResourceRequirements(split.Postgres),
 			}
 			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
 			applyPostgresProcessIdentity(&spec, documentdb)
+			applyIOUringSeccomp(&spec, documentdb)
 
 			return spec
 		}(),
+	}
+}
+
+func addPluginParamIfSet(params map[string]string, key, value string) {
+	if value != "" {
+		params[key] = value
 	}
 }
 
@@ -218,38 +235,46 @@ func parseMemoryToBytes(memoryStr string) int64 {
 	return qty.Value()
 }
 
-// buildResourceRequirements constructs corev1.ResourceRequirements from the
-// DocumentDB Resource spec. Uses Guaranteed QoS (requests == limits) as
-// recommended by CNPG. Returns empty requirements if neither Memory nor CPU is set.
-func buildResourceRequirements(documentdb *dbpreview.DocumentDB) corev1.ResourceRequirements {
+// buildResourceRequirements constructs corev1.ResourceRequirements from a
+// resolved component resource split. Returns empty requirements if nothing is set.
+func buildResourceRequirements(component ComponentResource) corev1.ResourceRequirements {
 	reqs := corev1.ResourceRequirements{}
-	mem := documentdb.Spec.Resource.Memory
-	cpu := documentdb.Spec.Resource.CPU
 
-	if (mem == "" || mem == "0") && (cpu == "" || cpu == "0") {
-		return reqs
+	requests := corev1.ResourceList{}
+	if quantity, ok := parseResourceQuantity(component.MemoryRequest); ok {
+		requests[corev1.ResourceMemory] = quantity
+	}
+	if quantity, ok := parseResourceQuantity(component.CPURequest); ok {
+		requests[corev1.ResourceCPU] = quantity
 	}
 
 	limits := corev1.ResourceList{}
-	if mem != "" && mem != "0" {
-		if quantity, err := resource.ParseQuantity(mem); err == nil {
-			limits[corev1.ResourceMemory] = quantity
-		}
+	if quantity, ok := parseResourceQuantity(component.MemoryLimit); ok {
+		limits[corev1.ResourceMemory] = quantity
 	}
-	if cpu != "" && cpu != "0" {
-		if quantity, err := resource.ParseQuantity(cpu); err == nil {
-			limits[corev1.ResourceCPU] = quantity
-		}
+	if quantity, ok := parseResourceQuantity(component.CPULimit); ok {
+		limits[corev1.ResourceCPU] = quantity
 	}
 
-	if len(limits) == 0 {
-		return reqs
+	if len(requests) > 0 {
+		reqs.Requests = requests
+	}
+	if len(limits) > 0 {
+		reqs.Limits = limits
 	}
 
-	// Guaranteed QoS: requests == limits
-	reqs.Limits = limits
-	reqs.Requests = limits.DeepCopy()
 	return reqs
+}
+
+func parseResourceQuantity(value string) (resource.Quantity, bool) {
+	if value == "" || value == "0" {
+		return resource.Quantity{}, false
+	}
+	quantity, err := resource.ParseQuantity(value)
+	if err != nil {
+		return resource.Quantity{}, false
+	}
+	return quantity, true
 }
 
 // parsePullPolicy converts a string to a corev1.PullPolicy.
@@ -324,6 +349,29 @@ func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbprevie
 	}
 }
 
+// applyIOUringSeccomp relaxes the postgres container seccomp profile when the
+// IOUring feature gate is enabled. CNPG runs the postgres pods with
+// seccompProfile=RuntimeDefault, but the container runtime strips the
+// io_uring_{setup,enter,register} syscalls from that profile, so io_method=io_uring
+// would otherwise crash with "could not setup io_uring queue: Operation not permitted".
+//
+// The operator references a Localhost seccomp profile that re-allows only the three
+// io_uring syscalls. The profile path is operator-level configuration (the same
+// decision applies to every DocumentDB on the cluster) and must be installed on every
+// node that runs postgres pods (see the io-uring feature playground).
+//
+// No-op when the gate is disabled, so CNPG keeps its RuntimeDefault.
+func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
+	if !dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+		return
+	}
+	profile := cmp.Or(os.Getenv(util.IOURING_SECCOMP_PROFILE_ENV), util.DEFAULT_IOURING_SECCOMP_PROFILE)
+	spec.SeccompProfile = &corev1.SeccompProfile{
+		Type:             corev1.SeccompProfileTypeLocalhost,
+		LocalhostProfile: pointer.String(profile),
+	}
+}
+
 // buildPostgresConfiguration returns the cnpgv1.PostgresConfiguration block
 // for the cluster.
 //
@@ -331,7 +379,7 @@ func applyPostgresProcessIdentity(spec *cnpgv1.ClusterSpec, documentdb *dbprevie
 // stanza (mounted from spec.image.documentDB as an ImageVolumeSource),
 // sets a fixed AdditionalLibraries list, and applies a small set of
 // operator-managed GUCs.
-func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource) cnpgv1.PostgresConfiguration {
+func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource, pgMemoryBytes int64) cnpgv1.PostgresConfiguration {
 	pgHBA := []string{
 		"host all all 0.0.0.0/0 trust",
 		"host all all ::0/0 trust",
@@ -349,7 +397,7 @@ func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImage
 			},
 		},
 		AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-		Parameters:          MergeParameters(documentdb, parseMemoryToBytes(documentdb.Spec.Resource.Memory)),
+		Parameters:          MergeParameters(documentdb, pgMemoryBytes),
 		PgHBA:               pgHBA,
 	}
 }

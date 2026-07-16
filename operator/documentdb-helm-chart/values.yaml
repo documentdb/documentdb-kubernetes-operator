@@ -78,6 +78,19 @@ certManager:
 # Defaults are conservative and aim to be compatible with Pod Security Admission's
 # `restricted` profile. Override any field per component as needed.
 operator:
+  # Sidecar resource isolation defaults. spec.resource.memory on a DocumentDB
+  # cluster is the total pod memory envelope; the operator reserves memory for
+  # the gateway sidecar (gatewayMemoryFraction of the envelope, capped at
+  # gatewayMemoryCap) and, when monitoring is enabled, the OTel collector
+  # (otelMemoryLimit), then gives PostgreSQL the remainder.
+  sidecarResources:
+    gatewayMemoryFraction: "0.1875"
+    gatewayMemoryCap: "32Gi"
+    gatewayCpuLimit: ""        # optional; bounds gateway async worker threads
+    otelMemoryRequest: "48Mi"
+    otelMemoryLimit: "128Mi"
+    otelCpuRequest: "50m"
+    otelCpuLimit: "200m"       # bounds the collector's CPU burst (ceiling)
   # Requests-only by convention: scheduler reserves capacity for the
   # operator, but no memory ceiling so a single operator can manage
   # fleets of any size without OOMKill. Set limits explicitly if your
@@ -107,6 +120,18 @@ operator:
   affinity: {}
   topologySpreadConstraints: []
   priorityClassName: ""
+  # io_uring (PostgreSQL 18 asynchronous I/O) opt-in support. Enabling the
+  # IOUring feature gate on a DocumentDB resource makes the operator relax the
+  # postgres container seccomp profile so the io_uring syscalls are allowed.
+  # This operator-level setting controls the Localhost seccomp profile used for
+  # every DocumentDB managed by this operator. Leave empty to use the operator's
+  # built-in default (profiles/documentdb-iouring.json).
+  # See docs/operator-public-documentation/io-uring.md.
+  ioUring:
+    # seccompProfile: Localhost profile path relative to /var/lib/kubelet/seccomp.
+    # The profile must be installed on every node that runs postgres pods.
+    # Empty string keeps the operator default (profiles/documentdb-iouring.json).
+    seccompProfile: ""
 
 sidecarInjector:
   # See operator.resources comment — requests-only by convention.

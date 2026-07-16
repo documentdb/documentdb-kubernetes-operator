@@ -27,6 +27,10 @@ receivers:
         endpoint: 127.0.0.1:4317
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
   batch:
     send_batch_size: 1024
     timeout: "5s"

@@ -39,7 +39,7 @@ cd documentdb-kubernetes-operator
    Reopen in Container” command from the command palette.
 3. VS Code builds the container defined in
    `.devcontainer/devcontainer.json` using the
-   `mcr.microsoft.com/devcontainers/go:2-1.25-bookworm` base image. The build
+   `mcr.microsoft.com/devcontainers/go:2-1.26-bookworm` base image. The build
    installs the following features:
    - Docker-in-Docker runtime for building and running images
    - kind + kubectl/helm/kubectx/kubens/stern for Kubernetes workflows
@@ -92,7 +92,7 @@ the Linux instructions inside WSL2.
 
 | Component | Minimum version | Notes |
 | --------- | --------------- | ----- |
-| Go | 1.25.0 | Matches `go.mod`. Install via package manager or [go.dev](https://go.dev/dl) |
+| Go | 1.26.0 | Matches `go.mod`. Install via package manager or [go.dev](https://go.dev/dl) |
 | Docker Engine | 24.x | Needed for image builds and kind |
 | kind | 0.31+ | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/) |
 | kubectl | 1.30+ | Align with the Kubernetes version you test against |
@@ -106,7 +106,7 @@ the Linux instructions inside WSL2.
 ```bash
 sudo apt-get update
 sudo apt-get install -y build-essential curl git jq make tar gzip
-sudo snap install go --channel=1.25/stable
+sudo snap install go --channel=1.26/stable
 curl -Lo kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64 && chmod +x kind && sudo mv kind /usr/local/bin/
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -117,7 +117,7 @@ curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/insta
 
 ```bash
 brew update
-brew install go@1.25 docker kind kubectl helm jq make coreutils findutils
+brew install go@1.26 docker kind kubectl helm jq make coreutils findutils
 brew install golangci-lint
 ```
 
