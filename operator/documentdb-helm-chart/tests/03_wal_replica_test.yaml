@@ -95,7 +95,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:0.2.0"
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/wal-replica:0.3.0"
 
   - it: should use a custom wal-replica image tag when set
     set:
