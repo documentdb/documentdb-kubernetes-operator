@@ -140,12 +140,56 @@ func TestFromParameters(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("resource parameters from parameters", func(t *testing.T) {
+		helper := &common.Plugin{Parameters: map[string]string{
+			"gatewayMemoryRequest": "768Mi",
+			"gatewayMemoryLimit":   "3Gi",
+			"gatewayCpuRequest":    "500m",
+			"gatewayCpuLimit":      "2",
+			"otelMemoryRequest":    "64Mi",
+			"otelMemoryLimit":      "128Mi",
+			"otelCpuRequest":       "100m",
+		}}
+		config, errs := FromParameters(helper)
+		if len(errs) != 0 {
+			t.Fatalf("unexpected validation errors: %v", errs)
+		}
+		if config.GatewayMemoryRequest != "768Mi" {
+			t.Errorf("GatewayMemoryRequest = %q, want 768Mi", config.GatewayMemoryRequest)
+		}
+		if config.GatewayMemoryLimit != "3Gi" {
+			t.Errorf("GatewayMemoryLimit = %q, want 3Gi", config.GatewayMemoryLimit)
+		}
+		if config.GatewayCPURequest != "500m" {
+			t.Errorf("GatewayCPURequest = %q, want 500m", config.GatewayCPURequest)
+		}
+		if config.GatewayCPULimit != "2" {
+			t.Errorf("GatewayCPULimit = %q, want 2", config.GatewayCPULimit)
+		}
+		if config.OTelMemoryRequest != "64Mi" {
+			t.Errorf("OTelMemoryRequest = %q, want 64Mi", config.OTelMemoryRequest)
+		}
+		if config.OTelMemoryLimit != "128Mi" {
+			t.Errorf("OTelMemoryLimit = %q, want 128Mi", config.OTelMemoryLimit)
+		}
+		if config.OTelCPURequest != "100m" {
+			t.Errorf("OTelCPURequest = %q, want 100m", config.OTelCPURequest)
+		}
+	})
 }
 
 func TestToParametersRoundTrip(t *testing.T) {
 	original := &Configuration{
 		GatewayImage:           "my-image:latest",
 		GatewayImagePullPolicy: corev1.PullNever,
+		GatewayMemoryRequest:   "768Mi",
+		GatewayMemoryLimit:     "3Gi",
+		GatewayCPURequest:      "500m",
+		GatewayCPULimit:        "2",
+		OTelMemoryRequest:      "64Mi",
+		OTelMemoryLimit:        "128Mi",
+		OTelCPURequest:         "100m",
 	}
 	original.applyDefaults()
 
@@ -164,5 +208,26 @@ func TestToParametersRoundTrip(t *testing.T) {
 	}
 	if restored.GatewayImage != original.GatewayImage {
 		t.Errorf("round-trip gateway image = %q, want %q", restored.GatewayImage, original.GatewayImage)
+	}
+	if restored.GatewayMemoryRequest != original.GatewayMemoryRequest {
+		t.Errorf("round-trip gateway memory request = %q, want %q", restored.GatewayMemoryRequest, original.GatewayMemoryRequest)
+	}
+	if restored.GatewayMemoryLimit != original.GatewayMemoryLimit {
+		t.Errorf("round-trip gateway memory limit = %q, want %q", restored.GatewayMemoryLimit, original.GatewayMemoryLimit)
+	}
+	if restored.GatewayCPURequest != original.GatewayCPURequest {
+		t.Errorf("round-trip gateway cpu request = %q, want %q", restored.GatewayCPURequest, original.GatewayCPURequest)
+	}
+	if restored.GatewayCPULimit != original.GatewayCPULimit {
+		t.Errorf("round-trip gateway cpu limit = %q, want %q", restored.GatewayCPULimit, original.GatewayCPULimit)
+	}
+	if restored.OTelMemoryRequest != original.OTelMemoryRequest {
+		t.Errorf("round-trip otel memory request = %q, want %q", restored.OTelMemoryRequest, original.OTelMemoryRequest)
+	}
+	if restored.OTelMemoryLimit != original.OTelMemoryLimit {
+		t.Errorf("round-trip otel memory limit = %q, want %q", restored.OTelMemoryLimit, original.OTelMemoryLimit)
+	}
+	if restored.OTelCPURequest != original.OTelCPURequest {
+		t.Errorf("round-trip otel cpu request = %q, want %q", restored.OTelCPURequest, original.OTelCPURequest)
 	}
 }

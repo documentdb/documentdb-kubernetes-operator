@@ -9,7 +9,7 @@
 #
 #   docker build -f test/longhaul/Dockerfile -t <registry>/longhaul-test:latest .
 #
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Note: the golang:*-alpine image already ships ca-certificates, and all
 # deps in go.mod resolve via proxy.golang.org (no VCS fetches), so neither

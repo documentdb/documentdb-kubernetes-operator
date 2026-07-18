@@ -1,0 +1,132 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: LONGHAUL - Build Test Driver Image
+
+# Builds the long-haul test driver image (test/longhaul/Dockerfile) and pushes
+# it to GHCR at:
+#   ghcr.io/<owner>/documentdb-kubernetes-operator/longhaul-test:<tag>
+#
+# Auth: built-in GITHUB_TOKEN (no extra secrets needed). Same pattern as the
+# operator/sidecar and database image build workflows in this repo.
+#
+# Tags pushed every run:
+#   :sha-<short>   immutable, deployable
+#   :main          rolling pointer to the latest main build (convenience only;
+#                  pin to :sha-<short> for actual deployments)
+#
+# This workflow does NOT deploy. Long-haul deploy is a separate workflow
+# (workflow_dispatch) that uses these tags.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'test/longhaul/**'
+      - '.github/workflows/longhaul-image-build.yml'
+
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: 'Optional additional tag (e.g. dev-myfeature). Leave blank for none.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write   # push to GHCR
+
+env:
+  IMAGE_NAME: longhaul-test
+  # Build context MUST be the repo root, not test/longhaul/, because
+  # test/longhaul/go.mod has `replace` directives pointing to
+  # ../shared and ../../operator/src (see Dockerfile header at line 5-8).
+  CONTEXT: .
+  DOCKERFILE: test/longhaul/Dockerfile
+
+concurrency:
+  group: longhaul-image-build
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    name: Build and push longhaul image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image refs
+        id: refs
+        env:
+          # Pass the dispatch input through the environment instead of
+          # interpolating it directly into the script, so a crafted value
+          # (e.g. `$(...)` or a quote breakout) can't execute as a command
+          # on this packages:write runner.
+          EXTRA_TAG: ${{ github.event.inputs.extra_tag }}
+        run: |
+          set -euo pipefail
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          REPO_NAME="$(basename "${{ github.repository }}")"
+          IMG="ghcr.io/${OWNER_LC}/${REPO_NAME}/${IMAGE_NAME}"
+          SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+
+          TAGS="${IMG}:sha-${SHORT_SHA},${IMG}:main"
+          if [ -n "$EXTRA_TAG" ]; then
+            # Docker tags allow [A-Za-z0-9._-] (max 128 chars) and must not
+            # start with . or -. Reject anything else — both to avoid a
+            # malformed ref and to defend in depth against injection.
+            case "$EXTRA_TAG" in
+              [.-]* | *[!A-Za-z0-9._-]*)
+                echo "::error::invalid extra_tag '$EXTRA_TAG' (allowed: A-Za-z0-9._-, not starting with . or -)"
+                exit 1
+                ;;
+            esac
+            TAGS="${TAGS},${IMG}:${EXTRA_TAG}"
+          fi
+
+          {
+            echo "image=${IMG}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "tags=${TAGS}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Will push: ${TAGS}"
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ${{ env.DOCKERFILE }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.refs.outputs.tags }}
+          provenance: false
+          # GHA cache instead of a :buildcache image tag — keeps GHCR clean
+          # and is automatically GC'd by GitHub.
+          cache-from: type=gha,scope=longhaul-test
+          cache-to: type=gha,scope=longhaul-test,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+
+      - name: Summary
+        run: |
+          {
+            echo "## Long-haul image pushed"
+            echo ""
+            echo "| Tag | Reference |"
+            echo "|-----|-----------|"
+            echo "| Immutable | \`${{ steps.refs.outputs.image }}:sha-${{ steps.refs.outputs.short_sha }}\` |"
+            echo "| Rolling   | \`${{ steps.refs.outputs.image }}:main\` |"
+            echo ""
+            echo "Deploy by setting the driver Deployment image to the immutable tag."
+          } >> "$GITHUB_STEP_SUMMARY"

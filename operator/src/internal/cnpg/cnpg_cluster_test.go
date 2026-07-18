@@ -194,6 +194,15 @@ var _ = Describe("getDefaultBootstrapConfiguration", func() {
 var _ = Describe("GetCnpgClusterSpec", func() {
 	var log = zap.New(zap.WriteTo(GinkgoWriter))
 
+	setProdSplitEnv := func() {
+		GinkgoT().Setenv(util.GATEWAY_MEMORY_FRACTION_ENV, "0.1875")
+		GinkgoT().Setenv(util.GATEWAY_MEMORY_CAP_ENV, "32Gi")
+		GinkgoT().Setenv(util.GATEWAY_CPU_LIMIT_ENV, "")
+		GinkgoT().Setenv(util.OTEL_MEMORY_REQUEST_ENV, "48Mi")
+		GinkgoT().Setenv(util.OTEL_MEMORY_LIMIT_ENV, "128Mi")
+		GinkgoT().Setenv(util.OTEL_CPU_REQUEST_ENV, "50m")
+	}
+
 	It("creates a CNPG cluster spec with default bootstrap", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
@@ -604,6 +613,70 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(params).To(HaveKeyWithValue("max_wal_senders", "10"))
 	})
 
+	It("uses carved postgres resources and gateway plugin params when monitoring is disabled", func() {
+		setProdSplitEnv()
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+					Memory: "16Gi",
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+		expectedPostgresMemory := resource.MustParse("13Gi")
+		Expect(cluster.Spec.Resources.Limits[corev1.ResourceMemory]).To(Equal(expectedPostgresMemory))
+		Expect(cluster.Spec.Resources.Requests[corev1.ResourceMemory]).To(Equal(expectedPostgresMemory))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST, "3Gi"))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT, "3Gi"))
+		Expect(cluster.Spec.Plugins[0].Parameters).NotTo(HaveKey(util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST))
+		Expect(cluster.Spec.Plugins[0].Parameters).NotTo(HaveKey(util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT))
+		Expect(cluster.Spec.PostgresConfiguration.Parameters).To(HaveKeyWithValue("shared_buffers", "3328MB"))
+	})
+
+	It("passes OTel resource plugin params and carves OTel memory when monitoring is enabled", func() {
+		setProdSplitEnv()
+		req := ctrl.Request{}
+		req.Name = "test-cluster"
+		req.Namespace = "default"
+
+		documentdb := &dbpreview.DocumentDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+			},
+			Spec: dbpreview.DocumentDBSpec{
+				InstancesPerNode: 1,
+				Resource: dbpreview.Resource{
+					Storage: dbpreview.StorageConfiguration{
+						PvcSize: "10Gi",
+					},
+					Memory: "16Gi",
+				},
+				Monitoring: &dbpreview.MonitoringSpec{
+					Enabled: true,
+				},
+			},
+		}
+
+		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
+		expectedPostgresMemory := resource.MustParse("13184Mi")
+		Expect(cluster.Spec.Resources.Limits[corev1.ResourceMemory]).To(Equal(expectedPostgresMemory))
+		Expect(cluster.Spec.Resources.Requests[corev1.ResourceMemory]).To(Equal(expectedPostgresMemory))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT, "3Gi"))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST, "48Mi"))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT, "128Mi"))
+		Expect(cluster.Spec.Plugins[0].Parameters).To(HaveKeyWithValue(util.PLUGIN_PARAM_OTEL_CPU_REQUEST, "50m"))
+	})
+
 	It("passes monitoring parameters to plugin when monitoring is enabled", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
@@ -954,123 +1027,101 @@ var _ = Describe("parseMemoryToBytes", func() {
 
 var _ = Describe("buildResourceRequirements", func() {
 	It("returns empty requirements when both memory and cpu are empty", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{})
 		Expect(result.Limits).To(BeNil())
 		Expect(result.Requests).To(BeNil())
 	})
 
 	It("returns empty requirements when both memory and cpu are '0'", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "0",
-					CPU:     "0",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "0",
+			MemoryLimit:   "0",
+			CPURequest:    "0",
+			CPULimit:      "0",
+		})
 		Expect(result.Limits).To(BeNil())
 		Expect(result.Requests).To(BeNil())
 	})
 
 	It("sets memory limits and requests with Guaranteed QoS", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "4Gi",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "4Gi",
+			MemoryLimit:   "4Gi",
+		})
 		expectedMem := resource.MustParse("4Gi")
 		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(expectedMem))
 		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(expectedMem))
 	})
 
 	It("sets cpu limits and requests with Guaranteed QoS", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					CPU:     "2",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			CPURequest: "2",
+			CPULimit:   "2",
+		})
 		expectedCPU := resource.MustParse("2")
 		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(expectedCPU))
 		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(expectedCPU))
 	})
 
 	It("sets both memory and cpu", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "8Gi",
-					CPU:     "4",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "8Gi",
+			MemoryLimit:   "8Gi",
+			CPURequest:    "4",
+			CPULimit:      "4",
+		})
 		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
 		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
 		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
 		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("4")))
 	})
 
-	It("ignores invalid memory values gracefully", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "notvalid",
-					CPU:     "2",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
-		_, hasMem := result.Limits[corev1.ResourceMemory]
-		Expect(hasMem).To(BeFalse())
+	It("sets requests and limits independently", func() {
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "6Gi",
+			MemoryLimit:   "8Gi",
+			CPURequest:    "1500m",
+			CPULimit:      "2",
+		})
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("6Gi")))
+		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("8Gi")))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("1500m")))
 		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
 	})
 
+	It("ignores invalid memory values gracefully", func() {
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "notvalid",
+			MemoryLimit:   "notvalid",
+			CPURequest:    "2",
+			CPULimit:      "2",
+		})
+		_, hasMem := result.Limits[corev1.ResourceMemory]
+		Expect(hasMem).To(BeFalse())
+		Expect(result.Limits[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+		Expect(result.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("2")))
+	})
+
 	It("ignores invalid cpu values gracefully", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "4Gi",
-					CPU:     "notvalid",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "4Gi",
+			MemoryLimit:   "4Gi",
+			CPURequest:    "notvalid",
+			CPULimit:      "notvalid",
+		})
 		_, hasCPU := result.Limits[corev1.ResourceCPU]
 		Expect(hasCPU).To(BeFalse())
 		Expect(result.Limits[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
+		Expect(result.Requests[corev1.ResourceMemory]).To(Equal(resource.MustParse("4Gi")))
 	})
 
 	It("returns empty requirements when all values are invalid", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
-					Memory:  "notvalid",
-					CPU:     "alsonotvalid",
-				},
-			},
-		}
-		result := buildResourceRequirements(documentdb)
+		result := buildResourceRequirements(ComponentResource{
+			MemoryRequest: "notvalid",
+			MemoryLimit:   "notvalid",
+			CPURequest:    "alsonotvalid",
+			CPULimit:      "alsonotvalid",
+		})
 		Expect(result.Limits).To(BeNil())
 		Expect(result.Requests).To(BeNil())
 	})

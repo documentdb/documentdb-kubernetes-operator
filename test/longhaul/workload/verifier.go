@@ -115,55 +115,80 @@ type auditResult struct {
 	findings       []finding
 }
 
-// auditDocs is the pure decision core of verifyWriter. Given the docs the
-// verifier read (sorted by seq ascending) plus the writer's expected starting
-// seq and current tip, it returns the new expected seq, the gap/checksum/tail
-// counters, and a list of findings for the caller to log.
+// auditor is the incremental decision core of verifyWriter. Feed it the docs
+// for a writer in ascending seq order via step(); it accumulates gap/checksum
+// counters and findings while holding only the running expectedSeq — never the
+// docs themselves. finish(maxSeq) applies trailing tail-loss detection and
+// returns the aggregate. Keeping state O(1) (not O(docs)) is what lets the
+// production scan stream a cursor instead of buffering a whole cycle's window,
+// which after a disruption pause can be tens of thousands of docs.
 //
 // Invariants checked:
 //   - For each doc, if doc.Seq > expectedSeq, the slots in [expectedSeq, doc.Seq)
 //     are missing (internal gap).
 //   - For each doc, checksum is recomputed and compared.
-//   - After processing all docs, if expectedSeq <= maxSeq the trailing slots
+//   - After all docs, if expectedSeq <= maxSeq the trailing slots
 //     [expectedSeq, maxSeq] are missing (tail loss).
-//   - On exit, newExpectedSeq is always maxSeq+1 when maxSeq >= initial
+//   - On finish, newExpectedSeq is always maxSeq+1 when maxSeq >= initial
 //     expectedSeq, so the next cycle accounts for everything past maxSeq.
-func auditDocs(writerID string, docs []WriteDocument, expectedSeq, maxSeq int64) auditResult {
-	var r auditResult
-	for _, doc := range docs {
-		if doc.Seq > expectedSeq {
-			gaps := doc.Seq - expectedSeq
-			r.internalGaps += gaps
-			r.findings = append(r.findings, finding{
-				kind: findingGap, writerID: writerID,
-				seq: expectedSeq, endSeq: doc.Seq, count: gaps,
-			})
-		}
-		expectedSeq = doc.Seq + 1
+type auditor struct {
+	writerID    string
+	expectedSeq int64
+	r           auditResult
+}
 
-		want := computeChecksum(doc.WriterID, doc.Seq, doc.Payload)
-		if doc.Checksum != want {
-			r.checksumErrors++
-			r.findings = append(r.findings, finding{
-				kind: findingChecksum, writerID: writerID,
-				seq: doc.Seq, count: 1,
-				stored: doc.Checksum, computed: want,
-			})
-		}
-	}
+func newAuditor(writerID string, expectedSeq int64) *auditor {
+	return &auditor{writerID: writerID, expectedSeq: expectedSeq}
+}
 
-	if expectedSeq <= maxSeq {
-		tail := maxSeq - expectedSeq + 1
-		r.tailLoss = tail
-		r.findings = append(r.findings, finding{
-			kind: findingTail, writerID: writerID,
-			seq: expectedSeq, endSeq: maxSeq, count: tail,
+// step folds a single doc into the running audit state.
+func (a *auditor) step(doc WriteDocument) {
+	if doc.Seq > a.expectedSeq {
+		gaps := doc.Seq - a.expectedSeq
+		a.r.internalGaps += gaps
+		a.r.findings = append(a.r.findings, finding{
+			kind: findingGap, writerID: a.writerID,
+			seq: a.expectedSeq, endSeq: doc.Seq, count: gaps,
 		})
-		expectedSeq = maxSeq + 1
 	}
+	a.expectedSeq = doc.Seq + 1
 
-	r.newExpectedSeq = expectedSeq
-	return r
+	want := computeChecksum(doc.WriterID, doc.Seq, doc.Payload)
+	if doc.Checksum != want {
+		a.r.checksumErrors++
+		a.r.findings = append(a.r.findings, finding{
+			kind: findingChecksum, writerID: a.writerID,
+			seq: doc.Seq, count: 1,
+			stored: doc.Checksum, computed: want,
+		})
+	}
+}
+
+// finish applies tail-loss detection for [expectedSeq, maxSeq] and returns the
+// aggregate result.
+func (a *auditor) finish(maxSeq int64) auditResult {
+	if a.expectedSeq <= maxSeq {
+		tail := maxSeq - a.expectedSeq + 1
+		a.r.tailLoss = tail
+		a.r.findings = append(a.r.findings, finding{
+			kind: findingTail, writerID: a.writerID,
+			seq: a.expectedSeq, endSeq: maxSeq, count: tail,
+		})
+		a.expectedSeq = maxSeq + 1
+	}
+	a.r.newExpectedSeq = a.expectedSeq
+	return a.r
+}
+
+// auditDocs is the pure, table-testable entry point: it replays a slice of docs
+// through an auditor. Production code uses the streaming path in scanWriter,
+// which feeds cursor-decoded docs to an auditor one at a time.
+func auditDocs(writerID string, docs []WriteDocument, expectedSeq, maxSeq int64) auditResult {
+	a := newAuditor(writerID, expectedSeq)
+	for _, doc := range docs {
+		a.step(doc)
+	}
+	return a.finish(maxSeq)
 }
 
 func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
@@ -185,13 +210,12 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 		return
 	}
 
-	docs, err := v.fetchDocs(ctx, writerID, expectedSeq, maxSeq)
+	r, err := v.scanWriter(ctx, writerID, expectedSeq, maxSeq)
 	if err != nil {
 		v.journal.Warn("verifier", fmt.Sprintf("query failed for writer %s: %v", writerID, err))
 		return
 	}
 
-	r := auditDocs(writerID, docs, expectedSeq, maxSeq)
 	v.metrics.VerifyGapsDetected.Add(r.internalGaps + r.tailLoss)
 	v.metrics.ChecksumErrors.Add(r.checksumErrors)
 	for _, f := range r.findings {
@@ -201,10 +225,12 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	v.nextSeq[writerID] = r.newExpectedSeq
 }
 
-// fetchDocs reads all docs for writerID with seq in [expectedSeq, maxSeq],
-// sorted by seq ascending. Decode errors are logged but skipped (the rest of
-// the scan continues; a skipped doc looks like a gap to auditDocs).
-func (v *Verifier) fetchDocs(ctx context.Context, writerID string, expectedSeq, maxSeq int64) ([]WriteDocument, error) {
+// scanWriter streams all docs for writerID with seq in [expectedSeq, maxSeq]
+// (sorted by seq ascending) through an auditor, holding only one decoded doc at
+// a time. This keeps verify memory O(1) per cycle regardless of how many docs
+// accumulated since the last tick — which can be tens of thousands after a
+// disruption pause — instead of materialising the whole window in a slice.
+func (v *Verifier) scanWriter(ctx context.Context, writerID string, expectedSeq, maxSeq int64) (auditResult, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "seq", Value: 1}})
 	filter := bson.D{
 		{Key: "writer_id", Value: writerID},
@@ -215,20 +241,27 @@ func (v *Verifier) fetchDocs(ctx context.Context, writerID string, expectedSeq, 
 	}
 	cursor, err := v.collection.Find(ctx, filter, opts)
 	if err != nil {
-		return nil, err
+		return auditResult{}, err
 	}
 	defer cursor.Close(ctx)
 
-	var out []WriteDocument
+	a := newAuditor(writerID, expectedSeq)
 	for cursor.Next(ctx) {
 		var doc WriteDocument
 		if err := cursor.Decode(&doc); err != nil {
+			// Decode errors are logged but skipped (the rest of the scan
+			// continues; a skipped doc looks like a gap to the auditor).
 			v.journal.Warn("verifier", fmt.Sprintf("decode error for writer %s: %v", writerID, err))
 			continue
 		}
-		out = append(out, doc)
+		a.step(doc)
 	}
-	return out, nil
+	// Surface iteration errors rather than silently treating a truncated read as
+	// tail loss, which would be a false positive.
+	if err := cursor.Err(); err != nil {
+		return auditResult{}, err
+	}
+	return a.finish(maxSeq), nil
 }
 
 func (v *Verifier) logFinding(f finding) {

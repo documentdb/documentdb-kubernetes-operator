@@ -24,6 +24,7 @@ const (
 	ExposureLabel           = "exposure"
 	StatusLabel             = "status"
 	UpgradeLabel            = "upgrade"
+	ResourcesLabel          = "resources"
 	ClusterReplicationLabel = "cluster-replication"
 
 	// Cross-cutting selectors.

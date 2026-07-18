@@ -331,6 +331,52 @@ var _ = Describe("SyncCnpgCluster", func() {
 		Expect(updated.Spec.Plugins[0].Parameters["otelConfigHash"]).To(Equal("new-hash"))
 		Expect(updated.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
+
+	It("syncs sidecar resource parameters including the OTel CPU limit", func() {
+		current := baseCluster("test-cluster", namespace)
+
+		desired := current.DeepCopy()
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST] = "3Gi"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT] = "3Gi"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST] = "1"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT] = "1"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST] = "48Mi"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT] = "128Mi"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_OTEL_CPU_REQUEST] = "50m"
+		desired.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_OTEL_CPU_LIMIT] = "300m"
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		params := updated.Spec.Plugins[0].Parameters
+		Expect(params[util.PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST]).To(Equal("3Gi"))
+		Expect(params[util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT]).To(Equal("3Gi"))
+		Expect(params[util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST]).To(Equal("1"))
+		Expect(params[util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT]).To(Equal("1"))
+		Expect(params[util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST]).To(Equal("48Mi"))
+		Expect(params[util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT]).To(Equal("128Mi"))
+		Expect(params[util.PLUGIN_PARAM_OTEL_CPU_REQUEST]).To(Equal("50m"))
+		Expect(params[util.PLUGIN_PARAM_OTEL_CPU_LIMIT]).To(Equal("300m"))
+	})
+
+	It("removes the OTel CPU limit parameter when it is unset in desired", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Plugins[0].Parameters[util.PLUGIN_PARAM_OTEL_CPU_LIMIT] = "300m"
+
+		desired := current.DeepCopy()
+		delete(desired.Spec.Plugins[0].Parameters, util.PLUGIN_PARAM_OTEL_CPU_LIMIT)
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Plugins[0].Parameters).ToNot(HaveKey(util.PLUGIN_PARAM_OTEL_CPU_LIMIT))
+	})
 })
 
 var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {

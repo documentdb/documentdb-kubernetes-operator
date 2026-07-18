@@ -1,0 +1,177 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Pre-merge gating for the long-haul CI/CD bundle.
+#
+# The long-haul {build, deploy, monitor} workflows only run post-merge
+# (push to main / scheduled / workflow_run), so a typo in any of them is
+# normally not caught until they fire against the live AKS cluster. This
+# workflow runs on PRs that touch any of those files (plus the long-haul
+# driver sources, deploy manifests, and Dockerfile) and exercises them
+# statically:
+#
+#   - actionlint    : GitHub Actions syntax, expression bugs, missing
+#                     permissions, embedded shellcheck on `run:` blocks.
+#   - yamllint      : strict YAML formatting.
+#   - kubeconform   : Kubernetes manifest schema validation against the
+#                     v1.30 schema set (matches our compatibility matrix).
+#   - helm template : ensure the operator chart still renders so the
+#                     auto-upgrade job in monitor.yaml will succeed.
+#   - go vet/test   : the driver has real unit tests (config, journal,
+#                     monitor, operations, report); compiling in the image
+#                     build is not enough, so run them here.
+#   - docker build  : build the long-haul image with push:false to catch
+#                     context / go.mod-replace problems before they break
+#                     the scheduled image build.
+name: Lint Long-Haul Workflows
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/longhaul-*.y*ml"
+      - ".github/workflows/lint-longhaul-workflows.yml"
+      - "test/longhaul/**"
+      - "operator/documentdb-helm-chart/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-longhaul-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: actionlint
+        # reviewdog/action-actionlint scans .github/workflows/ by default
+        # and embeds shellcheck so `run:` blocks are linted too. We rely
+        # on the default discovery — there is no point linting only the
+        # long-haul subset since neighbouring workflows share a runner
+        # image and any syntax problem would block CI anyway.
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-pr-check
+          fail_level: error
+
+      - name: yamllint
+        run: |
+          set -euo pipefail
+          pip install --quiet yamllint
+          yamllint -d '{extends: default, rules: {line-length: {max: 200}, comments-indentation: disable, document-start: disable, truthy: {check-keys: false}}}' \
+            .github/workflows/longhaul-image-build.yml \
+            .github/workflows/longhaul-deploy.yml \
+            .github/workflows/longhaul-monitor.yaml \
+            test/longhaul/deploy/
+
+      - name: Cache kubeconform schemas
+        # Persist downloaded JSON schemas across runs so we don't re-hit
+        # raw.githubusercontent.com (which rate-limits with HTTP 429) on
+        # every run. Once populated, steady-state lint needs zero schema
+        # downloads; the retry loop below only covers a cold cache.
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kubeconform-cache
+          key: kubeconform-schemas-1.30.0-v1
+
+      - name: kubeconform manifests
+        run: |
+          set -euo pipefail
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+          mkdir -p /tmp/kubeconform-cache
+          # Skip CRD-typed resources (DocumentDB) since their schemas live
+          # in operator/documentdb-helm-chart/crds — pass via -schema-location.
+          #
+          # Schemas are fetched from raw.githubusercontent.com, which
+          # intermittently rate-limits shared CI runner IPs (HTTP 403 /
+          # "giving up after 3 attempts"). Cache downloaded schemas and retry
+          # with backoff so a transient rate limit doesn't fail the gate; the
+          # cache means each retry only re-fetches the schemas still missing.
+          run_kubeconform() {
+            kubeconform -strict -summary \
+              -cache /tmp/kubeconform-cache \
+              -kubernetes-version 1.30.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -skip 'DocumentDB' \
+              test/longhaul/deploy/
+          }
+          n=0
+          until run_kubeconform; do
+            n=$((n + 1))
+            if [ "$n" -ge 4 ]; then
+              echo "::error::kubeconform failed after $n attempts"
+              exit 1
+            fi
+            echo "kubeconform attempt $n failed (likely schema-download rate limit); retrying in $((n * 30))s..."
+            sleep "$((n * 30))"
+          done
+
+      - name: helm template smoke
+        run: |
+          set -euo pipefail
+          curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          # Fetch chart dependencies (e.g. cloudnative-pg) so the chart can
+          # be templated — mirrors the release workflows.
+          helm dependency update operator/documentdb-helm-chart
+          # If the chart fails to template, the monitor's auto-upgrade
+          # job will fail at runtime against the live cluster.
+          helm template documentdb-operator operator/documentdb-helm-chart \
+            --namespace documentdb-operator \
+            --api-versions cert-manager.io/v1/Certificate \
+            > /tmp/rendered.yaml
+          # Sanity: rendered output must include the operator Deployment we
+          # target by name in monitor.yaml.
+          grep -q 'name: documentdb-operator$' /tmp/rendered.yaml \
+            || (echo "::error::Rendered chart missing 'documentdb-operator' Deployment — monitor.yaml's name-based selector will fail" && exit 1)
+
+  go-test:
+    # The driver has real unit tests (config, journal, monitor, operations,
+    # report). The image build only compiles them — run them here so a logic
+    # regression in the reporter/thresholds is caught at PR time.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: test/longhaul
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: test/longhaul/go.mod
+          cache-dependency-path: test/longhaul/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1
+
+  image-build-smoke:
+    # Mirrors the production longhaul-image-build.yml exactly (context, file,
+    # platforms) but with push:false. Catches context/replace-directive bugs
+    # at PR time rather than on the main-branch scheduled run.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build long-haul image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: test/longhaul/Dockerfile
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=longhaul-pr
+          cache-to: type=gha,scope=longhaul-pr,mode=max

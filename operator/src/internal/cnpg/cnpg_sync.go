@@ -14,14 +14,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 // SyncCnpgCluster compares the current and desired CNPG Cluster specs and patches
 // all fields in a single atomic JSON Patch operation. This is the single entry point
 // for ALL CNPG spec mutations (images + plugin params + replication).
 //
-// Mutable plugin parameters synced: gatewayImage, gatewayTLSSecret, and OTel sidecar
-// params (otelCollectorImage, otelConfigMapName, prometheusPort, otelConfigHash).
+// Mutable plugin parameters synced: gatewayImage, gatewayTLSSecret, sidecar
+// resource params, and OTel sidecar params (otelCollectorImage,
+// otelConfigMapName, prometheusPort, otelConfigHash).
 // Other parameters (e.g., documentDbCredentialSecret) are set at cluster creation
 // and do not change during the lifecycle of a DocumentDB resource.
 //
@@ -94,8 +97,8 @@ func SyncCnpgCluster(
 				pluginParamsChanged = true
 			}
 
-			// OTel sidecar parameters: add/update when monitoring is enabled,
-			// remove when monitoring is disabled.
+			// Sidecar parameters: add/update when desired is set,
+			// remove when desired is unset.
 			// TODO(otel): Currently, changing OTel params triggers a rolling restart
 			// (the operator adds a restart annotation) because the sidecar-injector
 			// plugin reads params at pod creation time.
@@ -103,8 +106,22 @@ func SyncCnpgCluster(
 			// (e.g. Prometheus port, collector image) can take effect without restarting
 			// database pods — for example, by updating the ConfigMap in-place and
 			// signalling the OTel Collector to reload its configuration.
-			otelKeys := []string{"otelCollectorImage", "otelConfigMapName", "prometheusPort", "otelConfigHash", "otelMonitorSecret"}
-			for _, key := range otelKeys {
+			sidecarParamKeys := []string{
+				util.PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST,
+				util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT,
+				util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST,
+				util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT,
+				"otelCollectorImage",
+				"otelConfigMapName",
+				"prometheusPort",
+				"otelConfigHash",
+				"otelMonitorSecret",
+				util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST,
+				util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT,
+				util.PLUGIN_PARAM_OTEL_CPU_REQUEST,
+				util.PLUGIN_PARAM_OTEL_CPU_LIMIT,
+			}
+			for _, key := range sidecarParamKeys {
 				desiredVal := getParam(desiredPlugin.Parameters, key)
 				currentVal := getParam(currentPlugin.Parameters, key)
 				if desiredVal != "" && currentVal != desiredVal {

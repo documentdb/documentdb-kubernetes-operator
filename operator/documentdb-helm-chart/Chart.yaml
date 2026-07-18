@@ -1,13 +1,13 @@
 apiVersion: v2
 name: documentdb-operator
-version: 0.2.0
+version: 0.3.0
 description: A Helm chart for deploying the DocumentDB operator
 # The operator requires Kubernetes 1.35+ for ImageVolume GA support.
 kubeVersion: ">= 1.35.0-0"
 # appVersion controls the default image tag for operator, sidecar, and wal-replica images.
 # Database image versions (documentdb extension + gateway) are controlled by documentDbVersion in values.yaml.
-appVersion: "0.2.0"
+appVersion: "0.3.0"
 dependencies:
   - name: cloudnative-pg
-    version: "0.28.1"
+    version: "0.28.3"
     repository: "https://cloudnative-pg.github.io/charts/"

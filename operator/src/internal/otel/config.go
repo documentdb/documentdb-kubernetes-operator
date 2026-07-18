@@ -69,7 +69,7 @@ func ConfigMapName(clusterName string) string {
 
 // GenerateConfigMapData returns the ConfigMap data entries for the OTel Collector.
 // The config is split into two files that the collector merges at startup:
-//   - static.yaml: receivers and batch processor from the embedded base_config.yaml.
+//   - static.yaml: receivers and static processors from the embedded base_config.yaml.
 //     Add new SQL metric queries to base_config.yaml — no Go code changes needed.
 //   - dynamic.yaml: per-cluster resource attributes, exporters, and pipeline wiring.
 //
@@ -154,7 +154,8 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		}
 	}
 
-	// Wire pipeline: receivers + batch from static.yaml, resource from this dynamic config.
+	// Wire pipeline: receivers + memory_limiter/batch from static.yaml,
+	// resource from this dynamic config.
 	// Disable the collector's internal telemetry to avoid port conflicts with the
 	// Prometheus exporter (both default to 8888).
 	if len(exporterNames) > 0 {
@@ -167,7 +168,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			Pipelines: map[string]pipelineConfig{
 				"metrics": {
 					Receivers:  receiverNames,
-					Processors: []string{"resource", "batch"},
+					Processors: []string{"memory_limiter", "resource", "batch"},
 					Exporters:  exporterNames,
 				},
 			},

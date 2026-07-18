@@ -113,7 +113,7 @@ Highlight well-written code or good practices.
 
 ## Project-Specific Context
 
-- **Language**: Go 1.25.0+
+- **Language**: Go 1.26.0+
 - **Framework**: Kubebuilder / controller-runtime
 - **Database**: DocumentDB (MongoDB-compatible)
 - **Deployment**: Kubernetes via Helm charts
