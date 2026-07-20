@@ -61,6 +61,13 @@ type Verifier struct {
 	leakFlagged    map[string]struct{}
 	lastScheduled  time.Time
 	stallWarnedFor time.Time
+
+	// scheduledSinceCompleted counts backups scheduled since the last observed
+	// completion; it feeds the completion-stall oracle. Verifier-goroutine
+	// private (checkScheduling and recordPhase both run via checkOnce), so it
+	// needs no synchronization; only its high-water mark is published to
+	// Metrics for the reporter goroutine.
+	scheduledSinceCompleted int64
 }
 
 // NewVerifier creates a backup verifier. metrics must be non-nil.
@@ -112,6 +119,12 @@ func (v *Verifier) Run(ctx context.Context) {
 func (v *Verifier) checkOnce(ctx context.Context, now time.Time) {
 	v.checkScheduling(ctx, now)
 	v.checkChildBackups(ctx, now)
+	// Publish the completion-stall high-water mark once per cycle, after both
+	// new schedules (which widen the gap) and completions (which reset it) have
+	// been applied — so a backup that completes in the same cycle it is
+	// observed properly cancels the schedule and the gap only grows when
+	// completions genuinely stop.
+	v.metrics.observeCompletionGap(v.scheduledSinceCompleted)
 }
 
 // checkScheduling inspects the ScheduledBackup status: it counts new
@@ -129,6 +142,10 @@ func (v *Verifier) checkScheduling(ctx context.Context, now time.Time) {
 			v.lastScheduled = last
 			v.metrics.Scheduled.Add(1)
 			v.metrics.LastScheduledUnix.Store(last.Unix())
+			// A new backup was scheduled; widen the completion-stall gap. A
+			// completion in checkChildBackups resets it, and checkOnce publishes
+			// the high-water mark after both run.
+			v.scheduledSinceCompleted++
 			v.journal.Info("backup", fmt.Sprintf("backup scheduled at %s", last.Format(time.RFC3339)))
 		}
 	}
@@ -194,6 +211,10 @@ func (v *Verifier) recordPhase(b *previewv1.Backup) {
 		if _, seen := v.seenCompleted[b.Name]; !seen {
 			v.seenCompleted[b.Name] = struct{}{}
 			v.metrics.Completed.Add(1)
+			// The completion path is alive: reset the running stall gap so the
+			// oracle only fires on a sustained run of scheduled-but-never-
+			// completed backups.
+			v.scheduledSinceCompleted = 0
 			v.journal.Info("backup", fmt.Sprintf("backup %q completed", b.Name))
 		}
 	case isTerminalFailure(b):

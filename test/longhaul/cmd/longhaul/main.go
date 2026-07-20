@@ -236,6 +236,10 @@ func buildSummary(metrics *workload.Metrics, backupMetrics *backup.Metrics, leak
 		appendReason(fmt.Sprintf("backup retention leak: %d expired backups not collected",
 			backupSnap.RetentionLeaks))
 	}
+	if backupSnap.HasCompletionStall() {
+		appendReason(fmt.Sprintf("backup completion stalled: %d backups scheduled with no completion",
+			backupSnap.MaxScheduledWithoutCompletion))
+	}
 
 	return report.Summary{
 		Result:       result,

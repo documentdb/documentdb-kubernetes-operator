@@ -105,6 +105,7 @@ func GenerateMarkdown(s Summary) string {
 	fmt.Fprintf(&b, "| Backups Failed | %d |\n", s.Backup.Failed)
 	fmt.Fprintf(&b, "| Live Backup Count | %d |\n", s.Backup.LastChildCount)
 	fmt.Fprintf(&b, "| Retention Leaks | %d |\n", s.Backup.RetentionLeaks)
+	fmt.Fprintf(&b, "| Max Scheduled Without Completion | %d |\n", s.Backup.MaxScheduledWithoutCompletion)
 	if !s.Backup.LastScheduled.IsZero() {
 		fmt.Fprintf(&b, "| Last Scheduled | %s |\n", s.Backup.LastScheduled.Format(time.RFC3339))
 	}

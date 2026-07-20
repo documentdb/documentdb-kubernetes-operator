@@ -6,6 +6,8 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -234,3 +236,141 @@ var _ = Describe("Verifier.checkOnce", func() {
 		Expect(m.Snapshot().HasRetentionLeak()).To(BeFalse())
 	})
 })
+
+var _ = Describe("Verifier.checkScheduling liveness", func() {
+	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+
+	It("warns once when scheduling stalls past nextScheduledTime + grace", func() {
+		// nextScheduledTime is overdue by more than livenessGrace and no
+		// backup has been scheduled since → the scheduler appears stalled.
+		overdue := now.Add(-livenessGrace).Add(-time.Minute)
+		fc := &fakeBackupClient{
+			sb: &previewv1.ScheduledBackup{
+				Status: previewv1.ScheduledBackupStatus{
+					NextScheduledTime: &metav1.Time{Time: overdue},
+				},
+			},
+		}
+		v, _ := newTestVerifier(fc)
+
+		v.checkOnce(context.Background(), now)
+		Expect(v.stallWarnedFor).To(Equal(overdue))
+		Expect(stallWarnings(v)).To(Equal(1))
+
+		// Same overdue deadline → warn-once, no duplicate.
+		v.checkOnce(context.Background(), now)
+		Expect(stallWarnings(v)).To(Equal(1))
+
+		// A new (still overdue) nextScheduledTime re-arms the warning.
+		reArmed := now.Add(-livenessGrace).Add(-30 * time.Second)
+		fc.sb.Status.NextScheduledTime = &metav1.Time{Time: reArmed}
+		v.checkOnce(context.Background(), now)
+		Expect(v.stallWarnedFor).To(Equal(reArmed))
+		Expect(stallWarnings(v)).To(Equal(2))
+	})
+
+	It("does not warn when the next scheduled time is still within grace", func() {
+		fc := &fakeBackupClient{
+			sb: &previewv1.ScheduledBackup{
+				Status: previewv1.ScheduledBackupStatus{
+					// 1m overdue < 5m grace.
+					NextScheduledTime: &metav1.Time{Time: now.Add(-time.Minute)},
+				},
+			},
+		}
+		v, _ := newTestVerifier(fc)
+		v.checkOnce(context.Background(), now)
+		Expect(stallWarnings(v)).To(BeZero())
+		Expect(v.stallWarnedFor.IsZero()).To(BeTrue())
+	})
+
+	It("does not warn when a backup was scheduled after the deadline", func() {
+		overdue := now.Add(-livenessGrace).Add(-time.Minute)
+		fc := &fakeBackupClient{
+			sb: &previewv1.ScheduledBackup{
+				Status: previewv1.ScheduledBackupStatus{
+					// A backup fired just after nextScheduledTime → not stalled.
+					LastScheduledTime: &metav1.Time{Time: overdue.Add(time.Second)},
+					NextScheduledTime: &metav1.Time{Time: overdue},
+				},
+			},
+		}
+		v, _ := newTestVerifier(fc)
+		v.checkOnce(context.Background(), now)
+		Expect(stallWarnings(v)).To(BeZero())
+	})
+})
+
+var _ = Describe("Verifier completion-stall oracle", func() {
+	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
+
+	It("flags a stall when backups keep scheduling but never complete", func() {
+		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		v, m := newTestVerifier(fc)
+
+		// Successive schedules, each with only a failing child backup.
+		for i := 1; i <= completionStallThreshold; i++ {
+			t := now.Add(time.Duration(i) * time.Hour)
+			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
+			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
+			v.checkOnce(context.Background(), t)
+		}
+
+		snap := m.Snapshot()
+		Expect(snap.Completed).To(BeZero())
+		Expect(snap.MaxScheduledWithoutCompletion).To(Equal(int64(completionStallThreshold)))
+		Expect(snap.HasCompletionStall()).To(BeTrue())
+	})
+
+	It("does not flag a stall when completions keep pace with scheduling", func() {
+		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		v, m := newTestVerifier(fc)
+
+		for i := 1; i <= completionStallThreshold+3; i++ {
+			t := now.Add(time.Duration(i) * time.Hour)
+			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
+			// The freshly scheduled backup completes in the same cycle.
+			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("c%d", i), cnpgv1.BackupPhaseCompleted, t)}
+			v.checkOnce(context.Background(), t)
+		}
+
+		snap := m.Snapshot()
+		Expect(snap.Completed).To(Equal(int64(completionStallThreshold + 3)))
+		Expect(snap.HasCompletionStall()).To(BeFalse())
+	})
+
+	It("resets the running gap once a completion recovers the path", func() {
+		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		v, m := newTestVerifier(fc)
+
+		// Two schedules fail (gap climbs to 2, still under threshold)...
+		for i := 1; i <= 2; i++ {
+			t := now.Add(time.Duration(i) * time.Hour)
+			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
+			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
+			v.checkOnce(context.Background(), t)
+		}
+		Expect(m.Snapshot().MaxScheduledWithoutCompletion).To(Equal(int64(2)))
+
+		// ...then one completes, resetting the running gap.
+		t := now.Add(3 * time.Hour)
+		fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
+		fc.children = []previewv1.Backup{mkBackup("c1", cnpgv1.BackupPhaseCompleted, t)}
+		v.checkOnce(context.Background(), t)
+
+		Expect(v.scheduledSinceCompleted).To(BeZero())
+		Expect(m.Snapshot().HasCompletionStall()).To(BeFalse())
+	})
+})
+
+// stallWarnings counts scheduling-stall warnings recorded on the verifier's
+// journal.
+func stallWarnings(v *Verifier) int {
+	n := 0
+	for _, e := range v.journal.Events() {
+		if e.Level == journal.LevelWarn && strings.Contains(e.Message, "stalled") {
+			n++
+		}
+	}
+	return n
+}

@@ -45,4 +45,25 @@ var _ = Describe("Metrics", func() {
 		Entry("one leak", int64(1), true),
 		Entry("several leaks", int64(3), true),
 	)
+
+	DescribeTable("HasCompletionStall",
+		func(gap int64, want bool) {
+			m := NewMetrics()
+			m.observeCompletionGap(gap)
+			Expect(m.Snapshot().HasCompletionStall()).To(Equal(want))
+		},
+		Entry("no schedules", int64(0), false),
+		Entry("one in flight", int64(1), false),
+		Entry("two in flight", int64(2), false),
+		Entry("at threshold", int64(completionStallThreshold), true),
+		Entry("past threshold", int64(completionStallThreshold+2), true),
+	)
+
+	It("observeCompletionGap keeps only the high-water mark", func() {
+		m := NewMetrics()
+		m.observeCompletionGap(2)
+		m.observeCompletionGap(5)
+		m.observeCompletionGap(3) // lower value must not lower the mark
+		Expect(m.Snapshot().MaxScheduledWithoutCompletion).To(Equal(int64(5)))
+	})
 })
