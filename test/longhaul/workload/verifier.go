@@ -246,11 +246,19 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	// are still detected. Done once per writer; steady-state cycles never
 	// re-read below nextSeq.
 	if !v.seeded[writerID] {
-		v.seeded[writerID] = true
-		if minSeq, err := v.minSeq(ctx, writerID); err != nil {
-			v.journal.Warn("verifier", fmt.Sprintf("min-seq seed failed for writer %s: %v", writerID, err))
-		} else if minSeq > expectedSeq {
-			expectedSeq = minSeq
+		// Only mark seeded on success: a transient minSeq error (network blip,
+		// majority-read timeout) must retry next cycle, otherwise the seed is
+		// skipped forever and the very next scan runs from seq 1 against a
+		// pruned collection — turning the surviving prefix into one giant false
+		// gap. minSeq returning (0, nil) for an empty collection is a success.
+		newExpected, ok, err := seedExpectedSeq(expectedSeq, func() (int64, error) {
+			return v.minSeq(ctx, writerID)
+		})
+		if err != nil {
+			v.journal.Warn("verifier", fmt.Sprintf("min-seq seed failed for writer %s (will retry): %v", writerID, err))
+		} else {
+			expectedSeq = newExpected
+			v.seeded[writerID] = ok
 		}
 	}
 
@@ -283,6 +291,25 @@ func (v *Verifier) publishFloor(writerID string, floor int64) {
 	if a, ok := v.floor[writerID]; ok {
 		a.Store(floor)
 	}
+}
+
+// seedExpectedSeq performs the one-time startup min-seq seed decision for a
+// single writer. lookup resolves the collection's current minimum seq for that
+// writer (v.minSeq in production). It returns the possibly-advanced expectedSeq
+// and whether the seed succeeded; the caller must only mark the writer seeded
+// when ok is true, so a transient lookup error retries on the next cycle rather
+// than being skipped forever (which would scan a pruned collection from seq 1
+// and register a false gap). An empty collection — lookup returning (0, nil) —
+// counts as success and leaves expectedSeq unchanged.
+func seedExpectedSeq(expectedSeq int64, lookup func() (int64, error)) (int64, bool, error) {
+	minSeq, err := lookup()
+	if err != nil {
+		return expectedSeq, false, err
+	}
+	if minSeq > expectedSeq {
+		expectedSeq = minSeq
+	}
+	return expectedSeq, true, nil
 }
 
 // minSeq returns the lowest seq currently stored for writerID, or 0 if the
