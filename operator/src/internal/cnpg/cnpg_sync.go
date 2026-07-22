@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -115,7 +116,6 @@ func SyncCnpgCluster(
 				"otelConfigMapName",
 				"prometheusPort",
 				"otelConfigHash",
-				"otelMonitorSecret",
 				util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST,
 				util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT,
 				util.PLUGIN_PARAM_OTEL_CPU_REQUEST,
@@ -325,36 +325,54 @@ func managedRoles(cluster *cnpgv1.Cluster) []cnpgv1.RoleConfiguration {
 }
 
 // managedRolesPatch returns the JSON Patch operation needed to reconcile
-// spec.managed.roles. Removing the field when no roles are desired avoids
-// assigning JSON null to the CRD array field, which Kubernetes validation can
-// reject. Other managed configuration, such as services, remains untouched.
+// spec.managed.roles. Only the operator-owned OTel role is changed; unrelated
+// managed roles and managed services remain untouched.
 func managedRolesPatch(current, desired *cnpgv1.Cluster) *JSONPatch {
 	currentRoles := managedRoles(current)
 	desiredRoles := managedRoles(desired)
 
-	// Treat nil and empty role lists as equivalent.
-	if len(currentRoles) == 0 && len(desiredRoles) == 0 {
-		return nil
-	}
-	if reflect.DeepEqual(currentRoles, desiredRoles) {
-		return nil
-	}
-	if len(desiredRoles) == 0 {
-		return &JSONPatch{
-			Op:   PatchOpRemove,
-			Path: PatchPathManagedRoles,
+	desiredRole := absentOtelMonitorRole()
+	for _, role := range desiredRoles {
+		if role.Name == otelcfg.MonitorRoleName {
+			desiredRole = role
+			break
 		}
 	}
+
+	roles := make([]cnpgv1.RoleConfiguration, 0, len(currentRoles)+1)
+	found := false
+	for _, role := range currentRoles {
+		if role.Name == otelcfg.MonitorRoleName {
+			if !found {
+				roles = append(roles, desiredRole)
+				found = true
+			}
+			continue
+		}
+		roles = append(roles, role)
+	}
+	if !found {
+		roles = append(roles, desiredRole)
+	}
+
+	if reflect.DeepEqual(currentRoles, roles) {
+		return nil
+	}
 	if current.Spec.Managed == nil {
+		managed := cnpgv1.ManagedConfiguration{}
+		if desired.Spec.Managed != nil {
+			managed = *desired.Spec.Managed
+		}
+		managed.Roles = roles
 		return &JSONPatch{
 			Op:    PatchOpAdd,
 			Path:  PatchPathManaged,
-			Value: desired.Spec.Managed,
+			Value: &managed,
 		}
 	}
 	return &JSONPatch{
 		Op:    PatchOpAdd,
 		Path:  PatchPathManagedRoles,
-		Value: desiredRoles,
+		Value: roles,
 	}
 }

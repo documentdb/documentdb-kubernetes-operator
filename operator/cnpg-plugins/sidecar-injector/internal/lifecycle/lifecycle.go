@@ -243,11 +243,9 @@ func (impl Implementation) reconcileMetadata(
 	}
 
 	// Inject OTel Collector sidecar when monitoring is enabled.
-	// The sidecar is only injected when the operator passes otelCollectorImage,
-	// otelConfigMapName and otelMonitorSecret parameters (i.e., monitoring.enabled
-	// is true). otelMonitorSecret is required because the sidecar sources its
-	// PGUSER/PGPASSWORD from that secret.
-	if configuration.OtelCollectorImage != "" && configuration.OtelConfigMapName != "" && configuration.OtelMonitorSecret != "" {
+	// The sidecar is only injected when the operator passes otelCollectorImage
+	// and otelConfigMapName parameters (i.e., monitoring.enabled is true).
+	if configuration.OtelCollectorImage != "" && configuration.OtelConfigMapName != "" {
 		log.Printf("Injecting OTel Collector sidecar with image: %s", configuration.OtelCollectorImage)
 
 		// Add ConfigMap volume for operator-generated config files (static.yaml + dynamic.yaml)
@@ -272,7 +270,7 @@ func (impl Implementation) reconcileMetadata(
 			})
 		}
 
-		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage, configuration.OtelMonitorSecret)
+		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage)
 		if resources := buildResources(
 			configuration.OTelCPURequest,
 			configuration.OTelCPULimit,
@@ -492,6 +490,7 @@ func injectGatewayOTelEnv(pod *corev1.Pod) {
 // otelCollectorContainerName is the name of the injected OpenTelemetry
 // Collector sidecar.
 const otelCollectorContainerName = "otel-collector"
+const otelMonitorRoleName = "otel_monitor"
 
 // gatewaySecurityContext returns the SecurityContext for the documentdb-gateway
 // sidecar: the shared PSA-restricted hardening plus an explicit UID/GID of
@@ -508,9 +507,8 @@ func gatewaySecurityContext() *corev1.SecurityContext {
 // the caller). It carries the shared PSA-restricted SecurityContext without an
 // explicit UID so the upstream collector image keeps its own baked-in non-root
 // user (UID 10001); PSA "restricted" only requires runAsNonRoot, not a fixed
-// UID. monitorSecret is the operator-managed basic-auth secret holding the
-// dedicated least-privilege monitoring role's credentials.
-func newOtelCollectorSidecar(image, monitorSecret string) *corev1.Container {
+// UID.
+func newOtelCollectorSidecar(image string) *corev1.Container {
 	return &corev1.Container{
 		Name:  otelCollectorContainerName,
 		Image: image,
@@ -518,11 +516,9 @@ func newOtelCollectorSidecar(image, monitorSecret string) *corev1.Container {
 			"--config=file:/config/static.yaml",
 			"--config=file:/config/dynamic.yaml",
 		},
-		// PGUSER and PGPASSWORD are sourced from the operator-managed monitoring
-		// secret ("<cluster>-otel-monitor"), which holds the credentials for the
-		// dedicated least-privilege "otel_monitor" role (member of pg_monitor).
-		// The OTel Collector's sqlquery receiver uses these credentials to connect
-		// to PostgreSQL and collect health metrics without application-level access.
+		// PostgreSQL currently uses trust authentication, so injecting a password
+		// would not enforce access control. Use the dedicated password-disabled
+		// identity directly until database authentication is tightened.
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
@@ -533,26 +529,8 @@ func newOtelCollectorSidecar(image, monitorSecret string) *corev1.Container {
 				},
 			},
 			{
-				Name: "PGUSER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: monitorSecret,
-						},
-						Key: "username",
-					},
-				},
-			},
-			{
-				Name: "PGPASSWORD",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: monitorSecret,
-						},
-						Key: "password",
-					},
-				},
+				Name:  "PGUSER",
+				Value: otelMonitorRoleName,
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

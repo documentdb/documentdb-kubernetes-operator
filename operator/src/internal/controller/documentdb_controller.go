@@ -6,10 +6,7 @@ package controller
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
-	"io"
 	"slices"
 	"strconv"
 	"strings"
@@ -77,7 +74,6 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reconcileMutex.Lock()
 	defer reconcileMutex.Unlock()
@@ -183,10 +179,6 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// and CNPG manages the pod rollout.
 	monitoringEnabled := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
 	if monitoringEnabled {
-		if err := r.reconcileOtelMonitorSecret(ctx, documentdb, req.Namespace); err != nil {
-			logger.Error(err, "Failed to reconcile OTel monitoring secret")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
 		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
 			logger.Error(err, "Failed to reconcile OTel ConfigMap")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
@@ -222,17 +214,12 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
-	// Delete the OTel resources only after the CNPG Cluster spec no longer
-	// references them. If cluster sync fails, retaining these objects keeps the
-	// existing managed role and sidecar configuration functional and allows a
-	// subsequent reconcile to retry safely.
+	// Delete the OTel ConfigMap only after the CNPG Cluster spec no longer
+	// references it. If cluster sync fails, retaining it keeps the existing
+	// sidecar configuration functional and allows a subsequent reconcile to retry.
 	if !monitoringEnabled {
 		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
 			logger.Error(err, "Failed to clean up OTel ConfigMap")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-		if err := r.deleteOtelMonitorSecret(ctx, documentdb.Name, req.Namespace); err != nil {
-			logger.Error(err, "Failed to clean up OTel monitoring secret")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 		}
 	}
@@ -1122,79 +1109,4 @@ func (r *DocumentDBReconciler) deleteOtelConfigMap(ctx context.Context, clusterN
 	}
 	logger.Info("OTel ConfigMap deleted", "name", cmName)
 	return nil
-}
-
-// reconcileOtelMonitorSecret ensures the dedicated basic-auth Secret holding the
-// least-privilege OTel monitoring role's credentials exists. CNPG consumes it as
-// the managed role's passwordSecret and the OTel Collector sidecar sources
-// PGUSER/PGPASSWORD from it. The password is generated once and preserved across
-// reconciles so it stays stable for the managed role and the running sidecar.
-func (r *DocumentDBReconciler) reconcileOtelMonitorSecret(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
-	logger := log.FromContext(ctx)
-	secretName := otelcfg.MonitorSecretName(documentdb.Name)
-
-	secret := &corev1.Secret{}
-	secret.Name = secretName
-	secret.Namespace = namespace
-
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
-		// Owner reference so the Secret is garbage-collected with the DocumentDB CR.
-		if err := controllerutil.SetControllerReference(documentdb, secret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set owner reference: %w", err)
-		}
-		secret.Type = corev1.SecretTypeBasicAuth
-		if secret.Data == nil {
-			secret.Data = map[string][]byte{}
-		}
-		// CNPG requires the secret username to match the managed role name exactly.
-		secret.Data[corev1.BasicAuthUsernameKey] = []byte(otelcfg.MonitorRoleName)
-		// Generate the password only once; preserve it on subsequent reconciles so
-		// the managed role's password and the sidecar's cached env stay in sync.
-		if len(secret.Data[corev1.BasicAuthPasswordKey]) == 0 {
-			password, genErr := generateRandomPassword(rand.Reader)
-			if genErr != nil {
-				return fmt.Errorf("failed to generate monitoring password: %w", genErr)
-			}
-			secret.Data[corev1.BasicAuthPasswordKey] = []byte(password)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reconcile OTel monitoring secret %s: %w", secretName, err)
-	}
-	if result != controllerutil.OperationResultNone {
-		logger.Info("OTel monitoring secret reconciled", "name", secretName, "operation", result)
-	}
-	return nil
-}
-
-// deleteOtelMonitorSecret removes the OTel monitoring Secret when monitoring is
-// no longer configured.
-func (r *DocumentDBReconciler) deleteOtelMonitorSecret(ctx context.Context, clusterName, namespace string) error {
-	logger := log.FromContext(ctx)
-	secretName := otelcfg.MonitorSecretName(clusterName)
-
-	secret := &corev1.Secret{}
-	secret.Name = secretName
-	secret.Namespace = namespace
-
-	err := r.Client.Delete(ctx, secret)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to delete OTel monitoring secret %s: %w", secretName, err)
-	}
-	logger.Info("OTel monitoring secret deleted", "name", secretName)
-	return nil
-}
-
-// generateRandomPassword returns a cryptographically random, URL-safe password
-// suitable for a PostgreSQL role.
-func generateRandomPassword(reader io.Reader) (string, error) {
-	buf := make([]byte, 24)
-	if _, err := io.ReadFull(reader, buf); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
 }

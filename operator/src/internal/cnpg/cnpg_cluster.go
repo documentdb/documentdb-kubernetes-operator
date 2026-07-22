@@ -101,9 +101,6 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 					if split.MonitoringEnabled {
 						params["otelCollectorImage"] = util.DEFAULT_OTEL_COLLECTOR_IMAGE
 						params["otelConfigMapName"] = otelcfg.ConfigMapName(documentdb.Name)
-						// Sidecar sources PGUSER/PGPASSWORD from the dedicated
-						// least-privilege monitoring secret rather than the app secret.
-						params["otelMonitorSecret"] = otelcfg.MonitorSecretName(documentdb.Name)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST, split.OTel.MemoryRequest)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT, split.OTel.MemoryLimit)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_CPU_REQUEST, split.OTel.CPURequest)
@@ -376,38 +373,47 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.Documen
 	}
 }
 
-// applyOtelMonitorRole declares a dedicated least-privilege PostgreSQL role for
-// the OTel Collector sidecar via CNPG's managed-roles reconciler. The role has
-// LOGIN and is a member of the built-in pg_monitor role (read access to all
-// pg_stat_* views) and nothing else — following the principle of least
-// privilege, the monitoring sidecar cannot read or modify application data.
+// applyOtelMonitorRole declares the PostgreSQL identity used by the OTel
+// Collector sidecar. When monitoring is disabled, the role remains declared
+// with ensure=absent so CNPG removes any role left by an earlier configuration.
 //
-// The role password is sourced from the operator-generated basic-auth secret
-// (<cluster>-otel-monitor); CNPG requires the secret's "username" to match the
-// role name exactly. No-op when monitoring is disabled, so clusters without
-// monitoring keep no managed roles.
+// PostgreSQL host authentication currently uses trust, so a generated password
+// would not be checked. Disable the role password explicitly until authentication
+// is tightened rather than creating an unused credential and widening Secret RBAC.
 func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
-	if documentdb == nil || documentdb.Spec.Monitoring == nil || !documentdb.Spec.Monitoring.Enabled {
+	if documentdb == nil {
 		return
 	}
 	if spec.Managed == nil {
 		spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}
-	spec.Managed.Roles = append(spec.Managed.Roles, cnpgv1.RoleConfiguration{
-		Name:    otelcfg.MonitorRoleName,
-		Comment: "Least-privilege role for the OTel Collector monitoring sidecar",
-		Ensure:  cnpgv1.EnsurePresent,
-		Login:   true,
-		InRoles: []string{"pg_monitor"},
-		PasswordSecret: &cnpgv1.LocalObjectReference{
-			Name: otelcfg.MonitorSecretName(documentdb.Name),
-		},
-		// Set the CNPG/CRD-defaulted fields explicitly so the desired role
-		// matches the API-server-defaulted form stored on the live cluster,
-		// keeping SyncCnpgCluster's diff stable (no perpetual re-patching).
+	role := absentOtelMonitorRole()
+	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+		// The current health query is SELECT 1, so the role needs LOGIN only
+		// and is not granted broad monitoring memberships.
+		role = cnpgv1.RoleConfiguration{
+			Name:            otelcfg.MonitorRoleName,
+			Comment:         "Dedicated role for the OTel Collector monitoring sidecar",
+			Ensure:          cnpgv1.EnsurePresent,
+			Login:           true,
+			DisablePassword: true,
+			// Set the CNPG/CRD-defaulted fields explicitly so the desired role
+			// matches the API-server-defaulted form stored on the live cluster,
+			// keeping SyncCnpgCluster's diff stable (no perpetual re-patching).
+			ConnectionLimit: -1,
+			Inherit:         pointer.Bool(true),
+		}
+	}
+	spec.Managed.Roles = append(spec.Managed.Roles, role)
+}
+
+func absentOtelMonitorRole() cnpgv1.RoleConfiguration {
+	return cnpgv1.RoleConfiguration{
+		Name:            otelcfg.MonitorRoleName,
+		Ensure:          cnpgv1.EnsureAbsent,
 		ConnectionLimit: -1,
 		Inherit:         pointer.Bool(true),
-	})
+	}
 }
 
 // for the cluster.

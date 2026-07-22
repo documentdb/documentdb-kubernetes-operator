@@ -682,7 +682,7 @@ var _ = Describe("addAzureFleetManagedServices", func() {
 			Spec: cnpgv1.ClusterSpec{
 				Managed: &cnpgv1.ManagedConfiguration{
 					Roles: []cnpgv1.RoleConfiguration{
-						{Name: "otel_monitor", Login: true, InRoles: []string{"pg_monitor"}},
+						{Name: "otel_monitor", Login: true, DisablePassword: true},
 					},
 				},
 			},

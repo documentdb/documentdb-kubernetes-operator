@@ -25,12 +25,6 @@ var _ = Describe("ConfigMapName", func() {
 	})
 })
 
-var _ = Describe("MonitorSecretName", func() {
-	It("returns the expected monitoring secret name", func() {
-		Expect(MonitorSecretName("my-cluster")).To(Equal("my-cluster-otel-monitor"))
-	})
-})
-
 var _ = Describe("MonitorRoleName", func() {
 	It("is the dedicated least-privilege monitoring role", func() {
 		Expect(MonitorRoleName).To(Equal("otel_monitor"))
@@ -54,6 +48,11 @@ var _ = Describe("base_config.yaml embed", func() {
 		Expect(cfg.Processors).To(HaveKey("batch"))
 		// Static config should NOT have exporters or service (those are dynamic)
 		Expect(cfg.Exporters).To(BeEmpty())
+	})
+
+	It("does not configure a password while PostgreSQL uses trust authentication", func() {
+		Expect(string(baseConfigYAML)).To(ContainSubstring("user=${env:PGUSER}"))
+		Expect(string(baseConfigYAML)).NotTo(ContainSubstring("PGPASSWORD"))
 	})
 
 	It("declares a cgroup-aware memory_limiter processor", func() {

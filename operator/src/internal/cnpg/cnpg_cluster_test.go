@@ -770,7 +770,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		Expect(pluginParams).NotTo(HaveKey("otelConfigMapName"))
 	})
 
-	It("declares the otel_monitor managed role and passes otelMonitorSecret when monitoring is enabled", func() {
+	It("declares a password-disabled otel_monitor role when monitoring is enabled", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
 		req.Namespace = "default"
@@ -793,24 +793,21 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 
 		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
 
-		pluginParams := cluster.Spec.Plugins[0].Parameters
-		Expect(pluginParams).To(HaveKeyWithValue("otelMonitorSecret", "test-cluster-otel-monitor"))
-
 		Expect(cluster.Spec.Managed).NotTo(BeNil())
 		Expect(cluster.Spec.Managed.Roles).To(HaveLen(1))
 		role := cluster.Spec.Managed.Roles[0]
 		Expect(role.Name).To(Equal("otel_monitor"))
 		Expect(role.Login).To(BeTrue())
 		Expect(role.Ensure).To(Equal(cnpgv1.EnsurePresent))
-		Expect(role.InRoles).To(ConsistOf("pg_monitor"))
-		Expect(role.PasswordSecret).NotTo(BeNil())
-		Expect(role.PasswordSecret.Name).To(Equal("test-cluster-otel-monitor"))
+		Expect(role.InRoles).To(BeEmpty())
+		Expect(role.PasswordSecret).To(BeNil())
+		Expect(role.DisablePassword).To(BeTrue())
 		Expect(role.Superuser).To(BeFalse())
 		Expect(role.CreateDB).To(BeFalse())
 		Expect(role.CreateRole).To(BeFalse())
 	})
 
-	It("does not declare managed roles when monitoring is disabled", func() {
+	It("declares the otel_monitor role absent when monitoring is disabled", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
 		req.Namespace = "default"
@@ -828,10 +825,8 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 
 		cluster := GetCnpgClusterSpec(req, documentdb, "test-image:latest", "test-sa", "", true, log)
 
-		Expect(cluster.Spec.Plugins[0].Parameters).NotTo(HaveKey("otelMonitorSecret"))
-		if cluster.Spec.Managed != nil {
-			Expect(cluster.Spec.Managed.Roles).To(BeEmpty())
-		}
+		Expect(cluster.Spec.Managed).NotTo(BeNil())
+		Expect(cluster.Spec.Managed.Roles).To(Equal([]cnpgv1.RoleConfiguration{absentOtelMonitorRole()}))
 	})
 
 	It("propagates spec.imagePullSecrets to the CNPG cluster spec", func() {

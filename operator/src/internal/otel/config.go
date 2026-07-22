@@ -19,20 +19,9 @@ var baseConfigYAML []byte
 
 const defaultPrometheusPort = 8888
 
-// MonitorRoleName is the dedicated least-privilege PostgreSQL role the OTel
-// Collector sidecar uses to run health-check queries and read pg_stat_* views.
-// It is granted membership in the built-in pg_monitor role and nothing else.
-// CNPG's managed-roles reconciler requires the username stored in the password
-// secret to match this name exactly.
+// MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
+// sidecar uses for its health-check query.
 const MonitorRoleName = "otel_monitor"
-
-// MonitorSecretName returns the name of the basic-auth Secret holding the OTel
-// monitoring role's credentials for a given DocumentDB cluster. The operator
-// generates and owns this Secret; CNPG reads it (as the managed role's
-// passwordSecret) and the sidecar sources PGUSER/PGPASSWORD from it.
-func MonitorSecretName(clusterName string) string {
-	return fmt.Sprintf("%s-otel-monitor", clusterName)
-}
 
 // collectorConfig represents the OTel Collector configuration structure.
 type collectorConfig struct {

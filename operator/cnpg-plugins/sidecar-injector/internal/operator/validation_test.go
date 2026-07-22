@@ -48,7 +48,7 @@ func TestValidateClusterChangeRetainsParameterErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateClusterChange() error: %v", err)
 	}
-	if got, want := len(result.ValidationErrors), 2; got != want {
+	if got, want := len(result.ValidationErrors), 1; got != want {
 		t.Fatalf("validation errors = %d, want %d: %v", got, want, result.ValidationErrors)
 	}
 }

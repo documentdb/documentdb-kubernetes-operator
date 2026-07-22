@@ -31,11 +31,10 @@ rules:
   resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # Secrets: certificate_controller reads cert-manager-issued TLS secrets to
-# stamp into Cluster spec; the DocumentDB controller also generates and manages
-# the per-cluster OTel monitoring credential secret (<cluster>-otel-monitor).
+# stamp into Cluster spec. No controller writes Secrets.
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["postgresql.cnpg.io"]
   resources: ["clusters", "publications", "subscriptions", "clusters/status"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

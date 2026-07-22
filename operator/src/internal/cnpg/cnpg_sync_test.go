@@ -528,13 +528,20 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 var _ = Describe("SyncCnpgCluster - managed roles", func() {
 	const namespace = "test-ns"
 
-	otelRole := func(secret string) cnpgv1.RoleConfiguration {
+	otelRole := func() cnpgv1.RoleConfiguration {
 		return cnpgv1.RoleConfiguration{
 			Name:            "otel_monitor",
 			Ensure:          cnpgv1.EnsurePresent,
 			Login:           true,
-			InRoles:         []string{"pg_monitor"},
-			PasswordSecret:  &cnpgv1.LocalObjectReference{Name: secret},
+			DisablePassword: true,
+			ConnectionLimit: -1,
+			Inherit:         pointer.Bool(true),
+		}
+	}
+	absentOtelRole := func() cnpgv1.RoleConfiguration {
+		return cnpgv1.RoleConfiguration{
+			Name:            "otel_monitor",
+			Ensure:          cnpgv1.EnsureAbsent,
 			ConnectionLimit: -1,
 			Inherit:         pointer.Bool(true),
 		}
@@ -545,7 +552,7 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		Expect(current.Spec.Managed).To(BeNil())
 		desired := current.DeepCopy()
 		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{
-			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+			Roles: []cnpgv1.RoleConfiguration{otelRole()},
 		}
 
 		c := buildFakeClient(current).Build()
@@ -556,29 +563,71 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		Expect(updated.Spec.Managed).NotTo(BeNil())
 		Expect(updated.Spec.Managed.Roles).To(HaveLen(1))
 		Expect(updated.Spec.Managed.Roles[0].Name).To(Equal("otel_monitor"))
-		Expect(updated.Spec.Managed.Roles[0].PasswordSecret.Name).To(Equal("test-cluster-otel-monitor"))
+		Expect(updated.Spec.Managed.Roles[0].DisablePassword).To(BeTrue())
 	})
 
-	It("removes the managed role when monitoring is disabled", func() {
+	It("marks the managed role absent when monitoring is disabled", func() {
 		current := baseCluster("test-cluster", namespace)
 		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
-			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+			Roles: []cnpgv1.RoleConfiguration{otelRole()},
 		}
 		desired := current.DeepCopy()
-		desired.Spec.Managed = nil
+		desired.Spec.Managed.Roles = []cnpgv1.RoleConfiguration{absentOtelRole()}
 
 		patch := managedRolesPatch(current, desired)
 		Expect(patch).NotTo(BeNil())
-		Expect(patch.Op).To(Equal(PatchOpRemove))
+		Expect(patch.Op).To(Equal(PatchOpAdd))
 		Expect(patch.Path).To(Equal(PatchPathManagedRoles))
-		Expect(patch.Value).To(BeNil())
+		Expect(patch.Value).To(Equal([]cnpgv1.RoleConfiguration{absentOtelRole()}))
 
 		c := buildFakeClient(current).Build()
 		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
 
 		updated := &cnpgv1.Cluster{}
 		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
-		Expect(managedRoles(updated)).To(BeEmpty())
+		Expect(managedRoles(updated)).To(Equal([]cnpgv1.RoleConfiguration{absentOtelRole()}))
+	})
+
+	It("keeps the absent role declaration until monitoring is re-enabled", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{absentOtelRole()},
+		}
+		desired := current.DeepCopy()
+
+		Expect(managedRolesPatch(current, desired)).To(BeNil())
+	})
+
+	It("adds an absent declaration to clean up an orphaned database role", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{absentOtelRole()},
+		}
+
+		c := buildFakeClient(current).Build()
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Managed.Roles).To(Equal([]cnpgv1.RoleConfiguration{absentOtelRole()}))
+	})
+
+	It("preserves other managed roles when marking the monitor role absent", func() {
+		current := baseCluster("test-cluster", namespace)
+		customRole := cnpgv1.RoleConfiguration{Name: "custom_role", Login: true}
+		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
+			Roles: []cnpgv1.RoleConfiguration{customRole, otelRole()},
+		}
+		desired := current.DeepCopy()
+		desired.Spec.Managed.Roles = []cnpgv1.RoleConfiguration{absentOtelRole()}
+
+		patch := managedRolesPatch(current, desired)
+		Expect(patch).NotTo(BeNil())
+		Expect(patch.Value).To(Equal([]cnpgv1.RoleConfiguration{
+			customRole,
+			absentOtelRole(),
+		}))
 	})
 
 	It("preserves managed.services when patching only roles", func() {
@@ -596,7 +645,7 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 			},
 		}
 		desired := current.DeepCopy()
-		desired.Spec.Managed.Roles = []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")}
+		desired.Spec.Managed.Roles = []cnpgv1.RoleConfiguration{otelRole()}
 
 		c := buildFakeClient(current).Build()
 		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
@@ -612,7 +661,7 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 	It("does not patch when managed roles are unchanged", func() {
 		current := baseCluster("test-cluster", namespace)
 		current.Spec.Managed = &cnpgv1.ManagedConfiguration{
-			Roles: []cnpgv1.RoleConfiguration{otelRole("test-cluster-otel-monitor")},
+			Roles: []cnpgv1.RoleConfiguration{otelRole()},
 		}
 		desired := current.DeepCopy()
 
@@ -626,14 +675,13 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
-	It("treats nil and empty managed role lists as equivalent", func() {
+	It("defaults a missing desired monitor role to absent", func() {
 		current := baseCluster("test-cluster", namespace)
 		desired := current.DeepCopy()
-		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{
-			Roles: []cnpgv1.RoleConfiguration{},
-		}
 
-		Expect(managedRolesPatch(current, desired)).To(BeNil())
+		patch := managedRolesPatch(current, desired)
+		Expect(patch).NotTo(BeNil())
+		Expect(patch.Path).To(Equal(PatchPathManaged))
 	})
 })
 

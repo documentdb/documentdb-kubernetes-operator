@@ -144,7 +144,6 @@ func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
 						"gatewayCpuLimit":            "2",
 						"otelCollectorImage":         "otel:latest",
 						"otelConfigMapName":          "otel-config",
-						"otelMonitorSecret":          "cluster-otel-monitor",
 						"otelMemoryRequest":          "64Mi",
 						"otelMemoryLimit":            "128Mi",
 						"otelCpuRequest":             "100m",
@@ -353,7 +352,7 @@ func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
 // restricted and, unlike the gateway, does not force a UID so the collector
 // image keeps its own non-root user (UID 10001).
 func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "demo-otel-monitor")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
 
 	if c.Name != otelCollectorContainerName {
 		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
@@ -367,33 +366,21 @@ func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
 	}
 }
 
-// TestNewOtelCollectorSidecar_MonitorSecret asserts the sidecar sources its
-// PostgreSQL credentials from the dedicated least-privilege monitoring secret
-// (not the app secret), so the collector connects as the pg_monitor-only role.
-func TestNewOtelCollectorSidecar_MonitorSecret(t *testing.T) {
-	const secretName = "demo-otel-monitor"
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", secretName)
+// TestNewOtelCollectorSidecar_MonitorUser asserts the sidecar connects using
+// the dedicated monitoring identity without injecting an unused password.
+func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
 
-	want := map[string]string{"PGUSER": "username", "PGPASSWORD": "password"}
-	for envName, key := range want {
-		var found bool
-		for _, e := range c.Env {
-			if e.Name != envName {
-				continue
-			}
-			found = true
-			if e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
-				t.Fatalf("%s must be sourced from a secret key ref", envName)
-			}
-			if got := e.ValueFrom.SecretKeyRef.Name; got != secretName {
-				t.Errorf("%s secret = %q, want %q", envName, got, secretName)
-			}
-			if got := e.ValueFrom.SecretKeyRef.Key; got != key {
-				t.Errorf("%s key = %q, want %q", envName, got, key)
-			}
+	for _, env := range c.Env {
+		if env.Name == "PGPASSWORD" {
+			t.Fatal("PGPASSWORD must not be injected while PostgreSQL uses trust authentication")
 		}
-		if !found {
-			t.Errorf("missing %s env var", envName)
+		if env.Name == "PGUSER" {
+			if env.Value != otelMonitorRoleName {
+				t.Fatalf("PGUSER = %q, want %q", env.Value, otelMonitorRoleName)
+			}
+			return
 		}
 	}
+	t.Fatal("missing PGUSER env var")
 }

@@ -7,7 +7,7 @@ receivers:
   # no Go code changes needed.
   sqlquery:
     driver: postgres
-    datasource: "host=localhost port=5432 user=${env:PGUSER} password=${env:PGPASSWORD} dbname=postgres sslmode=disable"
+    datasource: "host=localhost port=5432 user=${env:PGUSER} dbname=postgres sslmode=disable"
     collection_interval: "30s"
     queries:
       - sql: "SELECT 1 as up"

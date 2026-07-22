@@ -28,7 +28,6 @@ const (
 	otelCollectorImageParameter         = "otelCollectorImage"
 	otelConfigMapNameParameter          = "otelConfigMapName"
 	otelConfigHashParameter             = "otelConfigHash"
-	otelMonitorSecretParameter          = "otelMonitorSecret"
 	otelMemoryRequestParameter          = "otelMemoryRequest"
 	otelMemoryLimitParameter            = "otelMemoryLimit"
 	otelCPURequestParameter             = "otelCpuRequest"
@@ -49,7 +48,7 @@ type Configuration struct {
 	DocumentDbCredentialSecret string
 	OtelCollectorImage         string
 	OtelConfigMapName          string
-	OtelMonitorSecret          string
+	OtelConfigHash             string
 	OTelMemoryRequest          string
 	OTelMemoryLimit            string
 	OTelCPURequest             string
@@ -89,7 +88,6 @@ func FromParameters(
 	pullPolicy := parsePullPolicy(helper.Parameters[gatewayImagePullPolicyParameter])
 	otelCollectorImage := helper.Parameters[otelCollectorImageParameter]
 	otelConfigMapName := helper.Parameters[otelConfigMapNameParameter]
-	otelMonitorSecret := helper.Parameters[otelMonitorSecretParameter]
 	validateQuantityParameters(helper, &validationErrors,
 		gatewayMemoryRequestParameter,
 		gatewayMemoryLimitParameter,
@@ -117,11 +115,17 @@ func FromParameters(
 	requiredOtelParameters := []string{
 		otelCollectorImageParameter,
 		otelConfigMapNameParameter,
-		otelMonitorSecretParameter,
 	}
-	otelConfigured := helper.Parameters[prometheusPortParameter] != "" ||
-		helper.Parameters[otelConfigHashParameter] != ""
-	for _, parameter := range requiredOtelParameters {
+	otelParameters := append([]string{
+		prometheusPortParameter,
+		otelConfigHashParameter,
+		otelMemoryRequestParameter,
+		otelMemoryLimitParameter,
+		otelCPURequestParameter,
+		otelCPULimitParameter,
+	}, requiredOtelParameters...)
+	otelConfigured := false
+	for _, parameter := range otelParameters {
 		otelConfigured = otelConfigured || helper.Parameters[parameter] != ""
 	}
 	if otelConfigured {
@@ -151,7 +155,7 @@ func FromParameters(
 		DocumentDbCredentialSecret: credentialSecret,
 		OtelCollectorImage:         otelCollectorImage,
 		OtelConfigMapName:          otelConfigMapName,
-		OtelMonitorSecret:          otelMonitorSecret,
+		OtelConfigHash:             helper.Parameters[otelConfigHashParameter],
 		OTelMemoryRequest:          helper.Parameters[otelMemoryRequestParameter],
 		OTelMemoryLimit:            helper.Parameters[otelMemoryLimitParameter],
 		OTelCPURequest:             helper.Parameters[otelCPURequestParameter],
@@ -263,10 +267,16 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	setIfNotEmpty(gatewayCPURequestParameter, config.GatewayCPURequest)
 	setIfNotEmpty(gatewayCPULimitParameter, config.GatewayCPULimit)
 	result[documentDbCredentialSecretParameter] = config.DocumentDbCredentialSecret
+	setIfNotEmpty(otelCollectorImageParameter, config.OtelCollectorImage)
+	setIfNotEmpty(otelConfigMapNameParameter, config.OtelConfigMapName)
+	setIfNotEmpty(otelConfigHashParameter, config.OtelConfigHash)
 	setIfNotEmpty(otelMemoryRequestParameter, config.OTelMemoryRequest)
 	setIfNotEmpty(otelMemoryLimitParameter, config.OTelMemoryLimit)
 	setIfNotEmpty(otelCPURequestParameter, config.OTelCPURequest)
 	setIfNotEmpty(otelCPULimitParameter, config.OTelCPULimit)
+	if config.PrometheusPort > 0 {
+		result[prometheusPortParameter] = strconv.FormatInt(int64(config.PrometheusPort), 10)
+	}
 
 	return result, nil
 }

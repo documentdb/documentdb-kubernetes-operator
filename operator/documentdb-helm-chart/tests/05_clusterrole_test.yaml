@@ -102,14 +102,14 @@ tests:
             resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
             verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-  - it: should include secrets permissions for OTel credential management
+  - it: should include read-only secrets permissions
     asserts:
       - contains:
           path: rules
           content:
             apiGroups: [""]
             resources: ["secrets"]
-            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+            verbs: ["get", "list", "watch"]
 
   - it: should include CNPG backup permissions
     asserts:
