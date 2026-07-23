@@ -56,6 +56,12 @@ func (k *KillPrimaryPod) Execute(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get primary instance: %w", err)
 	}
+	if primary == "" {
+		return fmt.Errorf("get primary instance: cluster returned an empty primary pod name")
+	}
+	if k.healthMon == nil {
+		return fmt.Errorf("kill-primary-pod: health monitor is nil")
+	}
 	if err := k.client.DeletePod(ctx, primary); err != nil {
 		return fmt.Errorf("delete primary pod %s: %w", primary, err)
 	}

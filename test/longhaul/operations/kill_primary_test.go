@@ -72,4 +72,16 @@ var _ = Describe("KillPrimaryPod", func() {
 		defer c.mu.Unlock()
 		Expect(c.deletedPods).To(BeEmpty())
 	})
+
+	It("Execute fails without deleting when the primary name is empty", func() {
+		c := &fakeClient{instancesPerNode: 2, primary: ""}
+		k := NewKillPrimaryPod(c, nil, time.Second)
+
+		err := k.Execute(context.Background())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("empty primary pod name"))
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		Expect(c.deletedPods).To(BeEmpty())
+	})
 })

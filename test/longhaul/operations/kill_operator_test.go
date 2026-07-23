@@ -116,5 +116,20 @@ var _ = Describe("KillOperatorPod", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no running operator pod"))
 		})
+
+		It("refuses to run when the deployment has no matchLabels selector", func() {
+			dep := operatorDeployment(1, 1, 0, 1, 1)
+			dep.Spec.Selector = &metav1.LabelSelector{}
+			running := operatorPod("op-run", corev1.PodRunning, 10)
+			cs := fake.NewSimpleClientset(dep, running)
+			k := NewKillOperatorPod(cs, opNS, time.Minute)
+
+			err := k.Execute(context.Background())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no matchLabels selector"))
+
+			_, getErr := cs.CoreV1().Pods(opNS).Get(context.Background(), "op-run", metav1.GetOptions{})
+			Expect(getErr).NotTo(HaveOccurred(), "no pod should be deleted when the selector is empty")
+		})
 	})
 })

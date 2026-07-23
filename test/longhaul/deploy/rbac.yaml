@@ -64,6 +64,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: longhaul-test-operator
+  # NOTE: keep in sync with LONGHAUL_OPERATOR_NAMESPACE. If the driver overrides
+  # that env var, this namespace must be edited to match or kill-operator-pod
+  # fails with RBAC errors.
   namespace: documentdb-operator
   labels:
     app.kubernetes.io/name: longhaul-test
@@ -80,6 +83,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: longhaul-test-operator
+  # NOTE: must match the Role namespace above (and LONGHAUL_OPERATOR_NAMESPACE).
+  # Update in lockstep or the binding won't grant permissions in the right
+  # namespace.
   namespace: documentdb-operator
   labels:
     app.kubernetes.io/name: longhaul-test

@@ -12,8 +12,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -67,6 +69,13 @@ func (k *KillOperatorPod) Execute(ctx context.Context) error {
 		return fmt.Errorf("get operator deployment: %w", err)
 	}
 
+	// Fail fast if the Deployment has no label selector: SelectorFromSet on an
+	// empty map yields an "everything" selector, so the List below would match
+	// (and the delete could target) every pod in the namespace.
+	if dep.Spec.Selector == nil || len(dep.Spec.Selector.MatchLabels) == 0 {
+		return fmt.Errorf("operator deployment %s has no matchLabels selector; refusing to list all pods", k.deployment)
+	}
+
 	// Resolve the pod set from the Deployment's own selector so we don't
 	// depend on the release-name-derived "app" label value.
 	selector := labels.SelectorFromSet(dep.Spec.Selector.MatchLabels).String()
@@ -75,7 +84,7 @@ func (k *KillOperatorPod) Execute(ctx context.Context) error {
 		return fmt.Errorf("list operator pods: %w", err)
 	}
 
-	target := oldestRunningPod(pods.Items)
+	target, targetUID := oldestRunningPod(pods.Items)
 	if target == "" {
 		return fmt.Errorf("no running operator pod found for selector %q", selector)
 	}
@@ -83,10 +92,42 @@ func (k *KillOperatorPod) Execute(ctx context.Context) error {
 		return fmt.Errorf("delete operator pod %s: %w", target, err)
 	}
 
-	// Wait for the Deployment to reschedule and become Available again.
 	recoveryCtx, cancel := context.WithTimeout(ctx, k.recovery)
 	defer cancel()
+
+	// Confirm the targeted pod is actually gone before checking Deployment
+	// availability. Deleting a pod does not bump the Deployment's
+	// ObservedGeneration, so its status can still read "Available" from the
+	// pre-deletion state and let waitForDeploymentAvailable return immediately
+	// without ever observing the restart.
+	if err := k.waitForPodGone(recoveryCtx, target, targetUID); err != nil {
+		return err
+	}
+
+	// Wait for the Deployment to reschedule and become Available again.
 	return k.waitForDeploymentAvailable(recoveryCtx)
+}
+
+// waitForPodGone blocks until the pod identified by name/uid is deleted
+// (NotFound) or replaced by a new pod with a different UID, guaranteeing the
+// disruption has actually landed before we assert recovery.
+func (k *KillOperatorPod) waitForPodGone(ctx context.Context, name string, uid types.UID) error {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		pod, err := k.clientset.CoreV1().Pods(k.namespace).Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err == nil && pod.UID != uid {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for operator pod %s to be deleted: %w", name, ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 // OutagePolicy: an operator restart is a control-plane fault that must not take
@@ -131,10 +172,12 @@ func isDeploymentAvailable(dep *appsv1.Deployment) bool {
 	return dep.Status.ReadyReplicas >= desired && dep.Status.UnavailableReplicas == 0
 }
 
-// oldestRunningPod returns the name of the oldest pod in the Running phase, or
-// "" if none are running. Targeting the oldest makes the choice deterministic.
-func oldestRunningPod(pods []corev1.Pod) string {
+// oldestRunningPod returns the name and UID of the oldest pod in the Running
+// phase, or ("", "") if none are running. Targeting the oldest makes the choice
+// deterministic; the UID lets callers confirm that specific pod is later gone.
+func oldestRunningPod(pods []corev1.Pod) (string, types.UID) {
 	name := ""
+	var uid types.UID
 	var oldest time.Time
 	for i := range pods {
 		p := &pods[i]
@@ -144,8 +187,9 @@ func oldestRunningPod(pods []corev1.Pod) string {
 		ts := p.CreationTimestamp.Time
 		if name == "" || ts.Before(oldest) {
 			name = p.Name
+			uid = p.UID
 			oldest = ts
 		}
 	}
-	return name
+	return name, uid
 }
