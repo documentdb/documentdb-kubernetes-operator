@@ -478,6 +478,28 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
+	It("propagates pgHBA changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.PostgresConfiguration.PgHBA = nil
+		desired := current.DeepCopy()
+		desired.Spec.PostgresConfiguration.PgHBA = []string{
+			"hostssl all all all cert",
+			"hostssl replication streaming_replica all cert",
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.PostgresConfiguration.PgHBA).To(Equal([]string{
+			"hostssl all all all cert",
+			"hostssl replication streaming_replica all cert",
+		}))
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
 	It("handles multiple mutable field changes atomically", func() {
 		current := baseCluster("test-cluster", namespace)
 		current.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie"
@@ -522,6 +544,95 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		Expect(updated.Spec.MaxStopDelay).To(Equal(int32(60)))
 		// No restart annotation — CNPG handles all mutable spec fields natively
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
+	It("adds certificates when desired has certificates and current does not", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Certificates = nil
+		desired := current.DeepCopy()
+		desired.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:      "server-tls-secret",
+			ServerCASecret:       "server-ca-secret",
+			ReplicationTLSSecret: "replication-tls-secret",
+			ClientCASecret:       "client-ca-secret",
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Certificates).ToNot(BeNil())
+		Expect(updated.Spec.Certificates.ServerTLSSecret).To(Equal("server-tls-secret"))
+		Expect(updated.Spec.Certificates.ClientCASecret).To(Equal("client-ca-secret"))
+	})
+
+	It("removes certificates when desired has no certificates but current does", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:      "server-tls-secret",
+			ServerCASecret:       "server-ca-secret",
+			ReplicationTLSSecret: "replication-tls-secret",
+			ClientCASecret:       "client-ca-secret",
+		}
+		desired := current.DeepCopy()
+		desired.Spec.Certificates = nil
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Certificates).To(BeNil())
+	})
+
+	It("updates certificates when both current and desired have certificates but they differ", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:      "old-server-tls-secret",
+			ServerCASecret:       "old-server-ca-secret",
+			ReplicationTLSSecret: "old-replication-tls-secret",
+			ClientCASecret:       "old-client-ca-secret",
+		}
+		desired := current.DeepCopy()
+		desired.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret:      "new-server-tls-secret",
+			ServerCASecret:       "new-server-ca-secret",
+			ReplicationTLSSecret: "new-replication-tls-secret",
+			ClientCASecret:       "new-client-ca-secret",
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Certificates).ToNot(BeNil())
+		Expect(updated.Spec.Certificates.ServerTLSSecret).To(Equal("new-server-tls-secret"))
+		Expect(updated.Spec.Certificates.ClientCASecret).To(Equal("new-client-ca-secret"))
+	})
+
+	It("applies multiple certificate and cluster configuration changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret: "old-tls",
+		}
+
+		desired := current.DeepCopy()
+		desired.Spec.Certificates = &cnpgv1.CertificatesConfiguration{
+			ServerTLSSecret: "new-tls",
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.Certificates.ServerTLSSecret).To(Equal("new-tls"))
 	})
 })
 

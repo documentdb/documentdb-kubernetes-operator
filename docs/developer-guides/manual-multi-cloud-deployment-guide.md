@@ -331,6 +331,7 @@ spec:
     storage:
       pvcSize: 10Gi
   clusterReplication:
+    disableTLS: true
     primary: cloud-cluster-name
     clusterList:
       - name: cloud-cluster-name

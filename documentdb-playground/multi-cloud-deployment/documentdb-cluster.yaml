@@ -32,6 +32,7 @@ spec:
     storage:
       pvcSize: 10Gi
   clusterReplication:
+    disableTLS: true
     highAvailability: true
     primary: {{PRIMARY_CLUSTER}}
     crossCloudNetworkingStrategy: Istio

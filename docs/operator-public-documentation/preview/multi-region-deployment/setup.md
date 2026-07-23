@@ -146,12 +146,88 @@ Configure inter-cluster networking using `spec.clusterReplication.crossCloudNetw
 ```yaml
 spec:
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     crossCloudNetworkingStrategy: Istio  # or AzureFleet, None
     clusterList:
       - name: member-eastus2-cluster
       - name: member-westus3-cluster
 ```
+
+#### Replication TLS (PostgreSQL)
+
+Cross-Kubernetes-cluster streaming replication flows over the network between
+member Kubernetes clusters. Set `spec.tls.postgres` to encrypt this traffic with
+TLS. To enable mutual TLS (mTLS), include the full server verification fields so
+replicas both present a client certificate and verify the server certificate
+(`sslmode=verify-full`). Distribute the same certificate material to every member
+Kubernetes cluster so that any member Kubernetes cluster can become primary after
+failover.
+
+When you set `spec.tls.postgres.replicationTLSSecret`, the operator configures
+each PostgreSQL replication connection to use the `streaming_replica` client
+certificate.
+
+The supported configuration paths are:
+
+| Configuration path | Fields | Operator behavior |
+| --- | --- | --- |
+| Client certificate only | `spec.tls.postgres.replicationTLSSecret`, `spec.tls.postgres.clientCASecret` | References the `streaming_replica` client certificate and key and sets `sslmode=require`. |
+| Full server verification | `spec.tls.postgres.replicationTLSSecret`, `spec.tls.postgres.clientCASecret`, `spec.tls.postgres.serverTLSSecret`, `spec.tls.postgres.serverCASecret` | References the `streaming_replica` client certificate and key, references `serverCASecret` as `sslRootCert`, and sets `sslmode=verify-full`. |
+
+!!! important "Use an explicit PostgreSQL TLS configuration for encrypted replication"
+    If `spec.tls.postgres` is omitted, the operator assumes another layer, such
+    as Istio mTLS, secures the cross-Kubernetes-cluster path. In that mode, the
+    generated PostgreSQL replication configuration doesn't set `sslmode`,
+    `sslCert`, `sslKey`, or `sslRootCert`. The `pg_hba` will also be set to
+    trust all incoming replication connections.
+
+For `verify-full`, the server certificate SANs must cover every host name that a
+replica might use for the primary. Include the generated service names for each
+member Kubernetes cluster's PostgreSQL backend and, when using Azure Fleet
+Networking, the fleet service DNS name pattern:
+
+In multi-region mode, the CloudNative-PG cluster name isn't the raw DocumentDB
+object name. The operator generates one CloudNative-PG cluster name per member
+Kubernetes cluster by taking the DocumentDB object name, truncating it, and
+appending an FNV-1a hash of the member Kubernetes cluster name. The AKS Fleet
+playground mirrors this logic in
+[`generate_cnpg_cluster_name`](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/deploy-multi-region.sh)
+so `deploy-multi-region.sh` can precompute the `*-rw` service names that must be
+included in the PostgreSQL server certificate SAN list.
+
+
+```yaml title="postgres-server-certificate.yaml"
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cross-region-server-cert
+  namespace: documentdb-preview-ns
+spec:
+  secretName: cross-region-server-cert
+  usages:
+    - server auth
+  dnsNames:
+    - <documentdb-name>-<member-1-hash>-rw.documentdb-preview-ns.svc
+    - <documentdb-name>-<member-1-hash>-rw.documentdb-preview-ns
+    - <documentdb-name>-<member-1-hash>-rw
+    - <documentdb-name>-<member-2-hash>-rw.documentdb-preview-ns.svc
+    - <documentdb-name>-<member-2-hash>-rw.documentdb-preview-ns
+    - <documentdb-name>-<member-2-hash>-rw
+    - "*.fleet-system.svc"
+  issuerRef:
+    name: selfsigned-cross-region-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
+For a working KubeFleet example that propagates the certificate Secrets to every
+member Kubernetes cluster with `ResourcePlacement`, see
+[documentdb-resource-crp.yaml](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/documentdb-resource-crp.yaml)
+in the playground.
+
+See [TLSConfiguration](../api-reference.md#tlsconfiguration) in the API Reference
+for where PostgreSQL TLS is configured on the DocumentDB resource.
 
 ## Deployment options
 
@@ -257,6 +333,7 @@ spec:
       pvcSize: 100Gi
       storageClass: default-storage-class  # Fallback
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     clusterList:
       - name: member-westus3-cluster
@@ -402,6 +479,6 @@ If PVCs aren't provisioning:
 ## Next steps
 
 - [Failover procedures](failover-procedures.md) - Learn how to perform planned and unplanned failovers
-- [Backup and restore](../backup-and-restore.md) - Configure multi-region backup strategies
+- [Backup and restore](../operations/backup-and-restore.md) - Configure multi-region backup strategies
 - [TLS configuration](../configuration/tls.md) - Secure connections with proper TLS certificates
 - [AKS Fleet deployment example](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/documentdb-playground/aks-fleet-deployment/README.md) - Automated Azure multi-region setup

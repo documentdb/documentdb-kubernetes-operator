@@ -31,6 +31,7 @@ spec:
       pvcSize: 10Gi
   environment: aks
   clusterReplication:
+    disableTLS: true
     highAvailability: true
     crossCloudNetworkingStrategy: AzureFleet
     primary: {{PRIMARY_CLUSTER}}

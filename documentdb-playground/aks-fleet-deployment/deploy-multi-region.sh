@@ -17,6 +17,124 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+WEBHOOK_WAIT_TIMEOUT_SECONDS="${WEBHOOK_WAIT_TIMEOUT_SECONDS:-300}"
+APPLY_RETRY_COUNT="${APPLY_RETRY_COUNT:-4}"
+DOCDB_NAME="documentdb-preview"
+DOCDB_NAMESPACE="documentdb-preview-ns"
+
+generate_cnpg_cluster_name() {
+  local docdb_name="$1"
+  local cluster="$2"
+  local h=0xcbf29ce484222325
+  local prime=0x100000001b3
+  local max_docdb_len=$((50 - 9))
+  local i byte hash
+  local LC_ALL=C
+
+  for ((i = 0; i < ${#cluster}; i++)); do
+    printf -v byte '%d' "'${cluster:i:1}"
+    h=$(((h ^ byte) * prime))
+  done
+
+  printf -v hash '%x' "$h"
+  printf '%s\n' "${docdb_name:0:max_docdb_len}-${hash}" | cut -c1-50
+}
+
+wait_for_context_connectivity() {
+  local context="$1"
+  local timeout_seconds="${2:-60}"
+  local end_time=$((SECONDS + timeout_seconds))
+
+  echo "Validating API connectivity for context: $context"
+  while [ $SECONDS -lt $end_time ]; do
+    if kubectl --context "$context" version --request-timeout=10s >/dev/null 2>&1; then
+      echo "✓ API reachable for context: $context"
+      return 0
+    fi
+    sleep 5
+  done
+
+  echo "✗ Unable to reach Kubernetes API for context: $context"
+  echo "  This is often a kubeconfig endpoint or local DNS/network issue."
+  return 1
+}
+
+wait_for_service_endpoints() {
+  local context="$1"
+  local namespace="$2"
+  local service="$3"
+  local timeout_seconds="${4:-300}"
+  local end_time=$((SECONDS + timeout_seconds))
+
+  echo "Waiting for webhook service endpoints: ${namespace}/${service} (context: ${context})"
+  while [ $SECONDS -lt $end_time ]; do
+    if ! kubectl --context "$context" get service "$service" -n "$namespace" >/dev/null 2>&1; then
+      sleep 5
+      continue
+    fi
+
+    local endpoint_count
+    endpoint_count=$(kubectl --context "$context" get endpoints "$service" -n "$namespace" -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}' 2>/dev/null | wc -l )
+    if [ "$endpoint_count" -gt 0 ]; then
+      echo "✓ Ready endpoints found for ${namespace}/${service}: ${endpoint_count}"
+      return 0
+    fi
+
+    sleep 5
+  done
+
+  echo "✗ Timed out waiting for endpoints on ${namespace}/${service}"
+  echo "Service summary:"
+  kubectl --context "$context" get service "$service" -n "$namespace" -o wide || true
+  echo "Endpoints summary:"
+  kubectl --context "$context" get endpoints "$service" -n "$namespace" -o wide || true
+
+  local selector
+  selector=$(kubectl --context "$context" get service "$service" -n "$namespace" -o jsonpath='{range $k,$v := .spec.selector}{$k}={$v}{","}{end}' 2>/dev/null | sed 's/,$//')
+  if [ -n "$selector" ]; then
+    echo "Selected pods (${selector}):"
+    kubectl --context "$context" get pods -n "$namespace" -l "$selector" -o wide || true
+  fi
+
+  echo "Recent namespace events:"
+  kubectl --context "$context" get events -n "$namespace" --sort-by=.metadata.creationTimestamp | tail -20 || true
+  return 1
+}
+
+apply_with_webhook_retries() {
+  local context="$1"
+  local file_path="$2"
+  local max_attempts="${3:-4}"
+  local attempt=1
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    echo "Apply attempt ${attempt}/${max_attempts}..."
+
+    local output
+    if output=$(kubectl --context "$context" apply -f "$file_path" 2>&1); then
+      echo "$output"
+      return 0
+    fi
+
+    echo "$output"
+    if echo "$output" | grep -Eq 'no endpoints available for service|failed calling webhook|context deadline exceeded'; then
+      if [ "$attempt" -lt "$max_attempts" ]; then
+        echo "Transient webhook failure detected; re-checking webhook readiness before retrying..."
+        wait_for_service_endpoints "$context" "documentdb-operator" "documentdb-webhook-service" "$WEBHOOK_WAIT_TIMEOUT_SECONDS" || true
+        wait_for_service_endpoints "$context" "fleet-system-hub" "fleetwebhook" "$WEBHOOK_WAIT_TIMEOUT_SECONDS" || true
+        sleep $((attempt * 5))
+      fi
+    else
+      echo "Non-webhook apply failure detected. Aborting retries."
+      return 1
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
 RESOURCE_GROUP="${RESOURCE_GROUP:-documentdb-aks-fleet-rg}"
 HUB_REGION="${HUB_REGION:-westus3}"
 
@@ -82,6 +200,23 @@ for cluster in "${CLUSTER_ARRAY[@]}"; do
   fi
 done
 
+# Build the certificate SAN list for CNPG cross-region replication services.
+CROSS_REGION_DNS_NAMES=""
+for cluster in "${CLUSTER_ARRAY[@]}"; do
+  CNPG_CLUSTER_NAME=$(generate_cnpg_cluster_name "$DOCDB_NAME" "$cluster")
+  for dns_name in \
+    "${CNPG_CLUSTER_NAME}-rw.${DOCDB_NAMESPACE}.svc" \
+    "${CNPG_CLUSTER_NAME}-rw.${DOCDB_NAMESPACE}" \
+    "${CNPG_CLUSTER_NAME}-rw"; do
+    if [ -z "$CROSS_REGION_DNS_NAMES" ]; then
+      CROSS_REGION_DNS_NAMES="    - ${dns_name}"
+    else
+      CROSS_REGION_DNS_NAMES="${CROSS_REGION_DNS_NAMES}"$'\n'"    - ${dns_name}"
+    fi
+  done
+done
+CROSS_REGION_DNS_NAMES="${CROSS_REGION_DNS_NAMES}"$'\n'"    - \"*.fleet-system.svc\""
+
 # Step 1: Create cluster identification ConfigMaps on each member cluster
 echo ""
 echo "======================================="
@@ -126,6 +261,21 @@ if ! kubectl config get-contexts "$HUB_CLUSTER" &>/dev/null; then
 fi
 
 echo "Using hub context: $HUB_CLUSTER"
+
+if ! wait_for_context_connectivity "$HUB_CLUSTER" 60; then
+  echo "Fix kubeconfig connectivity for context '$HUB_CLUSTER' and retry."
+  exit 1
+fi
+
+if ! wait_for_service_endpoints "$HUB_CLUSTER" "documentdb-operator" "documentdb-webhook-service" "$WEBHOOK_WAIT_TIMEOUT_SECONDS"; then
+  echo "DocumentDB validating webhook is not ready. Ensure documentdb-operator pod is Running/Ready."
+  exit 1
+fi
+
+if ! wait_for_service_endpoints "$HUB_CLUSTER" "fleet-system-hub" "fleetwebhook" "$WEBHOOK_WAIT_TIMEOUT_SECONDS"; then
+  echo "Fleet validating webhook is not ready. Ensure hub-agent/webhook pods in fleet-system-hub are Running/Ready."
+  exit 1
+fi
 
 # Check if resources already exist
 EXISTING_RESOURCES=""
@@ -187,6 +337,8 @@ sed -e "s/{{DOCUMENTDB_PASSWORD}}/$DOCUMENTDB_PASSWORD/g" \
 while IFS= read -r line; do
   if [[ "$line" == '{{CLUSTER_LIST}}' ]]; then
     echo "$CLUSTER_LIST"
+  elif [[ "$line" == '{{CROSS_REGION_DNS_NAMES}}' ]]; then
+    echo "$CROSS_REGION_DNS_NAMES"
   else
     echo "$line"
   fi
@@ -199,6 +351,8 @@ echo "--------------------------------"
 echo "Primary cluster: $PRIMARY_CLUSTER"
 echo "Cluster list:"
 echo "$CLUSTER_LIST"
+echo "Cross-region certificate SANs:"
+echo "$CROSS_REGION_DNS_NAMES"
 echo "--------------------------------"
 
 # cat "$TEMP_YAML" 
@@ -206,7 +360,11 @@ echo "--------------------------------"
 # Apply the configuration
 echo ""
 echo "Applying DocumentDB multi-region configuration..."
-kubectl --context "$HUB_CLUSTER" apply -f "$TEMP_YAML"
+if ! apply_with_webhook_retries "$HUB_CLUSTER" "$TEMP_YAML" "$APPLY_RETRY_COUNT"; then
+  echo "Failed to apply configuration after ${APPLY_RETRY_COUNT} attempts."
+  rm -f "$TEMP_YAML"
+  exit 1
+fi
 
 # Clean up temp file
 rm -f "$TEMP_YAML"

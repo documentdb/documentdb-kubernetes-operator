@@ -6,6 +6,7 @@ metadata:
 spec:
   clusterReplication:
     crossCloudNetworkingStrategy: "None"
+    disableTLS: true
     primary: "${REPL_PRIMARY}"
     clusterList:
       - name: "${REPL_MEMBER_1}"

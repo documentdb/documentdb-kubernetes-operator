@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -107,6 +108,23 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		Self:    replicationContext.CNPGClusterName,
 	}
 
+	// If we are multi-cluster and no certs are provided, trust that the DocumentDB cluster is running in a secure environment and allow replication without TLS
+	// (probably istio or some other service mesh)
+	postgresReplicationTLSSecret := ""
+	postgresServerCASecret := ""
+	if cnpgCluster.Spec.Certificates != nil {
+		postgresReplicationTLSSecret = cnpgCluster.Spec.Certificates.ReplicationTLSSecret
+		postgresServerCASecret = cnpgCluster.Spec.Certificates.ServerCASecret
+	}
+	postgresClientCertificateProvided := postgresReplicationTLSSecret != ""
+	postgresServerCAProvided := postgresServerCASecret != ""
+	if documentdb.Spec.ClusterReplication.DisableTLS {
+		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
+			"host all all localhost trust",
+			"host replication streaming_replica all trust",
+		}
+	}
+
 	if replicationContext.IsAzureFleetNetworking() {
 		// need to create services for each of the other clusters
 		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{
@@ -139,15 +157,46 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 		},
 	}
 	for clusterName, serviceName := range replicationContext.GenerateExternalClusterServices(documentdb.Name, documentdb.Namespace, replicationContext.IsAzureFleetNetworking()) {
-		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, cnpgv1.ExternalCluster{
-			Name: clusterName,
-			ConnectionParameters: map[string]string{
-				"host":   serviceName,
-				"port":   "5432",
-				"dbname": "postgres",
-				"user":   "postgres",
-			},
-		})
+		connectionParameters := map[string]string{
+			"host":   serviceName,
+			"port":   "5432",
+			"dbname": "postgres",
+			"user":   "streaming_replica",
+		}
+		if postgresClientCertificateProvided {
+			connectionParameters["sslmode"] = "require"
+			if postgresServerCAProvided {
+				connectionParameters["sslmode"] = "verify-full"
+			}
+		}
+
+		externalCluster := cnpgv1.ExternalCluster{
+			Name:                 clusterName,
+			ConnectionParameters: connectionParameters,
+		}
+		if postgresClientCertificateProvided {
+			externalCluster.SSLCert = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: postgresReplicationTLSSecret,
+				},
+				Key: "tls.crt",
+			}
+			externalCluster.SSLKey = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: postgresReplicationTLSSecret,
+				},
+				Key: "tls.key",
+			}
+		}
+		if postgresClientCertificateProvided && postgresServerCAProvided {
+			externalCluster.SSLRootCert = &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: postgresServerCASecret,
+				},
+				Key: "ca.crt",
+			}
+		}
+		cnpgCluster.Spec.ExternalClusters = append(cnpgCluster.Spec.ExternalClusters, externalCluster)
 	}
 
 	return nil
@@ -363,11 +412,8 @@ func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, curre
 		log.Log.Info("Clearing stale promotionToken", "cluster", current.Name)
 	}
 
-	// Update if the cluster list has changed
-	replicasChanged := externalClusterNamesChanged(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
-	if replicasChanged {
-		getReplicasChangePatchOps(&patchOps, desired, replicationContext)
-	}
+	// Update if replication connection entries or their PgHBA rules have changed.
+	getReplicasChangePatchOps(&patchOps, current, desired, replicationContext)
 
 	return patchOps, nil, -1
 }
@@ -483,49 +529,48 @@ func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, pat
 	return nil, -1
 }
 
-func externalClusterNamesChanged(currentClusters, desiredClusters []cnpgv1.ExternalCluster) bool {
-	if len(currentClusters) != len(desiredClusters) {
-		return true
+func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, current, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
+	externalClusterSpecChanged := !reflect.DeepEqual(current.Spec.ExternalClusters, desired.Spec.ExternalClusters)
+	if externalClusterSpecChanged {
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathExternalClusters,
+			Value: desired.Spec.ExternalClusters,
+		})
 	}
-
-	if len(currentClusters) == 0 {
-		return false
+	if !reflect.DeepEqual(current.Spec.PostgresConfiguration.PgHBA, desired.Spec.PostgresConfiguration.PgHBA) {
+		*patchOps = append(*patchOps, cnpg.JSONPatch{
+			Op:    cnpg.PatchOpReplace,
+			Path:  cnpg.PatchPathPostgresPgHBA,
+			Value: desired.Spec.PostgresConfiguration.PgHBA,
+		})
 	}
-
-	nameSet := make(map[string]bool, len(currentClusters))
-	for _, cluster := range currentClusters {
-		nameSet[cluster.Name] = true
-	}
-
-	for _, cluster := range desiredClusters {
-		if found := nameSet[cluster.Name]; !found {
-			return true
-		}
-		delete(nameSet, cluster.Name)
-	}
-
-	return len(nameSet) != 0
-}
-
-func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, desired *cnpgv1.Cluster, replicationContext *util.ReplicationContext) {
-	*patchOps = append(*patchOps, cnpg.JSONPatch{
-		Op:    cnpg.PatchOpReplace,
-		Path:  cnpg.PatchPathExternalClusters,
-		Value: desired.Spec.ExternalClusters,
-	})
-	if replicationContext.IsAzureFleetNetworking() {
+	if externalClusterSpecChanged && replicationContext.IsAzureFleetNetworking() {
 		*patchOps = append(*patchOps, cnpg.JSONPatch{
 			Op:    cnpg.PatchOpReplace,
 			Path:  cnpg.PatchPathManagedServices,
 			Value: desired.Spec.Managed.Services.Additional,
 		})
 	}
-	if replicationContext.IsPrimary() {
-		*patchOps = append(*patchOps, cnpg.JSONPatch{
-			Op:    cnpg.PatchOpReplace,
-			Path:  cnpg.PatchPathSynchronous,
-			Value: desired.Spec.PostgresConfiguration.Synchronous,
-		})
+	if externalClusterSpecChanged && replicationContext.IsPrimary() {
+		currentSynchronous := current.Spec.PostgresConfiguration.Synchronous
+		desiredSynchronous := desired.Spec.PostgresConfiguration.Synchronous
+		if !reflect.DeepEqual(currentSynchronous, desiredSynchronous) {
+			synchronousPatch := cnpg.JSONPatch{
+				Path:  cnpg.PatchPathSynchronous,
+				Value: desiredSynchronous,
+			}
+			switch {
+			case currentSynchronous == nil:
+				synchronousPatch.Op = cnpg.PatchOpAdd
+			case desiredSynchronous == nil:
+				synchronousPatch.Op = cnpg.PatchOpRemove
+				synchronousPatch.Value = nil
+			default:
+				synchronousPatch.Op = cnpg.PatchOpReplace
+			}
+			*patchOps = append(*patchOps, synchronousPatch)
+		}
 	}
 }
 

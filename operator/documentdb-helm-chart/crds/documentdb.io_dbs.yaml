@@ -1125,6 +1125,12 @@ spec:
                     - Istio
                     - None
                     type: string
+                  disableTLS:
+                    default: false
+                    description: |-
+                      Disables TLS for replication traffic between clusters.
+                      Only for use when an existing mesh is already providing TLS.
+                    type: boolean
                   highAvailability:
                     description: Whether or not to have replicas on the primary cluster.
                     type: boolean
@@ -1577,15 +1583,79 @@ spec:
                       (placeholder for future phases).
                     type: object
                   postgres:
-                    description: Postgres configures TLS for the Postgres server (placeholder
-                      for future phases).
+                    description: |-
+                      Postgres configures TLS for the Postgres server.
+                      If server side certs are provided alone, the operator will use sslMode=require for cross-regional replication connections.
+                      If replication certs are also provided, the operator will use verify-full, which requires the hostname to be correctly set.
+                      See the multi-region-deployment docs for how to do that.
+                    properties:
+                      clientCASecret:
+                        description: |-
+                          The secret containing the Client CA certificate. If not defined, a new secret will be created
+                          with a self-signed CA and will be used to generate all the client certificates.<br />
+                          <br />
+                          Contains:<br />
+                          <br />
+                          - `ca.crt`: CA that should be used to validate the client certificates,
+                          used as `ssl_ca_file` of all the instances.<br />
+                          - `ca.key`: key used to generate client certificates, if ReplicationTLSSecret is provided,
+                          this can be omitted.<br />
+                        type: string
+                      replicationTLSSecret:
+                        description: |-
+                          The secret of type kubernetes.io/tls containing the client certificate to authenticate as
+                          the `streaming_replica` user.
+                          If not defined, ClientCASecret must provide also `ca.key`, and a new secret will be
+                          created using the provided CA.
+                        type: string
+                      serverAltDNSNames:
+                        description: The list of the server alternative DNS names
+                          to be added to the generated server TLS certificates, when
+                          required.
+                        items:
+                          type: string
+                        type: array
+                      serverCASecret:
+                        description: |-
+                          The secret containing the Server CA certificate. If not defined, a new secret will be created
+                          with a self-signed CA and will be used to generate the TLS certificate ServerTLSSecret.<br />
+                          <br />
+                          Contains:<br />
+                          <br />
+                          - `ca.crt`: CA that should be used to validate the server certificate,
+                          used as `sslrootcert` in client connection strings.<br />
+                          - `ca.key`: key used to generate Server SSL certs, if ServerTLSSecret is provided,
+                          this can be omitted.<br />
+                        type: string
+                      serverTLSSecret:
+                        description: |-
+                          The secret of type kubernetes.io/tls containing the server TLS certificate and key that will be set as
+                          `ssl_cert_file` and `ssl_key_file` so that clients can connect to postgres securely.
+                          If not defined, ServerCASecret must provide also `ca.key` and a new secret will be
+                          created using the provided CA.
+                        type: string
                     type: object
                 type: object
+                x-kubernetes-validations:
+                - message: spec.tls.postgres replicationTLSSecret and clientCASecret
+                    must be provided together; serverTLSSecret and serverCASecret
+                    must be provided together; serverTLSSecret requires replicationTLSSecret
+                  rule: '!has(self.postgres) || (has(self.postgres.replicationTLSSecret)
+                    == has(self.postgres.clientCASecret) && has(self.postgres.serverTLSSecret)
+                    == has(self.postgres.serverCASecret) && (!has(self.postgres.serverTLSSecret)
+                    || has(self.postgres.replicationTLSSecret)))'
             required:
             - instancesPerNode
             - nodeCount
             - resource
             type: object
+            x-kubernetes-validations:
+            - message: when spec.clusterReplication is set, either spec.clusterReplication.disableTLS
+                must be true or spec.tls.postgres.replicationTLSSecret and spec.tls.postgres.clientCASecret
+                must be provided
+              rule: '!has(self.clusterReplication) || ((has(self.clusterReplication.disableTLS)
+                && self.clusterReplication.disableTLS) || (has(self.tls) && has(self.tls.postgres)
+                && has(self.tls.postgres.replicationTLSSecret) && has(self.tls.postgres.clientCASecret)))'
           status:
             description: DocumentDBStatus defines the observed state of DocumentDB.
             properties:
