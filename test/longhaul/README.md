@@ -125,6 +125,7 @@ All configuration is via environment variables.
 | `LONGHAUL_DOCUMENTDB_URI` | Yes | — | Connection string to the DocumentDB gateway. |
 | `LONGHAUL_CLUSTER_NAME` | Yes | — | Name of the target DocumentDB cluster CR. |
 | `LONGHAUL_NAMESPACE` | No | `default` | Kubernetes namespace of the target cluster. |
+| `LONGHAUL_OPERATOR_NAMESPACE` | No | `documentdb-operator` | Namespace of the DocumentDB operator Deployment (target of the `kill-operator-pod` chaos op). |
 | `LONGHAUL_MAX_DURATION` | No | `30m` | Max test duration. Use `0s` for run-until-failure. |
 | `LONGHAUL_NUM_WRITERS` | No | `5` | Number of concurrent writers. |
 | `LONGHAUL_OP_COOLDOWN` | No | `5m` | Cooldown between management operations. |
@@ -133,6 +134,48 @@ All configuration is via environment variables.
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
+
+## Operations
+
+The scheduler runs one disruptive operation at a time, gated by steady state and
+a global cooldown. Current operations:
+
+| Operation | Kind | Notes |
+|-----------|------|-------|
+| `scale-up` / `scale-down` | Topology | Adjusts `spec.instancesPerNode` within `[MIN, MAX]`. Only adds/removes a standby, so the primary write path is untouched (near-zero outage budget). |
+| `upgrade-documentdb` | Topology | In-place version upgrade; requires HA (`instancesPerNode>=2`). |
+| `kill-operator-pod` | Chaos | Deletes the operator pod; asserts the data plane keeps serving (near-zero outage budget). |
+| `kill-primary-pod` | Chaos | Deletes the CNPG primary pod to exercise automatic failover; requires HA (`instancesPerNode>=2`). |
+
+Operations that keep the write path up throughout — the scale ops and
+`kill-operator-pod` — share the near-zero `journal.NoOutagePolicy` budget instead
+of ad-hoc per-op numbers, so a regression that unexpectedly disrupts writes
+during a "safe" operation trips the policy.
+
+Outage budgets are expressed as **wall-clock write-outage durations**
+(`OutagePolicy.MaxWriteOutage`), not raw write-failure counts. The journal
+converts the observed failure count into an estimated outage using the workload's
+aggregate write rate (`workload.AggregateWriteRate(NumWriters)`), so the budgets
+are independent of `LONGHAUL_NUM_WRITERS`: `NoOutagePolicy` ≈ 300ms (noise
+cushion), while `kill-primary-pod` and `upgrade-documentdb` share the
+`journal.PrimaryHandoverPolicy` budget of 30s — both interrupt writes for a
+single primary handover (an ungraceful failover vs. a graceful switchover), and
+an upgrade's longer whole-topology restart is bounded by `MustRecoverWithin`,
+not the write-outage budget.
+
+### RBAC for chaos operations
+
+Beyond the base RBAC the driver already needs, the chaos operations require the
+driver ServiceAccount to be granted (all present in `deploy/rbac.yaml`):
+
+- **`kill-primary-pod`** — `get`/`list` on `clusters.postgresql.cnpg.io` (to read
+  `status.currentPrimary`) and `delete` on `pods` in the cluster namespace; both
+  added to the `longhaul-test` Role.
+- **`kill-operator-pod`** — `get` on `deployments` and `get`/`list`/`delete` on
+  `pods` in the operator namespace (`LONGHAUL_OPERATOR_NAMESPACE`, default
+  `documentdb-operator`); granted by a separate `longhaul-test-operator`
+  Role/RoleBinding in that namespace, since the operator runs outside the
+  driver's own namespace.
 
 ## CI Safety
 

@@ -3,6 +3,7 @@ module github.com/documentdb/documentdb-operator/test/longhaul
 go 1.26.5
 
 require (
+	github.com/cloudnative-pg/cloudnative-pg v1.29.2
 	github.com/documentdb/documentdb-operator v0.0.0-00010101000000-000000000000
 	github.com/documentdb/documentdb-operator/test/shared v0.0.0-00010101000000-000000000000
 	github.com/onsi/ginkgo/v2 v2.32.0
@@ -25,7 +26,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudnative-pg/barman-cloud v0.5.1 // indirect
-	github.com/cloudnative-pg/cloudnative-pg v1.29.2 // indirect
 	github.com/cloudnative-pg/cnpg-i v0.5.0 // indirect
 	github.com/cloudnative-pg/machinery v0.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
