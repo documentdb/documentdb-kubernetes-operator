@@ -19,6 +19,7 @@ Key characteristics:
 
 - **VolumeSnapshot-based** — backups use the [CSI (Container Storage Interface)](https://kubernetes.io/docs/concepts/storage/volumes/#csi) driver's snapshot capability, so they are fast and storage-efficient.
 - **Primary-only** — the operator always targets the primary instance for backups.
+- **Multi-region aware** — in a multi-region deployment the operator backs up only the region that is currently primary; requests against a standby region are skipped. See [Backups in multi-region deployments](#backups-in-multi-region-deployments).
 - **Namespace-scoped** — `Backup` and `ScheduledBackup` resources must reside in the same namespace as the `DocumentDB` cluster.
 - **Retention-managed** — expired backups are automatically deleted by the operator.
 
@@ -209,6 +210,20 @@ Once the status shows `Cluster in healthy state`, connect and verify your data. 
 - You cannot specify both `backup` and `persistentVolume` in the same recovery spec.
 
 For additional recovery options (including PV-based recovery), see [Restore a Deleted DocumentDB Cluster](restore-deleted-cluster.md).
+
+## Backups in multi-region deployments
+
+In a [multi-region deployment](../multi-region-deployment/overview.md), a single DocumentDB cluster spans multiple regions with one region acting as the **primary** and the others running as **standby** replicas. Backups behave the same way as in a single-region cluster, with a few region-aware rules the operator enforces automatically:
+
+- **Only the primary region is backed up.** The operator resolves which region currently holds the primary role and takes the snapshot there. You do not need to target a specific region — `Backup` and `ScheduledBackup` resources are created against the DocumentDB cluster and the operator routes the snapshot to the primary.
+- **Requests against a standby region are skipped, not failed.** If a `Backup` is reconciled while the local region is a standby, the operator marks it as skipped with the message *"Backups can only be created from the primary cluster"*. This keeps `ScheduledBackup` resources safe to define identically in every region.
+- **Failover (site-swap) is handled automatically.** When the primary role moves to a different region (planned or unplanned failover), subsequent backups are taken from the newly promoted primary. If a backup is requested while a promotion is still in progress and the primary endpoint is not yet ready, the operator defers the backup and retries once promotion completes — it does not fail the backup.
+
+!!! tip "Scheduled backups across regions"
+
+    Define your `ScheduledBackup` in the same namespace as the DocumentDB cluster. Because standby regions skip backups rather than erroring, the schedule keeps producing backups from whichever region is primary — including after a failover — with no manual reconfiguration.
+
+For planned and unplanned failover steps, see [Failover procedures](../multi-region-deployment/failover-procedures.md).
 
 ## Backup Retention Policy
 
