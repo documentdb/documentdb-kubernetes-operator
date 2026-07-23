@@ -41,6 +41,7 @@ In a multi-region setup:
 ```yaml
 spec:
   clusterReplication:
+    disableTLS: true
     crossCloudNetworkingStrategy: AzureFleet  # or Istio, None
     primary: primary-cluster
     clusterList:

@@ -23,6 +23,7 @@ const (
 )
 
 // DocumentDBSpec defines the desired state of DocumentDB.
+// +kubebuilder:validation:XValidation:rule="!has(self.clusterReplication) || ((has(self.clusterReplication.disableTLS) && self.clusterReplication.disableTLS) || (has(self.tls) && has(self.tls.postgres) && has(self.tls.postgres.replicationTLSSecret) && has(self.tls.postgres.clientCASecret)))",message="when spec.clusterReplication is set, either spec.clusterReplication.disableTLS must be true or spec.tls.postgres.replicationTLSSecret and spec.tls.postgres.clientCASecret must be provided"
 type DocumentDBSpec struct {
 	// NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.
 	// +kubebuilder:validation:Minimum=1
@@ -385,6 +386,10 @@ type ClusterReplication struct {
 	ClusterList []MemberCluster `json:"clusterList"`
 	// Whether or not to have replicas on the primary cluster.
 	HighAvailability bool `json:"highAvailability,omitempty"`
+	// Disables TLS for replication traffic between clusters.
+	// Only for use when an existing mesh is already providing TLS.
+	// +kubebuilder:default=false
+	DisableTLS bool `json:"disableTLS,omitempty"`
 }
 
 type MemberCluster struct {
@@ -411,12 +416,16 @@ type Timeouts struct {
 }
 
 // TLSConfiguration aggregates TLS settings across DocumentDB components.
+// +kubebuilder:validation:XValidation:rule="!has(self.postgres) || (has(self.postgres.replicationTLSSecret) == has(self.postgres.clientCASecret) && has(self.postgres.serverTLSSecret) == has(self.postgres.serverCASecret) && (!has(self.postgres.serverTLSSecret) || has(self.postgres.replicationTLSSecret)))",message="spec.tls.postgres replicationTLSSecret and clientCASecret must be provided together; serverTLSSecret and serverCASecret must be provided together; serverTLSSecret requires replicationTLSSecret"
 type TLSConfiguration struct {
 	// Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only).
 	Gateway *GatewayTLS `json:"gateway,omitempty"`
 
-	// Postgres configures TLS for the Postgres server (placeholder for future phases).
-	Postgres *PostgresTLS `json:"postgres,omitempty"`
+	// Postgres configures TLS for the Postgres server.
+	// If server side certs are provided alone, the operator will use sslMode=require for cross-regional replication connections.
+	// If replication certs are also provided, the operator will use verify-full, which requires the hostname to be correctly set.
+	// See the multi-region-deployment docs for how to do that.
+	Postgres *cnpgv1.CertificatesConfiguration `json:"postgres,omitempty"`
 
 	// GlobalEndpoints configures TLS for global endpoints (placeholder for future phases).
 	GlobalEndpoints *GlobalEndpointsTLS `json:"globalEndpoints,omitempty"`
@@ -436,9 +445,6 @@ type GatewayTLS struct {
 	// Provided secret reference when Mode=Provided.
 	Provided *ProvidedTLS `json:"provided,omitempty"`
 }
-
-// PostgresTLS acts as a placeholder for future Postgres TLS settings.
-type PostgresTLS struct{}
 
 // GlobalEndpointsTLS acts as a placeholder for future global endpoint TLS settings.
 type GlobalEndpointsTLS struct{}

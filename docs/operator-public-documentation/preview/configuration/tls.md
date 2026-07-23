@@ -1,13 +1,13 @@
 ---
-title: TLS Configuration
-description: Configure TLS certificate management for DocumentDB gateway connections — SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
+title: TLS configuration
+description: Configure TLS certificate management for DocumentDB gateway and PostgreSQL connections, including SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.
 tags:
   - configuration
   - tls
   - security
 ---
 
-# TLS Configuration
+# TLS configuration
 
 !!! warning "Breaking change in this release"
     The `Disabled` TLS mode has been removed. If you previously set `spec.tls.gateway.mode: Disabled`, update it to `SelfSigned` (or remove the field — `SelfSigned` is now the default). See the [CHANGELOG](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md) for details.
@@ -258,6 +258,94 @@ Example TLS status output:
   "message": "Gateway TLS certificate ready"
 }
 ```
+
+## PostgreSQL certificates
+
+The `spec.tls.gateway` settings above secure client connections to the DocumentDB gateway. A separate field, `spec.tls.postgres`, configures the certificates that CloudNative-PG uses for PostgreSQL server and replication connections.
+
+In a single-region deployment, CloudNative-PG provisions self-signed certificates automatically. You don't need to set `spec.tls.postgres` unless you want PostgreSQL inter-pod, intra-Kubernetes-cluster connections to use certificate material from your own CA instead of the CloudNative-PG generated self-signed certificates.
+
+When you provide PostgreSQL certificate Secrets, the operator passes them to the underlying CloudNative-PG `Cluster`. This changes the certificates used between DocumentDB instance pods inside the same Kubernetes cluster; it doesn't change how clients connect to the DocumentDB gateway.
+
+```yaml title="documentdb-postgres-provided-certs.yaml"
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: my-documentdb
+  namespace: default
+spec:
+  nodeCount: 1
+  instancesPerNode: 3
+  resource:
+    storage:
+      pvcSize: 100Gi
+  tls:
+    postgres:
+      replicationTLSSecret: postgres-replication-cert
+      clientCASecret: postgres-replication-cert
+      serverTLSSecret: postgres-server-cert
+      serverCASecret: postgres-server-cert
+```
+
+!!! note
+    `replicationTLSSecret` and `clientCASecret` must be provided together. `serverTLSSecret` and `serverCASecret` must be provided together, and `serverTLSSecret` requires `replicationTLSSecret`.
+
+### Replication client certificate name
+
+The PostgreSQL replication client certificate referenced by `replicationTLSSecret` must authenticate as the `streaming_replica` PostgreSQL role. The Kubernetes Secret name can be any name that you reference from `spec.tls.postgres.replicationTLSSecret`, but the certificate identity must use `streaming_replica` as the common name.
+
+If you create the client certificate with cert-manager, set `spec.commonName` to `streaming_replica` and include the `client auth` usage:
+
+```yaml title="postgres-replication-certificate.yaml"
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-replication-cert
+  namespace: default
+spec:
+  secretName: postgres-replication-cert
+  usages:
+    - client auth
+  commonName: streaming_replica
+  issuerRef:
+    name: my-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
+### Server certificate SANs
+
+The PostgreSQL server certificate referenced by `serverTLSSecret` must include the CloudNative-PG read-write Service names for the DocumentDB object as Subject Alternative Names (SANs). In a single-region deployment, the operator uses the DocumentDB object name as the CloudNative-PG cluster name.
+
+For a DocumentDB object named `my-documentdb` in the `default` namespace, include all three service-name forms:
+
+- `my-documentdb-rw`
+- `my-documentdb-rw.default`
+- `my-documentdb-rw.default.svc`
+
+If you create the server certificate with cert-manager, put these names in `spec.dnsNames`:
+
+```yaml title="postgres-server-certificate.yaml"
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: postgres-server-cert
+  namespace: default
+spec:
+  secretName: postgres-server-cert
+  usages:
+    - server auth
+  dnsNames:
+    - my-documentdb-rw
+    - my-documentdb-rw.default
+    - my-documentdb-rw.default.svc
+  issuerRef:
+    name: my-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
+```
+
+For cross-Kubernetes-cluster replication, see [Replication TLS (PostgreSQL)](../multi-region-deployment/setup.md#replication-tls-postgresql).
 
 ## Additional resources
 

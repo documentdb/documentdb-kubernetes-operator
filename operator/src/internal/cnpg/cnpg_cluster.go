@@ -126,6 +126,7 @@ func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, docu
 				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource, split.PostgresMemoryBytes),
 				Bootstrap:             getBootstrapConfiguration(documentdb, isPrimaryRegion, log),
 				LogLevel:              cmp.Or(documentdb.Spec.LogLevel, "info"),
+				Certificates:          postgresCertificates(documentdb),
 				Backup: &cnpgv1.BackupConfiguration{
 					VolumeSnapshot: &cnpgv1.VolumeSnapshotConfiguration{
 						SnapshotOwnerReference: "backup", // Set owner reference to 'backup' so that snapshots are deleted when Backup resource is deleted
@@ -316,6 +317,13 @@ func pluginsSidecarInjectorName(documentdb *dbpreview.DocumentDB) string {
 	return documentdb.Spec.Plugins.SidecarInjectorName
 }
 
+func postgresCertificates(documentdb *dbpreview.DocumentDB) *cnpgv1.CertificatesConfiguration {
+	if documentdb.Spec.TLS == nil {
+		return nil
+	}
+	return documentdb.Spec.TLS.Postgres
+}
+
 // toCNPGImagePullSecrets translates a list of corev1.LocalObjectReference
 // (the Kubernetes-native shape used on spec.imagePullSecrets) into the
 // CNPG-flavoured cnpgv1.LocalObjectReference shape that
@@ -424,9 +432,8 @@ func absentOtelMonitorRole() cnpgv1.RoleConfiguration {
 // operator-managed GUCs.
 func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource, pgMemoryBytes int64) cnpgv1.PostgresConfiguration {
 	pgHBA := []string{
-		"host all all 0.0.0.0/0 trust",
-		"host all all ::0/0 trust",
-		"host replication all all trust",
+		"host all all localhost trust",
+		"hostssl replication streaming_replica all cert",
 	}
 
 	return cnpgv1.PostgresConfiguration{

@@ -65,6 +65,7 @@ metadata:
   namespace: documentdb-preview-ns
 spec:
   clusterReplication:
+    disableTLS: true
     primary: member-eastus2-cluster
     clusterList:
       - name: member-westus3-cluster
@@ -156,7 +157,14 @@ an equal or greater volume of available storage compared to the primary.
 Enable TLS for all connections:
 
 - **Client-to-gateway:** Encrypt application connections (see [TLS configuration](../configuration/tls.md))
-- **Replication traffic:** PostgreSQL SSL for inter-cluster replication
+- **Replication traffic:** Cross-Kubernetes-cluster streaming replication supports
+  two TLS paths. Path 1 uses `spec.tls.postgres.replicationTLSSecret` and
+  `clientCASecret` with `sslmode=require`.
+  Path 2 adds `serverTLSSecret` and `serverCASecret` and uses
+  `sslmode=verify-full` for server identity verification and mutual TLS (mTLS).
+  Configure shared certificate Secrets across all member Kubernetes clusters.
+  See [Replication TLS (PostgreSQL)](setup.md#replication-tls-postgresql) for
+  the complete setup.
 - **Service mesh:** mTLS for cross-cluster service communication
 
 ### Authentication and authorization

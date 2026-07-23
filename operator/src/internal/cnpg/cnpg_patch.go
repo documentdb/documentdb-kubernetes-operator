@@ -24,6 +24,8 @@ const (
 	PatchPathPlugins           = "/spec/plugins"
 	PatchPathReplicationSlots  = "/spec/replicationSlots"
 	PatchPathExternalClusters  = "/spec/externalClusters"
+	PatchPathCertificates      = "/spec/certificates"
+	PatchPathPostgresPgHBA     = "/spec/postgresql/pg_hba"
 	PatchPathManagedServices   = "/spec/managed/services/additional"
 	PatchPathManaged           = "/spec/managed"
 	PatchPathManagedRoles      = "/spec/managed/roles"
@@ -44,6 +46,7 @@ const (
 	PatchPathAffinity           = "/spec/affinity"
 	PatchPathMaxStopDelay       = "/spec/stopDelay"
 	PatchPathPostgresParameters = "/spec/postgresql/parameters"
+	PatchPathPgHBA              = "/spec/postgresql/pg_hba"
 	PatchPathResources          = "/spec/resources"
 
 	// JSON Patch path for restart annotation.

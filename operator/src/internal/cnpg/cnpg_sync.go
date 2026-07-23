@@ -220,6 +220,17 @@ func SyncCnpgCluster(
 		})
 	}
 
+	// TODO remove this
+	// This is only needed here for the upgrade from version 3.0, where the default pg_hba configuration
+	// was changed to be more secure. Once all clusters have been updated, this is no longer needed.
+	if !reflect.DeepEqual(current.Spec.PostgresConfiguration.PgHBA, desired.Spec.PostgresConfiguration.PgHBA) {
+		patchOps = append(patchOps, JSONPatch{
+			Op:    PatchOpAdd,
+			Path:  PatchPathPgHBA,
+			Value: desired.Spec.PostgresConfiguration.PgHBA,
+		})
+	}
+
 	// Resource requirements (CPU/memory requests and limits)
 	// CNPG includes resources in the generated PodSpec and detects drift via ComparePodSpecs.
 	// Use "add" rather than "replace" so the patch succeeds even when the target
@@ -230,6 +241,21 @@ func SyncCnpgCluster(
 			Path:  PatchPathResources,
 			Value: desired.Spec.Resources,
 		})
+	}
+
+	if !reflect.DeepEqual(current.Spec.Certificates, desired.Spec.Certificates) {
+		certificatesPatch := JSONPatch{
+			Op:    PatchOpReplace,
+			Path:  PatchPathCertificates,
+			Value: desired.Spec.Certificates,
+		}
+		if current.Spec.Certificates == nil {
+			certificatesPatch.Op = PatchOpAdd
+		} else if desired.Spec.Certificates == nil {
+			certificatesPatch.Op = PatchOpRemove
+			certificatesPatch.Value = nil
+		}
+		patchOps = append(patchOps, certificatesPatch)
 	}
 
 	// Managed roles (the OTel monitoring role) are reconciled independently of
