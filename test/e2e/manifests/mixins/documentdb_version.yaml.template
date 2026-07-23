@@ -1,0 +1,11 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  # Pin the whole DocumentDB stack (extension + gateway) to a single
+  # version via the user-facing knob. Overrides the empty image fields
+  # from the base template; individual spec.image.* fields would win if
+  # set, so the base's DOCUMENTDB_IMAGE/GATEWAY_IMAGE must stay empty.
+  documentDBVersion: ${DOCUMENTDB_VERSION}
