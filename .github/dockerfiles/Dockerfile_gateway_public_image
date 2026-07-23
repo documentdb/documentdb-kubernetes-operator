@@ -26,6 +26,12 @@ RUN mkdir -p \
       /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols \
       /home/documentdb/gateway/scripts
 
+# TODO(gateway-pkg): switch to a package install once the upstream `documentdb-gateway`
+# DEB/RPM lands (same model as the extension: install from https://documentdb.io/deb).
+# The `COPY --from=source` extraction below is a brittle contract on `documentdb-local`'s
+# internal layout — if that image moves the gateway binary (e.g. into /usr/bin via the new
+# .deb), these copies break silently. A package install also gives us pinning + dependency
+# resolution consistent with the extension track.
 COPY --from=source /home/documentdb/gateway/pg_documentdb_gw/target/release-with-symbols/documentdb_gateway /usr/bin/documentdb_gateway
 COPY --from=source /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json /home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json
 COPY --from=source /home/documentdb/gateway/scripts/utils.sh /home/documentdb/gateway/scripts/utils.sh

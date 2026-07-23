@@ -179,6 +179,9 @@ jobs:
 
     - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
       if: steps.should_build.outputs.skip != 'true'
+      env:
+        # Dockerfile_extension uses RUN --mount, which requires BuildKit.
+        DOCKER_BUILDKIT: '1'
       run: |
         set -euo pipefail
         TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
@@ -199,7 +202,7 @@ jobs:
               exit 1
             fi
             echo "Using deb: $DEB_FILE"
-            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE"
+            BUILD_ARGS="--build-arg PG_MAJOR=18 --build-arg DOCUMENTDB_DEB_PACKAGE=packages/$DEB_FILE"
             ;;
           gateway)
             GW_DEB=$(ls gateway-context/packages/ | grep -E 'gateway.*\.deb' | head -1)
