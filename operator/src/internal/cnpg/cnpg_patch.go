@@ -44,6 +44,7 @@ const (
 	PatchPathAffinity           = "/spec/affinity"
 	PatchPathMaxStopDelay       = "/spec/stopDelay"
 	PatchPathPostgresParameters = "/spec/postgresql/parameters"
+	PatchPathPgHBA              = "/spec/postgresql/pg_hba"
 	PatchPathResources          = "/spec/resources"
 
 	// JSON Patch path for restart annotation.

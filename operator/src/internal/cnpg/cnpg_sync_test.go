@@ -432,6 +432,28 @@ var _ = Describe("SyncCnpgCluster - mutable spec fields", func() {
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
+	It("propagates pgHBA changes", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.PostgresConfiguration.PgHBA = nil
+		desired := current.DeepCopy()
+		desired.Spec.PostgresConfiguration.PgHBA = []string{
+			"hostssl all all all cert",
+			"hostssl replication streaming_replica all cert",
+		}
+
+		c := buildFakeClient(current).Build()
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.PostgresConfiguration.PgHBA).To(Equal([]string{
+			"hostssl all all all cert",
+			"hostssl replication streaming_replica all cert",
+		}))
+		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
+	})
+
 	It("handles multiple mutable field changes atomically", func() {
 		current := baseCluster("test-cluster", namespace)
 		current.Spec.ImageName = "ghcr.io/cloudnative-pg/postgresql:17-minimal-trixie"

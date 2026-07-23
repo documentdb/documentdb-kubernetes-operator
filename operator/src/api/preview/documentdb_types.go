@@ -364,6 +364,9 @@ type TLSConfiguration struct {
 	Gateway *GatewayTLS `json:"gateway,omitempty"`
 
 	// Postgres configures TLS for the Postgres server.
+	// If server side certs are provided alone, the operator will use sslMode=require for cross-regional replication connections.
+	// If replication certs are also provided, the operator will use verify-full, which requires the hostname to be correctly set.
+	// See the multi-region-deployment docs for how to do that.
 	Postgres *cnpgv1.CertificatesConfiguration `json:"postgres,omitempty"`
 
 	// GlobalEndpoints configures TLS for global endpoints (placeholder for future phases).
