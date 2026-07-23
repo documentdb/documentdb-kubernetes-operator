@@ -11,6 +11,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	utilslabels "github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -204,6 +205,119 @@ func TestPVBelongsToClusterMatchesLabelsOrClaimPrefix(t *testing.T) {
 		if got := pvBelongsToCluster(tc.pv, tc.cluster); got != tc.want {
 			t.Errorf("%s: got %v want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestMarkExpiredPatchesStatusViaSubresource(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	bkp := &previewv1.Backup{
+		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
+		Spec:       previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
+	}
+	c := fakeclient.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(bkp).
+		WithStatusSubresource(&previewv1.Backup{}).
+		Build()
+
+	when := time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := MarkExpired(context.Background(), c, "ns", "b", when); err != nil {
+		t.Fatalf("MarkExpired: %v", err)
+	}
+
+	var got previewv1.Backup
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "b"}, &got); err != nil {
+		t.Fatalf("Get after MarkExpired: %v", err)
+	}
+	if got.Status.ExpiredAt == nil {
+		t.Fatalf("expected status.expiredAt to be set; got nil")
+	}
+	if !got.Status.ExpiredAt.Time.Equal(when) {
+		t.Fatalf("status.expiredAt=%v want %v", got.Status.ExpiredAt.Time, when)
+	}
+}
+
+func TestMarkExpiredErrorsOnNotFound(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	c := fakeclient.NewClientBuilder().
+		WithScheme(s).
+		WithStatusSubresource(&previewv1.Backup{}).
+		Build()
+
+	err := MarkExpired(context.Background(), c, "ns", "missing", time.Unix(0, 0))
+	if err == nil {
+		t.Fatal("expected error for missing Backup, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("expected error to mention name; got %v", err)
+	}
+}
+
+func TestWaitForBackupDeletedReturnsWhenMissing(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	c := fakeclient.NewClientBuilder().WithScheme(s).Build()
+	if err := WaitForBackupDeleted(context.Background(), c, "ns", "nope", 500*time.Millisecond); err != nil {
+		t.Fatalf("expected nil for missing Backup, got %v", err)
+	}
+}
+
+func TestWaitForBackupDeletedTimesOutWhenPresent(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	bkp := &previewv1.Backup{
+		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
+		Status:     previewv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
+	}
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(bkp).Build()
+	err := WaitForBackupDeleted(context.Background(), c, "ns", "b", 500*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestWaitForSnapshotsDeletedForBackupReturnsWhenNone(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	// Distractors that must be ignored: a snapshot in the same namespace
+	// carrying a different backupName, and one with the matching label
+	// in another namespace. Neither belongs to backup "b" in "ns".
+	otherBackup := &snapshotv1.VolumeSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "snap-other",
+			Namespace: "ns",
+			Labels:    map[string]string{utilslabels.BackupNameLabelName: "other"},
+		},
+	}
+	otherNS := &snapshotv1.VolumeSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "snap-b",
+			Namespace: "other-ns",
+			Labels:    map[string]string{utilslabels.BackupNameLabelName: "b"},
+		},
+	}
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(otherBackup, otherNS).Build()
+	if err := WaitForSnapshotsDeletedForBackup(context.Background(), c, "ns", "b", 500*time.Millisecond); err != nil {
+		t.Fatalf("expected nil when no matching snapshots exist, got %v", err)
+	}
+}
+
+func TestWaitForSnapshotsDeletedForBackupTimesOutWhenPresent(t *testing.T) {
+	t.Parallel()
+	s := newScheme(t)
+	snap := &snapshotv1.VolumeSnapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "snap-b",
+			Namespace: "ns",
+			Labels:    map[string]string{utilslabels.BackupNameLabelName: "b"},
+		},
+	}
+	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(snap).Build()
+	err := WaitForSnapshotsDeletedForBackup(context.Background(), c, "ns", "b", 500*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected timeout error, got %v", err)
 	}
 }
 
