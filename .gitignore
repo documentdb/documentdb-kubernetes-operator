@@ -278,6 +278,9 @@ Backup*/
 !test/e2e/manifests/backup/
 !test/e2e/tests/backup/
 !test/e2e/pkg/e2eutils/backup/
+# The long-haul driver's data-protection component lives here and is
+# likewise swallowed by the generic Backup*/ rule above.
+!test/longhaul/backup/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/

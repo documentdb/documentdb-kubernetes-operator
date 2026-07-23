@@ -46,6 +46,19 @@
 #   (LONGHAUL_MIN_INSTANCES == LONGHAUL_MAX_INSTANCES) so the gate is a fast,
 #   deterministic data-durability check (writers + verifier) that fits a
 #   GitHub-hosted runner and finishes in a few minutes.
+#
+# Data-protection gate
+#   The backup verifier is exercised for real, not just compiled in. The kind
+#   cluster already has CSI VolumeSnapshot support (setup-test-environment runs
+#   deploy-csi-driver.sh: external-snapshotter + a default csi-hostpath
+#   VolumeSnapshotClass), so a single-instance cluster can complete snapshot
+#   backups — exactly as the e2e scheduled-backup test proves. The smoke run
+#   therefore sets a fast backup schedule (every minute) and asserts the driver
+#   actually scheduled AND completed at least one backup (with no retention leak
+#   or completion stall). Because the backup verify loop ticks every 5m, the
+#   bounded window is >= 6m so that tick fires once against several
+#   already-completed backups; a broken backup path (no completion) fails the
+#   PR rather than passing silently as a no-op.
 
 name: Long-Haul Smoke Gate
 
@@ -61,9 +74,9 @@ on:
   workflow_dispatch:
     inputs:
       max_duration:
-        description: "Bounded driver run length (Go duration, e.g. 3m)"
+        description: "Bounded driver run length (Go duration). Keep >= 6m so the 5m backup verify tick fires."
         required: false
-        default: "3m"
+        default: "6m"
 
 permissions:
   contents: read
@@ -115,7 +128,7 @@ jobs:
       # Must match the cluster name the composite action derives:
       #   documentdb-<test-type>-<architecture>-<test-scenario-name>
       KIND_CLUSTER: documentdb-longhaul-amd64-smoke
-      MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
+      MAX_DURATION: ${{ github.event.inputs.max_duration || '6m' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -205,6 +218,10 @@ jobs:
           #  - RESET_DATA: fresh collection each CI run
           #  - MIN==MAX instances: disable disruptive scale ops (fast + stable)
           #  - short cadences so the verifier gets several cycles in the window
+          #  - BACKUP_*: exercise the data-protection verifier for real — a
+          #    per-minute schedule so backups are scheduled + completed well
+          #    before the backup verifier's 5m tick observes them. Retention is
+          #    1 day (>> the run) so no leak fires; we assert scheduled+completed.
           PATCH=$(jq -nc \
             --arg dur "${MAX_DURATION}" \
             '{data: {
@@ -216,7 +233,10 @@ jobs:
               LONGHAUL_RECOVERY_TIMEOUT: "2m",
               LONGHAUL_REPORT_INTERVAL: "30s",
               LONGHAUL_MIN_INSTANCES: "1",
-              LONGHAUL_MAX_INSTANCES: "1"
+              LONGHAUL_MAX_INSTANCES: "1",
+              LONGHAUL_BACKUP_ENABLED: "true",
+              LONGHAUL_BACKUP_SCHEDULE: "*/1 * * * *",
+              LONGHAUL_BACKUP_RETENTION_DAYS: "1"
             }}')
           kubectl patch configmap longhaul-test-config -n "${DB_NS}" --type merge -p "${PATCH}"
 
@@ -286,6 +306,44 @@ jobs:
           fi
           echo "✅ Long-haul smoke gate passed (exit 0, report PASS)."
 
+      - name: Assert data-protection verifier ran
+        run: |
+          set -euo pipefail
+          # The overall PASS only means "no leak/stall/data-loss". With zero
+          # backups that is trivially true, so a broken/no-op backup path would
+          # slip through. Assert the verifier actually scheduled AND completed a
+          # backup — proof the data-protection path functioned end-to-end.
+          report=$(kubectl get configmap longhaul-report -n "${DB_NS}" \
+            -o jsonpath='{.data.latest-report}' 2>/dev/null || echo "")
+          if [[ -z "${report}" ]]; then
+            echo "::error::longhaul-report has no latest-report body to inspect."
+            exit 1
+          fi
+
+          extract() { echo "${report}" | sed -n "s/^| $1 | \([0-9][0-9]*\) |.*/\1/p"; }
+          scheduled=$(extract "Backups Scheduled" || true)
+          completed=$(extract "Backups Completed" || true)
+          leaks=$(extract "Retention Leaks" || true)
+          stall=$(extract "Max Scheduled Without Completion" || true)
+
+          echo "===== Data Protection ====="
+          echo "${report}" | grep -E '^\| (Backups|Live Backup|Retention Leaks|Max Scheduled) ' || true
+          echo "Scheduled=${scheduled:-?} Completed=${completed:-?} Leaks=${leaks:-?} MaxNoCompletion=${stall:-?}"
+
+          if [[ -z "${scheduled}" || -z "${completed}" ]]; then
+            echo "::error::Could not parse backup metrics from the report."
+            exit 1
+          fi
+          if (( scheduled < 1 )); then
+            echo "::error::Backup verifier observed no scheduled backups (scheduled=${scheduled}); the data-protection path did not run."
+            exit 1
+          fi
+          if (( completed < 1 )); then
+            echo "::error::Backup verifier observed no completed backups (completed=${completed}); backups scheduled but never completed."
+            exit 1
+          fi
+          echo "✅ Data-protection verifier ran (scheduled=${scheduled}, completed=${completed})."
+
       - name: Diagnostics on failure
         if: failure()
         run: |
@@ -297,6 +355,11 @@ jobs:
           kubectl logs -n "${DB_NS}" -l app.kubernetes.io/name=longhaul-test --previous --tail=200 || true
           echo "===== longhaul-report ConfigMap ====="
           kubectl get configmap longhaul-report -n "${DB_NS}" -o yaml || true
+          echo "===== ScheduledBackup + child Backups ====="
+          kubectl get scheduledbackups.documentdb.io -n "${DB_NS}" -o wide || true
+          kubectl get backups.documentdb.io -n "${DB_NS}" -o wide || true
+          echo "===== VolumeSnapshots ====="
+          kubectl get volumesnapshots -n "${DB_NS}" -o wide || true
           echo "===== DocumentDB describe ====="
           kubectl describe documentdb "${DB_NAME}" -n "${DB_NS}" || true
           echo "===== Operator logs ====="
