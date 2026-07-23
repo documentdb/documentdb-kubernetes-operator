@@ -59,6 +59,12 @@ data:
   # DocumentDB workload collection and longhaul-report ConfigMap checkpoints.
   # Override to "true" only for local/dev iterations.
   LONGHAUL_RESET_DATA: "false"
+  # Retention: keep only the most recent N documents per writer so the endurance
+  # write load does not grow the PVC without bound (a fixed disk always fills
+  # eventually otherwise). Pruning removes only already-verified history, so it
+  # never affects the durability verdict. At ~10 writes/sec/writer, 2,000,000
+  # docs is roughly 55h of per-writer history. Set to "0" to disable pruning.
+  LONGHAUL_RETAIN_PER_WRITER: "2000000"
   # Replica range for scale operations.
   # Bounds for spec.instancesPerNode (CRD allows 1-3). Default Min=1, Max=3
   # exercises full scale-up/down cycle. Set Min=Max to disable scale ops.

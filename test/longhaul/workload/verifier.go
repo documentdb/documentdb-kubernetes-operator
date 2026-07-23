@@ -5,7 +5,9 @@ package workload
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
@@ -41,6 +43,17 @@ type Verifier struct {
 	// a late-arriving fill at a missing seq is not re-checked.
 	// Only mutated from the verifier goroutine, so no lock is needed.
 	nextSeq map[string]int64
+
+	// seeded[writerID] records whether the verifier has performed the one-time
+	// startup seed of expectedSeq from the collection's current minimum seq.
+	// Only touched from the verifier goroutine.
+	seeded map[string]bool
+
+	// floor[writerID] is the highest fully-verified seq for that writer
+	// (nextSeq-1), published as an atomic so the retention pruner can read it
+	// concurrently without racing the verifier goroutine. Everything at or
+	// below the floor has been accounted for and is safe to prune.
+	floor map[string]*atomic.Int64
 }
 
 // NewVerifier creates a verifier. writers is the set of writers whose tips
@@ -49,13 +62,31 @@ type Verifier struct {
 func NewVerifier(db *mongo.Database, writers []*Writer, metrics *Metrics, j *journal.Journal) *Verifier {
 	coll := db.Collection(CollectionName, options.Collection().
 		SetReadConcern(readconcern.Majority()))
+	floor := make(map[string]*atomic.Int64, len(writers))
+	for _, w := range writers {
+		floor[w.id] = &atomic.Int64{}
+	}
 	return &Verifier{
 		metrics:    metrics,
 		journal:    j,
 		collection: coll,
 		writers:    writers,
 		nextSeq:    make(map[string]int64),
+		seeded:     make(map[string]bool),
+		floor:      floor,
 	}
+}
+
+// ConfirmedFloor returns the highest seq the verifier has fully accounted for
+// for writerID (0 if none yet). Every seq at or below this value has been
+// scanned, so a pruner may safely delete documents below it without the
+// verifier ever re-reading them (steady state) or misreading them as gaps
+// (restart, thanks to the startup DB-min seed). Safe for concurrent reads.
+func (v *Verifier) ConfirmedFloor(writerID string) int64 {
+	if a, ok := v.floor[writerID]; ok {
+		return a.Load()
+	}
+	return 0
 }
 
 // Run starts the verifier loop. It blocks until the context is cancelled.
@@ -205,8 +236,35 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	if expectedSeq == 0 {
 		expectedSeq = 1
 	}
+
+	// One-time startup seed: retention pruning deletes already-verified
+	// documents below the confirmed floor, so after a pod restart (which
+	// resets the in-memory nextSeq to 1) a naive scan from seq 1 would see the
+	// pruned prefix as one enormous gap — a false data-loss verdict. Advance
+	// expectedSeq to the collection's current minimum seq so the verifier only
+	// audits documents that still exist. Real gaps above the surviving floor
+	// are still detected. Done once per writer; steady-state cycles never
+	// re-read below nextSeq.
+	if !v.seeded[writerID] {
+		// Only mark seeded on success: a transient minSeq error (network blip,
+		// majority-read timeout) must retry next cycle, otherwise the seed is
+		// skipped forever and the very next scan runs from seq 1 against a
+		// pruned collection — turning the surviving prefix into one giant false
+		// gap. minSeq returning (0, nil) for an empty collection is a success.
+		newExpected, ok, err := seedExpectedSeq(expectedSeq, func() (int64, error) {
+			return v.minSeq(ctx, writerID)
+		})
+		if err != nil {
+			v.journal.Warn("verifier", fmt.Sprintf("min-seq seed failed for writer %s (will retry): %v", writerID, err))
+		} else {
+			expectedSeq = newExpected
+			v.seeded[writerID] = ok
+		}
+	}
+
 	if maxSeq < expectedSeq {
 		// Nothing new committed since last cycle.
+		v.publishFloor(writerID, expectedSeq-1)
 		return
 	}
 
@@ -223,6 +281,50 @@ func (v *Verifier) verifyWriter(ctx context.Context, w *Writer) {
 	}
 
 	v.nextSeq[writerID] = r.newExpectedSeq
+	v.publishFloor(writerID, r.newExpectedSeq-1)
+}
+
+// publishFloor records the highest fully-verified seq for writerID so the
+// retention pruner can read it concurrently. No-op for writers not registered
+// at construction (e.g. unit tests that pass nil writers).
+func (v *Verifier) publishFloor(writerID string, floor int64) {
+	if a, ok := v.floor[writerID]; ok {
+		a.Store(floor)
+	}
+}
+
+// seedExpectedSeq performs the one-time startup min-seq seed decision for a
+// single writer. lookup resolves the collection's current minimum seq for that
+// writer (v.minSeq in production). It returns the possibly-advanced expectedSeq
+// and whether the seed succeeded; the caller must only mark the writer seeded
+// when ok is true, so a transient lookup error retries on the next cycle rather
+// than being skipped forever (which would scan a pruned collection from seq 1
+// and register a false gap). An empty collection — lookup returning (0, nil) —
+// counts as success and leaves expectedSeq unchanged.
+func seedExpectedSeq(expectedSeq int64, lookup func() (int64, error)) (int64, bool, error) {
+	minSeq, err := lookup()
+	if err != nil {
+		return expectedSeq, false, err
+	}
+	if minSeq > expectedSeq {
+		expectedSeq = minSeq
+	}
+	return expectedSeq, true, nil
+}
+
+// minSeq returns the lowest seq currently stored for writerID, or 0 if the
+// writer has no documents.
+func (v *Verifier) minSeq(ctx context.Context, writerID string) (int64, error) {
+	opts := options.FindOne().SetSort(bson.D{{Key: "seq", Value: 1}})
+	var doc WriteDocument
+	err := v.collection.FindOne(ctx, bson.M{"writer_id": writerID}, opts).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return doc.Seq, nil
 }
 
 // scanWriter streams all docs for writerID with seq in [expectedSeq, maxSeq]

@@ -4,6 +4,9 @@
 package workload
 
 import (
+	"errors"
+	"sync/atomic"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -45,10 +48,95 @@ var _ = Describe("Verifier", func() {
 		// what the verifier actually does. Document the boundary.
 		Skip("verifyAll requires a *mongo.Database; covered by long-haul integration runs")
 	})
+
+	Describe("ConfirmedFloor", func() {
+		It("returns 0 for a writer registered but not yet verified", func() {
+			v := &Verifier{floor: map[string]*atomic.Int64{"w000": {}}}
+			Expect(v.ConfirmedFloor("w000")).To(BeZero())
+		})
+
+		It("reflects the published floor and is isolated per writer", func() {
+			v := &Verifier{floor: map[string]*atomic.Int64{
+				"w000": {}, "w001": {},
+			}}
+			v.publishFloor("w000", 4_200)
+			Expect(v.ConfirmedFloor("w000")).To(Equal(int64(4_200)))
+			Expect(v.ConfirmedFloor("w001")).To(BeZero())
+			Expect(v.ConfirmedFloor("unknown")).To(BeZero(),
+				"unregistered writers read as 0 so the pruner never deletes for them")
+		})
+	})
+
+	Describe("startup min-seq seed (seedExpectedSeq)", func() {
+		// The seed is the restart-after-pruning safety net: retention pruning
+		// deletes already-verified docs below the floor, so a restarted pod
+		// (in-memory nextSeq reset to 1) must advance expectedSeq to the
+		// collection's surviving minimum, or the pruned prefix reads as one
+		// giant false gap. These tests lock the two invariants that matter:
+		// (1) a successful seed advances past the pruned prefix, and
+		// (2) a transient lookup error does NOT mark the writer seeded, so it
+		//     retries next cycle instead of being skipped forever.
+
+		It("advances expectedSeq to the surviving minimum after pruning (restart happy path)", func() {
+			// Fresh verifier => expectedSeq starts at 1. The collection was
+			// pruned so its lowest surviving seq is 5_000.
+			got, ok, err := seedExpectedSeq(1, func() (int64, error) { return 5_000, nil })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(got).To(Equal(int64(5_000)),
+				"scan must start at the surviving minimum, not seq 1, so the pruned prefix is not a false gap")
+		})
+
+		It("leaves expectedSeq unchanged when the minimum is at or below it", func() {
+			// Un-pruned / already-ahead resume point: min-seq must not rewind us.
+			got, ok, err := seedExpectedSeq(200, func() (int64, error) { return 1, nil })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(got).To(Equal(int64(200)))
+		})
+
+		It("treats an empty collection (0, nil) as a successful seed", func() {
+			got, ok, err := seedExpectedSeq(1, func() (int64, error) { return 0, nil })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue(), "an empty collection is a valid state, not a retry-worthy error")
+			Expect(got).To(Equal(int64(1)))
+		})
+
+		It("does NOT mark seeded on a transient error, and retries successfully next cycle", func() {
+			// This is the regression the Major review comment called out: a
+			// transient minSeq error used to mark the writer seeded, permanently
+			// skipping the seed and producing a false data-loss FAIL.
+			calls := 0
+			lookup := func() (int64, error) {
+				calls++
+				if calls == 1 {
+					return 0, errors.New("majority-read timeout")
+				}
+				return 5_000, nil
+			}
+
+			// Simulate the call-site contract: only mark seeded when ok is true.
+			expectedSeq := int64(1)
+			seeded := false
+
+			got, ok, err := seedExpectedSeq(expectedSeq, lookup)
+			Expect(err).To(HaveOccurred())
+			Expect(ok).To(BeFalse())
+			Expect(got).To(Equal(int64(1)), "a failed seed must not move expectedSeq")
+			seeded = seeded || ok
+			Expect(seeded).To(BeFalse(), "writer must remain un-seeded so it retries next cycle")
+
+			// Next cycle: the seed is retried (because still not seeded) and now
+			// succeeds, advancing past the pruned prefix.
+			got, ok, err = seedExpectedSeq(got, lookup)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ok).To(BeTrue())
+			Expect(got).To(Equal(int64(5_000)))
+			Expect(calls).To(Equal(2), "the transient error must trigger exactly one retry")
+		})
+	})
 })
 
-// makeDoc constructs a valid WriteDocument whose checksum matches; tests that
-// want a checksum mismatch override Checksum directly.
 func makeDoc(writerID string, seq int64) WriteDocument {
 	payload := "p"
 	return WriteDocument{
