@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Configure TLS certificate management for DocumentDB gateway connections — SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.">
+        <meta name="description" content="Configure TLS certificate management for DocumentDB gateway and PostgreSQL connections, including SelfSigned, CertManager, and Provided modes, private CA guidance, certificate rotation, and troubleshooting.">
       
       
       
@@ -22,7 +22,7 @@
     
     
       
-        <title>TLS Configuration - DocumentDB-Kubernetes-Operator</title>
+        <title>TLS configuration - DocumentDB-Kubernetes-Operator</title>
       
     
     
@@ -102,7 +102,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              TLS Configuration
+              TLS configuration
             
           </span>
         </div>
@@ -752,6 +752,39 @@
   <a href="#monitor-certificate-expiration" class="md-nav__link">
     <span class="md-ellipsis">
       Monitor certificate expiration
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postgresql-certificates" class="md-nav__link">
+    <span class="md-ellipsis">
+      PostgreSQL certificates
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PostgreSQL certificates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replication-client-certificate-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication client certificate name
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#server-certificate-sans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Server certificate SANs
     </span>
   </a>
   
@@ -1497,6 +1530,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#postgresql-certificates" class="md-nav__link">
+    <span class="md-ellipsis">
+      PostgreSQL certificates
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PostgreSQL certificates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replication-client-certificate-name" class="md-nav__link">
+    <span class="md-ellipsis">
+      Replication client certificate name
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#server-certificate-sans" class="md-nav__link">
+    <span class="md-ellipsis">
+      Server certificate SANs
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#additional-resources" class="md-nav__link">
     <span class="md-ellipsis">
       Additional resources
@@ -1523,7 +1589,7 @@
   
 
 
-<h1 id="tls-configuration">TLS Configuration<a class="headerlink" href="#tls-configuration" title="Permanent link">&para;</a></h1>
+<h1 id="tls-configuration">TLS configuration<a class="headerlink" href="#tls-configuration" title="Permanent link">&para;</a></h1>
 <div class="admonition warning">
 <p class="admonition-title">Breaking change in this release</p>
 <p>The <code>Disabled</code> TLS mode has been removed. If you previously set <code>spec.tls.gateway.mode: Disabled</code>, update it to <code>SelfSigned</code> (or remove the field — <code>SelfSigned</code> is now the default). See the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/CHANGELOG.md">CHANGELOG</a> for details.</p>
@@ -1761,6 +1827,78 @@
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Gateway TLS certificate ready&quot;</span>
 <a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="p">}</span>
 </code></pre></div>
+<h2 id="postgresql-certificates">PostgreSQL certificates<a class="headerlink" href="#postgresql-certificates" title="Permanent link">&para;</a></h2>
+<p>The <code>spec.tls.gateway</code> settings above secure client connections to the DocumentDB gateway. A separate field, <code>spec.tls.postgres</code>, configures the certificates that CloudNative-PG uses for PostgreSQL server and replication connections.</p>
+<p>In a single-region deployment, CloudNative-PG provisions self-signed certificates automatically. You don't need to set <code>spec.tls.postgres</code> unless you want PostgreSQL inter-pod, intra-Kubernetes-cluster connections to use certificate material from your own CA instead of the CloudNative-PG generated self-signed certificates.</p>
+<p>When you provide PostgreSQL certificate Secrets, the operator passes them to the underlying CloudNative-PG <code>Cluster</code>. This changes the certificates used between DocumentDB instance pods inside the same Kubernetes cluster; it doesn't change how clients connect to the DocumentDB gateway.</p>
+<div class="highlight"><span class="filename">documentdb-postgres-provided-certs.yaml</span><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">documentdb.io/preview</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DocumentDB</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="nt">nodeCount</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="w">  </span><span class="nt">instancesPerNode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span><span class="nt">resource</span><span class="p">:</span>
+<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="w">    </span><span class="nt">storage</span><span class="p">:</span>
+<a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="w">      </span><span class="nt">pvcSize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100Gi</span>
+<a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">  </span><span class="nt">tls</span><span class="p">:</span>
+<a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="nt">postgres</span><span class="p">:</span>
+<a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="w">      </span><span class="nt">replicationTLSSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-replication-cert</span>
+<a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="w">      </span><span class="nt">clientCASecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-replication-cert</span>
+<a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="w">      </span><span class="nt">serverTLSSecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-server-cert</span>
+<a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="w">      </span><span class="nt">serverCASecret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-server-cert</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>replicationTLSSecret</code> and <code>clientCASecret</code> must be provided together. <code>serverTLSSecret</code> and <code>serverCASecret</code> must be provided together, and <code>serverTLSSecret</code> requires <code>replicationTLSSecret</code>.</p>
+</div>
+<h3 id="replication-client-certificate-name">Replication client certificate name<a class="headerlink" href="#replication-client-certificate-name" title="Permanent link">&para;</a></h3>
+<p>The PostgreSQL replication client certificate referenced by <code>replicationTLSSecret</code> must authenticate as the <code>streaming_replica</code> PostgreSQL role. The Kubernetes Secret name can be any name that you reference from <code>spec.tls.postgres.replicationTLSSecret</code>, but the certificate identity must use <code>streaming_replica</code> as the common name.</p>
+<p>If you create the client certificate with cert-manager, set <code>spec.commonName</code> to <code>streaming_replica</code> and include the <code>client auth</code> usage:</p>
+<div class="highlight"><span class="filename">postgres-replication-certificate.yaml</span><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cert-manager.io/v1</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Certificate</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-replication-cert</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-replication-cert</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span><span class="nt">usages</span><span class="p">:</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">client auth</span>
+<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span><span class="nt">commonName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">streaming_replica</span>
+<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">  </span><span class="nt">issuerRef</span><span class="p">:</span>
+<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-ca-issuer</span>
+<a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Issuer</span>
+<a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cert-manager.io</span>
+</code></pre></div>
+<h3 id="server-certificate-sans">Server certificate SANs<a class="headerlink" href="#server-certificate-sans" title="Permanent link">&para;</a></h3>
+<p>The PostgreSQL server certificate referenced by <code>serverTLSSecret</code> must include the CloudNative-PG read-write Service names for the DocumentDB object as Subject Alternative Names (SANs). In a single-region deployment, the operator uses the DocumentDB object name as the CloudNative-PG cluster name.</p>
+<p>For a DocumentDB object named <code>my-documentdb</code> in the <code>default</code> namespace, include all three service-name forms:</p>
+<ul>
+<li><code>my-documentdb-rw</code></li>
+<li><code>my-documentdb-rw.default</code></li>
+<li><code>my-documentdb-rw.default.svc</code></li>
+</ul>
+<p>If you create the server certificate with cert-manager, put these names in <code>spec.dnsNames</code>:</p>
+<div class="highlight"><span class="filename">postgres-server-certificate.yaml</span><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cert-manager.io/v1</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Certificate</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-server-cert</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">  </span><span class="nt">secretName</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres-server-cert</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">  </span><span class="nt">usages</span><span class="p">:</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">server auth</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">  </span><span class="nt">dnsNames</span><span class="p">:</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb-rw</span>
+<a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb-rw.default</span>
+<a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-documentdb-rw.default.svc</span>
+<a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="w">  </span><span class="nt">issuerRef</span><span class="p">:</span>
+<a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my-ca-issuer</span>
+<a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Issuer</span>
+<a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cert-manager.io</span>
+</code></pre></div>
+<p>For cross-Kubernetes-cluster replication, see <a href="../../multi-region-deployment/setup/#replication-tls-postgresql">Replication TLS (PostgreSQL)</a>.</p>
 <h2 id="additional-resources">Additional resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
 <p>The <a href="https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/tls"><code>documentdb-playground/tls/</code></a> directory provides automated scripts and end-to-end guides for TLS setup on AKS:</p>
 <ul>

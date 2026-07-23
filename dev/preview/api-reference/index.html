@@ -1565,15 +1565,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#postgrestls" class="md-nav__link">
-    <span class="md-ellipsis">
-      PostgresTLS
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#prometheusexporterspec" class="md-nav__link">
     <span class="md-ellipsis">
       PrometheusExporterSpec
@@ -1910,15 +1901,6 @@
   <a href="#postgresspec" class="md-nav__link">
     <span class="md-ellipsis">
       PostgresSpec
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#postgrestls" class="md-nav__link">
-    <span class="md-ellipsis">
-      PostgresTLS
     </span>
   </a>
   
@@ -2731,12 +2713,14 @@ All fields are optional.</p>
 <td></td>
 <td>Optional: {} <br /></td>
 </tr>
+<tr>
+<td><code>parameters</code> <em>object (keys:string, values:string)</em></td>
+<td>Parameters allows users to override PostgreSQL configuration parameters<br />(postgresql.conf settings) passed through to the underlying CNPG Cluster.<br />The operator applies memory-aware defaults (shared_buffers, effective_cache_size,<br />work_mem, maintenance_work_mem) computed from the pod memory limit, plus static<br />best-practice defaults for autovacuum, IO, WAL, and connection settings.<br />Values specified here override computed and static defaults.<br />Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,<br />max_prepared_transactions) cannot be overridden.</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
 </tbody>
 </table>
-<h4 id="postgrestls">PostgresTLS<a class="headerlink" href="#postgrestls" title="Permanent link">&para;</a></h4>
-<p>PostgresTLS acts as a placeholder for future Postgres TLS settings.</p>
-<p><em>Appears in:</em>
-- <a href="#tlsconfiguration">TLSConfiguration</a></p>
 <h4 id="prometheusexporterspec">PrometheusExporterSpec<a class="headerlink" href="#prometheusexporterspec" title="Permanent link">&para;</a></h4>
 <p>PrometheusExporterSpec configures the Prometheus scrape endpoint exporter.</p>
 <p><em>Appears in:</em>
@@ -2827,6 +2811,18 @@ All fields are optional.</p>
 <td>Storage configuration for DocumentDB persistent volumes.</td>
 <td></td>
 <td></td>
+</tr>
+<tr>
+<td><code>memory</code> <em>string</em></td>
+<td>Memory specifies the memory limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.memory<br />and spec.resources.requests.memory (Guaranteed QoS).<br />Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)<br />are auto-computed from this value.<br />If not specified or set to "0", no memory limit is applied and static<br />defaults are used for memory-aware parameters.<br />Examples: "2Gi", "4Gi", "8Gi"</td>
+<td></td>
+<td>Optional: {} <br /></td>
+</tr>
+<tr>
+<td><code>cpu</code> <em>string</em></td>
+<td>CPU specifies the CPU limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.cpu<br />and spec.resources.requests.cpu (Guaranteed QoS).<br />If not specified or set to "0", no CPU limit is applied.<br />Examples: "2", "4", "500m"</td>
+<td></td>
+<td>Optional: {} <br /></td>
 </tr>
 </tbody>
 </table>
@@ -2955,8 +2951,8 @@ All fields are optional.</p>
 <td></td>
 </tr>
 <tr>
-<td><code>postgres</code> <em><a href="#postgrestls">PostgresTLS</a></em></td>
-<td>Postgres configures TLS for the Postgres server (placeholder for future phases).</td>
+<td><code>postgres</code> <em><a href="https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#CertificatesConfiguration">CertificatesConfiguration</a></em></td>
+<td>Postgres configures TLS for the Postgres server.</td>
 <td></td>
 <td></td>
 </tr>
