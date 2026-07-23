@@ -122,8 +122,13 @@ var _ = Describe("DocumentDB upgrade — schema",
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Succeed(), "DocumentDB did not reach Ready on oldVersion=%s", oldVersion)
 
+			// Single schema-version poller reused across every Eventually/
+			// Consistently below: it caches the last good read so a transient
+			// API error can't fail the Consistently window (see helper doc).
+			schemaVersion := schemaVersionGetter(ctx, c, key)
+
 			By("waiting for status.schemaVersion to settle on the old version")
-			Eventually(schemaVersionGetter(ctx, c, key),
+			Eventually(schemaVersion,
 				timeouts.For(timeouts.DocumentDBReady),
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Equal(oldVersion), "initial schema version should be %s", oldVersion)
@@ -164,7 +169,7 @@ var _ = Describe("DocumentDB upgrade — schema",
 			// The binary now offers newVersion, but with schemaVersion unset
 			// the operator must leave the installed schema at oldVersion. Hold
 			// the assertion over a window so a late auto-migration would fail.
-			Consistently(schemaVersionGetter(ctx, c, key),
+			Consistently(schemaVersion,
 				30*time.Second, 5*time.Second,
 			).Should(Equal(oldVersion),
 				"schema must remain at %s until spec.schemaVersion is set (two-phase)", oldVersion)
@@ -186,7 +191,7 @@ var _ = Describe("DocumentDB upgrade — schema",
 			})).To(Succeed(), "patch DocumentDB schemaVersion to %s", newVersion)
 
 			By("waiting for ALTER EXTENSION UPDATE to advance status.schemaVersion to the new version")
-			Eventually(schemaVersionGetter(ctx, c, key),
+			Eventually(schemaVersion,
 				timeouts.For(timeouts.DocumentDBUpgrade),
 				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
 			).Should(Equal(newVersion), "schema did not migrate to %s after finalize", newVersion)
@@ -208,16 +213,21 @@ var _ = Describe("DocumentDB upgrade — schema",
 	})
 
 // schemaVersionGetter returns a poll function reporting the DocumentDB's
-// status.schemaVersion, for use with Eventually/Consistently. A fetch
-// error is surfaced as an empty string so the matcher keeps polling
-// rather than failing hard on a transient API error.
+// status.schemaVersion, for use with Eventually/Consistently. To tolerate
+// transient API errors without failing a Consistently window, it caches the
+// last successfully observed value and returns that (rather than "") on a fetch
+// error — a real schema change is still caught because every successful read
+// refreshes the cache. Instantiate it once per spec and reuse the same closure
+// across all checks so the cache persists between them.
 func schemaVersionGetter(ctx context.Context, c client.Client, key types.NamespacedName) func() string {
+	var last string
 	return func() string {
 		dd, err := shareddb.Get(ctx, c, key)
 		if err != nil {
-			return ""
+			return last
 		}
-		return dd.Status.SchemaVersion
+		last = dd.Status.SchemaVersion
+		return last
 	}
 }
 
