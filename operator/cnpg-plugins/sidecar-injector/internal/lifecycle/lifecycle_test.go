@@ -352,7 +352,7 @@ func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
 // restricted and, unlike the gateway, does not force a UID so the collector
 // image keeps its own non-root user (UID 10001).
 func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "demo")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
 
 	if c.Name != otelCollectorContainerName {
 		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
@@ -364,4 +364,23 @@ func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
 	if c.SecurityContext.RunAsGroup != nil {
 		t.Errorf("otel-collector must not force a GID, got %d", *c.SecurityContext.RunAsGroup)
 	}
+}
+
+// TestNewOtelCollectorSidecar_MonitorUser asserts the sidecar connects using
+// the dedicated monitoring identity without injecting an unused password.
+func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
+
+	for _, env := range c.Env {
+		if env.Name == "PGPASSWORD" {
+			t.Fatal("PGPASSWORD must not be injected while PostgreSQL uses trust authentication")
+		}
+		if env.Name == "PGUSER" {
+			if env.Value != otelMonitorRoleName {
+				t.Fatalf("PGUSER = %q, want %q", env.Value, otelMonitorRoleName)
+			}
+			return
+		}
+	}
+	t.Fatal("missing PGUSER env var")
 }

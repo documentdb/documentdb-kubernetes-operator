@@ -102,7 +102,7 @@ tests:
             resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
             verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-  - it: should include secrets permissions (read-only)
+  - it: should include read-only secrets permissions
     asserts:
       - contains:
           path: rules

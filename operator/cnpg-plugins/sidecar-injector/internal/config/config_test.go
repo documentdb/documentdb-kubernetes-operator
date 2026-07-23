@@ -84,12 +84,105 @@ func TestFromParameters(t *testing.T) {
 		}
 	})
 
+	t.Run("parses OTel monitoring parameters", func(t *testing.T) {
+		helper := &common.Plugin{Parameters: map[string]string{
+			"otelCollectorImage": "otel/opentelemetry-collector-contrib:test",
+			"otelConfigMapName":  "demo-otel-config",
+			"otelConfigHash":     "abc123",
+		}}
+		config, errs := FromParameters(helper)
+		if len(errs) != 0 {
+			t.Fatalf("unexpected validation errors: %v", errs)
+		}
+		if config.OtelCollectorImage != "otel/opentelemetry-collector-contrib:test" {
+			t.Errorf("OtelCollectorImage = %q", config.OtelCollectorImage)
+		}
+		if config.OtelConfigMapName != "demo-otel-config" {
+			t.Errorf("OtelConfigMapName = %q", config.OtelConfigMapName)
+		}
+		if config.OtelConfigHash != "abc123" {
+			t.Errorf("OtelConfigHash = %q", config.OtelConfigHash)
+		}
+	})
+
+	for _, tt := range []struct {
+		name       string
+		parameters map[string]string
+		wantErrors int
+	}{
+		{
+			name: "rejects collector image without config map",
+			parameters: map[string]string{
+				"otelCollectorImage": "otel/opentelemetry-collector-contrib:test",
+			},
+			wantErrors: 1,
+		},
+		{
+			name: "rejects config map without collector image",
+			parameters: map[string]string{
+				"otelConfigMapName": "demo-otel-config",
+			},
+			wantErrors: 1,
+		},
+		{
+			name: "rejects optional OTel parameter without required parameters",
+			parameters: map[string]string{
+				"prometheusPort": "8888",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects config hash without required parameters",
+			parameters: map[string]string{
+				"otelConfigHash": "abc123",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects memory request without required parameters",
+			parameters: map[string]string{
+				"otelMemoryRequest": "64Mi",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects memory limit without required parameters",
+			parameters: map[string]string{
+				"otelMemoryLimit": "128Mi",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects CPU request without required parameters",
+			parameters: map[string]string{
+				"otelCpuRequest": "100m",
+			},
+			wantErrors: 2,
+		},
+		{
+			name: "rejects CPU limit without required parameters",
+			parameters: map[string]string{
+				"otelCpuLimit": "300m",
+			},
+			wantErrors: 2,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, errs := FromParameters(&common.Plugin{Parameters: tt.parameters})
+			if len(errs) != tt.wantErrors {
+				t.Fatalf("validation errors = %d, want %d: %v", len(errs), tt.wantErrors, errs)
+			}
+		})
+	}
+
 	t.Run("resource parameters from parameters", func(t *testing.T) {
 		helper := &common.Plugin{Parameters: map[string]string{
 			"gatewayMemoryRequest": "768Mi",
 			"gatewayMemoryLimit":   "3Gi",
 			"gatewayCpuRequest":    "500m",
 			"gatewayCpuLimit":      "2",
+			"otelCollectorImage":   "otel:latest",
+			"otelConfigMapName":    "otel-config",
 			"otelMemoryRequest":    "64Mi",
 			"otelMemoryLimit":      "128Mi",
 			"otelCpuRequest":       "100m",
@@ -130,6 +223,9 @@ func TestToParametersRoundTrip(t *testing.T) {
 		GatewayMemoryLimit:     "3Gi",
 		GatewayCPURequest:      "500m",
 		GatewayCPULimit:        "2",
+		OtelCollectorImage:     "otel:latest",
+		OtelConfigMapName:      "otel-config",
+		OtelConfigHash:         "abc123",
 		OTelMemoryRequest:      "64Mi",
 		OTelMemoryLimit:        "128Mi",
 		OTelCPURequest:         "100m",
@@ -163,6 +259,15 @@ func TestToParametersRoundTrip(t *testing.T) {
 	}
 	if restored.GatewayCPULimit != original.GatewayCPULimit {
 		t.Errorf("round-trip gateway cpu limit = %q, want %q", restored.GatewayCPULimit, original.GatewayCPULimit)
+	}
+	if restored.OtelCollectorImage != original.OtelCollectorImage {
+		t.Errorf("round-trip OTel collector image = %q, want %q", restored.OtelCollectorImage, original.OtelCollectorImage)
+	}
+	if restored.OtelConfigMapName != original.OtelConfigMapName {
+		t.Errorf("round-trip OTel config map = %q, want %q", restored.OtelConfigMapName, original.OtelConfigMapName)
+	}
+	if restored.OtelConfigHash != original.OtelConfigHash {
+		t.Errorf("round-trip OTel config hash = %q, want %q", restored.OtelConfigHash, original.OtelConfigHash)
 	}
 	if restored.OTelMemoryRequest != original.OTelMemoryRequest {
 		t.Errorf("round-trip otel memory request = %q, want %q", restored.OTelMemoryRequest, original.OTelMemoryRequest)

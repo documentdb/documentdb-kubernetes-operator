@@ -173,19 +173,14 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, nil
 	}
 
-	// Reconcile OTel Collector ConfigMap when monitoring is enabled.
-	// When monitoring is disabled or removed, delete the ConfigMap.
+	// Reconcile OTel resources when monitoring is enabled.
 	// The sidecar itself is added/removed via CNPG plugin parameters;
 	// the operator triggers a rolling restart (via restart annotation)
 	// and CNPG manages the pod rollout.
-	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+	monitoringEnabled := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
+	if monitoringEnabled {
 		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
 			logger.Error(err, "Failed to reconcile OTel ConfigMap")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-	} else {
-		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
-			logger.Error(err, "Failed to clean up OTel ConfigMap")
 			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 		}
 	}
@@ -217,6 +212,16 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := cnpg.SyncCnpgCluster(ctx, r.Client, currentCnpgCluster, desiredCnpgCluster, replicationOps); err != nil {
 		logger.Error(err, "Failed to sync CNPG Cluster spec")
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	// Delete the OTel ConfigMap only after the CNPG Cluster spec no longer
+	// references it. If cluster sync fails, retaining it keeps the existing
+	// sidecar configuration functional and allows a subsequent reconcile to retry.
+	if !monitoringEnabled {
+		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
+			logger.Error(err, "Failed to clean up OTel ConfigMap")
+			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+		}
 	}
 
 	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {

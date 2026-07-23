@@ -23,6 +23,7 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -2924,6 +2925,98 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(result.Requeue).To(BeFalse())
 		})
 
+		It("retains the OTel ConfigMap when cluster sync fails while disabling monitoring", func() {
+			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       documentDBName,
+					Namespace:  documentDBNamespace,
+					Finalizers: []string{documentDBFinalizer},
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					InstancesPerNode: 1,
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"},
+					},
+				},
+			}
+			configMapName := documentDBName + "-otel-config"
+			cnpgCluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: documentDBNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					Instances: 1,
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: util.DEFAULT_DOCUMENTDB_IMAGE,
+								},
+							},
+						},
+					},
+					Plugins: []cnpgv1.PluginConfiguration{
+						{
+							Name:    util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Enabled: ptr.To(true),
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+								"otelCollectorImage":         util.DEFAULT_OTEL_COLLECTOR_IMAGE,
+								"otelConfigMapName":          configMapName,
+							},
+						},
+					},
+					Managed: &cnpgv1.ManagedConfiguration{
+						Roles: []cnpgv1.RoleConfiguration{
+							{
+								Name:            "otel_monitor",
+								Ensure:          cnpgv1.EnsurePresent,
+								Login:           true,
+								DisablePassword: true,
+								ConnectionLimit: -1,
+								Inherit:         ptr.To(true),
+							},
+						},
+					},
+				},
+			}
+			configMap := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: documentDBNamespace},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb, cnpgCluster, configMap).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						if _, ok := obj.(*cnpgv1.Cluster); ok {
+							return fmt.Errorf("simulated CNPG sync failure")
+						}
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+				}).
+				Build()
+
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+			}
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{
+				NamespacedName: types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace},
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: documentDBNamespace}, &corev1.ConfigMap{})).To(Succeed())
+		})
+
 		It("should add restart annotation when TLS secret name changes", func() {
 			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
@@ -3342,4 +3435,5 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to delete OTel ConfigMap"))
 		})
 	})
+
 })
