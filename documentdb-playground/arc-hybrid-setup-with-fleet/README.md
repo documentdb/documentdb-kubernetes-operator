@@ -69,19 +69,42 @@ az extension add --name k8s-extension --upgrade --yes
 
 Follow the detailed [Step-by-Step Guide](#step-by-step-guide) below.
 
-### Option B: Using Scripts
+### Option B: Using Scripts (WSL-only - if `az login` works in WSL)
 
-**In WSL (for Kind/kubectl/Helm):**
+If Azure CLI works in your WSL environment without Conditional Access issues:
+
 ```bash
 cd documentdb-playground/arc-hybrid-setup-with-fleet
-./setup-arc-member.sh  # Creates Kind cluster
+
+# 1. Create Fleet hub + AKS cluster
+./scripts/bash/setup-fleet-hub.sh
+
+# 2. Create Kind cluster + Arc-enable + join Fleet
+./scripts/bash/setup-arc-member.sh
+
+# 3. Deploy DocumentDB to all clusters
+./scripts/bash/deploy-documentdb-fleet.sh
+
+# 4. Verify setup
+./scripts/bash/verify-portal.sh
 ```
 
-**In PowerShell (for Azure CLI):**
+### Option C: Using Scripts (Dual-Environment - PowerShell + WSL)
+
+If `az login` fails in WSL due to Conditional Access Policy:
+
+**In PowerShell:**
 ```powershell
-cd \\wsl.localhost\Ubuntu\home\$env:USERNAME\path\to\documentdb-playground\arc-hybrid-setup-with-fleet
+cd \\wsl.localhost\Ubuntu\home\$env:USERNAME\...\arc-hybrid-setup-with-fleet\scripts\powershell
 .\setup-fleet-hub.ps1      # Creates Fleet + AKS
 .\setup-arc-member.ps1     # Arc-enables Kind + joins Fleet
+```
+
+**In WSL (for Kind cluster and DocumentDB):**
+```bash
+cd documentdb-playground/arc-hybrid-setup-with-fleet
+./scripts/bash/setup-arc-member.sh --skip-azure  # Kind only, skip az commands
+./scripts/bash/deploy-documentdb-fleet.sh
 ```
 
 ## Architecture
@@ -343,6 +366,7 @@ After completing all phases, verify:
 | `az login` fails in WSL | Conditional Access Policy | Use PowerShell for all `az` commands |
 | Kind context not found | kubeconfig not shared | Set `$env:KUBECONFIG` to WSL path in PowerShell |
 | Arc CRD conflicts | Previous Arc install | Delete Kind cluster with `kind delete cluster --name documentdb-onprem` and recreate |
+| Arc connect timeout | Network issues | Retry; check firewall allows outbound to Azure |
 | Arc "token required" | Missing service account | Create token per Phase 7 |
 | Pods not visible in Portal | Wrong namespace selected | Change namespace filter to `app-namespace` |
 | Helm not found in PowerShell | Helm not in PATH | Run Helm commands from WSL only |
@@ -352,28 +376,51 @@ After completing all phases, verify:
 
 When you're done, clean up all resources:
 
-**In WSL:**
+**Using cleanup script (WSL):**
+```bash
+./scripts/bash/cleanup.sh
+```
+
+**Or manually:**
+
+*In WSL:*
 ```bash
 kind delete cluster --name documentdb-onprem
 ```
 
-**In PowerShell:**
-```powershell
+*In PowerShell (or WSL if az works):*
+```bash
 # This deletes: Fleet hub, AKS cluster, Arc registration, all resources
 az group delete --name documentdb-fleet-rg --yes --no-wait
 ```
 
 ## Files in This Directory
 
-| File | Purpose |
-|------|---------|
-| `README.md` | This guide |
-| `AGENT-INSTRUCTIONS.md` | Instructions for Copilot agents |
-| `documentdb-instance.yaml` | Sample DocumentDB CR for deployment |
-| `setup-fleet-hub.ps1` | PowerShell script for Fleet + AKS setup |
-| `setup-arc-member.ps1` | PowerShell script for Arc + Fleet join |
-| `setup-arc-member.sh` | Bash script for Kind cluster creation |
-| `cleanup.sh` | Cleanup script |
+```
+arc-hybrid-setup-with-fleet/
+├── README.md                      # This guide
+├── documentdb-instance.yaml       # Sample DocumentDB CR
+└── scripts/
+    ├── bash/                      # For WSL/Linux (use if az login works)
+    │   ├── setup-fleet-hub.sh     # Creates Fleet + AKS + cert-manager
+    │   ├── setup-arc-member.sh    # Creates Kind, Arc-enables, joins Fleet
+    │   ├── deploy-documentdb-fleet.sh  # Deploys operator + instances
+    │   ├── verify-portal.sh       # Verifies setup in Azure
+    │   └── cleanup.sh             # Removes all resources
+    └── powershell/                # For Windows (if az login fails in WSL)
+        ├── setup-fleet-hub.ps1    # Creates Fleet + AKS
+        └── setup-arc-member.ps1   # Arc-enables Kind + joins Fleet
+```
+
+### Script Features
+
+| Script | What It Does |
+|--------|-------------|
+| `setup-fleet-hub.sh` | Creates resource group, Fleet hub, AKS cluster, joins AKS to Fleet, installs cert-manager |
+| `setup-arc-member.sh` | Creates Kind cluster, Arc-enables it, joins to Fleet, installs cert-manager, creates portal token |
+| `deploy-documentdb-fleet.sh` | Deploys DocumentDB operator and instances to all Fleet members |
+| `verify-portal.sh` | Shows Fleet members, Arc status, and Azure Portal links |
+| `cleanup.sh` | Deletes Kind cluster, Arc registration, Fleet, AKS, resource group |
 
 ## Related Documentation
 
