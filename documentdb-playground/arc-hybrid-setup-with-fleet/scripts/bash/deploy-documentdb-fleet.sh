@@ -88,6 +88,12 @@ for MEMBER in $MEMBERS; do
         warn "Cannot connect to $MEMBER, skipping..."
         continue
     fi
+
+    # cert-manager is required by the operator chart. Fail fast with clear guidance.
+    if ! kubectl get deployment cert-manager -n cert-manager &>/dev/null; then
+        warn "cert-manager is not installed on $MEMBER. Run setup-fleet-hub/setup-arc-member first. Skipping..."
+        continue
+    fi
     
     # Check if operator already installed
     if helm list -n documentdb-operator 2>/dev/null | grep -q documentdb-operator; then
@@ -137,10 +143,12 @@ metadata:
     fleet: $FLEET_NAME
     cluster: $MEMBER
 spec:
-  instances: 3
-  documentdbVersion: "8"
-  storage:
-    size: 10Gi
+    nodeCount: 1
+    instancesPerNode: 3
+    documentDbCredentialSecret: documentdb-credentials
+    resource:
+        storage:
+            pvcSize: 10Gi
 EOF
         success "DocumentDB instance deployed on $MEMBER"
     done

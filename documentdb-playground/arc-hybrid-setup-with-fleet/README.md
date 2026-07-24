@@ -188,7 +188,7 @@ az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --ov
 
 ```bash
 kubectl config use-context documentdb-aks
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 ```
 
@@ -243,13 +243,37 @@ If using the PowerShell helper script instead of the manual steps above, the scr
 
 ### Phase 5: Install cert-manager on Kind (WSL)
 
-If you used the manual steps in Phase 4, install cert-manager explicitly:
+Preferred for Arc members: install cert-manager via the Azure Arc extension (the cert-manager pack).
+
+```bash
+# Verify whether cert-manager extension type is available for this connected cluster
+az k8s-extension extension-types list-by-cluster \
+  --cluster-type connectedClusters \
+  --cluster-name documentdb-onprem \
+  --resource-group $RESOURCE_GROUP \
+  --query "[].extensionType" -o tsv
+
+# Install cert-manager extension when available
+az k8s-extension create \
+  --name cert-manager \
+  --extension-type microsoft.certmanagement \
+  --scope cluster \
+  --cluster-type connectedClusters \
+  --cluster-name documentdb-onprem \
+  --resource-group $RESOURCE_GROUP \
+  --release-train stable \
+  --auto-upgrade-minor-version true
+```
+
+If `microsoft.certmanagement` is not offered for your connected cluster, fall back to the upstream cert-manager manifest:
 
 ```bash
 kubectl config use-context kind-documentdb-onprem
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 ```
+
+If cert-manager was already installed from a raw manifest, a later Arc extension install can fail with Helm ownership errors. See [Troubleshooting](#troubleshooting).
 
 If you used `scripts/powershell/setup-arc-member.ps1` or `scripts/bash/setup-arc-member.sh`, this phase is already handled by the script and can be skipped.
 

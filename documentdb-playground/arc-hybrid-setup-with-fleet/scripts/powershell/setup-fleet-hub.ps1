@@ -114,7 +114,7 @@ kubectl get nodes
 
 # Install cert-manager on AKS
 Write-Log "Installing cert-manager on AKS..."
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
 Write-Log "Waiting for cert-manager to be ready..."
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 Write-Success "cert-manager installed on AKS"

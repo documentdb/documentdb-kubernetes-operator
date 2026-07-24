@@ -197,7 +197,7 @@ if ($LASTEXITCODE -eq 0 -and (($extensionTypes -split "`n") | ForEach-Object { $
 }
 
 if (-not $installedViaExtension) {
-    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
     if ($LASTEXITCODE -ne 0) { Write-Err "Failed to install cert-manager manifest" }
 }
 

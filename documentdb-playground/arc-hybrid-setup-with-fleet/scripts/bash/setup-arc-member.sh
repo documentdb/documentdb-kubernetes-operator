@@ -171,7 +171,7 @@ else
 fi
 
 if [[ "$CERT_MANAGER_INSTALLED" != "true" ]]; then
-    if ! kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml; then
+    if ! kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml; then
         error "Failed to install cert-manager manifest"
     fi
 fi
