@@ -63,6 +63,7 @@ try {
 Write-Log "Checking Azure CLI extensions..."
 az extension add --name connectedk8s --upgrade --yes 2>$null
 az extension add --name fleet --upgrade --yes 2>$null
+az extension add --name k8s-extension --upgrade --yes 2>$null
 
 # Verify kubectl context
 Write-Log "Verifying kubeconfig context..."
@@ -163,6 +164,48 @@ if ($LASTEXITCODE -eq 0) {
 Write-Log "Arc agent pods:"
 kubectl get pods -n azure-arc
 
+# Install cert-manager (prefer Arc extension, fallback to manifest)
+Write-Log "Installing cert-manager on Arc cluster..."
+$installedViaExtension = $false
+$extensionTypes = az k8s-extension extension-types list-by-cluster `
+    --cluster-type connectedClusters `
+    --cluster-name $ArcCluster `
+    --resource-group $ResourceGroup `
+    --query "[].extensionType" -o tsv 2>$null
+
+if ($LASTEXITCODE -eq 0 -and (($extensionTypes -split "`n") | ForEach-Object { $_.Trim().ToLower() } | Where-Object { $_ -eq "microsoft.certmanagement" })) {
+    Write-Log "Installing cert-manager via Arc extension (microsoft.certmanagement)..."
+    az k8s-extension create `
+        --name cert-manager `
+        --extension-type microsoft.certmanagement `
+        --scope cluster `
+        --cluster-type connectedClusters `
+        --cluster-name $ArcCluster `
+        --resource-group $ResourceGroup `
+        --release-train stable `
+        --auto-upgrade-minor-version true `
+        --output none
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "cert-manager extension installed"
+        $installedViaExtension = $true
+    } else {
+        Write-Warn "Arc extension install failed. Falling back to manifest install."
+    }
+} else {
+    Write-Warn "microsoft.certmanagement extension type not available. Falling back to manifest install."
+}
+
+if (-not $installedViaExtension) {
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+    if ($LASTEXITCODE -ne 0) { Write-Err "Failed to install cert-manager manifest" }
+}
+
+Write-Log "Waiting for cert-manager to be ready..."
+kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=600s
+if ($LASTEXITCODE -ne 0) { Write-Err "cert-manager did not become ready in time" }
+Write-Success "cert-manager installed"
+
 # Create service account for portal viewing
 Write-Log "Creating service account for Azure Portal access..."
 kubectl create serviceaccount arc-portal-viewer -n default 2>$null
@@ -205,8 +248,7 @@ Write-Host ""
 Write-Host "=============================================="
 Write-Host ""
 Write-Host "Next steps (run in WSL):"
-Write-Host "1. Install cert-manager: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml"
-Write-Host "2. Deploy DocumentDB: helm install documentdb-operator ./operator/documentdb-helm-chart --namespace documentdb-operator --create-namespace"
+Write-Host "1. Deploy DocumentDB: helm install documentdb-operator ./operator/documentdb-helm-chart --namespace documentdb-operator --create-namespace"
 Write-Host ""
 
 # Save token to file

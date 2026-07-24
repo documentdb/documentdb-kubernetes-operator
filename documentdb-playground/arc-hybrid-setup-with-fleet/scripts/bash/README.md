@@ -4,7 +4,7 @@ These scripts automate the setup of DocumentDB on Azure Fleet Manager with Arc-e
 
 ## Prerequisites
 
-- Azure CLI 2.50.0+ with `fleet`, `connectedk8s` extensions
+- Azure CLI 2.50.0+ with `fleet`, `connectedk8s`, `k8s-extension` extensions
 - kubectl, Helm, Kind, Docker
 - Logged into Azure: `az login`
 

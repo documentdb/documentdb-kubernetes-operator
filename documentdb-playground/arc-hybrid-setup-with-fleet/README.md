@@ -95,10 +95,14 @@ If `az login` fails in WSL due to Conditional Access Policy:
 
 **In PowerShell:**
 ```powershell
-cd \\wsl.localhost\Ubuntu\home\$env:USERNAME\...\arc-hybrid-setup-with-fleet\scripts\powershell
-.\setup-fleet-hub.ps1      # Creates Fleet + AKS
-.\setup-arc-member.ps1     # Arc-enables Kind + joins Fleet
+Set-Location C:\temp
+$Repo = "\\wsl.localhost\Ubuntu\home\$env:USERNAME\...\arc-hybrid-setup-with-fleet"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "$Repo\scripts\powershell\setup-fleet-hub.ps1" -Location "westus2"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$Repo\scripts\powershell\setup-arc-member.ps1" -Location "westus2"
 ```
+
+> **Important:** Run PowerShell scripts from a local Windows working directory such as `C:\temp`. Running unsigned scripts directly from a UNC current directory may fail due to execution policy restrictions.
 
 **In WSL (for Kind cluster and DocumentDB):**
 ```bash
@@ -141,6 +145,8 @@ cd documentdb-playground/arc-hybrid-setup-with-fleet
 
 ### Phase 1: Create Fleet Hub + AKS (PowerShell)
 
+If the resource group already exists, use its current location. This guide assumes `westus2`.
+
 ```powershell
 # Variables
 $RESOURCE_GROUP = "documentdb-fleet-rg"
@@ -175,6 +181,8 @@ az fleet member create `
 $env:KUBECONFIG = "\\wsl.localhost\Ubuntu\home\$env:USERNAME\.kube\config"
 az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --overwrite-existing
 ```
+
+> **Reruns:** If `documentdb-aks` already exists, skip `az aks create` or choose a new `AKS_CLUSTER` name. The helper script does not currently adopt an existing AKS cluster.
 
 ### Phase 2: Install cert-manager on AKS (WSL)
 
@@ -231,13 +239,19 @@ az fleet member create `
 az fleet member list --resource-group $RESOURCE_GROUP --fleet-name $FLEET_NAME -o table
 ```
 
+If using the PowerShell helper script instead of the manual steps above, the script also installs cert-manager on the Arc-enabled cluster. It first tries the Azure Arc extension type `microsoft.certmanagement`, and if that extension type is unavailable for the connected cluster, it automatically falls back to the upstream cert-manager manifest.
+
 ### Phase 5: Install cert-manager on Kind (WSL)
+
+If you used the manual steps in Phase 4, install cert-manager explicitly:
 
 ```bash
 kubectl config use-context kind-documentdb-onprem
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 ```
+
+If you used `scripts/powershell/setup-arc-member.ps1` or `scripts/bash/setup-arc-member.sh`, this phase is already handled by the script and can be skipped.
 
 ### Phase 6: Deploy DocumentDB Operator to Both Clusters (WSL)
 
@@ -364,13 +378,18 @@ After completing all phases, verify:
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | `az login` fails in WSL | Conditional Access Policy | Use PowerShell for all `az` commands |
+| `management.azure.com` times out | VPN route captures ARM traffic | Disconnect Azure VPN or fix routing, then retry from PowerShell |
+| PowerShell script cannot run from `\\wsl.localhost\...` | Execution policy blocks unsigned UNC scripts | Run from `C:\temp` and invoke with `powershell -ExecutionPolicy Bypass -File ...` |
 | Kind context not found | kubeconfig not shared | Set `$env:KUBECONFIG` to WSL path in PowerShell |
 | Arc CRD conflicts | Previous Arc install | Delete Kind cluster with `kind delete cluster --name documentdb-onprem` and recreate |
+| Arc cluster already exists but is disconnected | Stale Azure Arc registration | Delete `connectedk8s` resource and Fleet member, then recreate or use a new Arc cluster name |
 | Arc connect timeout | Network issues | Retry; check firewall allows outbound to Azure |
+| `microsoft.certmanagement` extension type unavailable | Extension not offered for this connected cluster | Allow script to fall back to the upstream cert-manager manifest |
+| Arc cert-manager extension install fails with Helm ownership errors | cert-manager was already installed from raw manifests | Use a fresh cluster for extension validation, or remove the existing `cert-manager` resources before retrying the extension install |
 | Arc "token required" | Missing service account | Create token per Phase 7 |
 | Pods not visible in Portal | Wrong namespace selected | Change namespace filter to `app-namespace` |
 | Helm not found in PowerShell | Helm not in PATH | Run Helm commands from WSL only |
-| AKS creation fails | Quota exceeded | Try different region or request quota increase |
+| AKS creation fails | Quota exceeded or cluster already exists | Try different region, request quota increase, or choose a new AKS cluster name |
 
 ## Cleanup
 

@@ -61,6 +61,7 @@ fi
 log "Checking Azure CLI extensions..."
 az extension add --name connectedk8s --upgrade --yes 2>/dev/null || true
 az extension add --name fleet --upgrade --yes 2>/dev/null || true
+az extension add --name k8s-extension --upgrade --yes 2>/dev/null || true
 
 # Register providers
 log "Registering Azure providers (if needed)..."
@@ -139,9 +140,44 @@ success "Arc cluster joined to Fleet"
 
 # Install cert-manager on Arc cluster
 log "Installing cert-manager on Arc cluster..."
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+CERT_MANAGER_INSTALLED=false
+
+# Prefer Arc extension when available, then fall back to upstream manifest.
+EXTENSION_TYPES=$(az k8s-extension extension-types list-by-cluster \
+    --cluster-type connectedClusters \
+    --cluster-name "$ARC_CLUSTER" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "[].extensionType" -o tsv 2>/dev/null || true)
+
+if echo "$EXTENSION_TYPES" | grep -qi '^microsoft\.certmanagement$'; then
+    log "Installing cert-manager via Arc extension (microsoft.certmanagement)..."
+    if az k8s-extension create \
+        --name cert-manager \
+        --extension-type microsoft.certmanagement \
+        --scope cluster \
+        --cluster-type connectedClusters \
+        --cluster-name "$ARC_CLUSTER" \
+        --resource-group "$RESOURCE_GROUP" \
+        --release-train stable \
+        --auto-upgrade-minor-version true \
+        --output none; then
+        success "cert-manager extension installed"
+        CERT_MANAGER_INSTALLED=true
+    else
+        warn "Arc extension install failed; falling back to manifest install"
+    fi
+else
+    warn "microsoft.certmanagement extension type not available; falling back to manifest install"
+fi
+
+if [[ "$CERT_MANAGER_INSTALLED" != "true" ]]; then
+    if ! kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml; then
+        error "Failed to install cert-manager manifest"
+    fi
+fi
+
 log "Waiting for cert-manager to be ready..."
-kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
+kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=600s
 success "cert-manager installed"
 
 # Show Arc agent pods

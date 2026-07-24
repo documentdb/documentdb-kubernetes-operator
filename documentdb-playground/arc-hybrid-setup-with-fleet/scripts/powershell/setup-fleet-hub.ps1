@@ -4,7 +4,7 @@
 
 param(
     [string]$ResourceGroup = "documentdb-fleet-rg",
-    [string]$Location = "eastus",
+    [string]$Location = "westus2",
     [string]$FleetName = "documentdb-fleet",
     [string]$AksCluster = "documentdb-aks",
     [int]$NodeCount = 2,
@@ -26,7 +26,7 @@ Creates Azure Fleet Manager hub and AKS member cluster
 
 Parameters:
   -ResourceGroup   Azure resource group (default: documentdb-fleet-rg)
-  -Location        Azure region (default: eastus)
+    -Location        Azure region (default: westus2)
   -FleetName       Fleet hub name (default: documentdb-fleet)
   -AksCluster      AKS cluster name (default: documentdb-aks)
   -NodeCount       Number of nodes (default: 2)
