@@ -98,12 +98,12 @@ for MEMBER in $MEMBERS; do
     # Check if operator already installed
     if helm list -n documentdb-operator 2>/dev/null | grep -q documentdb-operator; then
         log "DocumentDB operator already installed on $MEMBER, upgrading..."
-        helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-helm-chart \
+        helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
           --namespace documentdb-operator \
           --wait --timeout 5m
     else
         log "Installing DocumentDB operator on $MEMBER..."
-        helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-helm-chart \
+        helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
           --namespace documentdb-operator --create-namespace \
           --wait --timeout 5m
     fi
