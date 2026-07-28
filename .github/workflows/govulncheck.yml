@@ -13,6 +13,15 @@ on:
       - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
       - 'operator/cnpg-plugins/sidecar-injector/go.mod'
       - 'operator/cnpg-plugins/sidecar-injector/go.sum'
+      - 'test/e2e/**/*.go'
+      - 'test/e2e/go.mod'
+      - 'test/e2e/go.sum'
+      - 'test/longhaul/**/*.go'
+      - 'test/longhaul/go.mod'
+      - 'test/longhaul/go.sum'
+      - 'test/shared/**/*.go'
+      - 'test/shared/go.mod'
+      - 'test/shared/go.sum'
   pull_request:
     paths:
       - 'operator/src/**/*.go'
@@ -24,6 +33,15 @@ on:
       - 'operator/cnpg-plugins/sidecar-injector/**/*.go'
       - 'operator/cnpg-plugins/sidecar-injector/go.mod'
       - 'operator/cnpg-plugins/sidecar-injector/go.sum'
+      - 'test/e2e/**/*.go'
+      - 'test/e2e/go.mod'
+      - 'test/e2e/go.sum'
+      - 'test/longhaul/**/*.go'
+      - 'test/longhaul/go.mod'
+      - 'test/longhaul/go.sum'
+      - 'test/shared/**/*.go'
+      - 'test/shared/go.mod'
+      - 'test/shared/go.sum'
   schedule:
     - cron: '22 10 * * *'
   workflow_dispatch:
@@ -42,6 +60,9 @@ jobs:
           - operator/src
           - documentdb-kubectl-plugin
           - operator/cnpg-plugins/sidecar-injector
+          - test/e2e
+          - test/longhaul
+          - test/shared
     steps:
       - uses: actions/checkout@v4
         with:

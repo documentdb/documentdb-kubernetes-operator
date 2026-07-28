@@ -1,0 +1,16 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: demo-documentdb
+  namespace: app-namespace
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: documentdb-credentials
+  resource:
+    storage:
+      pvcSize: 5Gi
+  exposeViaService:
+    serviceType: ClusterIP
+  logLevel: info
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
