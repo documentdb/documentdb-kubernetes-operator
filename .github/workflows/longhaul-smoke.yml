@@ -61,9 +61,9 @@ on:
   workflow_dispatch:
     inputs:
       max_duration:
-        description: "Bounded driver run length (Go duration, e.g. 3m)"
+        description: "Bounded driver run length (Go duration, e.g. 6m)"
         required: false
-        default: "3m"
+        default: "6m"
 
 permissions:
   contents: read
@@ -115,7 +115,8 @@ jobs:
       # Must match the cluster name the composite action derives:
       #   documentdb-<test-type>-<architecture>-<test-scenario-name>
       KIND_CLUSTER: documentdb-longhaul-amd64-smoke
-      MAX_DURATION: ${{ github.event.inputs.max_duration || '3m' }}
+      # The pruner's first tick is at 5m; the default must run beyond it.
+      MAX_DURATION: ${{ github.event.inputs.max_duration || '6m' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -203,6 +204,7 @@ jobs:
           # the shipped ConfigMap; the manifest structure is unchanged.
           #  - MAX_DURATION: finite run
           #  - RESET_DATA: fresh collection each CI run
+          #  - RETAIN_PER_WRITER: low enough to force a real prune at 5m
           #  - MIN==MAX instances: disable disruptive scale ops (fast + stable)
           #  - short cadences so the verifier gets several cycles in the window
           PATCH=$(jq -nc \
@@ -211,6 +213,7 @@ jobs:
               LONGHAUL_MAX_DURATION: $dur,
               LONGHAUL_RESET_DATA: "true",
               LONGHAUL_NUM_WRITERS: "2",
+              LONGHAUL_RETAIN_PER_WRITER: "100",
               LONGHAUL_OP_COOLDOWN: "30s",
               LONGHAUL_STEADY_STATE_WAIT: "10s",
               LONGHAUL_RECOVERY_TIMEOUT: "2m",
@@ -273,6 +276,8 @@ jobs:
           exit_code="${{ steps.wait.outputs.exit_code }}"
           result=$(kubectl get configmap longhaul-report -n "${DB_NS}" \
             -o jsonpath='{.data.result}' 2>/dev/null || echo "MISSING")
+          report=$(kubectl get configmap longhaul-report -n "${DB_NS}" \
+            -o jsonpath='{.data.latest-report}' 2>/dev/null || echo "MISSING")
           echo "Driver exit code : ${exit_code}"
           echo "Report result    : ${result}"
 
@@ -284,7 +289,11 @@ jobs:
             echo "::error::longhaul-report result is '${result}', expected PASS."
             exit 1
           fi
-          echo "✅ Long-haul smoke gate passed (exit 0, report PASS)."
+          if ! grep -Eq 'pruner: pruned [1-9][0-9]* docs' <<<"${report}"; then
+            echo "::error::Retention pruner did not report deleting any documents."
+            exit 1
+          fi
+          echo "✅ Long-haul smoke gate passed (exit 0, report PASS, retention pruned documents)."
 
       - name: Diagnostics on failure
         if: failure()
