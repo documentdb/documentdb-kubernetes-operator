@@ -47,6 +47,8 @@ jobs:
       ext_image_tag: ${{ steps.probe.outputs.ext_image_tag }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Probe documentdb + gateway images
       id: probe
       shell: bash
@@ -72,6 +74,23 @@ jobs:
           echo "Caller pinned documentdb_ref=$INPUT_REF → forcing build mode."
           echo "mode=build" >> "$GITHUB_OUTPUT"
           exit 0
+        fi
+
+        # Force build mode when the extension Dockerfile changed in this PR, so
+        # the modified Dockerfile is actually exercised instead of pulling a
+        # prebuilt image from the registry (registry mode would short-circuit it).
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if git cat-file -e "$BASE_SHA" 2>/dev/null; then
+            if git diff --name-only "$BASE_SHA" HEAD \
+                | grep -qx '.github/dockerfiles/Dockerfile_extension'; then
+              echo ".github/dockerfiles/Dockerfile_extension changed in this PR → forcing build mode."
+              echo "mode=build" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "::warning::base SHA $BASE_SHA unavailable; skipping Dockerfile-change detection."
+          fi
         fi
 
         OWNER="${{ github.repository_owner }}"
@@ -399,7 +418,7 @@ jobs:
           docker buildx build \
             --platform linux/${{ matrix.arch }} \
             --build-arg PG_MAJOR=18 \
-            --build-arg DEB_PACKAGE_REL_PATH=packages/$DEB_FILE \
+            --build-arg DOCUMENTDB_DEB_PACKAGE=packages/$DEB_FILE \
             --tag "$TARGET" \
             --load \
             -f .github/dockerfiles/Dockerfile_extension .
