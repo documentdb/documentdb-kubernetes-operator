@@ -28,6 +28,18 @@ const (
 	writeInterval = 100 * time.Millisecond
 )
 
+// AggregateWriteRate returns the workload's aggregate write rate in writes per
+// second across all writer goroutines, given the configured writer count. It is
+// the reciprocal of the per-writer writeInterval scaled by numWriters, and is
+// used to convert observed write-failure counts into an estimated outage
+// duration (see journal.DisruptionWindow). Returns 0 for a non-positive count.
+func AggregateWriteRate(numWriters int) float64 {
+	if numWriters <= 0 {
+		return 0
+	}
+	return float64(numWriters) / writeInterval.Seconds()
+}
+
 // WriteDocument is the schema for data-plane durability tracking.
 type WriteDocument struct {
 	WriterID  string    `bson:"writer_id"`

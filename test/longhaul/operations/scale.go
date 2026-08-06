@@ -77,6 +77,9 @@ type ScaleUp struct{ scaleOp }
 
 // NewScaleUp creates a ScaleUp operation. maxInstances is clamped to the
 // CRD upper bound (3) to avoid admission rejections.
+//
+// Scaling up only adds a standby replica (the primary and thus the write path
+// is untouched), so it uses the near-zero NoOutagePolicy budget.
 func NewScaleUp(client monitor.ClusterClient, health *monitor.HealthMonitor, maxInstances int, recovery time.Duration) *ScaleUp {
 	if maxInstances > 3 {
 		maxInstances = 3
@@ -90,10 +93,7 @@ func NewScaleUp(client monitor.ClusterClient, health *monitor.HealthMonitor, max
 		bound:     maxInstances,
 		boundKind: "max",
 		recovery:  recovery,
-		policy: journal.OutagePolicy{
-			AllowedWriteFailures: 20,
-			MustRecoverWithin:    recovery,
-		},
+		policy:    journal.NoOutagePolicy(recovery),
 	}}
 }
 
@@ -105,6 +105,10 @@ type ScaleDown struct{ scaleOp }
 
 // NewScaleDown creates a ScaleDown operation. minInstances is clamped to the
 // CRD lower bound (1) to avoid admission rejections.
+//
+// Scaling down removes the highest-ordinal standby (CNPG never removes the
+// primary), so the write path stays up and it uses the same near-zero
+// NoOutagePolicy budget as scale-up.
 func NewScaleDown(client monitor.ClusterClient, health *monitor.HealthMonitor, minInstances int, recovery time.Duration) *ScaleDown {
 	if minInstances < 1 {
 		minInstances = 1
@@ -118,10 +122,7 @@ func NewScaleDown(client monitor.ClusterClient, health *monitor.HealthMonitor, m
 		bound:     minInstances,
 		boundKind: "min",
 		recovery:  recovery,
-		policy: journal.OutagePolicy{
-			AllowedWriteFailures: 50,
-			MustRecoverWithin:    recovery,
-		},
+		policy:    journal.NoOutagePolicy(recovery),
 	}}
 }
 

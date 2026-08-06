@@ -17,6 +17,7 @@ var _ = Describe("Config", func() {
 			Expect(cfg.MaxDuration).To(Equal(30 * time.Minute))
 			Expect(cfg.Namespace).To(Equal("default"))
 			Expect(cfg.ClusterName).To(BeEmpty())
+			Expect(cfg.OperatorNamespace).To(Equal("documentdb-operator"))
 			Expect(cfg.NumWriters).To(Equal(5))
 			Expect(cfg.OpCooldown).To(Equal(5 * time.Minute))
 			Expect(cfg.RecoveryTimeout).To(Equal(5 * time.Minute))
@@ -32,6 +33,7 @@ var _ = Describe("Config", func() {
 		BeforeEach(func() {
 			for _, k := range []string{
 				EnvEnabled, EnvMaxDuration, EnvNamespace, EnvClusterName,
+				EnvOperatorNamespace,
 				EnvDocumentDBURI, EnvNumWriters,
 				EnvOpCooldown, EnvRecoveryTimeout, EnvSteadyStateWait,
 				EnvMinInstances, EnvMaxInstances, EnvReportInterval,
@@ -67,6 +69,13 @@ var _ = Describe("Config", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Namespace).To(Equal("test-ns"))
 			Expect(cfg.ClusterName).To(Equal("my-cluster"))
+		})
+
+		It("parses OperatorNamespace from env", func() {
+			GinkgoT().Setenv(EnvOperatorNamespace, "custom-operator-ns")
+			cfg, err := LoadFromEnv()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.OperatorNamespace).To(Equal("custom-operator-ns"))
 		})
 
 		It("returns error for invalid MaxDuration", func() {
@@ -122,6 +131,13 @@ var _ = Describe("Config", func() {
 		It("fails when ClusterName is empty", func() {
 			cfg := DefaultConfig()
 			Expect(cfg.Validate()).To(MatchError(ContainSubstring("cluster name")))
+		})
+
+		It("fails when OperatorNamespace is empty", func() {
+			cfg := DefaultConfig()
+			cfg.ClusterName = "test"
+			cfg.OperatorNamespace = ""
+			Expect(cfg.Validate()).To(MatchError(ContainSubstring("operator namespace")))
 		})
 
 		It("fails when MaxDuration is negative", func() {

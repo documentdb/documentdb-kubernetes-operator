@@ -18,6 +18,10 @@ const (
 	EnvNamespace   = "LONGHAUL_NAMESPACE"
 	EnvClusterName = "LONGHAUL_CLUSTER_NAME"
 
+	// EnvOperatorNamespace is the namespace where the DocumentDB operator
+	// Deployment runs (target of the kill-operator-pod chaos op).
+	EnvOperatorNamespace = "LONGHAUL_OPERATOR_NAMESPACE"
+
 	// Workload and operation tuning.
 	EnvDocumentDBURI   = "LONGHAUL_DOCUMENTDB_URI"
 	EnvNumWriters      = "LONGHAUL_NUM_WRITERS"
@@ -46,6 +50,10 @@ type Config struct {
 
 	// ClusterName is the name of the target DocumentDB cluster CR.
 	ClusterName string
+
+	// OperatorNamespace is the namespace of the DocumentDB operator Deployment,
+	// targeted by the kill-operator-pod chaos operation.
+	OperatorNamespace string
 
 	// DocumentDBURI is the DocumentDB connection string for data-plane workload.
 	DocumentDBURI string
@@ -82,17 +90,18 @@ type Config struct {
 // DefaultConfig returns a Config with safe defaults for local development.
 func DefaultConfig() Config {
 	return Config{
-		MaxDuration:     30 * time.Minute,
-		Namespace:       "default",
-		ClusterName:     "",
-		DocumentDBURI:   "",
-		NumWriters:      5,
-		OpCooldown:      5 * time.Minute,
-		RecoveryTimeout: 5 * time.Minute,
-		SteadyStateWait: 60 * time.Second,
-		MinInstances:    1,
-		MaxInstances:    3,
-		ReportInterval:  1 * time.Hour,
+		MaxDuration:       30 * time.Minute,
+		Namespace:         "default",
+		ClusterName:       "",
+		OperatorNamespace: "documentdb-operator",
+		DocumentDBURI:     "",
+		NumWriters:        5,
+		OpCooldown:        5 * time.Minute,
+		RecoveryTimeout:   5 * time.Minute,
+		SteadyStateWait:   60 * time.Second,
+		MinInstances:      1,
+		MaxInstances:      3,
+		ReportInterval:    1 * time.Hour,
 	}
 }
 
@@ -115,6 +124,10 @@ func LoadFromEnv() (Config, error) {
 
 	if v := os.Getenv(EnvClusterName); v != "" {
 		cfg.ClusterName = v
+	}
+
+	if v := os.Getenv(EnvOperatorNamespace); v != "" {
+		cfg.OperatorNamespace = v
 	}
 
 	if v := os.Getenv(EnvDocumentDBURI); v != "" {
@@ -194,6 +207,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ClusterName == "" {
 		return fmt.Errorf("cluster name must not be empty")
+	}
+	if c.OperatorNamespace == "" {
+		return fmt.Errorf("operator namespace must not be empty")
 	}
 	if c.NumWriters < 1 {
 		return fmt.Errorf("num writers must be at least 1, got %d", c.NumWriters)

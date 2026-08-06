@@ -41,9 +41,11 @@ func (f *fakeClusterClient) GetClusterHealth(_ context.Context) (ClusterHealth, 
 func (f *fakeClusterClient) GetCurrentDocumentDBImageTag(_ context.Context) (string, error) {
 	return "", nil
 }
-func (f *fakeClusterClient) GetInstancesPerNode(_ context.Context) (int, error)  { return 1, nil }
-func (f *fakeClusterClient) ScaleCluster(_ context.Context, _ int) error         { return nil }
-func (f *fakeClusterClient) UpgradeDocumentDB(_ context.Context, _ string) error { return nil }
+func (f *fakeClusterClient) GetInstancesPerNode(_ context.Context) (int, error)   { return 1, nil }
+func (f *fakeClusterClient) ScaleCluster(_ context.Context, _ int) error          { return nil }
+func (f *fakeClusterClient) UpgradeDocumentDB(_ context.Context, _ string) error  { return nil }
+func (f *fakeClusterClient) GetPrimaryInstance(_ context.Context) (string, error) { return "", nil }
+func (f *fakeClusterClient) DeletePod(_ context.Context, _ string) error          { return nil }
 
 var _ = Describe("HealthMonitor", func() {
 	Describe("IsSteadyState", func() {

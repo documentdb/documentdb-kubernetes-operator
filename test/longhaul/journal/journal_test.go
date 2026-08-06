@@ -43,7 +43,7 @@ var _ = Describe("Journal", func() {
 	Describe("DisruptionWindow lifecycle", func() {
 		It("opens, records failures, and closes correctly", func() {
 			j := New()
-			policy := OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 10}
+			policy := OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second}
 
 			Expect(j.ActiveWindow()).To(BeNil())
 
@@ -89,14 +89,14 @@ var _ = Describe("Journal", func() {
 
 		It("returns false on a closed window within budget", func() {
 			j := New()
-			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 10})
+			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: time.Second})
 			j.CloseDisruptionWindow()
 			Expect(j.HasPolicyViolation()).To(BeFalse())
 		})
 
-		It("returns true on a closed window over write-failure budget", func() {
+		It("returns true on a closed window over write-outage budget", func() {
 			j := New()
-			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Minute, AllowedWriteFailures: 1})
+			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Minute, MaxWriteOutage: 10 * time.Millisecond})
 			j.RecordWriteFailure()
 			j.RecordWriteFailure()
 			j.CloseDisruptionWindow()
@@ -105,7 +105,7 @@ var _ = Describe("Journal", func() {
 
 		It("returns true on an active window over time budget", func() {
 			j := New()
-			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Nanosecond, AllowedWriteFailures: 10})
+			j.OpenDisruptionWindow("op", OutagePolicy{MustRecoverWithin: time.Nanosecond, MaxWriteOutage: time.Second})
 			time.Sleep(1 * time.Millisecond)
 			Expect(j.HasPolicyViolation()).To(BeTrue())
 		})

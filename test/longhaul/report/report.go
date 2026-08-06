@@ -93,15 +93,16 @@ func GenerateMarkdown(s Summary) string {
 	// Disruption Windows
 	if len(s.Windows) > 0 {
 		b.WriteString("## Disruption Windows\n\n")
-		b.WriteString("| Operation | Duration | Write Failures | Policy Exceeded |\n")
-		b.WriteString("|-----------|----------|----------------|------------------|\n")
+		b.WriteString("| Operation | Duration | Write Failures | Est. Write Outage | Policy Exceeded |\n")
+		b.WriteString("|-----------|----------|----------------|-------------------|------------------|\n")
 		for _, w := range s.Windows {
 			exceeded := "No"
 			if w.ExceededPolicy() {
 				exceeded = "**YES**"
 			}
-			fmt.Fprintf(&b, "| %s | %s | %d | %s |\n",
-				w.OperationName, w.Duration().Round(time.Second), w.WriteFailures, exceeded)
+			fmt.Fprintf(&b, "| %s | %s | %d | %s | %s |\n",
+				w.OperationName, w.Duration().Round(time.Second), w.WriteFailures,
+				w.EstimatedWriteOutage().Round(time.Millisecond), exceeded)
 		}
 		b.WriteString("\n")
 	}

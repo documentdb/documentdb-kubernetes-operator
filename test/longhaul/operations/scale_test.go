@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 	"github.com/documentdb/documentdb-operator/test/longhaul/monitor"
 )
 
@@ -23,6 +24,10 @@ type fakeClient struct {
 	imageTag         string
 	scaleCalls       []int
 	upgradeCalls     []string
+	primary          string
+	primaryErr       error
+	deleteErr        error
+	deletedPods      []string
 }
 
 func (f *fakeClient) GetClusterHealth(_ context.Context) (monitor.ClusterHealth, error) {
@@ -49,6 +54,20 @@ func (f *fakeClient) UpgradeDocumentDB(_ context.Context, v string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.upgradeCalls = append(f.upgradeCalls, v)
+	return nil
+}
+func (f *fakeClient) GetPrimaryInstance(_ context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.primary, f.primaryErr
+}
+func (f *fakeClient) DeletePod(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deletedPods = append(f.deletedPods, name)
 	return nil
 }
 
@@ -87,10 +106,10 @@ var _ = Describe("ScaleUp", func() {
 		Entry("blocked: ipn read error", 0, errors.New("apiserver down"), 3, false, "cannot get instancesPerNode"),
 	)
 
-	It("OutagePolicy uses tighter budgets and echoes MustRecoverWithin", func() {
+	It("OutagePolicy uses the near-zero NoOutagePolicy budget and echoes MustRecoverWithin", func() {
 		s := NewScaleUp(&fakeClient{}, nil, 3, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(20)))
+		Expect(p.MaxWriteOutage).To(Equal(journal.NoOutageWriteOutageCushion))
 		Expect(p.MustRecoverWithin).To(Equal(5 * time.Minute))
 	})
 })
@@ -130,9 +149,9 @@ var _ = Describe("ScaleDown", func() {
 		Entry("blocked: ipn read error", 0, errors.New("apiserver down"), 1, false, "cannot get instancesPerNode"),
 	)
 
-	It("OutagePolicy is more lenient than scale-up", func() {
+	It("OutagePolicy shares the near-zero NoOutagePolicy budget with scale-up", func() {
 		s := NewScaleDown(&fakeClient{}, nil, 1, 5*time.Minute)
 		p := s.OutagePolicy()
-		Expect(p.AllowedWriteFailures).To(Equal(int64(50)))
+		Expect(p.MaxWriteOutage).To(Equal(journal.NoOutageWriteOutageCushion))
 	})
 })
