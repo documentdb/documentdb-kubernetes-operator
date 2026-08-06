@@ -1,0 +1,10 @@
+# Generated files
+.deployment-info
+.istio-certs/
+istio-*/
+*.tgz
+*.log
+
+# SSH key (required by Azure but not used - we use Run Command)
+.ssh-key
+.ssh-key.pub
