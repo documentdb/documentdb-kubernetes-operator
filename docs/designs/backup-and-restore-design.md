@@ -27,8 +27,8 @@ When users create a DocumentDB Backup resource, the operator automatically creat
 
 **Why not use CNPG Backup directly?**
 
-In this phase, our Backup resource acts as a wrapper around CNPG Backup. We maintain our own CRD to support future enhancements:
-- **Next phase:** Multi-region backup support
+In this phase, our Backup resource acts as a wrapper around CNPG Backup. We maintain our own CRD to support additional capabilities:
+- **Multi-region backup support** (implemented) — in a multi-region deployment the operator backs up only the region that currently holds the primary role, skips requests against standby regions, and automatically follows the primary across failovers (site-swap). See the [Backups in multi-region deployments](../operator-public-documentation/preview/operations/backup-and-restore.md#backups-in-multi-region-deployments) user guide.
 - **Future:** Multi-node backup capabilities
 
 ### Creating On-Demand Backups
