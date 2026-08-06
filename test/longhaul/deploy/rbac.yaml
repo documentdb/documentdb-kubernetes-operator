@@ -29,6 +29,14 @@ rules:
   - apiGroups: ["documentdb.io"]
     resources: ["dbs"]
     verbs: ["get", "list", "patch"]
+  # Manage ScheduledBackups and read their child Backups for the data-protection
+  # verifier (ensure a ScheduledBackup, then watch child Backup CRs).
+  - apiGroups: ["documentdb.io"]
+    resources: ["scheduledbackups"]
+    verbs: ["create", "get", "list", "update"]
+  - apiGroups: ["documentdb.io"]
+    resources: ["backups"]
+    verbs: ["list"]
   # Create/update ConfigMaps for periodic report persistence.
   - apiGroups: [""]
     resources: ["configmaps"]

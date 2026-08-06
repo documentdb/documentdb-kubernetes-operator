@@ -132,7 +132,50 @@ All configuration is via environment variables.
 | `LONGHAUL_MIN_INSTANCES` | No | `1` | Minimum `spec.instancesPerNode` for scale-down operations (CRD lower bound: 1). |
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
+| `LONGHAUL_BACKUP_ENABLED` | No | `true` | Enable the ScheduledBackup + retention verifier. |
+| `LONGHAUL_BACKUP_SCHEDULE` | No | `0 */6 * * *` | Cron schedule for the canary `ScheduledBackup`. |
+| `LONGHAUL_BACKUP_RETENTION_DAYS` | No | `1` | Retention window applied to child backups; also used to derive the retention-leak deadline. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
+
+### Data Protection (ScheduledBackup + retention)
+
+When `LONGHAUL_BACKUP_ENABLED` is true, the driver ensures a `ScheduledBackup`
+named `<cluster>-longhaul` exists and matches the run's schedule/retention
+(an existing CR is reconciled in place, never recreated, so backup history is
+preserved across restarts and parameter changes) and runs a verifier
+concurrently with the operation scheduler (backup is deliberately **not**
+isolated from topology/chaos, per the design).
+
+The verifier only checks the properties a **multi-day** run can establish —
+things unit and e2e tests cannot:
+
+- **Scheduling liveness** — `status.lastScheduledTime` keeps advancing; a stalled
+  scheduler (past `status.nextScheduledTime` + grace) raises a warning.
+- **Completion** — child `Backup` CRs keep reaching `completed`; only terminal
+  `failed` backups are counted as failures. A `skipped` backup is an intentional
+  no-op (e.g. the operator declines to back up a non-primary/standby) and is
+  **not** counted as a failure. If backups keep being scheduled but stop
+  completing for 3 consecutive schedules (a dead completion path — every backup
+  failing or hanging), the run is a **FAIL**. A single completed backup resets
+  this gap, so transient chaos-induced failures are tolerated.
+- **Retention leak** — no completed backup outlives its retention window
+  (`stoppedAt + spec.retentionDays*24h` + grace). The window is taken from each
+  backup's **own** `spec.retentionDays` (stamped at creation), so the check
+  stays correct even if a later run uses a different retention. A lingering
+  backup is a **FAIL**: expired backups aren't garbage-collected and the
+  population (and its PVCs / VolumeSnapshots) grows unbounded.
+
+It deliberately does **not** re-verify the operator's retention *arithmetic*
+(`expiredAt == stoppedAt + retentionDays*24h`) — that is a pure function already
+covered by the operator's unit tests and needs no accumulation. The oracle here
+is black-box: expired backups disappear. Because the minimum meaningful
+retention is 1 day, the leak check only fires on multi-day runs — exactly the
+accumulation window long-haul exists to cover.
+
+> **RBAC.** The driver ServiceAccount needs `create`/`get`/`list`/`update` on
+> `scheduledbackups.documentdb.io` and `list` on `backups.documentdb.io`. These
+> verbs are granted by the `longhaul-test` Role in `deploy/rbac.yaml`; without
+> them the backup verifier logs an error and the rest of the run continues.
 
 ## CI Safety
 
