@@ -83,7 +83,7 @@ var _ = Describe("Backup", func() {
 				},
 			}
 
-			needsUpdate := backup.UpdateStatus(cnpg, nil)
+			needsUpdate := backup.UpdateStatus(cnpg, nil, "")
 			Expect(needsUpdate).To(BeTrue())
 			Expect(string(backup.Status.Phase)).To(Equal(cnpgv1.BackupPhaseCompleted))
 			Expect(backup.Status.StartedAt).To(Equal(&startedAt))
@@ -119,8 +119,29 @@ var _ = Describe("Backup", func() {
 				},
 			}
 
-			needsUpdate := backup.UpdateStatus(cnpg, nil)
+			needsUpdate := backup.UpdateStatus(cnpg, nil, "")
 			Expect(needsUpdate).To(BeFalse())
+		})
+
+		It("captures the source schema version once and leaves it immutable", func() {
+			cnpg := &cnpgv1.Backup{
+				Status: cnpgv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
+			}
+			backup := &Backup{Spec: BackupSpec{}}
+
+			// First observation records the source schema version.
+			Expect(backup.UpdateStatus(cnpg, nil, "0.110.0")).To(BeTrue())
+			Expect(backup.Status.SchemaVersion).To(Equal("0.110.0"))
+
+			// A later, differing source schema version must NOT overwrite it
+			// (it reflects the schema at backup time), and must not by itself
+			// mark the status dirty.
+			Expect(backup.UpdateStatus(cnpg, nil, "0.112.0")).To(BeFalse())
+			Expect(backup.Status.SchemaVersion).To(Equal("0.110.0"))
+
+			// An empty source schema version is a no-op and never clears it.
+			Expect(backup.UpdateStatus(cnpg, nil, "")).To(BeFalse())
+			Expect(backup.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
 	})
 

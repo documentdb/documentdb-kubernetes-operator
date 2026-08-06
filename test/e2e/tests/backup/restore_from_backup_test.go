@@ -65,6 +65,7 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 				timeouts.For(timeouts.DocumentDBReady),
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Succeed())
+			schema := sourceSchemaVersion(ctx, c, srcKey)
 
 			h, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, sourceName)
 			Expect(err).NotTo(HaveOccurred(), "connect to source DocumentDB")
@@ -88,6 +89,28 @@ var _ = Describe("DocumentDB restore — recovery.backup (CSI snapshot)",
 				timeouts.For(timeouts.BackupComplete))
 			Expect(err).NotTo(HaveOccurred(),
 				"source backup %s/%s did not complete", ns, backupName)
+
+			// Schema-version compatibility (#434): the operator must record the
+			// source's schema version onto the Backup, and admission must reject a
+			// restore whose binary version is older than it. The happy-path restore
+			// below (default version >= schema) covers the admit case.
+			Eventually(func() string {
+				b, err := bkp.Get(ctx, c, ns, backupName)
+				if err != nil {
+					return ""
+				}
+				return b.Status.SchemaVersion
+			}, timeouts.For(timeouts.DocumentDBReady), timeouts.PollInterval(timeouts.DocumentDBReady)).
+				Should(Equal(schema), "Backup.Status.SchemaVersion must record the source cluster's schema version")
+
+			By("rejecting a restore whose binary version is older than the backup's schema version")
+			bad := buildRecoveryDocumentDB(ns, "restore-dst-old-binary",
+				"recovery_from_backup.yaml.template",
+				map[string]string{"BACKUP_NAME": backupName})
+			pinBinaryVersion(bad, olderBinaryVersion)
+			err = c.Create(ctx, bad)
+			Expect(err).To(HaveOccurred(), "restore onto an older binary must be rejected at admission")
+			Expect(err.Error()).To(ContainSubstring("older than the backup's schema version"))
 
 			// 3. Recovery DocumentDB sourced from that Backup name.
 			dst := createRecoveryDocumentDB(ctx, c, ns, recoveryName,

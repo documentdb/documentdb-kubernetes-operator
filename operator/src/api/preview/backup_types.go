@@ -48,6 +48,14 @@ type BackupStatus struct {
 	// For skipped backups, this explains why the backup was skipped.
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// SchemaVersion is the DocumentDB extension schema version of the source
+	// cluster at backup time, captured from the source DocumentDB's
+	// status.schemaVersion. It is used to validate restore compatibility:
+	// a restore must target a binary version >= this schema version, otherwise
+	// an older binary would run against a newer, irreversible schema.
+	// +optional
+	SchemaVersion string `json:"schemaVersion,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -59,6 +67,7 @@ type BackupStatus struct {
 // +kubebuilder:printcolumn:name="StoppedAt",type=string,JSONPath=".status.stoppedAt",description="Backup completion time"
 // +kubebuilder:printcolumn:name="ExpiredAt",type=string,JSONPath=".status.expiredAt",description="Backup expiration time"
 // +kubebuilder:printcolumn:name="Message",type=string,JSONPath=".status.message",description="Backup status message"
+// +kubebuilder:printcolumn:name="SchemaVersion",type=string,JSONPath=".status.schemaVersion",description="DocumentDB schema version at backup time"
 // +kubebuilder:metadata:labels=app=documentdb-operator
 type Backup struct {
 	metav1.TypeMeta   `json:",inline"`

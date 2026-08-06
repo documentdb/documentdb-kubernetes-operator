@@ -11,6 +11,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -18,7 +19,48 @@ import (
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
+
+// schemaVersionAnnotation mirrors util.AnnotationSchemaVersion in the
+// operator. It is intentionally hard-coded here so the restore-validation
+// specs pin the exact on-the-wire annotation key the contract depends on —
+// a rename on the operator side must be a conscious, two-place change.
+const schemaVersionAnnotation = "documentdb.io/schema-version"
+
+// olderBinaryVersion is a semver guaranteed to be lower than any real
+// DocumentDB extension schema version (which are 0.1x.y). Restores pinned
+// to it are rejected at admission *before* any image pull, so it never
+// needs to resolve to a pullable tag.
+const olderBinaryVersion = "0.1.0"
+
+// sourceSchemaVersion polls a source DocumentDB's status.schemaVersion
+// until it is non-empty, returning the observed value. The operator
+// records this on Backups and stamps it onto retained PVs; both restore
+// validations compare a restore's binary version against it.
+func sourceSchemaVersion(ctx context.Context, c client.Client, key types.NamespacedName) string {
+	var observed string
+	Eventually(func() string {
+		dd, err := shareddb.Get(ctx, c, key)
+		if err != nil {
+			return ""
+		}
+		observed = dd.Status.SchemaVersion
+		return observed
+	}, timeouts.For(timeouts.DocumentDBReady), timeouts.PollInterval(timeouts.DocumentDBReady)).
+		ShouldNot(BeEmpty(), "source %s never reported status.schemaVersion", key)
+	return observed
+}
+
+// pinBinaryVersion forces a restore CR's resolved binary version to v by
+// clearing spec.image (whose tag would otherwise win in resolveBinaryVersion)
+// and setting spec.documentDBVersion. This makes the admission decision
+// deterministic regardless of the DOCUMENTDB_IMAGE the CI job injects.
+func pinBinaryVersion(dd *previewv1.DocumentDB, v string) {
+	dd.Spec.Image = nil
+	dd.Spec.DocumentDBVersion = v
+}
 
 // credentialSecretName is the secret the backup area seeds in every
 // source and recovery namespace. Aliased to the fixtures default so
@@ -91,10 +133,11 @@ func manifestsRoot() string {
 	return filepath.Join(filepath.Dir(thisFile), "..", "..", "manifests")
 }
 
-// createRecoveryDocumentDB renders a flat recovery_* template under
-// manifests/backup/ and applies the resulting DocumentDB CR.
-func createRecoveryDocumentDB(
-	ctx context.Context, c client.Client,
+// buildRecoveryDocumentDB renders a flat recovery_* template under
+// manifests/backup/ and returns the resulting DocumentDB CR *without*
+// creating it, so callers (e.g. admission-rejection specs) can mutate
+// the spec before calling Create themselves.
+func buildRecoveryDocumentDB(
 	ns, name, templateName string, extra map[string]string,
 ) *previewv1.DocumentDB {
 	vars := baseVars(name, ns, "")
@@ -112,6 +155,16 @@ func createRecoveryDocumentDB(
 	if dd.Name == "" {
 		dd.Name = name
 	}
+	return dd
+}
+
+// createRecoveryDocumentDB renders a flat recovery_* template under
+// manifests/backup/ and applies the resulting DocumentDB CR.
+func createRecoveryDocumentDB(
+	ctx context.Context, c client.Client,
+	ns, name, templateName string, extra map[string]string,
+) *previewv1.DocumentDB {
+	dd := buildRecoveryDocumentDB(ns, name, templateName, extra)
 	Expect(c.Create(ctx, dd)).To(Succeed(), "create recovery DocumentDB %s/%s", ns, name)
 	return dd
 }

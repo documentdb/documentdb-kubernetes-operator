@@ -9,6 +9,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 type fakeWebhookManager struct {
@@ -352,6 +354,40 @@ var _ = Describe("resolveBinaryVersion helper", func() {
 	})
 })
 
+var _ = Describe("resolveEffectiveBinaryVersion helper", func() {
+	It("returns the spec version when one is set", func() {
+		db := newTestDocumentDB("0.112.0", "", "")
+		Expect(resolveEffectiveBinaryVersion(db)).To(Equal("0.112.0"))
+	})
+
+	It("falls back to the default image version when neither image nor version is set", func() {
+		db := newTestDocumentDB("", "", "")
+		defaultVersion := resolveBinaryVersion(newTestDocumentDB("", "", util.DEFAULT_DOCUMENTDB_IMAGE))
+		Expect(resolveEffectiveBinaryVersion(db)).To(Equal(defaultVersion))
+	})
+
+	It("prefers the DOCUMENTDB_VERSION env override over the default", func() {
+		GinkgoT().Setenv(util.DOCUMENTDB_VERSION_ENV, "0.115.0")
+		db := newTestDocumentDB("", "", "")
+		Expect(resolveEffectiveBinaryVersion(db)).To(Equal("0.115.0"))
+	})
+
+	It("stays unknown for a digest-only image with no version (does not use the default)", func() {
+		db := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb@sha256:abc123")
+		Expect(resolveEffectiveBinaryVersion(db)).To(BeEmpty())
+	})
+
+	It("stays unknown when the ChangeStreams gate selects a non-semver image", func() {
+		// With no version/env and the ChangeStreams gate on, the controller runs the
+		// changestream image (non-semver tag). The webhook must treat it as unknown
+		// (warn), not silently compare against the default, to stay in step with the
+		// controller.
+		db := newTestDocumentDB("", "", "")
+		db.Spec.FeatureGates = map[string]bool{dbpreview.FeatureGateChangeStreams: true}
+		Expect(resolveEffectiveBinaryVersion(db)).To(BeEmpty())
+	})
+})
+
 var _ = Describe("extractSemver helper", func() {
 	It("extracts clean semver", func() {
 		Expect(extractSemver("0.112.0")).To(Equal("0.112.0"))
@@ -566,5 +602,225 @@ var _ = Describe("resource envelope validation", func() {
 		db := newDB()
 		db.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
 		Expect(v.validateResources(db)).ToNot(BeEmpty())
+	})
+})
+
+func newRestoreDocumentDB(name, version, backupName string) *dbpreview.DocumentDB {
+	db := newTestDocumentDB(version, "", "")
+	db.Name = name
+	db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+		Recovery: &dbpreview.RecoveryConfiguration{
+			Backup: cnpgv1.LocalObjectReference{Name: backupName},
+		},
+	}
+	return db
+}
+
+func newBackupWithSchema(name, schemaVersion string) *dbpreview.Backup {
+	return &dbpreview.Backup{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Status:     dbpreview.BackupStatus{SchemaVersion: schemaVersion},
+	}
+}
+
+func newValidatorWithObjects(objs ...ctrlclient.Object) *DocumentDBValidator {
+	scheme := runtime.NewScheme()
+	Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+	Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	return &DocumentDBValidator{Client: fakeClient}
+}
+
+func newPVRestoreDocumentDB(name, version, pvName string) *dbpreview.DocumentDB {
+	db := newTestDocumentDB(version, "", "")
+	db.Name = name
+	db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+		Recovery: &dbpreview.RecoveryConfiguration{
+			PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: pvName},
+		},
+	}
+	return db
+}
+
+func newPVWithSchema(name, schemaVersion string) *corev1.PersistentVolume {
+	pv := &corev1.PersistentVolume{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	if schemaVersion != "" {
+		pv.Annotations = map[string]string{util.AnnotationSchemaVersion: schemaVersion}
+	}
+	return pv
+}
+
+var _ = Describe("restore schema compatibility validation", func() {
+	ctx := context.Background()
+
+	It("is a no-op when there is no bootstrap recovery", func() {
+		v := newValidatorWithObjects()
+		db := newTestDocumentDB("0.112.0", "", "")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows restore when binary version equals backup schema version", func() {
+		backup := newBackupWithSchema("bk", "0.112.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "0.112.0", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows restore when binary version is newer than backup schema version", func() {
+		backup := newBackupWithSchema("bk", "0.110.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "0.112.0", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects restore when binary version is older than backup schema version", func() {
+		backup := newBackupWithSchema("bk", "0.112.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "0.110.0", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Detail).To(ContainSubstring("older than the backup's schema version"))
+	})
+
+	It("warns when the backup has no recorded schema version", func() {
+		backup := newBackupWithSchema("bk", "")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "0.110.0", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("no recorded schema version"))
+	})
+
+	It("warns when the referenced backup does not exist", func() {
+		v := newValidatorWithObjects()
+		db := newRestoreDocumentDB("restored", "0.110.0", "missing")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("not found"))
+	})
+
+	It("blocks restore when no version is set and the default binary is older than the backup schema", func() {
+		// With no spec.documentDBVersion/image, the controller applies the operator
+		// default. Restoring a newer schema onto it would run an older binary against
+		// a newer schema, so admission blocks it.
+		backup := newBackupWithSchema("bk", "999.0.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Detail).To(ContainSubstring("older than the backup's schema version"))
+	})
+
+	It("allows restore when no version is set and the default binary is >= the backup schema", func() {
+		backup := newBackupWithSchema("bk", "0.110.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "", "bk")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("warns when the restore binary version cannot be determined (digest-only image)", func() {
+		// A digest-only image pins an image whose version is unknown at admission,
+		// and it takes priority over the operator default, so compatibility can only
+		// be warned about, not verified.
+		backup := newBackupWithSchema("bk", "0.112.0")
+		v := newValidatorWithObjects(backup)
+		db := newRestoreDocumentDB("restored", "", "bk")
+		db.Spec.Image = &dbpreview.ImageSpec{DocumentDB: "ghcr.io/documentdb/documentdb@sha256:abc123"}
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("cannot determine the target DocumentDB version"))
+	})
+
+	It("warns when restoring from a PersistentVolume with an explicit version", func() {
+		v := newValidatorWithObjects()
+		db := newTestDocumentDB("0.112.0", "", "")
+		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+			},
+		}
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("PersistentVolume"))
+	})
+
+	It("warns (does not block) on a PersistentVolume restore that omits an explicit binary version", func() {
+		v := newValidatorWithObjects()
+		db := newTestDocumentDB("", "", "")
+		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+			},
+		}
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("PersistentVolume"))
+	})
+
+	It("allows a PersistentVolume restore when only image.documentDB is set", func() {
+		v := newValidatorWithObjects()
+		db := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb:0.112.0")
+		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
+			Recovery: &dbpreview.RecoveryConfiguration{
+				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+			},
+		}
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("PersistentVolume"))
+	})
+
+	It("allows a PersistentVolume restore when the PV annotation schema equals the binary version", func() {
+		pv := newPVWithSchema("pv-1", "0.112.0")
+		v := newValidatorWithObjects(pv)
+		db := newPVRestoreDocumentDB("restored", "0.112.0", "pv-1")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("allows a PersistentVolume restore when the binary version is newer than the PV annotation schema", func() {
+		pv := newPVWithSchema("pv-1", "0.110.0")
+		v := newValidatorWithObjects(pv)
+		db := newPVRestoreDocumentDB("restored", "0.112.0", "pv-1")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(BeEmpty())
+	})
+
+	It("rejects a PersistentVolume restore when the binary version is older than the PV annotation schema", func() {
+		pv := newPVWithSchema("pv-1", "0.112.0")
+		v := newValidatorWithObjects(pv)
+		db := newPVRestoreDocumentDB("restored", "0.110.0", "pv-1")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(warnings).To(BeEmpty())
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Detail).To(ContainSubstring("older than the PersistentVolume's schema version"))
+	})
+
+	It("warns when the PV has no schema annotation (same as a backup with no recorded schema)", func() {
+		pv := newPVWithSchema("pv-1", "")
+		v := newValidatorWithObjects(pv)
+		db := newPVRestoreDocumentDB("restored", "", "pv-1")
+		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
+		Expect(errs).To(BeEmpty())
+		Expect(warnings).To(HaveLen(1))
+		Expect(warnings[0]).To(ContainSubstring("no recorded schema version"))
 	})
 })

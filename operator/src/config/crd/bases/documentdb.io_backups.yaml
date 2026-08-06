@@ -41,6 +41,10 @@ spec:
       jsonPath: .status.message
       name: Message
       type: string
+    - description: DocumentDB schema version at backup time
+      jsonPath: .status.schemaVersion
+      name: SchemaVersion
+      type: string
     name: preview
     schema:
       openAPIV3Schema:
@@ -103,6 +107,14 @@ spec:
                 type: string
               phase:
                 description: Phase represents the current phase of the backup operation.
+                type: string
+              schemaVersion:
+                description: |-
+                  SchemaVersion is the DocumentDB extension schema version of the source
+                  cluster at backup time, captured from the source DocumentDB's
+                  status.schemaVersion. It is used to validate restore compatibility:
+                  a restore must target a binary version >= this schema version, otherwise
+                  an older binary would run against a newer, irreversible schema.
                 type: string
               startedAt:
                 description: StartedAt is the time when the backup operation started.

@@ -65,6 +65,7 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 				timeouts.For(timeouts.DocumentDBReady),
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Succeed())
+			schema := sourceSchemaVersion(ctx, c, srcKey)
 
 			h, err := emongo.NewFromDocumentDB(ctx, e2e.SuiteEnv(), ns, sourceName)
 			Expect(err).NotTo(HaveOccurred(), "connect to source DocumentDB")
@@ -87,6 +88,22 @@ var _ = Describe("DocumentDB restore — recovery.persistentVolume (retained PV)
 			Expect(err).NotTo(HaveOccurred(),
 				"no retained PV found for deleted source cluster %s/%s", ns, sourceName)
 			Expect(pv).NotTo(BeNil())
+
+			// Schema-version compatibility (#434): the PV controller must stamp the
+			// source's schema version onto the retained PV, and admission must reject
+			// a PV restore whose binary version is older than it. The happy-path
+			// restore below (default version >= schema) covers the admit case.
+			Expect(pv.Annotations).To(HaveKeyWithValue(schemaVersionAnnotation, schema),
+				"retained PV must be annotated with the source's schema version")
+
+			By("rejecting a PV restore whose binary version is older than the PV's schema version")
+			bad := buildRecoveryDocumentDB(ns, "pv-recovery-dst-old-binary",
+				"recovery_from_pv.yaml.template",
+				map[string]string{"PV_NAME": pv.Name})
+			pinBinaryVersion(bad, olderBinaryVersion)
+			err = c.Create(ctx, bad)
+			Expect(err).To(HaveOccurred(), "PV restore onto an older binary must be rejected at admission")
+			Expect(err.Error()).To(ContainSubstring("older than the PersistentVolume's schema version"))
 
 			// 4. Create the recovery DocumentDB that points at that
 			// PV's name. The operator should rehydrate the data,

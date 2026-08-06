@@ -108,8 +108,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// Update status based on CNPG Backup status
-	return r.updateBackupStatus(ctx, backup, cnpgBackup, cluster.Spec.Backup)
+	return r.updateBackupStatus(ctx, backup, cnpgBackup, cluster.Spec.Backup, cluster.Status.SchemaVersion)
 }
 
 // ensureVolumeSnapshotClass creates a VolumeSnapshotClass based on the cloud environment
@@ -193,10 +192,10 @@ func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbprevi
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
-// updateBackupStatus updates the Backup status based on CNPG Backup status
-func (r *BackupReconciler) updateBackupStatus(ctx context.Context, backup *dbpreview.Backup, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
+// updateBackupStatus reconciles and persists the Backup's status, returning the reconcile result.
+func (r *BackupReconciler) updateBackupStatus(ctx context.Context, backup *dbpreview.Backup, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbpreview.BackupConfiguration, sourceSchemaVersion string) (ctrl.Result, error) {
 	original := backup.DeepCopy()
-	needsUpdate := backup.UpdateStatus(cnpgBackup, backupConfiguration)
+	needsUpdate := backup.UpdateStatus(cnpgBackup, backupConfiguration, sourceSchemaVersion)
 
 	if needsUpdate {
 		if err := r.Status().Patch(ctx, backup, client.MergeFrom(original)); err != nil {

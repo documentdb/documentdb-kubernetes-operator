@@ -193,11 +193,11 @@ var _ = Describe("Backup Controller", func() {
 				},
 			}
 
-			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil)
+			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil, "0.112.0")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.RequeueAfter).NotTo(Equal(0))
 
-			// Verify status was updated with times
+			// Verify status was updated with times and the source schema version.
 			updated := &dbpreview.Backup{}
 			Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, updated)).To(Succeed())
 			Expect(string(updated.Status.Phase)).To(Equal(string(cnpgv1.BackupPhaseCompleted)))
@@ -205,6 +205,7 @@ var _ = Describe("Backup Controller", func() {
 			Expect(updated.Status.StoppedAt).ToNot(BeNil())
 			Expect(updated.Status.StartedAt.Time.Unix()).To(Equal(cnpgBackup.Status.StartedAt.Time.Unix()))
 			Expect(updated.Status.StoppedAt.Time.Unix()).To(Equal(cnpgBackup.Status.StoppedAt.Time.Unix()))
+			Expect(updated.Status.SchemaVersion).To(Equal("0.112.0"))
 		})
 
 		It("stops reconciling (returns zero result) when CNPG Backup phase is Failed", func() {
@@ -249,7 +250,7 @@ var _ = Describe("Backup Controller", func() {
 				},
 			}
 
-			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil)
+			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil, "")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.RequeueAfter).NotTo(Equal(0))
 
@@ -300,7 +301,7 @@ var _ = Describe("Backup Controller", func() {
 				},
 			}
 
-			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil)
+			res, err := reconciler.updateBackupStatus(ctx, backup, cnpgBackup, nil, "")
 			Expect(err).ToNot(HaveOccurred())
 			// Still in progress, requeue
 			Expect(res.RequeueAfter).To(Equal(10 * time.Second))

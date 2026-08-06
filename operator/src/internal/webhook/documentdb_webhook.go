@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -61,10 +62,16 @@ func (v *DocumentDBValidator) ValidateCreate(ctx context.Context, documentdb *db
 	}
 
 	allErrs := v.validate(documentdb)
+
+	// Restore-specific compatibility check. Runs only on create because bootstrap
+	// is immutable afterward. May both add errors (hard block) and warnings.
+	warnings, restoreErrs := v.validateRestoreSchemaCompatibility(ctx, documentdb)
+	allErrs = append(allErrs, restoreErrs...)
+
 	if len(allErrs) == 0 {
-		return nil, nil
+		return warnings, nil
 	}
-	return nil, apierrors.NewInvalid(
+	return warnings, apierrors.NewInvalid(
 		schema.GroupKind{Group: "documentdb.io", Kind: "DocumentDB"},
 		documentdb.Name, allErrs)
 }
@@ -218,6 +225,172 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Restore validation (create-only)
+// ---------------------------------------------------------------------------
+
+// validateRestoreSchemaCompatibility validates that a restore's target binary
+// version is compatible with the schema version the source was taken at.
+//
+// "Binary version" here is the DocumentDB extension version the new cluster will
+// run (resolved from spec.documentDBVersion / spec.image.documentDB, or the
+// operator default) — the same value surfaced to users in messages as the
+// "DocumentDB version". The "schema version" is the extension schema version the
+// source data was written at.
+//
+// A restore is a physical recovery: the restored catalog (including the
+// documentdb extension schema) comes back at source-time schema version, while
+// the new cluster's binary version is chosen independently. Running an older
+// binary against a newer, irreversible schema risks data corruption, and the
+// rollback guard (validateImageRollback) cannot catch it because a fresh restore
+// has an empty status.
+//
+// Rules:
+//   - binary >= schema  → allowed (schema catch-up handled by the two-phase upgrade flow)
+//   - binary <  schema  → rejected
+//   - schema or binary version unknown → allowed with a warning
+//
+// It orchestrates three single-purpose steps: identify the restore source,
+// resolve that source's schema version, and compare it against the effective
+// binary version. Backup-CR restores read the schema from Backup.Status; PV
+// restores read it from the source PV's annotation (stamped by the PV
+// controller). Both sources follow the same logic: when the schema version
+// cannot be determined the restore is allowed with a warning; only a resolved
+// binary older than a known schema is rejected.
+func (v *DocumentDBValidator) validateRestoreSchemaCompatibility(ctx context.Context, newDB *dbpreview.DocumentDB) (admission.Warnings, field.ErrorList) {
+	if newDB.Spec.Bootstrap == nil || newDB.Spec.Bootstrap.Recovery == nil {
+		return nil, nil
+	}
+	src, ok := restoreSourceFor(newDB.Spec.Bootstrap.Recovery)
+	if !ok {
+		return nil, nil // no recognizable restore source to validate
+	}
+
+	schemaVersion, warnings := v.resolveSourceSchemaVersion(ctx, newDB.Namespace, src)
+	if len(warnings) > 0 {
+		return warnings, nil
+	}
+
+	return compareBinaryToSchema(resolveEffectiveBinaryVersion(newDB), schemaVersion, src)
+}
+
+// restoreSource identifies where a restore draws its data — and thus its schema
+// version — from, carrying the diagnostics and the spec field to flag on error.
+type restoreSource struct {
+	kind      string // sourceKindBackup or sourceKindPV
+	name      string
+	fieldPath *field.Path
+}
+
+const (
+	sourceKindBackup = "backup"
+	sourceKindPV     = "PersistentVolume"
+)
+
+// restoreSourceFor identifies the restore source from a recovery configuration,
+// returning false when neither a backup nor a PersistentVolume source is set.
+func restoreSourceFor(recovery *dbpreview.RecoveryConfiguration) (restoreSource, bool) {
+	if recovery.Backup.Name != "" {
+		return restoreSource{
+			kind:      sourceKindBackup,
+			name:      recovery.Backup.Name,
+			fieldPath: field.NewPath("spec", "bootstrap", "recovery", "backup"),
+		}, true
+	}
+	if recovery.PersistentVolume != nil && recovery.PersistentVolume.Name != "" {
+		return restoreSource{
+			kind:      sourceKindPV,
+			name:      recovery.PersistentVolume.Name,
+			fieldPath: field.NewPath("spec", "bootstrap", "recovery", "persistentVolume"),
+		}, true
+	}
+	return restoreSource{}, false
+}
+
+// resolveSourceSchemaVersion reads the restore source and returns its recorded
+// schema version. It only reports warnings for I/O failures (source not found or
+// unreadable); a successfully read source with no schema version returns ("",
+// nil), leaving the "unknown schema" policy to compareBinaryToSchema so that both
+// empty-input cases are decided in one place. Backup and PV are handled
+// identically.
+func (v *DocumentDBValidator) resolveSourceSchemaVersion(ctx context.Context, namespace string, src restoreSource) (string, admission.Warnings) {
+	var schemaVersion string
+	var readErr error
+
+	switch src.kind {
+	case sourceKindBackup:
+		backup := &dbpreview.Backup{}
+		if err := v.Get(ctx, client.ObjectKey{Name: src.name, Namespace: namespace}, backup); err != nil {
+			readErr = err
+		} else {
+			schemaVersion = backup.Status.SchemaVersion
+		}
+	case sourceKindPV:
+		pv := &corev1.PersistentVolume{}
+		if err := v.Get(ctx, client.ObjectKey{Name: src.name}, pv); err != nil {
+			readErr = err
+		} else {
+			schemaVersion = pv.Annotations[util.AnnotationSchemaVersion]
+		}
+	}
+
+	if readErr != nil {
+		if apierrors.IsNotFound(readErr) {
+			return "", admission.Warnings{
+				fmt.Sprintf("%s %q not found: schema-version compatibility cannot be verified", src.kind, src.name),
+			}
+		}
+		// Transient/API error: don't hard-block the restore, but warn.
+		return "", admission.Warnings{
+			fmt.Sprintf("failed to read %s %q: schema-version compatibility cannot be verified: %v", src.kind, src.name, readErr),
+		}
+	}
+	return schemaVersion, nil
+}
+
+// compareBinaryToSchema is the single authority on the restore decision. It warns
+// (and allows) when either the source schema version or the target DocumentDB
+// version is unknown, and rejects only a known target version that is older than a
+// known schema.
+func compareBinaryToSchema(binaryVersion, schemaVersion string, src restoreSource) (admission.Warnings, field.ErrorList) {
+	if schemaVersion == "" {
+		return admission.Warnings{
+			fmt.Sprintf("%s %q has no recorded schema version: schema-version compatibility cannot be verified; "+
+				"ensure the target DocumentDB version (spec.documentDBVersion or spec.image.documentDB) is >= the source's "+
+				"schema version to avoid data corruption", src.kind, src.name),
+		}, nil
+	}
+	if binaryVersion == "" {
+		return admission.Warnings{
+			fmt.Sprintf("cannot determine the target DocumentDB version for restore from %s %q "+
+				"(set spec.documentDBVersion or spec.image.documentDB): compatibility with the %s's schema version %s cannot be verified",
+				src.kind, src.name, src.kind, schemaVersion),
+		}, nil
+	}
+
+	binaryExtensionVersion := util.SemverToExtensionVersion(binaryVersion)
+	schemaExtensionVersion := util.SemverToExtensionVersion(schemaVersion)
+
+	cmp, err := util.CompareExtensionVersions(binaryExtensionVersion, schemaExtensionVersion)
+	if err != nil {
+		return admission.Warnings{
+			fmt.Sprintf("cannot compare the target DocumentDB version %s with the %s's schema version %s: %v; compatibility not verified",
+				binaryVersion, src.kind, schemaVersion, err),
+		}, nil
+	}
+	if cmp < 0 {
+		return nil, field.ErrorList{field.Forbidden(
+			src.fieldPath,
+			fmt.Sprintf(
+				"restore blocked: the target DocumentDB version %s is older than the %s's schema version %s. "+
+					"Restoring onto an older DocumentDB version runs it against a newer, irreversible schema and may cause data corruption. "+
+					"Set spec.documentDBVersion (or spec.image.documentDB) to %s or newer.",
+				binaryVersion, src.kind, schemaVersion, schemaVersion),
+		)}
+	}
+	return nil, nil
+}
+
 // validateImmutableFields rejects updates to fields that cannot be changed after creation.
 // Note: credentialSecret, storageClass, and sidecarInjectorPluginName are enforced via
 // CEL transition rules on the CRD schema (see documentdb_types.go).
@@ -317,7 +490,30 @@ func resolveBinaryVersion(db *dbpreview.DocumentDB) string {
 	return db.Spec.DocumentDBVersion
 }
 
-// specImageDocumentDB safely returns spec.image.documentDB or "" when unset.
+// resolveEffectiveBinaryVersion returns the binary version the operator will
+// actually run for db, including the operator-wide default the controller applies
+// when the spec pins no version. Restore validation uses this rather than the
+// spec-only resolveBinaryVersion so a restore whose effective binary would be
+// older than the source schema is blocked, not merely warned.
+func resolveEffectiveBinaryVersion(db *dbpreview.DocumentDB) string {
+	if v := resolveBinaryVersion(db); v != "" {
+		return v
+	}
+	// The spec pins no parseable version. Resolve the exact image the controller
+	// would actually run (a pinned but unparseable image, the DOCUMENTDB_VERSION
+	// env default, the ChangeStreams image, or the built-in default) via the shared
+	// helper, and read its semver tag. Anything without a parseable semver tag
+	// (a digest, or the changestream image) stays unknown so the restore is warned,
+	// not falsely blocked — keeping the webhook in step with the controller.
+	image := util.GetDocumentDBImageForInstance(db)
+	if tagIdx := strings.LastIndex(image, ":"); tagIdx >= 0 {
+		if semver := extractSemver(image[tagIdx+1:]); semver != "" {
+			return semver
+		}
+	}
+	return ""
+}
+
 func specImageDocumentDB(db *dbpreview.DocumentDB) string {
 	if db == nil || db.Spec.Image == nil {
 		return ""

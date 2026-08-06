@@ -34,8 +34,9 @@ func (backup *Backup) CreateCNPGBackup(scheme *runtime.Scheme, clusterName strin
 	return cnpgBackup, nil
 }
 
-// UpdateStatus updates the Backup status based on the CNPG Backup status and backup configuration.
-func (backup *Backup) UpdateStatus(cnpgBackup *cnpgv1.Backup, backupConfiguration *BackupConfiguration) bool {
+// UpdateStatus reconciles the Backup status from the observed inputs and returns
+// whether any status field changed.
+func (backup *Backup) UpdateStatus(cnpgBackup *cnpgv1.Backup, backupConfiguration *BackupConfiguration, sourceSchemaVersion string) bool {
 	needsUpdate := false
 	if backup.Status.Phase != cnpgBackup.Status.Phase {
 		backup.Status.Phase = cnpgBackup.Status.Phase
@@ -60,6 +61,14 @@ func (backup *Backup) UpdateStatus(cnpgBackup *cnpgv1.Backup, backupConfiguratio
 	expirationTime := backup.CalculateExpirationTime(backupConfiguration)
 	if !areTimesEqual(backup.Status.ExpiredAt, expirationTime) {
 		backup.Status.ExpiredAt = expirationTime
+		needsUpdate = true
+	}
+
+	// Record the source cluster's schema version at backup time: captured once
+	// when first available and left immutable afterward, so a later restore can
+	// validate binary-vs-schema compatibility.
+	if backup.Status.SchemaVersion == "" && sourceSchemaVersion != "" {
+		backup.Status.SchemaVersion = sourceSchemaVersion
 		needsUpdate = true
 	}
 

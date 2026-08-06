@@ -151,6 +151,25 @@ func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Con
 		needsUpdate = true
 	}
 
+	// Stamp the installed schema version so a future PV restore can validate
+	// binary/schema compatibility at admission time. Only set it once the cluster
+	// has reported a schema version; never clear a previously stamped value (a
+	// transient empty status must not erase the last-known-good version, which is
+	// what a retained PV would be restored from).
+	if schemaVersion := documentdb.Status.SchemaVersion; schemaVersion != "" &&
+		pv.Annotations[util.AnnotationSchemaVersion] != schemaVersion {
+		if pv.Annotations == nil {
+			pv.Annotations = make(map[string]string)
+		}
+		logger.Info("PV schema-version annotation needs update",
+			"pv", pv.Name,
+			"currentValue", pv.Annotations[util.AnnotationSchemaVersion],
+			"desiredValue", schemaVersion,
+			"documentdb", documentdb.Name)
+		pv.Annotations[util.AnnotationSchemaVersion] = schemaVersion
+		needsUpdate = true
+	}
+
 	// Check if reclaim policy needs update
 	desiredPolicy := r.getDesiredReclaimPolicy(documentdb)
 	if pv.Spec.PersistentVolumeReclaimPolicy != desiredPolicy {
@@ -402,17 +421,21 @@ func (r *PersistentVolumeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Apply pvPredicate only to PersistentVolume events, not globally
 		For(&corev1.PersistentVolume{}, builder.WithPredicates(pvPredicate())).
 		// Watch DocumentDB changes and trigger reconciliation of associated PVs
+		// when the reclaim policy or the installed schema version changes.
 		Watches(
 			&dbpreview.DocumentDB{},
 			handler.EnqueueRequestsFromMapFunc(r.findPVsForDocumentDB),
-			builder.WithPredicates(documentDBReclaimPolicyPredicate()),
+			builder.WithPredicates(documentDBPVRelevantPredicate()),
 		).
 		Named("pv-controller").
 		Complete(r)
 }
 
-// documentDBReclaimPolicyPredicate only triggers when the reclaim policy field changes
-func documentDBReclaimPolicyPredicate() predicate.Predicate {
+// documentDBPVRelevantPredicate triggers PV reconciliation when a DocumentDB
+// change affects PV-level state: the reclaim policy (mutates the PV spec) or the
+// installed schema version (stamped onto the PV as an annotation for restore
+// compatibility validation).
+func documentDBPVRelevantPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			oldDB, ok := e.ObjectOld.(*dbpreview.DocumentDB)
@@ -423,7 +446,8 @@ func documentDBReclaimPolicyPredicate() predicate.Predicate {
 			if !ok {
 				return false
 			}
-			return oldDB.Spec.Resource.Storage.PersistentVolumeReclaimPolicy != newDB.Spec.Resource.Storage.PersistentVolumeReclaimPolicy
+			return oldDB.Spec.Resource.Storage.PersistentVolumeReclaimPolicy != newDB.Spec.Resource.Storage.PersistentVolumeReclaimPolicy ||
+				oldDB.Status.SchemaVersion != newDB.Status.SchemaVersion
 		},
 		CreateFunc:  func(e event.CreateEvent) bool { return false },
 		DeleteFunc:  func(e event.DeleteEvent) bool { return false },

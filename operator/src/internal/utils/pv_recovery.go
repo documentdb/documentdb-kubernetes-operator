@@ -17,6 +17,13 @@ const (
 	// Label for identifying the DocumentDB cluster a PV/PVC belongs to
 	LabelCluster   = "documentdb.io/cluster"
 	LabelNamespace = "documentdb.io/namespace"
+
+	// AnnotationSchemaVersion records, on a PV, the DocumentDB extension schema
+	// version installed in the data on that volume. It is stamped by the PV
+	// controller from DocumentDB.Status.SchemaVersion and read at admission time
+	// to validate PV-restore binary/schema compatibility (the schema version is
+	// otherwise not readable from a PV without booting PostgreSQL).
+	AnnotationSchemaVersion = "documentdb.io/schema-version"
 )
 
 // TempPVCNameForPVRecovery generates the name for a temporary PVC used during PV recovery.

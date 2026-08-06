@@ -277,6 +277,71 @@ var _ = Describe("PersistentVolume Controller", func() {
 			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
 			Expect(needsUpdate).To(BeFalse())
 		})
+
+		It("stamps the schema-version annotation from DocumentDB status", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pvName,
+					Labels: map[string]string{
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
+					},
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
+				},
+			}
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
+				Spec: dbpreview.DocumentDBSpec{
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PersistentVolumeReclaimPolicy: "Retain",
+						},
+					},
+				},
+				Status: dbpreview.DocumentDBStatus{SchemaVersion: "0.112.0"},
+			}
+
+			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
+			Expect(needsUpdate).To(BeTrue())
+			Expect(pv.Annotations[util.AnnotationSchemaVersion]).To(Equal("0.112.0"))
+		})
+
+		It("does not clear the schema-version annotation when status is empty", func() {
+			pv := &corev1.PersistentVolume{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: pvName,
+					Labels: map[string]string{
+						util.LabelCluster:   documentdbName,
+						util.LabelNamespace: testNamespace,
+					},
+					Annotations: map[string]string{
+						util.AnnotationSchemaVersion: "0.112.0",
+					},
+				},
+				Spec: corev1.PersistentVolumeSpec{
+					PersistentVolumeReclaimPolicy: corev1.PersistentVolumeReclaimRetain,
+					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
+				},
+			}
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
+				Spec: dbpreview.DocumentDBSpec{
+					Resource: dbpreview.Resource{
+						Storage: dbpreview.StorageConfiguration{
+							PersistentVolumeReclaimPolicy: "Retain",
+						},
+					},
+				},
+				// No Status.SchemaVersion set.
+			}
+
+			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
+			Expect(needsUpdate).To(BeFalse())
+			Expect(pv.Annotations[util.AnnotationSchemaVersion]).To(Equal("0.112.0"))
+		})
 	})
 
 	Describe("provisionerSupportsMountOptions", func() {
@@ -955,11 +1020,11 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 	})
 
-	Describe("documentDBReclaimPolicyPredicate", func() {
+	Describe("documentDBPVRelevantPredicate", func() {
 		var pred predicate.Predicate
 
 		BeforeEach(func() {
-			pred = documentDBReclaimPolicyPredicate()
+			pred = documentDBPVRelevantPredicate()
 		})
 
 		Describe("UpdateFunc", func() {
@@ -1011,6 +1076,19 @@ var _ = Describe("PersistentVolume Controller", func() {
 				}
 				e := event.UpdateEvent{ObjectOld: oldDB, ObjectNew: newDB}
 				Expect(pred.Update(e)).To(BeFalse())
+			})
+
+			It("returns true when the installed schema version changes", func() {
+				oldDB := &dbpreview.DocumentDB{
+					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
+					Status:     dbpreview.DocumentDBStatus{SchemaVersion: "0.110.0"},
+				}
+				newDB := &dbpreview.DocumentDB{
+					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
+					Status:     dbpreview.DocumentDBStatus{SchemaVersion: "0.112.0"},
+				}
+				e := event.UpdateEvent{ObjectOld: oldDB, ObjectNew: newDB}
+				Expect(pred.Update(e)).To(BeTrue())
 			})
 
 			It("returns false for non-DocumentDB objects", func() {

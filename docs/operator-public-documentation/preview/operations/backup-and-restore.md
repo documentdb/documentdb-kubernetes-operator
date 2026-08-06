@@ -166,6 +166,32 @@ List backups for your DocumentDB cluster and choose one in `completed` status:
 kubectl get backups -n <namespace>
 ```
 
+The `SchemaVersion` column shows the schema version the backup was taken at. You
+need it to choose a compatible version for the restore:
+
+```bash
+kubectl get backup my-backup -n <namespace> -o jsonpath='{.status.schemaVersion}'
+```
+
+### Version compatibility
+
+A restore brings your data back at the schema version from **when the backup was
+taken**. Set the new cluster's `documentDBVersion` to **that version or newer** —
+ideally the same version the backup was taken with. Never restore onto an **older**
+version: it runs against a newer, irreversible schema and may cause **data
+corruption**.
+
+| Restore version vs. backup schema | Behavior |
+| --- | --- |
+| equal or newer | Allowed |
+| older | **Rejected** at admission (when the schema version is known) |
+| schema version unknown | Allowed with a warning — verify the version yourself |
+
+The schema version is known from the `Backup`'s `status.schemaVersion` or a
+retained PV's `documentdb.io/schema-version` annotation. A PV imported from
+outside the operator (e.g. a raw disk or external snapshot) carries no annotation,
+so its schema version is unknown.
+
 ### Step 2: Create a New DocumentDB Cluster
 
 ```yaml title="restore.yaml"
@@ -177,6 +203,8 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
+  # Set to the backup's schema version or newer (see Version compatibility).
+  documentDBVersion: "0.110.0"
   resource:
     storage:
       pvcSize: 10Gi
@@ -207,6 +235,7 @@ Once the status shows `Cluster in healthy state`, connect and verify your data. 
 - The backup must be in `completed` status.
 - The VolumeSnapshot referenced by the backup must still exist — if it was manually deleted, the backup cannot be used for recovery.
 - You cannot specify both `backup` and `persistentVolume` in the same recovery spec.
+- The restore version must be **>= the backup's schema version** when that version is known (from the `Backup` or a PV's `documentdb.io/schema-version` annotation); otherwise the restore is allowed with a warning. See [Version compatibility](#version-compatibility).
 
 For additional recovery options (including PV-based recovery), see [Restore a Deleted DocumentDB Cluster](restore-deleted-cluster.md).
 
@@ -236,4 +265,3 @@ The operator resolves retention in priority order: per-backup > per-schedule > p
 - Failed backups still expire (timer starts at creation).
 - Deleting the DocumentDB cluster does **not** immediately delete its `Backup` objects — they wait for expiration.
 - There is no "keep forever" option. Export backups externally for permanent archival.
-
