@@ -31,7 +31,7 @@ rules:
   resources: ["serviceexports", "multiclusterservices", "serviceimports", "internalserviceexports"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 # Secrets: certificate_controller reads cert-manager-issued TLS secrets to
-# stamp into Cluster spec; no controller writes Secrets. Read-only.
+# stamp into Cluster spec. No controller writes Secrets.
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["get", "list", "watch"]

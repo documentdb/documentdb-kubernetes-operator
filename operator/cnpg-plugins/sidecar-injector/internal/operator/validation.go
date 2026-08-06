@@ -66,7 +66,10 @@ func (Implementation) ValidateClusterChange(
 	var newConfiguration *config.Configuration
 	newConfiguration, result.ValidationErrors = config.FromParameters(newClusterHelper)
 	oldConfiguration, _ := config.FromParameters(oldClusterHelper)
-	result.ValidationErrors = config.ValidateChanges(oldConfiguration, newConfiguration, newClusterHelper)
+	result.ValidationErrors = append(
+		result.ValidationErrors,
+		config.ValidateChanges(oldConfiguration, newConfiguration, newClusterHelper)...,
+	)
 
 	return result, nil
 }

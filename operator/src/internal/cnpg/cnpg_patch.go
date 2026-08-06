@@ -27,6 +27,8 @@ const (
 	PatchPathCertificates      = "/spec/certificates"
 	PatchPathPostgresPgHBA     = "/spec/postgresql/pg_hba"
 	PatchPathManagedServices   = "/spec/managed/services/additional"
+	PatchPathManaged           = "/spec/managed"
+	PatchPathManagedRoles      = "/spec/managed/roles"
 	PatchPathSynchronous       = "/spec/postgresql/synchronous"
 	PatchPathBootstrap         = "/spec/bootstrap"
 

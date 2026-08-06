@@ -19,6 +19,10 @@ var baseConfigYAML []byte
 
 const defaultPrometheusPort = 8888
 
+// MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
+// sidecar uses for its health-check query.
+const MonitorRoleName = "otel_monitor"
+
 // collectorConfig represents the OTel Collector configuration structure.
 type collectorConfig struct {
 	Receivers  map[string]any `yaml:"receivers,omitempty"`
