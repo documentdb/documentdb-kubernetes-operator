@@ -132,8 +132,19 @@ func run(cfg config.Config) int {
 	// Start verifier. A single verifier is sufficient — see StartVerifier
 	// godoc. Writers are passed so the verifier can detect tail loss by
 	// comparing each writer's acked tip against what's in the DB.
-	workload.StartVerifier(ctx, db, writers, metrics, j)
+	verifier := workload.StartVerifier(ctx, db, writers, metrics, j)
 	j.Info("main", "verifier started")
+
+	// Start retention pruner (bounds the workload collection so an unbounded
+	// write test cannot eventually exhaust the PVC). It prunes only documents
+	// below the verifier's confirmed floor, so it never affects the durability
+	// verdict. Disabled when RetainPerWriter == 0.
+	if cfg.RetainPerWriter > 0 {
+		workload.StartPruner(ctx, db.Collection(workload.CollectionName), writers, verifier, cfg.RetainPerWriter, metrics, j)
+		j.Info("main", "retention pruner started")
+	} else {
+		j.Info("main", "retention pruning disabled (LONGHAUL_RETAIN_PER_WRITER=0)")
+	}
 
 	// Configure operations.
 	ops := []operations.Operation{

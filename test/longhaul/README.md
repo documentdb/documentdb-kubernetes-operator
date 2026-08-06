@@ -133,6 +133,7 @@ All configuration is via environment variables.
 | `LONGHAUL_MAX_INSTANCES` | No | `3` | Maximum `spec.instancesPerNode` for scale-up operations (CRD upper bound: 3). |
 | `LONGHAUL_REPORT_INTERVAL` | No | `1h` | How often to write checkpoint reports to ConfigMap. |
 | `LONGHAUL_RESET_DATA` | No | `false` | If `true`, drop the workload collection on startup. Off by default so a Deployment pod restart preserves durability history. |
+| `LONGHAUL_RETAIN_PER_WRITER` | No | `2000000` | Retention window: most-recent verified documents kept per writer before the pruner deletes older ones, bounding disk usage. `0` disables pruning (unbounded growth). |
 
 ## CI Safety
 
