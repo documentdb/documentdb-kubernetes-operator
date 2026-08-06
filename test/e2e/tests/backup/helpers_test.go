@@ -5,19 +5,25 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 	. "github.com/onsi/gomega"    //nolint:revive
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // credentialSecretName is the secret the backup area seeds in every
@@ -114,6 +120,46 @@ func createRecoveryDocumentDB(
 	}
 	Expect(c.Create(ctx, dd)).To(Succeed(), "create recovery DocumentDB %s/%s", ns, name)
 	return dd
+}
+
+// provisionReadyCluster creates a 1-node DocumentDB in ns, registers
+// its cleanup, and blocks until it reports Ready. Shared by every
+// backup spec that needs a live source cluster before taking a backup.
+func provisionReadyCluster(ctx context.Context, c client.Client, ns, clusterName string) {
+	dd, err := documentdb.Create(ctx, c, ns, clusterName, documentdb.CreateOptions{
+		Base:          "documentdb",
+		Vars:          baseVars(clusterName, ns, "2Gi"),
+		ManifestsRoot: manifestsRoot(),
+	})
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(func(ctx SpecContext) {
+		_ = shareddb.Delete(ctx, c, dd, 3*time.Minute)
+	})
+	key := types.NamespacedName{Namespace: ns, Name: clusterName}
+	Eventually(assertions.AssertDocumentDBReady(ctx, c, key),
+		timeouts.For(timeouts.DocumentDBReady),
+		timeouts.PollInterval(timeouts.DocumentDBReady),
+	).Should(Succeed())
+}
+
+// createCompletedBackup creates an on-demand Backup (RetentionDays=1)
+// against clusterName, registers cleanup, and blocks until the Backup
+// CR reports Completed. bkp.Delete swallows IsNotFound, so the
+// registered cleanup stays correct even for specs whose Backup is
+// garbage-collected by the operator before teardown.
+func createCompletedBackup(ctx context.Context, c client.Client, ns, clusterName, backupName string) {
+	_, err := bkp.Create(ctx, c, bkp.BackupVars{
+		Name:          backupName,
+		Namespace:     ns,
+		ClusterName:   clusterName,
+		RetentionDays: 1,
+	})
+	Expect(err).NotTo(HaveOccurred(), "create Backup CR %s/%s", ns, backupName)
+	DeferCleanup(func(ctx SpecContext) {
+		_ = bkp.Delete(ctx, c, ns, backupName, 1*time.Minute)
+	})
+	_, err = bkp.WaitForCompleted(ctx, c, ns, backupName, timeouts.For(timeouts.BackupComplete))
+	Expect(err).NotTo(HaveOccurred(), "Backup %s/%s did not reach Completed", ns, backupName)
 }
 
 // skipUnlessCSISnapshotsUsable is the pre-flight for every backup

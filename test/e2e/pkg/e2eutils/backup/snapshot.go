@@ -81,6 +81,39 @@ func WaitForSnapshotForBackup(ctx context.Context, c client.Client, ns, backupNa
 	}
 }
 
+// WaitForSnapshotsDeletedForBackup polls until no VolumeSnapshot in ns
+// carries the cnpg.io/backupName=<backupName> label, or timeout
+// elapses. Used by the expired-backup cleanup spec to assert the
+// operator's cascading garbage collection (Backup → CNPG Backup →
+// VolumeSnapshot) removes the underlying snapshot, not just the Backup
+// CR. A leaked snapshot is the more user-visible failure mode
+// (orphaned storage cost), so this closes the loop that
+// WaitForBackupDeleted alone leaves open.
+func WaitForSnapshotsDeletedForBackup(ctx context.Context, c client.Client, ns, backupName string, timeout time.Duration) error {
+	if c == nil {
+		return errors.New("backup.WaitForSnapshotsDeletedForBackup: client must not be nil")
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		snaps, err := ListSnapshotsForBackup(ctx, c, ns, backupName)
+		if err != nil {
+			return err
+		}
+		if len(snaps) == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out after %s waiting for VolumeSnapshots of backup %s/%s to be deleted (%d still present)",
+				timeout, ns, backupName, len(snaps))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(DefaultPollInterval):
+		}
+	}
+}
+
 // FindRetainedPV returns the first PersistentVolume whose claimRef
 // points at a PVC in ns for clusterName. The helper prefers PVs that
 // are in the Released phase (the post-delete state when the reclaim
