@@ -108,14 +108,21 @@ var _ = Describe("Sidecar memory carve-out",
 
 				// This is the suite's only monitoring-on cluster, so it is the
 				// only place the collector's PSA hardening (#387) can be checked
-				// end-to-end. The fixture labels the namespace restricted, so
-				// reaching healthy already proves the sidecar passed admission;
-				// the explicit field checks name the offending field instead of
-				// leaving an opaque pod-creation failure. otel-collector is
-				// named as required so a collector that silently fails to inject
-				// is a failure rather than a vacuous pass on the gateway alone.
-				Eventually(assertions.AssertInjectedSidecarsPSARestricted(
+				// end-to-end. Two separate assertions because they fail for
+				// different reasons: a missing collector is a plumbing problem,
+				// a bad securityContext is the #387 problem.
+				Eventually(assertions.AssertSidecarsInjected(
 					ctx, c, cr.Namespace, cr.Name, otelContainerName),
+					timeouts.For(timeouts.DocumentDBReady),
+					timeouts.PollInterval(timeouts.DocumentDBReady),
+				).Should(Succeed(), "monitoring-on cluster must have the otel-collector injected")
+
+				// The fixture labels the namespace restricted, so reaching
+				// healthy already proves the sidecars passed admission; the
+				// explicit field checks name the offending field instead of
+				// leaving an opaque pod-creation failure.
+				Eventually(assertions.AssertInjectedSidecarsPSARestricted(
+					ctx, c, cr.Namespace, cr.Name),
 					timeouts.For(timeouts.DocumentDBReady),
 					timeouts.PollInterval(timeouts.DocumentDBReady),
 				).Should(Succeed(), "monitoring-on cluster pods must carry PSA-restricted securityContext")
