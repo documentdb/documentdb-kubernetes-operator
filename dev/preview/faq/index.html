@@ -1925,7 +1925,7 @@
 <h2 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h2>
 <h3 id="how-do-i-connect-to-my-documentdb-cluster">How do I connect to my DocumentDB cluster?<a class="headerlink" href="#how-do-i-connect-to-my-documentdb-cluster" title="Permanent link">&para;</a></h3>
 <p>Get the connection string from the cluster status:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>&lt;name&gt;<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.connectionString}'</span>
 </code></pre></div>
 <p>For external access via LoadBalancer, the connection string is available once the external IP is assigned.</p>
 <p>See <a href="../configuration/networking/">Networking</a> for connection details.</p>

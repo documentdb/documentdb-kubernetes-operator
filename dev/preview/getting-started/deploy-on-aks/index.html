@@ -1692,12 +1692,12 @@ Supported values are <code>aks</code>, <code>eks</code>, and <code>gke</code>. I
 operator does not apply cloud-specific service annotations. For field details,
 see the <a href="https://documentdb.io/documentdb-kubernetes-operator/latest/preview/api-reference/">API reference</a>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;aks&quot;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="s">"aks"</span>
 </code></pre></div>
 <p>When <code>spec.environment: "aks"</code> is set, the operator adds Azure-specific service
 annotations:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">annotations</span><span class="p">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">service.beta.kubernetes.io/azure-load-balancer-external</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;true&quot;</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">service.beta.kubernetes.io/azure-load-balancer-external</span><span class="p">:</span><span class="w"> </span><span class="s">"true"</span>
 </code></pre></div>
 <p>The <code>service.beta.kubernetes.io/azure-load-balancer-external</code> annotation is set
 by the operator for AKS deployments. It is not a generic Kubernetes annotation.

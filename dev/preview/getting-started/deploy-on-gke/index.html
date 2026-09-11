@@ -1662,12 +1662,12 @@ Supported values are <code>aks</code>, <code>eks</code>, and <code>gke</code>. I
 operator doesn't apply cloud-specific service annotations. For field details,
 see the <a href="../../api-reference/">API reference</a>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;gke&quot;</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="s">"gke"</span>
 </code></pre></div>
 <p>When <code>spec.environment: "gke"</code> is set, the operator adds Google Cloud-specific
 service annotations:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">annotations</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">cloud.google.com/load-balancer-type</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;External&quot;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">cloud.google.com/load-balancer-type</span><span class="p">:</span><span class="w"> </span><span class="s">"External"</span>
 </code></pre></div>
 <p>This annotation tells GKE to provision an external Google Cloud load balancer
 for the gateway Service so that it's reachable from outside the Kubernetes

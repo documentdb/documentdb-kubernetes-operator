@@ -2020,7 +2020,7 @@
 <a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">  </span>--tls<span class="w"> </span>--tlsAllowInvalidCertificates
 </code></pre></div>
 <p>Or use a connection string:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span>
 </code></pre></div>
 <h4 id="option-2-loadbalancer-service-for-cloud-deployments">Option 2: LoadBalancer service (for cloud deployments)<a class="headerlink" href="#option-2-loadbalancer-service-for-cloud-deployments" title="Permanent link">&para;</a></h4>
 <p>For direct external access in cloud environments (AKS, EKS, GKE), deploy with a <code>LoadBalancer</code> service type:</p>
@@ -2050,10 +2050,10 @@
 </code></pre></div>
 <p><strong>Step 3:</strong> Connect using the external IP:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># Get the connection string</span>
-<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.connectionString}'</span>
 <a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>
 <a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="c1"># Connect with mongosh</span>
-<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>mongosh<span class="w"> </span><span class="s2">&quot;&lt;connection-string&gt;&quot;</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>mongosh<span class="w"> </span><span class="s2">"&lt;connection-string&gt;"</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -2063,40 +2063,40 @@
 <p>Once connected, create a database, a collection, and insert some documents:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>use<span class="w"> </span>testdb
 <a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>
-<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>db.createCollection<span class="o">(</span><span class="s2">&quot;test_collection&quot;</span><span class="o">)</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>db.createCollection<span class="o">(</span><span class="s2">"test_collection"</span><span class="o">)</span>
 <a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
 <a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>db.test_collection.insertMany<span class="o">([</span>
-<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Alice&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="o">}</span>,
-<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Bob&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">25</span><span class="w"> </span><span class="o">}</span>,
-<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">&quot;Charlie&quot;</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">35</span><span class="w"> </span><span class="o">}</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">"Alice"</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">30</span><span class="w"> </span><span class="o">}</span>,
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">"Bob"</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">25</span><span class="w"> </span><span class="o">}</span>,
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="w">  </span><span class="o">{</span><span class="w"> </span>name:<span class="w"> </span><span class="s2">"Charlie"</span>,<span class="w"> </span>age:<span class="w"> </span><span class="m">35</span><span class="w"> </span><span class="o">}</span>
 <a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="o">])</span>
 <a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a>
 <a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a>db.test_collection.find<span class="o">()</span>
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>[direct: mongos] test&gt; use testdb
 <a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>switched to db testdb
-<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>[direct: mongos] testdb&gt; db.createCollection(&quot;test_collection&quot;)
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>[direct: mongos] testdb&gt; db.createCollection("test_collection")
 <a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>{ ok: 1 }
 <a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>[direct: mongos] testdb&gt; db.test_collection.insertMany([
-<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>...   { name: &quot;Alice&quot;, age: 30 },
-<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>...   { name: &quot;Bob&quot;, age: 25 },
-<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>...   { name: &quot;Charlie&quot;, age: 35 }
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>...   { name: "Alice", age: 30 },
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>...   { name: "Bob", age: 25 },
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>...   { name: "Charlie", age: 35 }
 <a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>... ])
 <a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>{
 <a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>  acknowledged: true,
 <a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>  insertedIds: {
-<a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>    &#39;0&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fed&#39;),
-<a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>    &#39;1&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fee&#39;),
-<a id="__codelineno-26-15" name="__codelineno-26-15" href="#__codelineno-26-15"></a>    &#39;2&#39;: ObjectId(&#39;682c3b06491dc99ae02b3fef&#39;)
+<a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a>    '0': ObjectId('682c3b06491dc99ae02b3fed'),
+<a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>    '1': ObjectId('682c3b06491dc99ae02b3fee'),
+<a id="__codelineno-26-15" name="__codelineno-26-15" href="#__codelineno-26-15"></a>    '2': ObjectId('682c3b06491dc99ae02b3fef')
 <a id="__codelineno-26-16" name="__codelineno-26-16" href="#__codelineno-26-16"></a>  }
 <a id="__codelineno-26-17" name="__codelineno-26-17" href="#__codelineno-26-17"></a>}
 <a id="__codelineno-26-18" name="__codelineno-26-18" href="#__codelineno-26-18"></a>[direct: mongos] testdb&gt; db.test_collection.find()
 <a id="__codelineno-26-19" name="__codelineno-26-19" href="#__codelineno-26-19"></a>[
-<a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a>  { _id: ObjectId(&#39;682c3b06491dc99ae02b3fed&#39;), name: &#39;Alice&#39;, age: 30 },
-<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>  { _id: ObjectId(&#39;682c3b06491dc99ae02b3fee&#39;), name: &#39;Bob&#39;, age: 25 },
+<a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a>  { _id: ObjectId('682c3b06491dc99ae02b3fed'), name: 'Alice', age: 30 },
+<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>  { _id: ObjectId('682c3b06491dc99ae02b3fee'), name: 'Bob', age: 25 },
 <a id="__codelineno-26-22" name="__codelineno-26-22" href="#__codelineno-26-22"></a>  {
-<a id="__codelineno-26-23" name="__codelineno-26-23" href="#__codelineno-26-23"></a>    _id: ObjectId(&#39;682c3b06491dc99ae02b3fef&#39;),
-<a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a>    name: &#39;Charlie&#39;,
+<a id="__codelineno-26-23" name="__codelineno-26-23" href="#__codelineno-26-23"></a>    _id: ObjectId('682c3b06491dc99ae02b3fef'),
+<a id="__codelineno-26-24" name="__codelineno-26-24" href="#__codelineno-26-24"></a>    name: 'Charlie',
 <a id="__codelineno-26-25" name="__codelineno-26-25" href="#__codelineno-26-25"></a>    age: 35
 <a id="__codelineno-26-26" name="__codelineno-26-26" href="#__codelineno-26-26"></a>  }
 <a id="__codelineno-26-27" name="__codelineno-26-27" href="#__codelineno-26-27"></a>]
@@ -2111,15 +2111,15 @@
 <a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>python3<span class="w"> </span>mongo-python-data-pusher.py
 </code></pre></div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>Inserted document ID: 682c54f9505b85fba77ed154
-<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>{&#39;_id&#39;: ObjectId(&#39;682c54f9505b85fba77ed154&#39;),
-<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a> &#39;cast&#39;: [&#39;Olivia Colman&#39;, &#39;Emma Stone&#39;, &#39;Rachel Weisz&#39;],
-<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a> &#39;directors&#39;: [&#39;Yorgos Lanthimos&#39;],
-<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a> &#39;genres&#39;: [&#39;Drama&#39;, &#39;History&#39;],
-<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a> &#39;rated&#39;: &#39;R&#39;,
-<a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a> &#39;runtime&#39;: 121,
-<a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a> &#39;title&#39;: &#39;The Favourite MongoDB Movie&#39;,
-<a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a> &#39;type&#39;: &#39;movie&#39;,
-<a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a> &#39;year&#39;: 2018}
+<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>{'_id': ObjectId('682c54f9505b85fba77ed154'),
+<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a> 'cast': ['Olivia Colman', 'Emma Stone', 'Rachel Weisz'],
+<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a> 'directors': ['Yorgos Lanthimos'],
+<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a> 'genres': ['Drama', 'History'],
+<a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a> 'rated': 'R',
+<a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a> 'runtime': 121,
+<a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a> 'title': 'The Favourite MongoDB Movie',
+<a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a> 'type': 'movie',
+<a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a> 'year': 2018}
 </code></pre></div>
 <p>Verify using <code>mongosh</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>use<span class="w"> </span>sample_mflix
@@ -2132,15 +2132,15 @@
 <a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>[direct: mongos] sample_mflix&gt; db.movies.find()
 <a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>[
 <a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>  {
-<a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>    _id: ObjectId(&#39;682c54f9505b85fba77ed154&#39;),
-<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>    title: &#39;The Favourite MongoDB Movie&#39;,
-<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>    genres: [ &#39;Drama&#39;, &#39;History&#39; ],
+<a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a>    _id: ObjectId('682c54f9505b85fba77ed154'),
+<a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a>    title: 'The Favourite MongoDB Movie',
+<a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>    genres: [ 'Drama', 'History' ],
 <a id="__codelineno-30-11" name="__codelineno-30-11" href="#__codelineno-30-11"></a>    runtime: 121,
-<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>    rated: &#39;R&#39;,
+<a id="__codelineno-30-12" name="__codelineno-30-12" href="#__codelineno-30-12"></a>    rated: 'R',
 <a id="__codelineno-30-13" name="__codelineno-30-13" href="#__codelineno-30-13"></a>    year: 2018,
-<a id="__codelineno-30-14" name="__codelineno-30-14" href="#__codelineno-30-14"></a>    directors: [ &#39;Yorgos Lanthimos&#39; ],
-<a id="__codelineno-30-15" name="__codelineno-30-15" href="#__codelineno-30-15"></a>    cast: [ &#39;Olivia Colman&#39;, &#39;Emma Stone&#39;, &#39;Rachel Weisz&#39; ],
-<a id="__codelineno-30-16" name="__codelineno-30-16" href="#__codelineno-30-16"></a>    type: &#39;movie&#39;
+<a id="__codelineno-30-14" name="__codelineno-30-14" href="#__codelineno-30-14"></a>    directors: [ 'Yorgos Lanthimos' ],
+<a id="__codelineno-30-15" name="__codelineno-30-15" href="#__codelineno-30-15"></a>    cast: [ 'Olivia Colman', 'Emma Stone', 'Rachel Weisz' ],
+<a id="__codelineno-30-16" name="__codelineno-30-16" href="#__codelineno-30-16"></a>    type: 'movie'
 <a id="__codelineno-30-17" name="__codelineno-30-17" href="#__codelineno-30-17"></a>  }
 <a id="__codelineno-30-18" name="__codelineno-30-18" href="#__codelineno-30-18"></a>]
 </code></pre></div>
@@ -2200,7 +2200,7 @@
 <a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a>[CustomResourceDefinition] databases.postgresql.cnpg.io
 <a id="__codelineno-35-10" name="__codelineno-35-10" href="#__codelineno-35-10"></a>[CustomResourceDefinition] imagecatalogs.postgresql.cnpg.io
 <a id="__codelineno-35-11" name="__codelineno-35-11" href="#__codelineno-35-11"></a>
-<a id="__codelineno-35-12" name="__codelineno-35-12" href="#__codelineno-35-12"></a>release &quot;documentdb-operator&quot; uninstalled
+<a id="__codelineno-35-12" name="__codelineno-35-12" href="#__codelineno-35-12"></a>release "documentdb-operator" uninstalled
 </code></pre></div>
 <h3 id="delete-the-namespace-and-crds">Delete the namespace and CRDs<a class="headerlink" href="#delete-the-namespace-and-crds" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>namespace<span class="w"> </span>documentdb-operator

@@ -1888,11 +1888,11 @@ for an example.</p>
 <p>Identify the current primary and verify replica health:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># View current primary setting</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>hub<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.spec.clusterReplication.primary}&#39;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.spec.clusterReplication.primary}'</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># Check replication status on primary</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>primary<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT * FROM pg_stat_replication;&quot;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT * FROM pg_stat_replication;"</span>
 </code></pre></div>
 <p>Expected output shows active replication to all replicas:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a> pid | usename  | application_name | client_addr | state     | sent_lsn   | write_lsn  | flush_lsn  | replay_lsn | sync_state
@@ -1915,7 +1915,7 @@ for an example.</p>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># 2. Verify replication lag is low (&lt; 1 second)</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>current-primary<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="s2">&quot;SELECT client_addr, state, replay_lag FROM pg_stat_replication;&quot;</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="s2">"SELECT client_addr, state, replay_lag FROM pg_stat_replication;"</span>
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
 <a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># 3. Check target replica is healthy</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>new-primary<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
@@ -1942,8 +1942,8 @@ for an example.</p>
 <p>Update the DocumentDB resource on the hub Kubernetes cluster:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>hub<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--type<span class="o">=</span><span class="s1">&#39;merge&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;clusterReplication&quot;:{&quot;primary&quot;:&quot;new-primary-cluster-name&quot;}}}&#39;</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--type<span class="o">=</span><span class="s1">'merge'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>-p<span class="w"> </span><span class="s1">'{"spec":{"clusterReplication":{"primary":"new-primary-cluster-name"}}}'</span>
 </code></pre></div>
 <p>The fleet controller propagates the change to all member Kubernetes clusters automatically.</p>
 </div>
@@ -1951,10 +1951,10 @@ for an example.</p>
 <p>Update the DocumentDB resource on <strong>all</strong> Kubernetes clusters:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Update on all Kubernetes clusters (use a loop or run individually)</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">for</span><span class="w"> </span>context<span class="w"> </span><span class="k">in</span><span class="w"> </span>cluster1<span class="w"> </span>cluster2<span class="w"> </span>cluster3<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$context</span><span class="s2">&quot;</span><span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="nv">$context</span><span class="s2">"</span><span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span>--type<span class="o">=</span><span class="s1">&#39;merge&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;clusterReplication&quot;:{&quot;primary&quot;:&quot;new-primary-cluster-name&quot;}}}&#39;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span>--type<span class="o">=</span><span class="s1">'merge'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span>-p<span class="w"> </span><span class="s1">'{"spec":{"clusterReplication":{"primary":"new-primary-cluster-name"}}}'</span>
 <a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="k">done</span>
 </code></pre></div>
 </div>
@@ -1986,11 +1986,11 @@ for an example.</p>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>svc/documentdb-preview<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span><span class="p">&amp;</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Connect with mongosh</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true&quot;</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span>
 <a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Test write operation</span>
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>db.testCollection.insertOne<span class="o">({</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span>message:<span class="w"> </span><span class="s2">&quot;Write test after failover&quot;</span>,
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span>message:<span class="w"> </span><span class="s2">"Write test after failover"</span>,
 <a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span>timestamp:<span class="w"> </span>new<span class="w"> </span>Date<span class="o">()</span>
 <a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="o">})</span>
 <a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
@@ -2000,15 +2000,15 @@ for an example.</p>
 <p>Check that the old primary is now replicating from the new primary:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Verify replication status ON NEW PRIMARY</span>
 <a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>new-primary<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT * FROM pg_stat_replication;&quot;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT * FROM pg_stat_replication;"</span>
 </code></pre></div>
 <p>You should see the old primary listed as a replica receiving replication stream.</p>
 <h3 id="step-6-post-failover-validation">Step 6: Post-failover validation<a class="headerlink" href="#step-6-post-failover-validation" title="Permanent link">&para;</a></h3>
 <p>Run comprehensive checks:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># 1. Verify all Kubernetes clusters are in sync</span>
 <a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">for</span><span class="w"> </span>context<span class="w"> </span><span class="k">in</span><span class="w"> </span>cluster1<span class="w"> </span>cluster2<span class="w"> </span>cluster3<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;=== </span><span class="nv">$context</span><span class="s2"> ===&quot;</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$context</span><span class="s2">&quot;</span><span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"=== </span><span class="nv">$context</span><span class="s2"> ==="</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="nv">$context</span><span class="s2">"</span><span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
 <a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="k">done</span>
 <a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
 <a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># 2. Check application health</span>
@@ -2070,8 +2070,8 @@ and verify manually.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Remove failed primary from cluster list and set new primary in one command</span>
 <a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>hub<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>--type<span class="o">=</span><span class="s1">&#39;merge&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;clusterReplication&quot;:{&quot;primary&quot;:&quot;replica-cluster-name&quot;,&quot;clusterList&quot;:[{&quot;name&quot;:&quot;replica-cluster-name&quot;},{&quot;name&quot;:&quot;other-replica-cluster-name&quot;}]}}}&#39;</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>--type<span class="o">=</span><span class="s1">'merge'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>-p<span class="w"> </span><span class="s1">'{"spec":{"clusterReplication":{"primary":"replica-cluster-name","clusterList":[{"name":"replica-cluster-name"},{"name":"other-replica-cluster-name"}]}}}'</span>
 </code></pre></div>
 <p>Replace the <code>clusterList</code> entries with your actual list of healthy Kubernetes clusters, excluding the failed primary.</p>
 </div>
@@ -2079,10 +2079,10 @@ and verify manually.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Update on all accessible Kubernetes clusters</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># Remove failed primary from cluster list and set new primary in one command</span>
 <a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">for</span><span class="w"> </span>context<span class="w"> </span><span class="k">in</span><span class="w"> </span>replica1<span class="w"> </span>replica2<span class="p">;</span><span class="w"> </span><span class="k">do</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$context</span><span class="s2">&quot;</span><span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span>kubectl<span class="w"> </span>--context<span class="w"> </span><span class="s2">"</span><span class="nv">$context</span><span class="s2">"</span><span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>documentdb-preview<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">    </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span>--type<span class="o">=</span><span class="s1">&#39;merge&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;clusterReplication&quot;:{&quot;primary&quot;:&quot;replica-cluster-name&quot;,&quot;clusterList&quot;:[{&quot;name&quot;:&quot;replica-cluster-name&quot;},{&quot;name&quot;:&quot;other-replica-cluster-name&quot;}]}}}&#39;</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">    </span>--type<span class="o">=</span><span class="s1">'merge'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">    </span>-p<span class="w"> </span><span class="s1">'{"spec":{"clusterReplication":{"primary":"replica-cluster-name","clusterList":[{"name":"replica-cluster-name"},{"name":"other-replica-cluster-name"}]}}}'</span>
 <a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="k">done</span>
 </code></pre></div>
 <p>Replace the <code>clusterList</code> entries with your actual list of healthy Kubernetes clusters, excluding the failed primary.</p>
@@ -2105,8 +2105,8 @@ and verify manually.</p>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>new-primary<span class="w"> </span>port-forward<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>svc/documentdb-preview<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span><span class="p">&amp;</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true&quot;</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>db.testCollection.insertOne<span class="o">({</span>message:<span class="w"> </span><span class="s2">&quot;DR failover test&quot;</span><span class="o">})</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>db.testCollection.insertOne<span class="o">({</span>message:<span class="w"> </span><span class="s2">"DR failover test"</span><span class="o">})</span>
 </code></pre></div>
 <h3 id="step-5-monitor-recovery">Step 5: Monitor recovery<a class="headerlink" href="#step-5-monitor-recovery" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Application pod logs</span>

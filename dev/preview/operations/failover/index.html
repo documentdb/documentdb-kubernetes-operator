@@ -1646,8 +1646,8 @@
 <h3 id="promoting-a-standby-documentdb-cluster">Promoting a Standby DocumentDB Cluster<a class="headerlink" href="#promoting-a-standby-documentdb-cluster" title="Permanent link">&para;</a></h3>
 <p>To promote a standby DocumentDB cluster to primary, update the <code>primary</code> field in all DocumentDB cluster configurations:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># On the new primary cluster</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">&#39;json&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">&#39;[{&quot;op&quot;: &quot;replace&quot;, &quot;path&quot;: &quot;/spec/clusterReplication/primary&quot;, &quot;value&quot;: &quot;standby-cluster-1&quot;}]&#39;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span>--type<span class="o">=</span><span class="s1">'json'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-p<span class="o">=</span><span class="s1">'[{"op": "replace", "path": "/spec/clusterReplication/primary", "value": "standby-cluster-1"}]'</span>
 </code></pre></div>
 <h2 id="application-considerations">Application Considerations<a class="headerlink" href="#application-considerations" title="Permanent link">&para;</a></h2>
 <h3 id="connection-handling">Connection Handling<a class="headerlink" href="#connection-handling" title="Permanent link">&para;</a></h3>

@@ -2031,11 +2031,11 @@
 <p>Each Kubernetes cluster in a multi-region deployment must identify itself with
 a unique Kubernetes cluster name. Create a ConfigMap on each Kubernetes cluster:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Run on each Kubernetes cluster and replace with your actual cluster name.</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">CLUSTER_NAME</span><span class="o">=</span><span class="s2">&quot;member-eastus2-cluster&quot;</span><span class="w">  </span><span class="c1"># for example: member-eastus2-cluster, member-westus3-cluster</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">CLUSTER_NAME</span><span class="o">=</span><span class="s2">"member-eastus2-cluster"</span><span class="w">  </span><span class="c1"># for example: member-eastus2-cluster, member-westus3-cluster</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>kubectl<span class="w"> </span>create<span class="w"> </span>configmap<span class="w"> </span>cluster-identity<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>--namespace<span class="w"> </span>kube-system<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_NAME</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">CLUSTER_NAME</span><span class="si">}</span><span class="s2">"</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -2166,7 +2166,7 @@ included in the PostgreSQL server certificate SAN list.</p>
 <a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;documentdb-name&gt;-&lt;member-2-hash&gt;-rw.documentdb-preview-ns.svc</span>
 <a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;documentdb-name&gt;-&lt;member-2-hash&gt;-rw.documentdb-preview-ns</span>
 <a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">&lt;documentdb-name&gt;-&lt;member-2-hash&gt;-rw</span>
-<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;*.fleet-system.svc&quot;</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">"*.fleet-system.svc"</span>
 <a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="w">  </span><span class="nt">issuerRef</span><span class="p">:</span>
 <a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">selfsigned-cross-region-issuer</span>
 <a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a><span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Issuer</span>
@@ -2218,18 +2218,18 @@ primary) and accepts a more granular <code>environment</code> and <code>storageC
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>kubectl<span class="w"> </span>config<span class="w"> </span>get-contexts
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Or for cloud-managed clusters:</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>az<span class="w"> </span>aks<span class="w"> </span>list<span class="w"> </span>--query<span class="w"> </span><span class="s2">&quot;[].name&quot;</span><span class="w"> </span>-o<span class="w"> </span>table<span class="w">  </span><span class="c1"># Azure</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>aws<span class="w"> </span>eks<span class="w"> </span>list-clusters<span class="w"> </span>--query<span class="w"> </span><span class="s2">&quot;clusters&quot;</span><span class="w"> </span>--output<span class="w"> </span>table<span class="w">  </span><span class="c1"># AWS</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>gcloud<span class="w"> </span>container<span class="w"> </span>clusters<span class="w"> </span>list<span class="w"> </span>--format<span class="o">=</span><span class="s2">&quot;table(name)&quot;</span><span class="w">  </span><span class="c1"># GCP</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>az<span class="w"> </span>aks<span class="w"> </span>list<span class="w"> </span>--query<span class="w"> </span><span class="s2">"[].name"</span><span class="w"> </span>-o<span class="w"> </span>table<span class="w">  </span><span class="c1"># Azure</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>aws<span class="w"> </span>eks<span class="w"> </span>list-clusters<span class="w"> </span>--query<span class="w"> </span><span class="s2">"clusters"</span><span class="w"> </span>--output<span class="w"> </span>table<span class="w">  </span><span class="c1"># AWS</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>gcloud<span class="w"> </span>container<span class="w"> </span>clusters<span class="w"> </span>list<span class="w"> </span>--format<span class="o">=</span><span class="s2">"table(name)"</span><span class="w">  </span><span class="c1"># GCP</span>
 </code></pre></div>
 <h4 id="step-2-create-kubernetes-cluster-identification">Step 2: Create Kubernetes cluster identification<a class="headerlink" href="#step-2-create-kubernetes-cluster-identification" title="Permanent link">&para;</a></h4>
 <p>On each Kubernetes cluster, create a ConfigMap to identify the Kubernetes cluster name:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Run on each Kubernetes cluster</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nv">CLUSTER_NAME</span><span class="o">=</span><span class="s2">&quot;cluster-region-name&quot;</span><span class="w">  </span><span class="c1"># for example: member-eastus2-cluster</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="nv">CLUSTER_NAME</span><span class="o">=</span><span class="s2">"cluster-region-name"</span><span class="w">  </span><span class="c1"># for example: member-eastus2-cluster</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
 <a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>kubectl<span class="w"> </span>create<span class="w"> </span>configmap<span class="w"> </span>cluster-identity<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>--namespace<span class="w"> </span>kube-system<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">CLUSTER_NAME</span><span class="si">}</span><span class="s2">&quot;</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">CLUSTER_NAME</span><span class="si">}</span><span class="s2">"</span>
 </code></pre></div>
 <h4 id="step-3-deploy-cert-manager-and-documentdb-operator-to-each-cluster">Step 3: Deploy cert-manager and DocumentDB operator to each cluster<a class="headerlink" href="#step-3-deploy-cert-manager-and-documentdb-operator-to-each-cluster" title="Permanent link">&para;</a></h4>
 <p>Install the cert manager and DocumentDB operator to the hub per the
@@ -2326,7 +2326,7 @@ cloud-specific setup docs for more details.</p>
 <li>
 <p><strong>Check PostgreSQL replication status on primary:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>primary<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;SELECT * FROM pg_stat_replication;&quot;</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>documentdb-preview-1<span class="w"> </span>--<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>postgres<span class="w"> </span>-c<span class="w"> </span><span class="s2">"SELECT * FROM pg_stat_replication;"</span>
 </code></pre></div>
 </li>
 <li>
@@ -2342,7 +2342,7 @@ cloud-specific setup docs for more details.</p>
 <li>
 <p><strong>Check cluster-identity ConfigMap:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>cluster1<span class="w"> </span>get<span class="w"> </span>configmap<span class="w"> </span>cluster-identity<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span>-n<span class="w"> </span>kube-system<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.data.cluster-name}&#39;</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span>-n<span class="w"> </span>kube-system<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.data.cluster-name}'</span>
 </code></pre></div>
 </li>
 <li>
@@ -2353,7 +2353,7 @@ cloud-specific setup docs for more details.</p>
 <p><strong>Update ConfigMap if incorrect:</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>cluster1<span class="w"> </span>create<span class="w"> </span>configmap<span class="w"> </span>cluster-identity<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span>--namespace<span class="w"> </span>kube-system<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">&quot;correct-cluster-name&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">  </span>--from-literal<span class="o">=</span>cluster-name<span class="o">=</span><span class="s2">"correct-cluster-name"</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">  </span>--dry-run<span class="o">=</span>client<span class="w"> </span>-o<span class="w"> </span>yaml<span class="w"> </span><span class="p">|</span><span class="w"> </span>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>-
 </code></pre></div>
 </li>

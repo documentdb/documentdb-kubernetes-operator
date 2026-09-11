@@ -1792,7 +1792,7 @@
 </div>
 <h2 id="install-k3s">Install K3s<a class="headerlink" href="#install-k3s" title="Permanent link">&para;</a></h2>
 <p>Install K3s with the required Kubernetes version:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-sfL<span class="w"> </span>https://get.k3s.io<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="nv">INSTALL_K3S_VERSION</span><span class="o">=</span><span class="s2">&quot;v1.35.0+k3s1&quot;</span><span class="w"> </span>sh<span class="w"> </span>-
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-sfL<span class="w"> </span>https://get.k3s.io<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="nv">INSTALL_K3S_VERSION</span><span class="o">=</span><span class="s2">"v1.35.0+k3s1"</span><span class="w"> </span>sh<span class="w"> </span>-
 </code></pre></div>
 <p>Wait for the node to become ready:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>sudo<span class="w"> </span>k3s<span class="w"> </span>kubectl<span class="w"> </span>get<span class="w"> </span>nodes
@@ -1891,10 +1891,10 @@
 </code></pre></div>
 <p>In another terminal, get the connection string and connect:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># View the connection string from the DocumentDB cluster status</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">&#39;{.status.connectionString}&#39;</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.connectionString}'</span>
 <a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
 <a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Connect with mongosh (substitute your credentials)</span>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span>
 </code></pre></div>
 <h3 id="option-2-k3s-built-in-load-balancer">Option 2: K3s built-in load balancer<a class="headerlink" href="#option-2-k3s-built-in-load-balancer" title="Permanent link">&para;</a></h3>
 <p>K3s includes <a href="https://docs.k3s.io/networking/networking-services#service-load-balancer">ServiceLB</a> (formerly Klipper), which provides LoadBalancer service support without an external cloud provider. Deploy DocumentDB with a LoadBalancer service:</p>
@@ -1928,7 +1928,7 @@
 <a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>my-documentdb   Cluster in healthy state   mongodb://...@192.168.1.100:10260/...
 </code></pre></div>
 <p>Connect with <code>mongosh</code> using the external IP:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>mongosh<span class="w"> </span><span class="s2">&quot;mongodb://dev_user:DevPassword123@192.168.1.100:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://dev_user:DevPassword123@192.168.1.100:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span>
 </code></pre></div>
 <p>For more connection options including application drivers, see <a href="../connecting-to-documentdb/">Connecting to DocumentDB</a>.</p>
 <h2 id="resource-considerations">Resource considerations<a class="headerlink" href="#resource-considerations" title="Permanent link">&para;</a></h2>
