@@ -53,6 +53,37 @@ ginkgo -r --label-filter=lifecycle ./tests/...
 ginkgo -r --label-filter='data && level:low' ./tests/data
 ```
 
+### Opt-in live telemetry prototype
+
+The `live-telemetry` case uses the disposable playground deployment and its
+localhost-only MCP port-forward. It reuses the shared connection and seed
+helpers and requires both gateway request metrics and request spans.
+`documentdb.postgres.up` alone does not pass.
+
+```bash
+cd test/e2e
+E2E_LIVE_TELEMETRY=1 go test ./tests/performance -run TestPerformance \
+  -count=1 -v -ginkgo.label-filter=live-telemetry
+```
+
+The separately selected `live-telemetry-trials` case records three bounded
+synthetic read windows. Both cases skip unless `E2E_LIVE_TELEMETRY=1`, and
+require the namespace ownership marker installed by the playground manifests.
+They must not target shared deployments. Setup, image pins, interpretation
+limits, and cleanup are documented in
+`documentdb-playground/performance-advisor/README.md` from the repository root.
+Set `E2E_LIVE_TELEMETRY_MCP_URL` only to a loopback HTTP `/mcp` endpoint if the
+port-forward uses a different local port.
+
+The playground's `demo.sh up/run/down` wrapper also sets
+`E2E_LIVE_TELEMETRY_DEMO_DIR` to a fresh private run directory. In this opt-in
+mode, the same trial case waits for a successful observer status read before
+workload setup, uses three 90-second windows, and requires detailed live
+metric and trace receipts in every window. Missing, stale, foreign, or
+retrospective receipts fail the case. The observer does not get database
+access or fault labels. Without this variable, the existing three 45-second
+observation windows are unchanged.
+
 ## Layout
 
 ```

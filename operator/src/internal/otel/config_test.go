@@ -125,6 +125,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery", "otlp"))
 		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(Equal([]string{"memory_limiter", "resource", "batch"}))
 		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ConsistOf("prometheus"))
+		Expect(dynCfg.Service.Pipelines).NotTo(HaveKey("traces"))
 	})
 
 	It("includes OTLP exporter in dynamic.yaml when configured", func() {
@@ -142,6 +143,11 @@ var _ = Describe("GenerateConfigMapData", func() {
 		dynCfg := parseCfg(data["dynamic.yaml"])
 		Expect(dynCfg.Exporters).To(HaveKey("otlp"))
 		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElement("otlp"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf("sqlquery", "otlp"))
+		Expect(dynCfg.Service.Pipelines["metrics"].Processors).To(Equal([]string{"memory_limiter", "resource", "batch"}))
+		Expect(dynCfg.Service.Pipelines["traces"].Receivers).To(Equal([]string{"otlp"}))
+		Expect(dynCfg.Service.Pipelines["traces"].Processors).To(Equal([]string{"memory_limiter", "resource", "batch"}))
+		Expect(dynCfg.Service.Pipelines["traces"].Exporters).To(Equal([]string{"otlp"}))
 	})
 
 	It("skips OTLP exporter when endpoint is empty", func() {
@@ -157,6 +163,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
 		Expect(dynCfg.Exporters).NotTo(HaveKey("otlp"))
+		Expect(dynCfg.Service.Pipelines).NotTo(HaveKey("traces"))
 	})
 
 	It("includes Prometheus exporter with default port", func() {
@@ -208,6 +215,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(dynCfg.Exporters).To(HaveKey("prometheus"))
 		Expect(dynCfg.Exporters).NotTo(HaveKey("debug"))
 		Expect(dynCfg.Service.Pipelines["metrics"].Exporters).To(ContainElements("otlp", "prometheus"))
+		Expect(dynCfg.Service.Pipelines["traces"].Exporters).To(Equal([]string{"otlp"}))
+		Expect(dynCfg.Service.Pipelines["traces"].Receivers).To(Equal([]string{"otlp"}))
 	})
 
 	It("generates no pipeline when no exporters configured", func() {

@@ -162,6 +162,13 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 				},
 			},
 		}
+		if _, enabled := cfg.Exporters["otlp"]; enabled {
+			cfg.Service.Pipelines["traces"] = pipelineConfig{
+				Receivers:  []string{"otlp"},
+				Processors: []string{"memory_limiter", "resource", "batch"},
+				Exporters:  []string{"otlp"},
+			}
+		}
 	}
 
 	out, err := yaml.Marshal(&cfg)

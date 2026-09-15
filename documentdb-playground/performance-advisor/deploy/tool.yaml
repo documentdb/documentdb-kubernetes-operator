@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: live-telemetry
+  labels:
+    app.kubernetes.io/part-of: live-telemetry-prototype
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: live-telemetry-tool
+  namespace: live-telemetry
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: live-telemetry-tool
+  namespace: live-telemetry
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: live-telemetry-tool
+  template:
+    metadata:
+      labels:
+        app: live-telemetry-tool
+    spec:
+      serviceAccountName: live-telemetry-tool
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tool
+          image: live-telemetry-tool:prototype
+          imagePullPolicy: Never
+          args:
+            - --namespace=live-telemetry
+            - --cluster=telemetry-db
+            - --otlp-address=0.0.0.0:4317
+            - --mcp-address=127.0.0.1:8080
+          env:
+            - name: GOMEMLIMIT
+              value: 384MiB
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            tcpSocket:
+              port: otlp-grpc
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: otlp-grpc
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: live-telemetry-tool
+  namespace: live-telemetry
+spec:
+  type: ClusterIP
+  selector:
+    app: live-telemetry-tool
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: live-telemetry-tool
+  namespace: live-telemetry
+spec:
+  podSelector:
+    matchLabels:
+      app: live-telemetry-tool
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: telemetry-db
+      ports:
+        - protocol: TCP
+          port: 4317
+  egress: []
