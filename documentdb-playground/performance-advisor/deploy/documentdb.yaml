@@ -1,0 +1,27 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: telemetry-db
+  namespace: live-telemetry
+  labels:
+    app.kubernetes.io/part-of: live-telemetry-prototype
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: documentdb-credentials
+  image:
+    documentDB: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.116.0@sha256:28e39bacc8a5d0e2f1cd3d820035c5983808059c3686babd2e27a083b96ac4f4
+    gateway: live-telemetry-gateway:prototype
+    postgres: ghcr.io/cloudnative-pg/postgresql:18.4-minimal-trixie@sha256:2cf8d1c297265331b8a81aefe5b7b397ddbb836e15eaa953543f6190e8dabf98
+  exposeViaService:
+    serviceType: ClusterIP
+  resource:
+    cpu: "1"
+    memory: 2Gi
+    storage:
+      pvcSize: 5Gi
+  monitoring:
+    enabled: true
+    exporter:
+      otlp:
+        endpoint: live-telemetry-tool.live-telemetry.svc.cluster.local:4317

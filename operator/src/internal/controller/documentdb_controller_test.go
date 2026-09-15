@@ -3197,6 +3197,9 @@ var _ = Describe("DocumentDB Controller", func() {
 				Spec: dbpreview.DocumentDBSpec{
 					Monitoring: &dbpreview.MonitoringSpec{
 						Enabled: false,
+						Exporter: &dbpreview.ExporterSpec{
+							OTLP: &dbpreview.OTLPExporterSpec{Endpoint: "telemetry-tool:4317"},
+						},
 					},
 				},
 			}

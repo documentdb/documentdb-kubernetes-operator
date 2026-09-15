@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "live-telemetry": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "documentdb-playground/performance-advisor/demo.sh",
+        "observe"
+      ],
+      "tools": [
+        "get_capture_status",
+        "get_metric_window",
+        "get_recent_traces",
+        "get_trace"
+      ],
+      "timeout": 30000
+    }
+  }
+}

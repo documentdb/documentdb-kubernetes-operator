@@ -1,0 +1,12 @@
+FROM ghcr.io/documentdb/documentdb-kubernetes-operator/gateway@sha256:1f95ba8e06e2a2626c7e9458106a6de372dd5e50ee9559267a92298ad410ccf5
+
+RUN set -eu; \
+    config=/home/documentdb/gateway/pg_documentdb_gw/SetupConfiguration.json; \
+    jq -e '.TelemetryOptions.Metrics.Enabled == false and .TelemetryOptions.Tracing.Enabled == false' "$config" > /dev/null; \
+    jq '.TelemetryOptions.Metrics.Enabled = true \
+        | .TelemetryOptions.Metrics.OtlpEndpoint = "http://127.0.0.1:4317" \
+        | .TelemetryOptions.Tracing.Enabled = true \
+        | .TelemetryOptions.Tracing.OtlpEndpoint = "http://127.0.0.1:4317" \
+        | .TelemetryOptions.Tracing.SamplerRatio = 1.0' "$config" > /tmp/telemetry-config.json; \
+    cat /tmp/telemetry-config.json > "$config"; \
+    rm /tmp/telemetry-config.json
