@@ -464,6 +464,67 @@ kubectl --context <cluster-name> get svc -n istio-system istio-eastwestgateway
 kubectl --context <cluster-name> get secrets -n istio-system | grep istio-remote-secret
 ```
 
+### CNPG init/join Job pods rejected: `volumes[*].image: Forbidden: may not specify more than 1 volume type`
+
+**Symptom:** After deploying the DocumentDB CR, the cluster sits in `Setting up primary` / `Cluster is unrecoverable` and the operator log loops on `Selected PVC is not ready yet`. CNPG init or join Job pods are never created. Looking at the underlying CNPG `Cluster` events shows API server rejections like:
+
+```
+spec.volumes[3].image: Forbidden: may not specify more than 1 volume type
+spec.containers[1].volumeMounts[5].name: Not found: "istio-envoy"
+```
+
+**Root cause:** A stale **Istio sidecar-injector webhook** (≤ 1.23.x) is mutating the Job pod spec produced by the DocumentDB cnpg-i sidecar plugin. The plugin attaches the DocumentDB extension binaries via the Kubernetes [OCI image volume source](https://kubernetes.io/docs/concepts/storage/volumes/#image) (alpha in 1.31, beta in 1.33, GA in 1.35). Older Istio injectors don't understand this volume type and produce a malformed mutated pod spec, which the API server then rejects.
+
+**Do not** disable Istio injection on `documentdb-preview-ns` to "work around" this — Istio is the cross-cloud transport for `crossCloudNetworkingStrategy: Istio` and the operator requires it.
+
+**Fix:** Upgrade Istio on every member cluster to a version that supports the OCI image volume source (Istio ≥ 1.24 understands it; current stable 1.29.x is recommended on Kubernetes ≥ 1.33).
+
+```bash
+# 1) Install a current istioctl (1.29.x at time of writing)
+ISTIO_VERSION=1.29.2
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$ISTIO_VERSION sh -
+export PATH="$PWD/istio-$ISTIO_VERSION/bin:$PATH"
+
+# 2) For *each* member cluster, re-apply the canonical IstioOperator spec
+#    (matches the spec installed by deploy.sh, with the new control plane version).
+#    Replace MEMBER_CLUSTERS with the kubectl contexts for ALL of your member
+#    clusters — for the default 3-cloud demo this is azure-documentdb,
+#    gcp-documentdb, and aws-documentdb. Leaving any member on the stale
+#    sidecar-injector will keep the failure mode on that cluster.
+MEMBER_CLUSTERS=(azure-documentdb gcp-documentdb aws-documentdb)
+index=0
+for cluster in "${MEMBER_CLUSTERS[@]}"; do
+  index=$(( index + 1 ))
+  istioctl --context "$cluster" x precheck
+  cat <<EOF | istioctl --context "$cluster" install -y -f -
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+spec:
+  values:
+    global:
+      meshID: mesh1
+      multiCluster:
+        clusterName: ${cluster}
+      network: network${index}
+EOF
+  # 3) Restart the east-west gateway so its sidecar is re-injected with the new version
+  kubectl --context "$cluster" -n istio-system rollout restart deploy istio-eastwestgateway
+done
+
+# 4) Recreate the CNPG cluster CR on the *primary* cluster (the operator will
+#    then recreate it from the DocumentDB CR). Discover which member is
+#    primary from the DocumentDB spec rather than hard-coding it:
+PRIMARY_CLUSTER=$(kubectl --context "$HUB_CONTEXT" -n documentdb-preview-ns \
+  get documentdb documentdb-preview \
+  -o jsonpath='{.spec.clusterReplication.primary}')
+kubectl --context "$PRIMARY_CLUSTER" -n documentdb-preview-ns \
+  delete cluster.postgresql.cnpg.io --all
+```
+
+**Verification:** Within ~30s the operator recreates the CNPG `Cluster`. The `*-initdb` Job pod should now reach `Completed`, the primary pod should run `3/3`, and the cross-cloud replica's `*-join` Job should follow shortly. `kubectl get documentdb.documentdb.io` will report `Cluster in healthy state`.
+
+> If you redeploy from scratch, ensure `deploy.sh`'s `ISTIO_VERSION` is set to a non-EOL release (Istio 1.24.0 was the original pin and is now end-of-life — its bundled charts will fail to render with the error `helm render: load chart: component does not exist`).
+
 ### EKS-Specific Issues
 
 **EBS CSI Driver:**
