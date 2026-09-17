@@ -1,0 +1,93 @@
+# One-shot init Job: runs `extenddb init --backend mongodb`, which creates
+# the extenddb_catalog/extenddb_data databases inside DocumentDB, generates
+# a self-signed TLS cert, generates extenddb.toml, and prints admin
+# credentials to its logs (shown once -- scripts/deploy.sh captures them).
+#
+# IMPORTANT: unlike the PostgreSQL backend (which takes --pg-host/--pg-user/
+# etc. as CLI flags), `extenddb init --backend mongodb` has no equivalent
+# --mongo-uri flag. Its MongoBootstrapper reads the connection string by
+# parsing [storage.mongodb].connection_string out of the file at --config
+# *before* doing any database work -- the EXTENDDB__STORAGE__MONGODB__
+# CONNECTION_STRING env var override only applies at `extenddb serve` time,
+# not during init. So the container command below writes a minimal seed
+# TOML containing the connection string first, then passes --overwrite so
+# `init` is allowed to replace that seed file with its own fully generated
+# config afterwards (confirmed against extenddb v0.1.3 source).
+#
+# Must complete (and its pod be gone or at least done writing to the PVC)
+# before manifests/serve.yaml is applied, since both mount the same
+# ReadWriteOnce PVC. scripts/deploy.sh enforces this ordering.
+#
+# Templated by scripts/deploy.sh with envsubst: ${EXTENDDB_NAMESPACE},
+# ${EXTENDDB_IMAGE}.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: extenddb-init
+  namespace: ${EXTENDDB_NAMESPACE}
+spec:
+  backoffLimit: 0
+  # Give the job pod a bounded lifetime after completion so it releases the
+  # ReadWriteOnce PVC promptly, avoiding a lingering-pod race with the serve
+  # Deployment on multi-node clusters (see README Troubleshooting).
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      # The image runs as non-root UID/GID 10001; fsGroup ensures the
+      # mounted PVC is group-writable for that UID regardless of the CSI
+      # driver's default mount ownership.
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: extenddb-init
+          image: ${EXTENDDB_IMAGE}
+          # Override the image's ENTRYPOINT ["extenddb"]: write a seed config
+          # file containing the MongoDB connection string (init's own
+          # bootstrapper needs it on disk, not just in the environment), then
+          # run init with --overwrite so it replaces the seed file with its
+          # fully generated config once bootstrapping succeeds.
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              umask 077
+              cat > /var/lib/extenddb/extenddb.toml <<TOML
+              [server]
+              bind_addr = "0.0.0.0"
+
+              [storage]
+              backend = "mongodb"
+
+              [storage.mongodb]
+              connection_string = "${EXTENDDB_MONGO_URI}"
+              TOML
+              exec extenddb init --backend mongodb \
+                  --config /var/lib/extenddb/extenddb.toml \
+                  --bind-addr 0.0.0.0 \
+                  --overwrite
+          env:
+            - name: EXTENDDB_MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: extenddb-mongo-uri
+                  key: connection_string
+            # `extenddb init` writes the generated self-signed TLS cert/key
+            # to `~/.extenddb/tls/` -- by default that's the container's home
+            # directory, which is NOT on the shared PVC and is lost once this
+            # Job's pod exits. Point HOME at the PVC-backed state dir so the
+            # cert/key persist and the serve Deployment's separate pod (same
+            # PVC, different container) can find them.
+            - name: HOME
+              value: /var/lib/extenddb
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/extenddb
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: extenddb-state

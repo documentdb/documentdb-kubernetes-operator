@@ -1,0 +1,20 @@
+# Namespace and persistent state volume for ExtendDB. Applied first, before
+# the init Job and serve Deployment (see scripts/deploy.sh for ordering).
+#
+# Templated by scripts/deploy.sh with envsubst: ${EXTENDDB_NAMESPACE}.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${EXTENDDB_NAMESPACE}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: extenddb-state
+  namespace: ${EXTENDDB_NAMESPACE}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
