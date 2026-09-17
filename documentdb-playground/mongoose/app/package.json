@@ -1,0 +1,18 @@
+{
+  "name": "documentdb-mongoose-playground",
+  "version": "1.0.0",
+  "description": "Mongoose + Express demo and CRUD test suite running against DocumentDB",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test:crud": "node mongoose-crud-test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5"
+  }
+}

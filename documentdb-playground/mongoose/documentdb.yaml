@@ -1,0 +1,48 @@
+# Sample DocumentDB instance sized for the Mongoose playground.
+#
+# Apply with:
+#   kubectl create namespace documentdb-test
+#   kubectl apply -f documentdb.yaml
+#
+# Notes:
+# - Replace the password before using outside a throwaway dev cluster.
+# - The gateway speaks the MongoDB wire protocol, so Mongoose connects to it
+#   exactly like it would to a standalone mongod (with TLS + directConnection).
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docdb-credentials
+  namespace: documentdb-test
+type: Opaque
+stringData:
+  username: docdbadmin
+  password: "ChangeMe!ReplaceBeforeUsing"
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-cluster
+  namespace: documentdb-test
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  documentDbCredentialSecret: docdb-credentials
+  resource:
+    storage:
+      pvcSize: "10Gi"
+  exposeViaService:
+    serviceType: ClusterIP
+  sidecarInjectorPluginName: cnpg-i-sidecar-injector.documentdb.io
+  # documentDBVersion pins the version for ALL DocumentDB components (engine +
+  # gateway) in lockstep. Prefer this over setting gatewayImage/documentDBImage
+  # individually: explicit per-component image fields take precedence over this
+  # value, so pinning only one would skew engine/gateway versions.
+  #
+  # 0.109.0 is the latest published release (and the operator 0.2.0 default).
+  #
+  # Known issue: gateway 0.109.0 fails point lookups that filter on `_id`
+  # (e.g. Mongoose `findById`) with "trying to open a pruned relation". The fix
+  # exists upstream but is not yet in a published release. Bump this value once a
+  # newer DocumentDB version is released.
+  documentDBVersion: "0.109.0"
