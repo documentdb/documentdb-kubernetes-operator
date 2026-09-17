@@ -1,0 +1,113 @@
+# ClusterResourcePlacement for DocumentDB operator propagation via Fleet.
+# Note: The operator is installed directly on each cluster (Helm on AKS, Run Command on k3s)
+# because CRP-based propagation of complex charts with CRDs causes Helm ownership conflicts.
+# This CRP is kept for reference but is NOT applied by install-documentdb-operator.sh.
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-operator-crp
+spec:
+  resourceSelectors:
+    - group: ""
+      version: v1
+      kind: Namespace
+      name: documentdb-operator
+    - group: ""
+      version: v1
+      kind: Namespace
+      name: cnpg-system
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      labelSelector:
+        matchLabels:
+          app: documentdb-operator
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: publications.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: failoverquorums.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: poolers.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: clusterimagecatalogs.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: imagecatalogs.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: backups.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: scheduledbackups.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: subscriptions.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: databases.postgresql.cnpg.io
+    - group: "apiextensions.k8s.io"
+      version: v1
+      kind: CustomResourceDefinition
+      name: clusters.postgresql.cnpg.io
+    # RBAC roles and bindings
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRole
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: documentdb-operator
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg-edit
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRole
+      name: documentdb-operator-cloudnative-pg-view
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRoleBinding
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: documentdb-operator
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRoleBinding
+      name: documentdb-operator-cloudnative-pg
+    - group: "admissionregistration.k8s.io"
+      version: v1
+      kind: MutatingWebhookConfiguration
+      name: cnpg-mutating-webhook-configuration
+    - group: "admissionregistration.k8s.io"
+      version: v1
+      kind: ValidatingWebhookConfiguration
+      name: cnpg-validating-webhook-configuration
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRole
+      name: wal-replica-manager
+    - group: "rbac.authorization.k8s.io"
+      version: v1
+      kind: ClusterRoleBinding
+      name: wal-replica-manager-binding
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
