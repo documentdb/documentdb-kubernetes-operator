@@ -37,6 +37,41 @@ func parseExtensionVersions(output string) (defaultVersion, installedVersion str
 	return parseExtensionVersionsFromOutput(output)
 }
 
+// versionCheckOutput renders psql aligned output for the pg_available_extensions query
+// that handleExtensionUpgrade issues first.
+func versionCheckOutput(defaultVersion, installedVersion string) string {
+	return fmt.Sprintf(
+		" default_version | installed_version \n-----------------+-------------------\n %s         | %s           \n",
+		defaultVersion, installedVersion)
+}
+
+// updatePathOutput renders psql aligned output for the pg_extension_update_paths preflight.
+// Pass noUpdatePathSentinel to simulate a missing update path.
+func updatePathOutput(path string) string {
+	return fmt.Sprintf("     update_path      \n----------------------\n %s \n(1 row)\n", path)
+}
+
+// extensionSQLResponder builds a SQLExecutor stub that answers both read-only queries
+// handleExtensionUpgrade issues (the version check and the update-path preflight),
+// records every statement it receives into calls, and returns a canned success for
+// anything else (i.e. the ALTER EXTENSION itself).
+func extensionSQLResponder(
+	calls *[]string,
+	defaultVersion, installedVersion, updatePath string,
+) func(context.Context, *cnpgv1.Cluster, string) (string, error) {
+	return func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
+		*calls = append(*calls, sql)
+		switch {
+		case strings.Contains(sql, "pg_available_extensions"):
+			return versionCheckOutput(defaultVersion, installedVersion), nil
+		case strings.Contains(sql, "pg_extension_update_paths"):
+			return updatePathOutput(updatePath), nil
+		default:
+			return "ALTER EXTENSION", nil
+		}
+	}
+}
+
 var _ = Describe("DocumentDB Controller", func() {
 	const (
 		clusterName         = "test-cluster"
@@ -834,27 +869,20 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					sqlCalls = append(sqlCalls, sql)
-					if len(sqlCalls) == 1 {
-						// First call: version check — installed 0.109-0, default 0.110-0
-						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
-					}
-					// Second call: ALTER EXTENSION
-					return "ALTER EXTENSION", nil
-				},
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.110-0", "0.109-0", "0.109-0--0.110-0"),
 			}
 
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Verify both SQL calls were made
-			Expect(sqlCalls).To(HaveLen(2))
+			// Verify the version check, the update-path preflight, and the ALTER all ran
+			Expect(sqlCalls).To(HaveLen(3))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(ContainSubstring("pg_extension_update_paths"))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
 
 			// Status should reflect the upgraded version (default version as semver)
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1208,23 +1236,16 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					sqlCalls = append(sqlCalls, sql)
-					if len(sqlCalls) == 1 {
-						// default > installed → triggers ALTER EXTENSION
-						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
-					}
-					return "ALTER EXTENSION", nil
-				},
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.110-0", "0.109-0", "0.109-0--0.110-0"),
 			}
 
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update DocumentDB status after schema upgrade"))
-			Expect(sqlCalls).To(HaveLen(2))
+			Expect(sqlCalls).To(HaveLen(3))
 		})
 	})
 
@@ -1343,25 +1364,20 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					sqlCalls = append(sqlCalls, sql)
-					if len(sqlCalls) == 1 {
-						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
-					}
-					return "ALTER EXTENSION", nil
-				},
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.110-0", "0.109-0", "0.109-0--0.110-0"),
 			}
 
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Both version-check and ALTER EXTENSION should have been called
-			Expect(sqlCalls).To(HaveLen(2))
+			// Version check, update-path preflight and ALTER EXTENSION should have been called
+			Expect(sqlCalls).To(HaveLen(3))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(ContainSubstring("pg_extension_update_paths"))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
 
 			// Status should reflect the upgraded version
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1414,26 +1430,20 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			sqlCalls := []string{}
 			reconciler := &DocumentDBReconciler{
-				Client:   fakeClient,
-				Scheme:   scheme,
-				Recorder: recorder,
-				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					sqlCalls = append(sqlCalls, sql)
-					if len(sqlCalls) == 1 {
-						// Binary is 0.110-0, installed is 0.109-0
-						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
-					}
-					return "ALTER EXTENSION", nil
-				},
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.110-0", "0.109-0", "0.109-0--0.110-0"),
 			}
 
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Should run ALTER EXTENSION UPDATE TO specific version
-			Expect(sqlCalls).To(HaveLen(2))
+			Expect(sqlCalls).To(HaveLen(3))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE TO '0.110-0'"))
+			Expect(sqlCalls[1]).To(ContainSubstring("pg_extension_update_paths"))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE TO '0.110-0'"))
 
 			// Status should reflect the explicit version
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1636,6 +1646,494 @@ var _ = Describe("DocumentDB Controller", func() {
 
 		// Note: Image rollback blocking is now enforced by the validating webhook at
 		// admission time. The controller no longer needs to check for this case.
+	})
+
+	Describe("extension update path preflight", func() {
+		// upgradeCluster builds a healthy single-instance CNPG cluster suitable for
+		// driving handleExtensionUpgrade.
+		upgradeCluster := func() *cnpgv1.Cluster {
+			return &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      clusterName,
+					Namespace: clusterNamespace,
+				},
+				Spec: cnpgv1.ClusterSpec{
+					PostgresConfiguration: cnpgv1.PostgresConfiguration{
+						Extensions: []cnpgv1.ExtensionConfiguration{
+							{
+								Name: "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{
+									Reference: "documentdb/documentdb:v1.0.0",
+								},
+							},
+						},
+					},
+				},
+				Status: cnpgv1.ClusterStatus{
+					CurrentPrimary: "test-cluster-1",
+					InstancesStatus: map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {"test-cluster-1"},
+					},
+				},
+			}
+		}
+
+		upgradeDB := func(schemaVersion string) *dbpreview.DocumentDB {
+			return &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      documentDBName,
+					Namespace: clusterNamespace,
+				},
+				Spec: dbpreview.DocumentDBSpec{
+					SchemaVersion: schemaVersion,
+				},
+			}
+		}
+
+		newClient := func(objs ...client.Object) client.Client {
+			return fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(objs...).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+		}
+
+		blockedCondition := func(c client.Client) *metav1.Condition {
+			updated := &dbpreview.DocumentDB{}
+			ExpectWithOffset(1, c.Get(ctx, types.NamespacedName{
+				Name: documentDBName, Namespace: clusterNamespace,
+			}, updated)).To(Succeed())
+			for i := range updated.Status.Conditions {
+				if updated.Status.Conditions[i].Type == dbpreview.ConditionSchemaUpgradeBlocked {
+					return &updated.Status.Conditions[i]
+				}
+			}
+			return nil
+		}
+
+		Describe("pgExtensionUpdatePathsSQL", func() {
+			It("should build a single-row query with the sentinel fallback", func() {
+				sql := pgExtensionUpdatePathsSQL("0.109-0", "0.113-0")
+				Expect(sql).To(ContainSubstring("pg_extension_update_paths('documentdb')"))
+				Expect(sql).To(ContainSubstring("source = '0.109-0'"))
+				Expect(sql).To(ContainSubstring("target = '0.113-0'"))
+				Expect(sql).To(ContainSubstring(noUpdatePathSentinel))
+			})
+		})
+
+		Describe("parseUpdatePathFromOutput", func() {
+			It("should parse a resolvable single-hop path", func() {
+				path, ok := parseUpdatePathFromOutput(updatePathOutput("0.109-0--0.110-0"))
+				Expect(ok).To(BeTrue())
+				Expect(path).To(Equal("0.109-0--0.110-0"))
+			})
+
+			It("should parse a resolvable multi-hop chain", func() {
+				chain := "0.109-0--0.110-0--0.111-0--0.112-0"
+				path, ok := parseUpdatePathFromOutput(updatePathOutput(chain))
+				Expect(ok).To(BeTrue())
+				Expect(path).To(Equal(chain))
+			})
+
+			It("should surface the sentinel when no path exists", func() {
+				path, ok := parseUpdatePathFromOutput(updatePathOutput(noUpdatePathSentinel))
+				Expect(ok).To(BeTrue())
+				Expect(path).To(Equal(noUpdatePathSentinel))
+			})
+
+			It("should report not-ok for truncated output", func() {
+				_, ok := parseUpdatePathFromOutput(" update_path \n-------------\n")
+				Expect(ok).To(BeFalse())
+			})
+
+			It("should report not-ok for empty output", func() {
+				_, ok := parseUpdatePathFromOutput("")
+				Expect(ok).To(BeFalse())
+			})
+
+			It("should report not-ok when a row-count footer lands in the data position", func() {
+				_, ok := parseUpdatePathFromOutput(" update_path \n-------------\n(0 rows)\n")
+				Expect(ok).To(BeFalse())
+			})
+		})
+
+		It("should skip the preflight and fail open on an unexpected version format", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			// A version that does not match Major.Minor-Patch must never reach the query.
+			blocked, path := reconciler.checkExtensionUpdatePath(
+				ctx, cluster, "0.109-0'; DROP SCHEMA public CASCADE; --", "0.113-0")
+
+			Expect(blocked).To(BeFalse(), "an unverifiable version must fail open")
+			Expect(path).To(BeEmpty())
+			Expect(sqlCalls).To(BeEmpty(), "no SQL may be generated from an unexpected version string")
+		})
+
+		Describe("setSchemaUpgradeBlockedCondition", func() {
+			It("should not issue a status write when the condition is unchanged", func() {
+				documentdb := upgradeDB("auto")
+				fakeClient := newClient(documentdb)
+				reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme, Recorder: recorder}
+
+				Expect(reconciler.setSchemaUpgradeBlockedCondition(ctx, documentdb,
+					metav1.ConditionTrue, dbpreview.ReasonNoUpdatePath, "blocked")).To(Succeed())
+
+				first := blockedCondition(fakeClient)
+				Expect(first).ToNot(BeNil())
+
+				// Re-applying an identical condition must be a no-op so the controller
+				// does not rewrite status on every reconcile.
+				Expect(reconciler.setSchemaUpgradeBlockedCondition(ctx, documentdb,
+					metav1.ConditionTrue, dbpreview.ReasonNoUpdatePath, "blocked")).To(Succeed())
+
+				second := blockedCondition(fakeClient)
+				Expect(second.LastTransitionTime).To(Equal(first.LastTransitionTime))
+			})
+
+			It("should return an error when the DocumentDB cannot be read", func() {
+				documentdb := upgradeDB("auto")
+				fakeClient := newClient() // DocumentDB deliberately absent
+				reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme, Recorder: recorder}
+
+				err := reconciler.setSchemaUpgradeBlockedCondition(ctx, documentdb,
+					metav1.ConditionTrue, dbpreview.ReasonNoUpdatePath, "blocked")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("status conditions"))
+			})
+		})
+
+		It("should requeue when the blocked condition cannot be published", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			// Pre-set so the earlier status.schemaVersion write is skipped and the
+			// interceptor only trips on the condition write under test.
+			documentdb.Status.SchemaVersion = "0.109.0"
+
+			// Status writes fail, so the blocked condition never reaches the API server.
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cluster, documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithInterceptorFuncs(interceptor.Funcs{
+					SubResourceUpdate: func(
+						_ context.Context, _ client.Client, _ string,
+						obj client.Object, _ ...client.SubResourceUpdateOption,
+					) error {
+						if _, ok := obj.(*dbpreview.DocumentDB); ok {
+							return fmt.Errorf("simulated status update failure")
+						}
+						return nil
+					},
+				}).
+				Build()
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
+			Expect(err).To(HaveOccurred(),
+				"a blocked upgrade whose condition cannot be published must requeue, "+
+					"not return cleanly and leave the user with no signal")
+			Expect(err.Error()).To(ContainSubstring("SchemaUpgradeBlocked"))
+
+			for _, sql := range sqlCalls {
+				Expect(sql).ToNot(ContainSubstring("ALTER EXTENSION"))
+			}
+		})
+
+		It("should skip ALTER EXTENSION and set the blocked condition when no update path exists", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			// Version check + preflight only — the ALTER must never be issued.
+			Expect(sqlCalls).To(HaveLen(2))
+			Expect(sqlCalls[1]).To(ContainSubstring("pg_extension_update_paths"))
+			for _, sql := range sqlCalls {
+				Expect(sql).ToNot(ContainSubstring("ALTER EXTENSION"))
+			}
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonNoUpdatePath))
+			Expect(cond.Message).To(ContainSubstring("0.109.0"))
+			Expect(cond.Message).To(ContainSubstring("0.113.0"))
+
+			// The schema must stay where it was — a blocked upgrade is not a completed one.
+			updated := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{
+				Name: documentDBName, Namespace: clusterNamespace,
+			}, updated)).To(Succeed())
+			Expect(updated.Status.SchemaVersion).To(Equal("0.109.0"))
+
+			Eventually(recorder.Events).Should(Receive(And(
+				ContainSubstring("Warning"),
+				ContainSubstring(dbpreview.ConditionSchemaUpgradeBlocked),
+			)))
+		})
+
+		It("should run ALTER EXTENSION and clear the condition when a path exists", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", "0.109-0--0.113-0"),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			Expect(sqlCalls).To(HaveLen(3))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonUpdatePathAvailable))
+
+			updated := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{
+				Name: documentDBName, Namespace: clusterNamespace,
+			}, updated)).To(Succeed())
+			Expect(updated.Status.SchemaVersion).To(Equal("0.113.0"))
+		})
+
+		It("should not run the preflight at all when the schema is already current", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.113-0", noUpdatePathSentinel),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			// Same-version no-op: only the version check runs.
+			Expect(sqlCalls).To(HaveLen(1))
+			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonSchemaUpToDate))
+		})
+
+		It("should not run the preflight in two-phase mode where no ALTER is planned", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("") // two-phase: schema stays put
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			Expect(sqlCalls).To(HaveLen(1))
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonNoMigrationPlanned))
+		})
+
+		It("should clear a stale blocked condition when the user reverts to two-phase mode", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("0.111.0") // unreachable target → blocked
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+			Expect(blockedCondition(fakeClient).Status).To(Equal(metav1.ConditionTrue))
+
+			By("reverting spec.schemaVersion to two-phase mode")
+			reverted := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{
+				Name: documentDBName, Namespace: clusterNamespace,
+			}, reverted)).To(Succeed())
+			reverted.Spec.SchemaVersion = ""
+			Expect(fakeClient.Update(ctx, reverted)).To(Succeed())
+
+			sqlCalls = nil
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, reverted)).To(Succeed())
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse),
+				"a stale blocked condition must not survive reverting the spec")
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonNoMigrationPlanned))
+		})
+
+		It("should run the migration once the user retargets to a reachable version", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("0.111.0") // unreachable target → blocked
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			blockedReconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			Expect(blockedReconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+			Expect(blockedCondition(fakeClient).Status).To(Equal(metav1.ConditionTrue))
+
+			By("retargeting spec.schemaVersion to a version with an update path")
+			retargeted := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{
+				Name: documentDBName, Namespace: clusterNamespace,
+			}, retargeted)).To(Succeed())
+			retargeted.Spec.SchemaVersion = "0.113.0"
+			Expect(fakeClient.Update(ctx, retargeted)).To(Succeed())
+
+			sqlCalls = nil
+			okReconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", "0.109-0--0.113-0"),
+			}
+			Expect(okReconciler.handleExtensionUpgrade(ctx, cluster, retargeted)).To(Succeed())
+
+			Expect(sqlCalls).To(HaveLen(3))
+			Expect(sqlCalls[2]).To(ContainSubstring("ALTER EXTENSION documentdb UPDATE TO '0.113-0'"))
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonUpdatePathAvailable))
+		})
+
+		It("should fail open and still run ALTER EXTENSION when the preflight query errors", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
+					sqlCalls = append(sqlCalls, sql)
+					switch {
+					case strings.Contains(sql, "pg_available_extensions"):
+						return versionCheckOutput("0.113-0", "0.109-0"), nil
+					case strings.Contains(sql, "pg_extension_update_paths"):
+						return "", fmt.Errorf("function pg_extension_update_paths does not exist")
+					default:
+						return "ALTER EXTENSION", nil
+					}
+				},
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			// An inconclusive preflight must not wedge an upgrade that would otherwise work.
+			Expect(sqlCalls).To(HaveLen(3))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+		})
+
+		It("should fail open when the preflight output cannot be parsed", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("auto")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:   fakeClient,
+				Scheme:   scheme,
+				Recorder: recorder,
+				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
+					sqlCalls = append(sqlCalls, sql)
+					switch {
+					case strings.Contains(sql, "pg_available_extensions"):
+						return versionCheckOutput("0.113-0", "0.109-0"), nil
+					case strings.Contains(sql, "pg_extension_update_paths"):
+						return "garbage", nil
+					default:
+						return "ALTER EXTENSION", nil
+					}
+				},
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+			Expect(sqlCalls).To(HaveLen(3))
+			Expect(sqlCalls[2]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+		})
+
+		It("should preflight against the explicit target when schemaVersion is pinned", func() {
+			cluster := upgradeCluster()
+			documentdb := upgradeDB("0.111.0")
+			fakeClient := newClient(cluster, documentdb)
+
+			sqlCalls := []string{}
+			reconciler := &DocumentDBReconciler{
+				Client:      fakeClient,
+				Scheme:      scheme,
+				Recorder:    recorder,
+				SQLExecutor: extensionSQLResponder(&sqlCalls, "0.113-0", "0.109-0", noUpdatePathSentinel),
+			}
+
+			Expect(reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)).To(Succeed())
+
+			// The preflight must ask about installed → pinned target, not installed → binary.
+			Expect(sqlCalls).To(HaveLen(2))
+			Expect(sqlCalls[1]).To(ContainSubstring("source = '0.109-0'"))
+			Expect(sqlCalls[1]).To(ContainSubstring("target = '0.111-0'"))
+
+			cond := blockedCondition(fakeClient)
+			Expect(cond).ToNot(BeNil())
+			Expect(cond.Reason).To(Equal(dbpreview.ReasonNoUpdatePath))
+			Expect(cond.Message).To(ContainSubstring("0.111.0"))
+		})
 	})
 
 	Describe("updateImageStatus", func() {

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +19,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -25,6 +28,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -775,6 +779,159 @@ func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedV
 	return defaultVersion, installedVersion, true
 }
 
+// pgExtensionUpdatePathsSQL builds the preflight query that asks PostgreSQL whether a
+// chain of `documentdb--<from>--<to>.sql` update scripts exists between two extension
+// versions. pg_extension_update_paths returns one row per (source, target) pair the
+// extension advertises, with a NULL path when the pair is known but unreachable; the
+// pair is absent entirely when either version is not advertised at all. The COALESCE
+// wrapper collapses both "no rows" and "NULL path" into a single sentinel so the result
+// is always exactly one non-empty row and the psql output is unambiguous to parse.
+func pgExtensionUpdatePathsSQL(fromVersion, toVersion string) string {
+	return fmt.Sprintf(
+		"SELECT COALESCE((SELECT path FROM pg_extension_update_paths('documentdb') "+
+			"WHERE source = '%s' AND target = '%s'), '%s') AS update_path",
+		fromVersion, toVersion, noUpdatePathSentinel)
+}
+
+// noUpdatePathSentinel is returned by the preflight query when PostgreSQL cannot resolve
+// an update path. It is deliberately not a valid extension version, so it can never
+// collide with a real path value.
+const noUpdatePathSentinel = "NO_UPDATE_PATH"
+
+// extensionVersionPattern matches the PostgreSQL extension version format the operator
+// works with (Major.Minor-Patch, e.g. "0.109-0"). It gates the values interpolated into
+// the preflight query.
+var extensionVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+-[0-9]+$`)
+
+// parseUpdatePathFromOutput parses the single-row output of pgExtensionUpdatePathsSQL.
+// Expected format:
+//
+//	     update_path
+//	----------------------
+//	 0.109-0--0.110-0
+//	(1 row)
+//
+// Returns the resolved path and whether the result could be interpreted at all. When ok
+// is true and path equals noUpdatePathSentinel, PostgreSQL has no update path.
+func parseUpdatePathFromOutput(output string) (path string, ok bool) {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 3 {
+		return "", false
+	}
+
+	path = strings.TrimSpace(lines[2])
+	// A row count footer such as "(0 rows)" means the COALESCE guarantee did not hold and
+	// the output is not what this parser expects; treat it as uninterpretable.
+	if path == "" || strings.HasPrefix(path, "(") {
+		return "", false
+	}
+	return path, true
+}
+
+// checkExtensionUpdatePath is a fail-fast preflight for ALTER EXTENSION UPDATE.
+//
+// PostgreSQL resolves an extension upgrade by walking the graph of update scripts the
+// extension ships. If any release in the range omits its script, the graph has a gap and
+// ALTER EXTENSION UPDATE fails at execution time with a raw "extension has no update path
+// from X to Y" error that re-fires on every reconcile. pg_extension_update_paths exposes
+// that same graph read-only, so the operator can detect the gap *before* touching the
+// schema and surface an actionable status condition instead.
+//
+// Returns blocked=true only when the absence of a path is positively proven. Any error or
+// unparseable result fails open (blocked=false): the preflight is an advisory improvement,
+// so an inconclusive check must preserve the pre-existing behavior of letting PostgreSQL
+// decide rather than wedging an upgrade that would otherwise succeed.
+func (r *DocumentDBReconciler) checkExtensionUpdatePath(
+	ctx context.Context,
+	cluster *cnpgv1.Cluster,
+	fromVersion string,
+	toVersion string,
+) (blocked bool, path string) {
+	logger := log.FromContext(ctx)
+
+	// toVersion is constrained by the CRD pattern and the validating webhook, but
+	// fromVersion is read out of pg_available_extensions, i.e. it ultimately derives from
+	// the extension image's script filenames rather than from a validated schema. Since
+	// both are interpolated into the query, require the expected Major.Minor-Patch shape
+	// and fail open otherwise instead of trusting the image.
+	if !extensionVersionPattern.MatchString(fromVersion) || !extensionVersionPattern.MatchString(toVersion) {
+		logger.Info("Unexpected extension version format; skipping update path preflight",
+			"fromVersion", fromVersion,
+			"toVersion", toVersion)
+		return false, ""
+	}
+
+	output, err := r.SQLExecutor(ctx, cluster, pgExtensionUpdatePathsSQL(fromVersion, toVersion))
+	if err != nil {
+		logger.Error(err, "Extension update path preflight failed; proceeding with ALTER EXTENSION",
+			"fromVersion", fromVersion,
+			"toVersion", toVersion)
+		return false, ""
+	}
+
+	resolved, ok := parseUpdatePathFromOutput(output)
+	if !ok {
+		logger.Info("Could not parse extension update path preflight output; proceeding with ALTER EXTENSION",
+			"fromVersion", fromVersion,
+			"toVersion", toVersion,
+			"output", output)
+		return false, ""
+	}
+
+	if resolved == noUpdatePathSentinel {
+		return true, ""
+	}
+
+	logger.V(1).Info("Extension update path resolved",
+		"fromVersion", fromVersion,
+		"toVersion", toVersion,
+		"path", resolved)
+	return false, resolved
+}
+
+// setSchemaUpgradeBlockedCondition writes the SchemaUpgradeBlocked condition onto the
+// DocumentDB status. Condition churn is avoided by meta.SetStatusCondition, which reports
+// whether anything actually changed, so a no-op reconcile issues no API write.
+//
+// The read comes from the informer cache, which can lag a status update this same
+// reconcile just made, so the write is retried on conflict rather than relying on the
+// resulting watch event to re-drive reconciliation.
+//
+// NOTE: this refetches into documentdb, replacing the caller's copy.
+func (r *DocumentDBReconciler) setSchemaUpgradeBlockedCondition(
+	ctx context.Context,
+	documentdb *dbpreview.DocumentDB,
+	status metav1.ConditionStatus,
+	reason string,
+	message string,
+) error {
+	name := types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Get(ctx, name, documentdb); err != nil {
+			return err
+		}
+
+		condition := metav1.Condition{
+			Type:               dbpreview.ConditionSchemaUpgradeBlocked,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: documentdb.Generation,
+		}
+
+		if !meta.SetStatusCondition(&documentdb.Status.Conditions, condition) {
+			return nil
+		}
+
+		return r.Status().Update(ctx, documentdb)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update DocumentDB status conditions: %w", err)
+	}
+	return nil
+}
+
 // handleExtensionUpgrade handles the ALTER EXTENSION lifecycle after images have been synced
 // by SyncCnpgCluster. It:
 // 1. Updates DocumentDB status with the current images from the CNPG cluster
@@ -836,6 +993,12 @@ func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, curre
 	// If versions match, no upgrade needed
 	if defaultVersion == installedVersion {
 		logger.V(1).Info("DocumentDB extension is up to date", "version", installedVersion)
+		if err := r.setSchemaUpgradeBlockedCondition(ctx, documentdb, metav1.ConditionFalse,
+			dbpreview.ReasonSchemaUpToDate,
+			fmt.Sprintf("Extension schema is at %s; no migration pending.", util.ExtensionVersionToSemver(installedVersion)),
+		); err != nil {
+			logger.Error(err, "Failed to clear SchemaUpgradeBlocked condition")
+		}
 		return nil
 	}
 
@@ -862,20 +1025,74 @@ func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, curre
 		if r.Recorder != nil {
 			r.Recorder.Event(documentdb, corev1.EventTypeWarning, "ExtensionRollback", msg)
 		}
+		// No schema migration is being attempted, so any previous block is moot.
+		if err := r.setSchemaUpgradeBlockedCondition(ctx, documentdb, metav1.ConditionFalse,
+			dbpreview.ReasonNoMigrationPlanned,
+			"Extension rollback detected; no schema migration is being attempted.",
+		); err != nil {
+			logger.Error(err, "Failed to clear SchemaUpgradeBlocked condition")
+		}
 		return nil
 	}
 
 	// Determine schema target based on spec.schemaVersion (two-phase upgrade logic)
 	schemaTarget, updateSQL := r.determineSchemaTarget(ctx, documentdb, defaultVersion, installedVersion)
 	if schemaTarget == "" {
-		// Two-phase mode or validation failure — do not run ALTER EXTENSION
+		// Two-phase mode or validation failure — do not run ALTER EXTENSION.
+		// Clear any prior block so reverting spec.schemaVersion actually resolves
+		// a SchemaUpgradeBlocked condition instead of leaving it stuck at True.
+		if err := r.setSchemaUpgradeBlockedCondition(ctx, documentdb, metav1.ConditionFalse,
+			dbpreview.ReasonNoMigrationPlanned,
+			"No schema migration is currently requested; set spec.schemaVersion to finalize an upgrade.",
+		); err != nil {
+			logger.Error(err, "Failed to clear SchemaUpgradeBlocked condition")
+		}
 		return nil
+	}
+
+	// Preflight: refuse to fire ALTER EXTENSION when PostgreSQL cannot resolve an update
+	// path. Without this, the ALTER fails at execution time with a raw PG error that
+	// re-fires every reconcile; with it, the user gets an actionable status condition and
+	// the reconcile stops cleanly.
+	blocked, resolvedPath := r.checkExtensionUpdatePath(ctx, currentCluster, installedVersion, schemaTarget)
+	if blocked {
+		msg := fmt.Sprintf(
+			"Schema upgrade blocked: the documentdb extension provides no update path from %s to %s. "+
+				"ALTER EXTENSION UPDATE was not run because it would fail. "+
+				"This means the extension image is missing one or more documentdb--<from>--<to>.sql "+
+				"migration scripts in that range. To resolve, upgrade to a version that has a "+
+				"continuous update path from %s, or restore from a backup taken before the image change.",
+			util.ExtensionVersionToSemver(installedVersion),
+			util.ExtensionVersionToSemver(schemaTarget),
+			util.ExtensionVersionToSemver(installedVersion))
+		logger.Info(msg)
+		if r.Recorder != nil {
+			r.Recorder.Event(documentdb, corev1.EventTypeWarning, dbpreview.ConditionSchemaUpgradeBlocked, msg)
+		}
+		if err := r.setSchemaUpgradeBlockedCondition(ctx, documentdb, metav1.ConditionTrue,
+			dbpreview.ReasonNoUpdatePath, msg); err != nil {
+			// The condition is the only actionable signal for this branch, so a failure to
+			// publish it must requeue rather than return cleanly.
+			return fmt.Errorf("failed to publish SchemaUpgradeBlocked condition: %w", err)
+		}
+		// Return cleanly: retrying cannot help until the user changes the spec.
+		return nil
+	}
+
+	if err := r.setSchemaUpgradeBlockedCondition(ctx, documentdb, metav1.ConditionFalse,
+		dbpreview.ReasonUpdatePathAvailable,
+		fmt.Sprintf("Update path from %s to %s is resolvable.",
+			util.ExtensionVersionToSemver(installedVersion),
+			util.ExtensionVersionToSemver(schemaTarget)),
+	); err != nil {
+		logger.Error(err, "Failed to clear SchemaUpgradeBlocked condition")
 	}
 
 	// Run ALTER EXTENSION to upgrade
 	logger.Info("Upgrading DocumentDB extension",
 		"fromVersion", installedVersion,
-		"toVersion", schemaTarget)
+		"toVersion", schemaTarget,
+		"updatePath", resolvedPath)
 
 	if _, err := r.SQLExecutor(ctx, currentCluster, updateSQL); err != nil {
 		return fmt.Errorf("failed to run ALTER EXTENSION documentdb UPDATE: %w", err)

@@ -538,7 +538,43 @@ type DocumentDBStatus struct {
 
 	// TLS reports gateway TLS provisioning status (Phase 1).
 	TLS *TLSStatus `json:"tls,omitempty"`
+
+	// Conditions represent the latest available observations of the DocumentDB state.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +patchStrategy=merge
+	// +patchMergeKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
+
+const (
+	// ConditionSchemaUpgradeBlocked is set when the operator has determined that the
+	// requested extension schema migration cannot be performed and has deliberately
+	// not run ALTER EXTENSION UPDATE. Status "True" means the upgrade is blocked.
+	ConditionSchemaUpgradeBlocked = "SchemaUpgradeBlocked"
+
+	// ReasonNoUpdatePath indicates PostgreSQL exposes no chain of extension update
+	// scripts between the installed schema version and the requested target, so
+	// ALTER EXTENSION UPDATE would fail. Used with ConditionSchemaUpgradeBlocked=True.
+	ReasonNoUpdatePath = "NoUpdatePath"
+
+	// ReasonUpdatePathAvailable indicates a resolvable update path exists between the
+	// installed schema version and the requested target. Used with
+	// ConditionSchemaUpgradeBlocked=False.
+	ReasonUpdatePathAvailable = "UpdatePathAvailable"
+
+	// ReasonSchemaUpToDate indicates no schema migration is pending. Used with
+	// ConditionSchemaUpgradeBlocked=False.
+	ReasonSchemaUpToDate = "SchemaUpToDate"
+
+	// ReasonNoMigrationPlanned indicates the operator is not attempting a schema
+	// migration on this reconcile — for example two-phase mode where the user has
+	// not set spec.schemaVersion, or a detected extension rollback. Used with
+	// ConditionSchemaUpgradeBlocked=False so a previously blocked upgrade does not
+	// leave a stale True condition after the user changes the spec.
+	ReasonNoMigrationPlanned = "NoMigrationPlanned"
+)
 
 // TLSStatus captures readiness and secret information.
 type TLSStatus struct {

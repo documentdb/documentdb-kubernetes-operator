@@ -151,12 +151,18 @@ runs:
         echo "  Operator: $OPERATOR_IMAGE"
         echo "  Sidecar: $SIDECAR_IMAGE"
         
-        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$OPERATOR_IMAGE"; then
+        # Capture the list first rather than piping into grep. Under
+        # `set -o pipefail`, `grep -q` exits as soon as it matches, which
+        # SIGPIPEs docker and makes the pipeline report failure even though the
+        # image was found. Matching against a variable removes that race.
+        LOADED_IMAGES="$(docker images --format '{{.Repository}}:{{.Tag}}')"
+        
+        if ! grep -qxF "$OPERATOR_IMAGE" <<< "$LOADED_IMAGES"; then
           echo "❌ Required operator image not found: $OPERATOR_IMAGE"
           exit 1
         fi
         
-        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$SIDECAR_IMAGE"; then
+        if ! grep -qxF "$SIDECAR_IMAGE" <<< "$LOADED_IMAGES"; then
           echo "❌ Required sidecar image not found: $SIDECAR_IMAGE"
           exit 1
         fi
@@ -428,8 +434,11 @@ runs:
           fi
         done
         
-        # Check if cert-manager is already installed
-        if helm list -n ${{ inputs.cert-manager-namespace }} 2>/dev/null | grep -q cert-manager; then
+        # Check if cert-manager is already installed. Capture first: piping into
+        # `grep -q` under `set -o pipefail` can SIGPIPE helm and misreport a match
+        # as a failure.
+        HELM_RELEASES="$(helm list -n ${{ inputs.cert-manager-namespace }} 2>/dev/null || true)"
+        if grep -q cert-manager <<< "$HELM_RELEASES"; then
           echo "cert-manager is already installed, skipping installation"
           echo "CERT_MANAGER_READY=true" >> $GITHUB_ENV
         else

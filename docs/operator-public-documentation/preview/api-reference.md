@@ -117,6 +117,28 @@ _Appears in:_
 | `primary` _string_ | Primary is the name of the primary cluster for replication. |  |  |
 | `clusterList` _[MemberCluster](#membercluster) array_ | ClusterList is the list of clusters participating in replication. |  |  |
 | `highAvailability` _boolean_ | Whether or not to have replicas on the primary cluster. |  |  |
+| `disableTLS` _boolean_ | Disables TLS for replication traffic between clusters.<br />Only for use when an existing mesh is already providing TLS. | false |  |
+
+
+#### ComponentResources
+
+
+
+ComponentResources overrides the CPU and/or memory allocated to an individual
+container in the DocumentDB pod (PostgreSQL, the gateway, or the OTel
+collector). Each field is a Kubernetes quantity string; when set it is applied
+as both the request and the limit for that container (Guaranteed-class) and
+overrides the automatic carve-out derived from spec.resource.memory.
+
+
+
+_Appears in:_
+- [Resource](#resource)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `memory` _string_ | Memory is the memory request=limit for the container (e.g. "512Mi", "2Gi"). |  | Pattern: `^([0-9]+(\.[0-9]+)?(m\|Ki\|Mi\|Gi\|Ti\|Pi\|Ei\|k\|M\|G\|T\|P\|E)?)?$` <br />Optional: \{\} <br /> |
+| `cpu` _string_ | CPU is the CPU request=limit for the container (e.g. "500m", "2"). |  | Pattern: `^([0-9]+(\.[0-9]+)?(m\|Ki\|Mi\|Gi\|Ti\|Pi\|Ei\|k\|M\|G\|T\|P\|E)?)?$` <br />Optional: \{\} <br /> |
 
 
 #### DocumentDB
@@ -254,7 +276,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `documentDB` _string_ | DocumentDB is the container image for the DocumentDB extension layer.<br />This image is mounted into the PostgreSQL container via CNPG's<br />ImageVolumeSource so that the extension files are available alongside<br />an upstream PostgreSQL image. |  | Optional: \{\} <br /> |
 | `gateway` _string_ | Gateway is the container image for the DocumentDB Gateway sidecar. |  | Optional: \{\} <br /> |
-| `postgres` _string_ | Postgres is the container image for the PostgreSQL server.<br />Must be an upstream CNPG-compatible PostgreSQL image (the operator<br />adds the DocumentDB extension via an ImageVolume mount), and must<br />use trixie (Debian 13) base to match the extension's GLIBC<br />requirements. | ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie | Optional: \{\} <br /> |
+| `postgres` _string_ | Postgres is the container image for the PostgreSQL server.<br />Must be an upstream CNPG-compatible PostgreSQL image (the operator<br />adds the DocumentDB extension via an ImageVolume mount), and must<br />use trixie (Debian 13) base to match the extension's GLIBC<br />requirements.<br />Pinned to the 18.4 minor tag instead of the floating<br />"18-minimal-trixie" tag, which rolled 18.4 -> 18.6 on 2026-08-13 and<br />crashed the DocumentDB 0.113.0 extension on insert. Staying on 18.4<br />avoids that regression while still receiving CNPG's Debian/PGDG<br />security rebuilds; revert to the floating "18-minimal-trixie" tag once<br />a DocumentDB release carrying the PG 18.6 fix ships. | ghcr.io/cloudnative-pg/postgresql:18.4-minimal-trixie | Optional: \{\} <br /> |
 
 
 #### IssuerRef
@@ -443,7 +465,10 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `storage` _[StorageConfiguration](#storageconfiguration)_ | Storage configuration for DocumentDB persistent volumes. |  |  |
 | `memory` _string_ | Memory specifies the memory limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.memory<br />and spec.resources.requests.memory (Guaranteed QoS).<br />Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)<br />are auto-computed from this value.<br />If not specified or set to "0", no memory limit is applied and static<br />defaults are used for memory-aware parameters.<br />Examples: "2Gi", "4Gi", "8Gi" |  | Optional: \{\} <br /> |
-| `cpu` _string_ | CPU specifies the CPU limit for each DocumentDB instance pod.<br />This value is passed to the CNPG Cluster's spec.resources.limits.cpu<br />and spec.resources.requests.cpu (Guaranteed QoS).<br />If not specified or set to "0", no CPU limit is applied.<br />Examples: "2", "4", "500m" |  | Optional: \{\} <br /> |
+| `cpu` _string_ | CPU specifies the total CPU envelope for each DocumentDB instance pod.<br />The operator divides this envelope across PostgreSQL, the documentdb-gateway<br />sidecar, and, when monitoring is enabled, the OTel collector sidecar.<br />PostgreSQL receives the remainder after gateway and OTel CPU reservations;<br />an explicit per-container CPU override wins over the automatic carve-out.<br />If not specified or set to "0", no CPU envelope is applied.<br />Examples: "2", "4", "500m" |  | Optional: \{\} <br /> |
+| `gateway` _[ComponentResources](#componentresources)_ | Gateway optionally overrides the resources allocated to the<br />documentdb-gateway sidecar container. When unset, the operator derives the<br />gateway's memory as min(gatewayMemoryFraction × memory, gatewayMemoryCap)<br />and carves it out of the pod memory envelope. The value is applied as both<br />the request and the limit (Guaranteed-class) so a gateway leak is<br />OOM-isolated and cannot crowd out PostgreSQL. |  | Optional: \{\} <br /> |
+| `database` _[ComponentResources](#componentresources)_ | Database optionally overrides the resources allocated to the PostgreSQL<br />container. When unset, PostgreSQL receives the pod memory and CPU envelopes<br />minus the gateway and (when monitoring is enabled) OTel collector carve-outs. |  | Optional: \{\} <br /> |
+| `otel` _[ComponentResources](#componentresources)_ | OTel optionally overrides the resources allocated to the otel-collector<br />sidecar container (only present when spec.monitoring.enabled is true).<br />When unset, the operator applies built-in defaults: memory request 48Mi /<br />limit 128Mi and CPU request 50m / limit 200m (Burstable — the requests are<br />the reserved floor and the limits cap a telemetry burst). Setting otel.cpu<br />or otel.memory pins that dimension to request == limit (Guaranteed). |  | Optional: \{\} <br /> |
 
 
 #### ScheduledBackup
@@ -514,7 +539,7 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `gateway` _[GatewayTLS](#gatewaytls)_ | Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only). |  |  |
-| `postgres` _[CertificatesConfiguration](https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#CertificatesConfiguration)_ | Postgres configures TLS for the Postgres server. |  |  |
+| `postgres` _[CertificatesConfiguration](https://pkg.go.dev/github.com/cloudnative-pg/cloudnative-pg/api/v1#CertificatesConfiguration)_ | Postgres configures TLS for the Postgres server.<br />If server side certs are provided alone, the operator will use sslMode=require for cross-regional replication connections.<br />If replication certs are also provided, the operator will use verify-full, which requires the hostname to be correctly set.<br />See the multi-region-deployment docs for how to do that. |  |  |
 | `globalEndpoints` _[GlobalEndpointsTLS](#globalendpointstls)_ | GlobalEndpoints configures TLS for global endpoints (placeholder for future phases). |  |  |
 
 

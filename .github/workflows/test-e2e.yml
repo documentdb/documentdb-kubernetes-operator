@@ -33,13 +33,15 @@ on:
         type: string
         default: ''
       depth:
-        description: 'Test depth tier (mapped to TEST_DEPTH; accepts Low|Medium|High)'
+        description: 'Test depth tier (mapped to TEST_DEPTH). Lowest is the deepest/full sweep; Highest is the shallowest.'
         required: false
         type: choice
         options:
-          - Low
-          - Medium
+          - Highest
           - High
+          - Medium
+          - Low
+          - Lowest
         default: Medium
       keep_clusters:
         description: 'Keep Kind clusters running after tests (for debugging)'

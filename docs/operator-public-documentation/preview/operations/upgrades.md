@@ -253,6 +253,22 @@ Choose the approach that matches your use case:
     !!! warning
         With `schemaVersion: "auto"`, the schema migration is irreversible once applied. You cannot roll back to the previous version — only restore from backup.
 
+### Skipping Versions
+
+You do **not** have to upgrade one minor at a time. DocumentDB ships a continuous chain of extension migration scripts, so a single upgrade can span several minors — for example `0.110.0` → `0.113.0`. PostgreSQL resolves the intermediate steps internally and the operator applies them in one `ALTER EXTENSION UPDATE`.
+
+Before running the migration the operator **preflights** the update path by querying `pg_extension_update_paths`. If no path exists between the installed schema and the version you requested, the operator does **not** run `ALTER EXTENSION` at all. Instead it stops cleanly and reports:
+
+- a `SchemaUpgradeBlocked` condition with status `True` and reason `NoUpdatePath` on `status.conditions`, and
+- a `SchemaUpgradeBlocked` warning event on the DocumentDB resource.
+
+```bash
+kubectl get documentdb my-cluster -n default \
+  -o jsonpath='{.status.conditions[?(@.type=="SchemaUpgradeBlocked")]}'
+```
+
+The most common cause is requesting a `schemaVersion` that was never released (for example a patch version that does not exist). Set `spec.schemaVersion` to a real released version — or to `"auto"` to target whatever the binary provides — and the condition clears on the next reconcile. Your data is untouched while the upgrade is blocked: the migration never started.
+
 ### Monitoring the Upgrade
 
 ```bash
@@ -264,6 +280,10 @@ kubectl get documentdb my-cluster -n default
 
 # Check the current schema version
 kubectl get documentdb my-cluster -n default -o jsonpath='{.status.schemaVersion}'
+
+# Check whether a schema migration was blocked
+kubectl get documentdb my-cluster -n default \
+  -o jsonpath='{.status.conditions[?(@.type=="SchemaUpgradeBlocked")].reason}'
 ```
 
 ### Rollback and Recovery

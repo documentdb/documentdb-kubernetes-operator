@@ -3,10 +3,12 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +18,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // Environment variables that gate and parameterize the upgrade area.
@@ -42,6 +48,14 @@ const (
 	envOldDocumentDBVersion = "E2E_UPGRADE_OLD_DOCUMENTDB_VERSION"
 	envNewDocumentDBVersion = "E2E_UPGRADE_NEW_DOCUMENTDB_VERSION"
 
+	// Ascending, comma-separated list of published DocumentDB versions used by
+	// the multi-version upgrade specs (multi-minor jump and sequential chain).
+	// The extension only ships documentdb--<from>--<to>.sql scripts between
+	// released versions, so every entry must be a real published tag on both
+	// the documentdb and gateway GHCR repos — an invented version has no
+	// update path and would be blocked by the operator's preflight.
+	envDocumentDBVersionChain = "E2E_UPGRADE_DOCUMENTDB_VERSION_CHAIN"
+
 	// Default old/new versions for the schema-upgrade spec, applied when
 	// the env vars above are unset. Chosen as the last released pair so
 	// the spec exercises a real two-phase migration on every e2e PR
@@ -56,6 +70,15 @@ const (
 	// passes an optional workflow_dispatch override.
 	defaultOldDocumentDBVersion = "0.116.0"
 	defaultNewDocumentDBVersion = "0.117.0"
+
+	// Default version chain for the multi-version upgrade specs. These are the
+	// published DocumentDB releases on ghcr.io/documentdb/documentdb-kubernetes-operator
+	// (documentdb + gateway). The gaps are deliberate and load-bearing: the chain
+	// omits 0.111.x and 0.112.x entirely, so the single-step jump spec (first entry
+	// → last entry, 0.109.0 → 0.114.0) crosses several unpublished minors — exactly
+	// the ">1 minor jump" case these specs exist to cover. Keep this list ascending
+	// and keep every entry a real published tag; add newly released versions to the end.
+	defaultDocumentDBVersionChain = "0.109.0,0.110.0,0.113.0,0.114.0"
 
 	// Optional gateway image overrides for the image-upgrade spec.
 	// When unset the spec patches only spec.image.documentDB and leaves
@@ -187,6 +210,113 @@ func createCredentialSecret(ctx context.Context, c client.Client, ns string) {
 	err := c.Create(ctx, sec)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		Fail("create credential secret " + ns + "/" + credentialSecretName + ": " + err.Error())
+	}
+}
+
+// documentDBVersionChain returns the ascending list of published DocumentDB
+// versions used by the multi-version upgrade specs, read from
+// envDocumentDBVersionChain (comma-separated) or falling back to
+// defaultDocumentDBVersionChain. Specs that need more entries than are
+// configured should Skip rather than fabricate versions.
+func documentDBVersionChain() []string {
+	raw := envOr(envDocumentDBVersionChain, defaultDocumentDBVersionChain)
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// majorMinor splits a "Major.Minor.Patch" version string into its numeric major
+// and minor components, reporting ok=false when either cannot be parsed.
+func majorMinor(version string) (major, minor int, ok bool) {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return 0, 0, false
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, false
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	return major, minor, true
+}
+
+// compareMajorMinor compares two "Major.Minor.Patch" versions on their major and
+// minor components only, returning -1, 0 or 1. Unparseable input yields 0 so
+// callers gate conservatively rather than acting on a bogus ordering.
+func compareMajorMinor(a, b string) int {
+	aMajor, aMinor, aOK := majorMinor(a)
+	bMajor, bMinor, bOK := majorMinor(b)
+	if !aOK || !bOK {
+		return 0
+	}
+	switch {
+	case aMajor != bMajor:
+		if aMajor < bMajor {
+			return -1
+		}
+		return 1
+	case aMinor != bMinor:
+		if aMinor < bMinor {
+			return -1
+		}
+		return 1
+	default:
+		return 0
+	}
+}
+
+// minorDistance reports how many minors separate two versions, counting a major
+// bump as unbounded distance so a chain crossing a major is never mistaken for a
+// narrow jump. Returns -1 when either version cannot be parsed.
+func minorDistance(from, to string) int {
+	fromMajor, fromMinor, fromOK := majorMinor(from)
+	toMajor, toMinor, toOK := majorMinor(to)
+	if !fromOK || !toOK {
+		return -1
+	}
+	if toMajor != fromMajor {
+		return math.MaxInt32
+	}
+	return toMinor - fromMinor
+}
+
+// majorMinorOf returns the "Major.Minor" prefix of a "Major.Minor.Patch"
+// version string (e.g. "0.109.0" → "0.109"). Returns the input unchanged when
+// it has fewer than two components.
+func majorMinorOf(version string) string {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return version
+	}
+	return parts[0] + "." + parts[1]
+}
+
+// schemaUpgradeBlockedGetter returns a poll function reporting the DocumentDB's
+// SchemaUpgradeBlocked condition, or nil when the condition is absent. A fetch
+// error yields nil so Eventually keeps polling rather than failing outright.
+func schemaUpgradeBlockedGetter(
+	ctx context.Context,
+	c client.Client,
+	key types.NamespacedName,
+) func() *metav1.Condition {
+	return func() *metav1.Condition {
+		dd, err := shareddb.Get(ctx, c, key)
+		if err != nil {
+			return nil
+		}
+		for i := range dd.Status.Conditions {
+			if dd.Status.Conditions[i].Type == previewv1.ConditionSchemaUpgradeBlocked {
+				return &dd.Status.Conditions[i]
+			}
+		}
+		return nil
 	}
 }
 

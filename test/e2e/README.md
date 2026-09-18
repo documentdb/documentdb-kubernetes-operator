@@ -142,6 +142,7 @@ E2E_UPGRADE=1 E2E_UPGRADE_PREVIOUS_CHART=… \
 | `E2E_UPGRADE_NEW_DOCUMENTDB_IMAGE` | Extension image used after upgrade |
 | `E2E_UPGRADE_OLD_DOCUMENTDB_VERSION` | Schema-upgrade spec: `spec.documentDBVersion` to start from (default `0.109.0`) |
 | `E2E_UPGRADE_NEW_DOCUMENTDB_VERSION` | Schema-upgrade spec: `spec.documentDBVersion` to upgrade to (default `0.110.0`) |
+| `E2E_UPGRADE_DOCUMENTDB_VERSION_CHAIN` | Multi-version upgrade specs: ascending comma-separated list of **published** DocumentDB versions (default `0.109.0,0.110.0,0.113.0,0.114.0`). Drives the multi-minor-jump and sequential-chain specs; every entry must be a real released tag or the operator's update-path preflight will block the migration |
 
 > A note on `E2E_KEEP_CLUSTERS`: the design doc discusses a flag for keeping
 > DocumentDB-cluster fixtures around after a failed spec, but no such knob is
