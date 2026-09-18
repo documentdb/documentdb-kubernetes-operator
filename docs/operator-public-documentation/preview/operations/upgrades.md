@@ -47,7 +47,10 @@ TARGET_VERSION=<release-version>
 Open the GitHub release page for `${TARGET_VERSION}` to review breaking changes, new features, and any required migration steps before proceeding.
 
 !!! note
-    Per the [release strategy](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/designs/release-strategy.md), each minor version is supported for three months after the next minor release. Plan to upgrade within this window.
+  Per the [release strategy](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/designs/release-strategy.md),
+  each minor version is supported until the next minor release is published.
+  Each stable major version remains supported for three months after the next
+  major release is published. Plan upgrades within these support windows.
 
 ### Step 3: Apply Updated CRDs
 
