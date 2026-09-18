@@ -189,7 +189,7 @@ func (r *CertificateReconciler) ensureCertManagerManagedCert(ctx context.Context
 		secretName = ddb.Name + "-gateway-cert-tls"
 	}
 
-	serviceBase := util.DOCUMENTDB_SERVICE_PREFIX + ddb.Name
+	serviceBase := util.GetDocumentDBServiceName(ddb.Name)
 	baseDNS := []string{serviceBase, serviceBase + "." + ddb.Namespace, serviceBase + "." + ddb.Namespace + ".svc"}
 	dnsSet := map[string]struct{}{}
 	finalDNS := []string{}
@@ -289,7 +289,7 @@ func (r *CertificateReconciler) ensureSelfSignedCert(ctx context.Context, ddb *d
 		}
 	}
 
-	serviceBase := util.DOCUMENTDB_SERVICE_PREFIX + ddb.Name
+	serviceBase := util.GetDocumentDBServiceName(ddb.Name)
 	dnsNames := []string{
 		serviceBase,
 		serviceBase + "." + namespace,

@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,7 +127,7 @@ func TestEnsureCertManagerManagedCert(t *testing.T) {
 	}
 	require.Contains(t, cert.Spec.DNSNames, "custom.example")
 	// Should include service DNS names
-	serviceBase := util.DOCUMENTDB_SERVICE_PREFIX + ddb.Name
+	serviceBase := util.GetDocumentDBServiceName(ddb.Name)
 	require.Contains(t, cert.Spec.DNSNames, serviceBase)
 
 	// Simulate readiness condition then invoke ensure again (mimic reconcile loop)
@@ -163,6 +164,34 @@ func TestEnsureSelfSignedCert(t *testing.T) {
 	require.Zero(t, res.RequeueAfter)
 	require.True(t, ddb.Status.TLS.Ready)
 	require.NotEmpty(t, ddb.Status.TLS.SecretName)
+}
+
+func TestGatewayCertSANsMatchTruncatedServiceName(t *testing.T) {
+	ctx := context.Background()
+	// 19-char prefix + this name exceeds the 63-character Service name limit, so the
+	// operator truncates the Service name. The cert SANs must follow that truncation,
+	// otherwise the hostname published in status.connectionString fails strict TLS
+	// verification. Regression test for the SAN/Service-name divergence.
+	longName := strings.Repeat("a", 60)
+	ddb := baseDocumentDB(longName, "default")
+	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "SelfSigned"}}
+	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	r := buildCertificateReconciler(t, ddb)
+
+	_, err := r.reconcileCertificates(ctx, ddb)
+	require.NoError(t, err)
+
+	cert := &cmapi.Certificate{}
+	require.NoError(t, r.Client.Get(ctx, types.NamespacedName{Name: longName + "-gateway-cert", Namespace: "default"}, cert))
+
+	serviceName := util.GetDocumentDBServiceName(ddb.Name)
+	require.Len(t, serviceName, 63, "test fixture should exercise the truncation path")
+
+	require.Contains(t, cert.Spec.DNSNames, serviceName)
+	require.Contains(t, cert.Spec.DNSNames, serviceName+".default")
+	require.Contains(t, cert.Spec.DNSNames, serviceName+".default.svc")
+	require.NotContains(t, cert.Spec.DNSNames, util.DOCUMENTDB_SERVICE_PREFIX+ddb.Name,
+		"cert must not carry a SAN for the untruncated service name")
 }
 
 func TestReconcileCertificatesDoesNotManagePostgresCertificates(t *testing.T) {
