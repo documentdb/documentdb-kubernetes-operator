@@ -24,27 +24,30 @@ import (
 
 // GetCnpgClusterSpec renders the Cluster for a DocumentDB instance. The
 // documentdbImage argument overrides the resolved extension image; pass "" to
-// use the image resolved from the instance. Retained for callers that supply an
-// explicit extension image.
+// use the image resolved from the instance. req and serviceAccountName are
+// accepted for call-site compatibility but no longer consumed: object
+// coordinates now come from the intent's Identity, and the service account is
+// not read by the renderer.
 func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
 	intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
 	if documentdbImage != "" {
 		intent.Images.PostgresExtension = documentdbImage
 	}
-	return GetCnpgClusterSpecFromIntent(req, documentdb, intent, serviceAccountName, storageClass, isPrimaryRegion, log)
+	return GetCnpgClusterSpecFromIntent(intent, storageClass, isPrimaryRegion, log)
 }
 
 // GetCnpgClusterSpecFromIntent renders a CNPG Cluster from a product-neutral
-// ClusterIntent. This is the seam the reconciler drives: product-varying values
-// (images, credential secret, plugin name) come from the intent rather than from
-// product-specific lookups.
-func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.DocumentDB, intent product.ClusterIntent, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
-	split := ComputeResourceSplit(documentdb, DefaultSplitConfig())
+// ClusterIntent plus reconcile-time inputs (storage class, region role) that
+// are not part of any product's spec. This is the seam the reconciler drives:
+// every render input comes from these arguments rather than from loose
+// parameters or product-specific lookups.
+func GetCnpgClusterSpecFromIntent(intent product.ClusterIntent, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+	split := ComputeResourceSplitFromResource(intent.Resource, intent.Monitoring.Enabled, DefaultSplitConfig())
 
-	sidecarPluginName := intent.SidecarInjectorPlugin
+	sidecarPluginName := intent.Plugins.SidecarInjectorName
 
 	gatewayImage := intent.Images.Gateway
-	log.Info("Creating CNPG cluster with gateway image", "gatewayImage", gatewayImage, "documentdbName", documentdb.Name, "specGatewayImage", imageGateway(documentdb))
+	log.Info("Creating CNPG cluster with gateway image", "gatewayImage", gatewayImage, "documentdbName", intent.Identity.Name)
 
 	credentialSecretName := intent.CredentialSecret
 
@@ -65,8 +68,8 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 
 	return &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      req.Name,
-			Namespace: req.Namespace,
+			Name:      intent.Identity.Name,
+			Namespace: intent.Identity.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         intent.Identity.APIVersion,
@@ -80,7 +83,7 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 		},
 		Spec: func() cnpgv1.ClusterSpec {
 			spec := cnpgv1.ClusterSpec{
-				Instances:           intent.Topology.Instances,
+				Instances:           intent.Topology.InstancesPerNode,
 				ImageName:           intent.Images.Postgres,
 				ImagePullSecrets:    toCNPGImagePullSecrets(intent.Images.PullSecrets),
 				PrimaryUpdateMethod: cnpgv1.PrimaryUpdateMethodSwitchover,
@@ -102,26 +105,26 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST, split.Gateway.CPURequest)
 					addPluginParamIfSet(params, util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT, split.Gateway.CPULimit)
 					// If TLS is ready, surface secret name to plugin so it can mount certs.
-					if documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready && documentdb.Status.TLS.SecretName != "" {
-						params["gatewayTLSSecret"] = documentdb.Status.TLS.SecretName
+					if intent.TLS.GatewaySecretName != "" {
+						params["gatewayTLSSecret"] = intent.TLS.GatewaySecretName
 					}
 					// Pass monitoring parameters to plugin for OTel sidecar injection.
 					// Sidecar is only injected when monitoring is enabled.
 					// Config hash triggers operator-initiated rolling restart on config changes.
 					if split.MonitoringEnabled {
 						params["otelCollectorImage"] = util.DEFAULT_OTEL_COLLECTOR_IMAGE
-						params["otelConfigMapName"] = otelcfg.ConfigMapName(documentdb.Name)
+						params["otelConfigMapName"] = otelcfg.ConfigMapName(intent.Identity.Name)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST, split.OTel.MemoryRequest)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT, split.OTel.MemoryLimit)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_CPU_REQUEST, split.OTel.CPURequest)
 						addPluginParamIfSet(params, util.PLUGIN_PARAM_OTEL_CPU_LIMIT, split.OTel.CPULimit)
-						if promPort := otelcfg.ResolvePrometheusPort(documentdb.Spec.Monitoring); promPort > 0 {
+						if promPort := otelcfg.ResolvePrometheusPort(intent.Monitoring); promPort > 0 {
 							params["prometheusPort"] = fmt.Sprintf("%d", promPort)
 						}
 						// Compute config hash for change detection. The operator triggers a
 						// rolling restart (via restart annotation) when plugin parameters
 						// change, ensuring pods pick up new config.
-						if configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, req.Namespace, documentdb.Spec.Monitoring); err == nil {
+						if configData, err := otelcfg.GenerateConfigMapData(intent.Identity.Name, intent.Identity.Namespace, intent.Monitoring); err == nil {
 							params["otelConfigHash"] = otelcfg.HashConfigMapData(configData)
 						} else {
 							log.Error(err, "Failed to generate OTel config hash; config changes may not trigger rolling restart")
@@ -133,10 +136,10 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 						Parameters: params,
 					}}
 				}(),
-				PostgresConfiguration: buildPostgresConfiguration(documentdb, extensionImageSource, split.PostgresMemoryBytes),
+				PostgresConfiguration: buildPostgresConfiguration(MergeParametersResolved(intent.Postgres.Parameters, intent.FeatureGates, split.PostgresMemoryBytes), extensionImageSource),
 				Bootstrap:             bootstrapConfigurationFromIntent(intent, isPrimaryRegion, log),
-				LogLevel:              cmp.Or(documentdb.Spec.LogLevel, "info"),
-				Certificates:          postgresCertificates(documentdb),
+				LogLevel:              cmp.Or(intent.LogLevel, "info"),
+				Certificates:          intent.TLS.PostgresCertificates,
 				Backup: &cnpgv1.BackupConfiguration{
 					VolumeSnapshot: &cnpgv1.VolumeSnapshotConfiguration{
 						SnapshotOwnerReference: "backup", // Set owner reference to 'backup' so that snapshots are deleted when Backup resource is deleted
@@ -146,10 +149,10 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 				Affinity:  intent.Topology.Affinity,
 				Resources: buildResourceRequirements(split.Postgres),
 			}
-			spec.MaxStopDelay = getMaxStopDelayOrDefault(documentdb)
+			spec.MaxStopDelay = intent.Timeouts.StopDelay
 			applyPostgresProcessIdentity(&spec, intent)
 			applyIOUringSeccomp(&spec, intent)
-			applyOtelMonitorRole(&spec, documentdb)
+			applyOtelMonitorRoleFromIntent(&spec, intent.Monitoring.Enabled)
 
 			return spec
 		}(),
@@ -237,14 +240,6 @@ func getDefaultBootstrapConfiguration(documentdb *dbpreview.DocumentDB) *cnpgv1.
 	return defaultBootstrapConfigurationFromIntent(product.DocumentDBAdapter{}.ToClusterIntent(documentdb))
 }
 
-// getMaxStopDelayOrDefault returns StopDelay if set, otherwise util.CNPG_DEFAULT_STOP_DELAY
-func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
-	if documentdb.Spec.Timeouts.StopDelay != 0 {
-		return documentdb.Spec.Timeouts.StopDelay
-	}
-	return util.CNPG_DEFAULT_STOP_DELAY
-}
-
 // parseMemoryToBytes converts a Kubernetes quantity string (e.g., "2Gi", "4096Mi")
 // to bytes. Returns 0 if the string is empty or "0" (meaning unlimited/unset).
 func parseMemoryToBytes(memoryStr string) int64 {
@@ -311,22 +306,6 @@ func parsePullPolicy(value string) corev1.PullPolicy {
 	}
 }
 
-// imageGateway returns spec.image.gateway or empty string when unset.
-// Nil-safe.
-func imageGateway(documentdb *dbpreview.DocumentDB) string {
-	if documentdb == nil || documentdb.Spec.Image == nil {
-		return ""
-	}
-	return documentdb.Spec.Image.Gateway
-}
-
-func postgresCertificates(documentdb *dbpreview.DocumentDB) *cnpgv1.CertificatesConfiguration {
-	if documentdb.Spec.TLS == nil {
-		return nil
-	}
-	return documentdb.Spec.TLS.Postgres
-}
-
 // toCNPGImagePullSecrets translates a list of corev1.LocalObjectReference
 // (the Kubernetes-native shape used on spec.imagePullSecrets) into the
 // CNPG-flavoured cnpgv1.LocalObjectReference shape that
@@ -387,15 +366,12 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, intent product.ClusterIntent)
 // PostgreSQL host authentication currently uses trust, so a generated password
 // would not be checked. Disable the role password explicitly until authentication
 // is tightened rather than creating an unused credential and widening Secret RBAC.
-func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, documentdb *dbpreview.DocumentDB) {
-	if documentdb == nil {
-		return
-	}
+func applyOtelMonitorRoleFromIntent(spec *cnpgv1.ClusterSpec, monitoringEnabled bool) {
 	if spec.Managed == nil {
 		spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}
 	role := absentOtelMonitorRole()
-	if documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled {
+	if monitoringEnabled {
 		// The current health query is SELECT 1, so the role needs LOGIN only
 		// and is not granted broad monitoring memberships.
 		role = cnpgv1.RoleConfiguration{
@@ -429,7 +405,7 @@ func absentOtelMonitorRole() cnpgv1.RoleConfiguration {
 // stanza (mounted from spec.image.documentDB as an ImageVolumeSource),
 // sets a fixed AdditionalLibraries list, and applies a small set of
 // operator-managed GUCs.
-func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImageSource corev1.ImageVolumeSource, pgMemoryBytes int64) cnpgv1.PostgresConfiguration {
+func buildPostgresConfiguration(parameters map[string]string, extensionImageSource corev1.ImageVolumeSource) cnpgv1.PostgresConfiguration {
 	pgHBA := []string{
 		"host all all localhost trust",
 		"hostssl replication streaming_replica all cert",
@@ -446,7 +422,7 @@ func buildPostgresConfiguration(documentdb *dbpreview.DocumentDB, extensionImage
 			},
 		},
 		AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
-		Parameters:          MergeParameters(documentdb, pgMemoryBytes),
+		Parameters:          parameters,
 		PgHBA:               pgHBA,
 	}
 }

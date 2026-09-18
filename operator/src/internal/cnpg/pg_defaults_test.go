@@ -216,8 +216,8 @@ var _ = Describe("ProtectedParameters", func() {
 			result = ProtectedParameters(documentdb)
 		})
 
-		It("sets wal_level to logical", func() {
-			Expect(result["wal_level"]).To(Equal("logical"))
+		It("does not set wal_level (change streams contributes it as a resolved parameter, not a protected one)", func() {
+			Expect(result).NotTo(HaveKey("wal_level"))
 		})
 
 		It("still contains other protected params", func() {

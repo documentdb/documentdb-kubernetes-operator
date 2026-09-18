@@ -10,8 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
-
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
 func TestOtel(t *testing.T) {
@@ -82,13 +80,8 @@ var _ = Describe("base_config.yaml embed", func() {
 
 var _ = Describe("GenerateConfigMapData", func() {
 	It("returns static.yaml from embedded base_config.yaml", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		// static.yaml should contain the embedded base config
@@ -99,13 +92,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("generates dynamic.yaml with resource processor and exporters", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("test-cluster", "test-ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("test-cluster", "test-ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -128,15 +116,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes OTLP exporter in dynamic.yaml when configured", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP: &dbpreview.OTLPExporterSpec{
-					Endpoint: "otel-collector.monitoring:4317",
-				},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, OTLPEndpoint: "otel-collector.monitoring:4317"}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -145,14 +126,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("skips OTLP exporter when endpoint is empty", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: ""},
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, OTLPEndpoint: "", Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -160,13 +135,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes Prometheus exporter with default port", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -177,13 +147,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes Prometheus exporter with custom port", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -193,14 +158,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes both OTLP and Prometheus exporters", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: "otel-collector:4317"},
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, OTLPEndpoint: "otel-collector:4317", Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -211,8 +170,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("generates no pipeline when no exporters configured", func() {
-		spec := &dbpreview.MonitoringSpec{Enabled: true, Exporter: nil}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -222,13 +181,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 
 	// Regression guards — see comments in config.go for the why behind each.
 	It("uses 'insert' (not 'upsert') on the resource processor so per-datapoint k8s attrs survive", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Must not contain 'upsert' — that would clobber per-datapoint resource
@@ -239,13 +193,8 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("enables resource_to_telemetry_conversion on the prometheus exporter so resource attrs become labels", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+		cfg := MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090}
+		data, err := GenerateConfigMapData("cluster", "ns", cfg)
 		Expect(err).NotTo(HaveOccurred())
 		// Without this option the prometheus exporter writes resource attrs only
 		// to target_info, hiding documentdb.cluster / k8s.* labels.
@@ -281,32 +230,19 @@ var _ = Describe("HashConfigMapData", func() {
 })
 
 var _ = Describe("ResolvePrometheusPort", func() {
-	It("returns 0 when spec is nil", func() {
-		Expect(ResolvePrometheusPort(nil)).To(Equal(int32(0)))
+	It("returns 0 when monitoring is empty", func() {
+		Expect(ResolvePrometheusPort(MonitoringConfig{})).To(Equal(int32(0)))
 	})
 
 	It("returns 0 when Prometheus is not configured", func() {
-		spec := &dbpreview.MonitoringSpec{Enabled: true}
-		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(0)))
+		Expect(ResolvePrometheusPort(MonitoringConfig{Enabled: true})).To(Equal(int32(0)))
 	})
 
 	It("returns default port when Port is 0", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{},
-			},
-		}
-		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(8888)))
+		Expect(ResolvePrometheusPort(MonitoringConfig{Enabled: true, Prometheus: true})).To(Equal(int32(8888)))
 	})
 
 	It("returns custom port when set", func() {
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
-			},
-		}
-		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(9090)))
+		Expect(ResolvePrometheusPort(MonitoringConfig{Enabled: true, Prometheus: true, PrometheusPort: 9090})).To(Equal(int32(9090)))
 	})
 })

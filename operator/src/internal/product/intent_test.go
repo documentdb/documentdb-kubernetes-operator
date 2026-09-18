@@ -32,11 +32,11 @@ func TestToClusterIntentDefaults(t *testing.T) {
 	if intent.CredentialSecret != util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET {
 		t.Errorf("CredentialSecret = %q, want %q", intent.CredentialSecret, util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET)
 	}
-	if intent.SidecarInjectorPlugin != util.DEFAULT_SIDECAR_INJECTOR_PLUGIN {
-		t.Errorf("SidecarInjectorPlugin = %q, want %q", intent.SidecarInjectorPlugin, util.DEFAULT_SIDECAR_INJECTOR_PLUGIN)
+	if intent.Plugins.SidecarInjectorName != util.DEFAULT_SIDECAR_INJECTOR_PLUGIN {
+		t.Errorf("Plugins.SidecarInjectorName = %q, want %q", intent.Plugins.SidecarInjectorName, util.DEFAULT_SIDECAR_INJECTOR_PLUGIN)
 	}
-	if intent.WALReplicaPlugin != util.DEFAULT_WAL_REPLICA_PLUGIN {
-		t.Errorf("WALReplicaPlugin = %q, want %q", intent.WALReplicaPlugin, util.DEFAULT_WAL_REPLICA_PLUGIN)
+	if intent.Plugins.WalReplicaName != util.DEFAULT_WAL_REPLICA_PLUGIN {
+		t.Errorf("Plugins.WalReplicaName = %q, want %q", intent.Plugins.WalReplicaName, util.DEFAULT_WAL_REPLICA_PLUGIN)
 	}
 	if intent.Product.Name != "DocumentDB" {
 		t.Errorf("Product.Name = %q, want DocumentDB", intent.Product.Name)
@@ -69,8 +69,8 @@ func TestToClusterIntentOverrides(t *testing.T) {
 	if intent.CredentialSecret != "my-secret" {
 		t.Errorf("CredentialSecret = %q, want my-secret", intent.CredentialSecret)
 	}
-	if intent.SidecarInjectorPlugin != "custom-injector.example.io" {
-		t.Errorf("SidecarInjectorPlugin = %q, want custom-injector.example.io", intent.SidecarInjectorPlugin)
+	if intent.Plugins.SidecarInjectorName != "custom-injector.example.io" {
+		t.Errorf("Plugins.SidecarInjectorName = %q, want custom-injector.example.io", intent.Plugins.SidecarInjectorName)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestToClusterIntentTopologyStorageIdentity(t *testing.T) {
 
 	intent := a.ToClusterIntent(db)
 
-	if intent.Topology.Instances != 3 {
-		t.Errorf("Topology.Instances = %d, want 3", intent.Topology.Instances)
+	if intent.Topology.InstancesPerNode != 3 {
+		t.Errorf("Topology.InstancesPerNode = %d, want 3", intent.Topology.InstancesPerNode)
 	}
 	if intent.Storage.PvcSize != "20Gi" {
 		t.Errorf("Storage.PvcSize = %q, want 20Gi", intent.Storage.PvcSize)

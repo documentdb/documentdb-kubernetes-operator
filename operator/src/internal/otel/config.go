@@ -10,14 +10,26 @@ import (
 	"sort"
 
 	"gopkg.in/yaml.v3"
-
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
 //go:embed base_config.yaml
 var baseConfigYAML []byte
 
 const defaultPrometheusPort = 8888
+
+// MonitoringConfig is the product-neutral OTel collector configuration input.
+// Product adapters map their custom resource's monitoring spec onto this struct
+// so the collector config generation stays independent of any product CRD type.
+type MonitoringConfig struct {
+	// Enabled reports whether the OTel Collector sidecar is requested.
+	Enabled bool
+	// OTLPEndpoint is the OTLP gRPC exporter endpoint. Empty disables the exporter.
+	OTLPEndpoint string
+	// Prometheus reports whether the Prometheus scrape exporter is configured.
+	Prometheus bool
+	// PrometheusPort is the Prometheus scrape port; 0 selects the default.
+	PrometheusPort int32
+}
 
 // MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
 // sidecar uses for its health-check query.
@@ -66,8 +78,8 @@ func ConfigMapName(clusterName string) string {
 // disabled, the operator deletes the ConfigMap and removes sidecar parameters,
 // then triggers a rolling restart (via restart annotation) so that CNPG
 // recreates pods without the sidecar.
-func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (map[string]string, error) {
-	dynamicYAML, err := generateDynamicConfig(clusterName, namespace, spec)
+func GenerateConfigMapData(clusterName, namespace string, cfg MonitoringConfig) (map[string]string, error) {
+	dynamicYAML, err := generateDynamicConfig(clusterName, namespace, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +93,7 @@ func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.Monito
 // generateDynamicConfig builds the per-cluster dynamic config (resource
 // processor, exporters, pipeline wiring) that the collector deep-merges
 // with the embedded base_config.yaml.
-func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
+func generateDynamicConfig(clusterName, namespace string, mon MonitoringConfig) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
 			// `insert` (not `upsert`) so receivers that already emit their
@@ -105,42 +117,40 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 
 	exporterNames := []string{}
 
-	if spec.Exporter != nil {
-		if otlp := spec.Exporter.OTLP; otlp != nil && otlp.Endpoint != "" {
-			if cfg.Exporters == nil {
-				cfg.Exporters = map[string]any{}
-			}
-			cfg.Exporters["otlp"] = map[string]any{
-				"endpoint": otlp.Endpoint,
-				"tls": map[string]any{
-					// TODO: Support TLS for OTLP exporter. Currently hardcoded to
-					// insecure for in-cluster communication. When TLS is needed,
-					// add TLS config fields to OTLPExporterSpec (certSecret, etc.).
-					"insecure": true,
-				},
-			}
-			exporterNames = append(exporterNames, "otlp")
+	if mon.OTLPEndpoint != "" {
+		if cfg.Exporters == nil {
+			cfg.Exporters = map[string]any{}
 		}
+		cfg.Exporters["otlp"] = map[string]any{
+			"endpoint": mon.OTLPEndpoint,
+			"tls": map[string]any{
+				// TODO: Support TLS for OTLP exporter. Currently hardcoded to
+				// insecure for in-cluster communication. When TLS is needed,
+				// add TLS config fields to the exporter model (certSecret, etc.).
+				"insecure": true,
+			},
+		}
+		exporterNames = append(exporterNames, "otlp")
+	}
 
-		if prom := spec.Exporter.Prometheus; prom != nil {
-			if cfg.Exporters == nil {
-				cfg.Exporters = map[string]any{}
-			}
-			port := prom.Port
-			if port == 0 {
-				port = defaultPrometheusPort
-			}
-			cfg.Exporters["prometheus"] = map[string]any{
-				"endpoint": fmt.Sprintf("0.0.0.0:%d", port),
-				// Surface resource attributes as Prometheus labels (instead
-				// of burying them in target_info) so dashboards can filter
-				// by pod/container/cluster.
-				"resource_to_telemetry_conversion": map[string]any{
-					"enabled": true,
-				},
-			}
-			exporterNames = append(exporterNames, "prometheus")
+	if mon.Prometheus {
+		if cfg.Exporters == nil {
+			cfg.Exporters = map[string]any{}
 		}
+		port := mon.PrometheusPort
+		if port == 0 {
+			port = defaultPrometheusPort
+		}
+		cfg.Exporters["prometheus"] = map[string]any{
+			"endpoint": fmt.Sprintf("0.0.0.0:%d", port),
+			// Surface resource attributes as Prometheus labels (instead
+			// of burying them in target_info) so dashboards can filter
+			// by pod/container/cluster.
+			"resource_to_telemetry_conversion": map[string]any{
+				"enabled": true,
+			},
+		}
+		exporterNames = append(exporterNames, "prometheus")
 	}
 
 	// Wire pipeline: receivers + memory_limiter/batch from static.yaml,
@@ -193,12 +203,12 @@ func HashConfigMapData(data map[string]string) string {
 
 // ResolvePrometheusPort returns the effective Prometheus port from the spec,
 // or 0 if Prometheus exporter is not configured.
-func ResolvePrometheusPort(spec *dbpreview.MonitoringSpec) int32 {
-	if spec == nil || spec.Exporter == nil || spec.Exporter.Prometheus == nil {
+func ResolvePrometheusPort(mon MonitoringConfig) int32 {
+	if !mon.Prometheus {
 		return 0
 	}
-	if spec.Exporter.Prometheus.Port == 0 {
+	if mon.PrometheusPort == 0 {
 		return defaultPrometheusPort
 	}
-	return spec.Exporter.Prometheus.Port
+	return mon.PrometheusPort
 }
