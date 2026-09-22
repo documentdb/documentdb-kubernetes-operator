@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
 // formatMB formats a megabyte value as a PostgreSQL size string.
@@ -81,27 +82,34 @@ func StaticDefaults() map[string]string {
 // ProtectedParameters returns parameters that are always force-set by the
 // operator and cannot be overridden by users.
 func ProtectedParameters(documentdb *dbpreview.DocumentDB) map[string]string {
+	return protectedParameters(product.FeatureGates{
+		IOUring: dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring),
+	})
+}
+
+// protectedParameters returns the neutral operator-owned GUCs (always highest
+// priority) resolved from the product-neutral feature gates.
+func protectedParameters(gates product.FeatureGates) map[string]string {
 	params := map[string]string{
 		"cron.database_name":        "postgres",
 		"max_replication_slots":     "10",
 		"max_wal_senders":           "10",
 		"max_prepared_transactions": "100",
 	}
-	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
-		params["wal_level"] = "logical"
-	}
-	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+	if gates.IOUring {
 		params["io_method"] = "io_uring"
 	}
 	return params
 }
 
-// MergeParameters merges all parameter sources in priority order (last write wins):
-// 1. StaticDefaults
-// 2. ComputeMemoryAwareDefaults
-// 3. User overrides (documentdb.Spec.Postgres.Parameters)
-// 4. ProtectedParameters (always wins)
-func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) map[string]string {
+// MergeParametersResolved merges all parameter sources in priority order (last
+// write wins):
+//  1. StaticDefaults
+//  2. ComputeMemoryAwareDefaults
+//  3. userParams (adapter-resolved: user overrides plus product-mandated defaults
+//     such as change streams' wal_level=logical)
+//  4. ProtectedParameters (always wins)
+func MergeParametersResolved(userParams map[string]string, gates product.FeatureGates, memoryLimitBytes int64) map[string]string {
 	result := make(map[string]string)
 
 	for k, v := range StaticDefaults() {
@@ -110,12 +118,10 @@ func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) m
 	for k, v := range ComputeMemoryAwareDefaults(memoryLimitBytes) {
 		result[k] = v
 	}
-	if documentdb.Spec.Postgres != nil {
-		for k, v := range documentdb.Spec.Postgres.Parameters {
-			result[k] = v
-		}
+	for k, v := range userParams {
+		result[k] = v
 	}
-	for k, v := range ProtectedParameters(documentdb) {
+	for k, v := range protectedParameters(gates) {
 		result[k] = v
 	}
 

@@ -8,7 +8,15 @@ import (
 	. "github.com/onsi/gomega"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
+
+// mergeParams merges PostgreSQL parameters for a DocumentDB through the
+// product-neutral MergeParametersResolved seam.
+func mergeParams(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) map[string]string {
+	intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
+	return MergeParametersResolved(intent.Postgres.Parameters, intent.FeatureGates, memoryLimitBytes)
+}
 
 var _ = Describe("formatMB", func() {
 	It("formats plain megabytes", func() {
@@ -216,8 +224,8 @@ var _ = Describe("ProtectedParameters", func() {
 			result = ProtectedParameters(documentdb)
 		})
 
-		It("sets wal_level to logical", func() {
-			Expect(result["wal_level"]).To(Equal("logical"))
+		It("does not set wal_level (change streams contributes it as a resolved parameter, not a protected one)", func() {
+			Expect(result).NotTo(HaveKey("wal_level"))
 		})
 
 		It("still contains other protected params", func() {
@@ -261,7 +269,7 @@ var _ = Describe("MergeParameters", func() {
 					},
 				},
 			}
-			result := MergeParameters(documentdb, 0)
+			result := mergeParams(documentdb, 0)
 			Expect(result["max_connections"]).To(Equal("500"))
 		})
 	})
@@ -277,7 +285,7 @@ var _ = Describe("MergeParameters", func() {
 					},
 				},
 			}
-			result := MergeParameters(documentdb, 0)
+			result := mergeParams(documentdb, 0)
 			Expect(result["cron.database_name"]).To(Equal("postgres"))
 		})
 	})
@@ -287,7 +295,7 @@ var _ = Describe("MergeParameters", func() {
 			documentdb := &dbpreview.DocumentDB{
 				Spec: dbpreview.DocumentDBSpec{},
 			}
-			result := MergeParameters(documentdb, 8*1024*1024*1024)
+			result := mergeParams(documentdb, 8*1024*1024*1024)
 			Expect(result["shared_buffers"]).To(Equal("2GB"))
 		})
 	})
@@ -307,7 +315,7 @@ var _ = Describe("MergeParameters", func() {
 					},
 				},
 			}
-			result := MergeParameters(documentdb, 8*1024*1024*1024)
+			result := mergeParams(documentdb, 8*1024*1024*1024)
 
 			// User overrides win for non-protected params
 			Expect(result["max_connections"]).To(Equal("500"))
@@ -329,7 +337,7 @@ var _ = Describe("MergeParameters", func() {
 			documentdb := &dbpreview.DocumentDB{
 				Spec: dbpreview.DocumentDBSpec{},
 			}
-			result := MergeParameters(documentdb, 8*1024*1024*1024)
+			result := mergeParams(documentdb, 8*1024*1024*1024)
 
 			Expect(result["max_connections"]).To(Equal("300"))
 			Expect(result["shared_buffers"]).To(Equal("2GB"))
@@ -342,7 +350,7 @@ var _ = Describe("MergeParameters", func() {
 			documentdb := &dbpreview.DocumentDB{
 				Spec: dbpreview.DocumentDBSpec{},
 			}
-			result := MergeParameters(documentdb, 0)
+			result := mergeParams(documentdb, 0)
 
 			Expect(result["shared_buffers"]).To(Equal("256MB"))
 			Expect(result["effective_cache_size"]).To(Equal("512MB"))

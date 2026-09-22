@@ -7,7 +7,15 @@ import (
 	"testing"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
+
+// computeSplit resolves the pod resource carve-out for a DocumentDB through the
+// product-neutral ComputeResourceSplitFromResource seam.
+func computeSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) ResourceSplit {
+	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
+	return ComputeResourceSplitFromResource(product.ResourceFromSpec(documentdb.Spec.Resource), monitoring, cfg)
+}
 
 // prodSplitConfig mirrors the documented production defaults (18.75%, cap 32Gi,
 // otel 48Mi/128Mi) without depending on environment variables.
@@ -47,7 +55,7 @@ func TestComputeResourceSplit_ProductionRows(t *testing.T) {
 	cfg := prodSplitConfig()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := ComputeResourceSplit(ddbWithMemory(tc.envelope, false), cfg)
+			s := computeSplit(ddbWithMemory(tc.envelope, false), cfg)
 			if s.Gateway.MemoryLimit != tc.wantGW {
 				t.Errorf("gateway memory = %q, want %q", s.Gateway.MemoryLimit, tc.wantGW)
 			}
@@ -69,7 +77,7 @@ func TestComputeResourceSplit_ProductionRows(t *testing.T) {
 
 func TestComputeResourceSplit_MonitoringCarvesOTel(t *testing.T) {
 	cfg := prodSplitConfig()
-	s := ComputeResourceSplit(ddbWithMemory("16Gi", true), cfg)
+	s := computeSplit(ddbWithMemory("16Gi", true), cfg)
 
 	if !s.MonitoringEnabled {
 		t.Fatalf("monitoring should be enabled")
@@ -98,7 +106,7 @@ func TestComputeResourceSplit_ExplicitOverridesWin(t *testing.T) {
 	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "10Gi"}
 	d.Spec.Resource.OTel = &dbpreview.ComponentResources{Memory: "256Mi", CPU: "150m"}
 
-	s := ComputeResourceSplit(d, cfg)
+	s := computeSplit(d, cfg)
 
 	if s.Gateway.MemoryLimit != "2Gi" || s.Gateway.MemoryRequest != "2Gi" {
 		t.Errorf("gateway override not applied: %+v", s.Gateway)
@@ -122,7 +130,7 @@ func TestComputeResourceSplit_ExplicitOverridesWin(t *testing.T) {
 func TestComputeResourceSplit_UnsetMemoryNoCarveOut(t *testing.T) {
 	cfg := prodSplitConfig()
 	// No envelope memory set -> no automatic carve-out (legacy behavior).
-	s := ComputeResourceSplit(ddbWithMemory("", false), cfg)
+	s := computeSplit(ddbWithMemory("", false), cfg)
 	if s.Gateway.MemoryLimit != "" || s.Postgres.MemoryLimit != "" {
 		t.Errorf("expected no memory set, got gw=%q pg=%q", s.Gateway.MemoryLimit, s.Postgres.MemoryLimit)
 	}
@@ -135,7 +143,7 @@ func TestComputeResourceSplit_CPUFromEnvelope(t *testing.T) {
 	cfg := prodSplitConfig()
 	d := ddbWithMemory("8Gi", false)
 	d.Spec.Resource.CPU = "4"
-	s := ComputeResourceSplit(d, cfg)
+	s := computeSplit(d, cfg)
 	if s.Postgres.CPULimit != "4" || s.Postgres.CPURequest != "4" {
 		t.Errorf("postgres cpu = %q/%q, want 4/4", s.Postgres.CPURequest, s.Postgres.CPULimit)
 	}
@@ -145,7 +153,7 @@ func TestComputeResourceSplit_GatewayCPULimitDefault(t *testing.T) {
 	cfg := prodSplitConfig()
 	cfg.GatewayCPULimit = "2"
 	d := ddbWithMemory("8Gi", false)
-	s := ComputeResourceSplit(d, cfg)
+	s := computeSplit(d, cfg)
 	if s.Gateway.CPULimit != "2" || s.Gateway.CPURequest != "2" {
 		t.Errorf("gateway cpu = %q/%q, want 2/2", s.Gateway.CPURequest, s.Gateway.CPULimit)
 	}
@@ -159,7 +167,7 @@ func TestComputeResourceSplit_EnvelopeOmittedAllExplicit(t *testing.T) {
 	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi", CPU: "500m"}
 	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi", CPU: "3"}
 
-	s := ComputeResourceSplit(d, cfg)
+	s := computeSplit(d, cfg)
 	if s.Gateway.MemoryLimit != "512Mi" || s.Gateway.CPULimit != "500m" {
 		t.Errorf("gateway = %+v, want 512Mi/500m", s.Gateway)
 	}
@@ -175,7 +183,7 @@ func TestComputeResourceSplit_CPUCarvedWithMonitoring(t *testing.T) {
 	cfg := prodSplitConfig()
 	d := ddbWithMemory("8Gi", true)
 	d.Spec.Resource.CPU = "4"
-	s := ComputeResourceSplit(d, cfg)
+	s := computeSplit(d, cfg)
 	// otel cpu reservation defaults to 50m request / 200m limit (Burstable);
 	// only the request is carved from the envelope, so postgres = 4 - 50m = 3950m.
 	if s.OTel.CPURequest != "50m" {

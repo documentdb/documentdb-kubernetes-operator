@@ -1,0 +1,92 @@
+metadata:
+  ownerReferences:
+  - apiVersion: ""
+    blockOwnerDeletion: true
+    controller: true
+    kind: ""
+    name: ""
+    uid: ""
+spec:
+  affinity: {}
+  backup:
+    target: primary
+    volumeSnapshot:
+      onlineConfiguration: {}
+      snapshotOwnerReference: backup
+  bootstrap:
+    initdb:
+      postInitSQL:
+      - CREATE EXTENSION documentdb CASCADE
+      - CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'
+      - ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS
+  inheritedMetadata:
+    labels:
+      app: ""
+      replica_type: primary
+  instances: 1
+  logLevel: debug
+  managed:
+    roles:
+    - connectionLimit: -1
+      ensure: absent
+      inherit: true
+      name: otel_monitor
+  plugins:
+  - enabled: true
+    name: cnpg-i-sidecar-injector.documentdb.io
+    parameters:
+      documentDbCredentialSecret: documentdb-credentials
+      gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.113.0
+  postgresql:
+    extensions:
+    - dynamic_library_path:
+      - lib
+      extension_control_path:
+      - share
+      image:
+        reference: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.113.0
+      ld_library_path:
+      - lib
+      - system
+      name: documentdb
+    parameters:
+      autovacuum_analyze_scale_factor: "0.05"
+      autovacuum_max_workers: "4"
+      autovacuum_vacuum_cost_delay: 2ms
+      autovacuum_vacuum_scale_factor: "0.1"
+      checkpoint_completion_target: "0.9"
+      cron.database_name: postgres
+      effective_cache_size: 512MB
+      effective_io_concurrency: "200"
+      maintenance_work_mem: 128MB
+      max_connections: "300"
+      max_prepared_transactions: "100"
+      max_replication_slots: "10"
+      max_wal_senders: "10"
+      max_wal_size: 2GB
+      min_wal_size: 256MB
+      random_page_cost: "1.1"
+      shared_buffers: 256MB
+      wal_buffers: 16MB
+      work_mem: 16MB
+    pg_hba:
+    - host all all localhost trust
+    - hostssl replication streaming_replica all cert
+    shared_preload_libraries:
+    - pg_cron
+    - pg_documentdb_core
+    - pg_documentdb
+    syncReplicaElectionConstraint:
+      enabled: false
+  primaryUpdateMethod: switchover
+  resources: {}
+  stopDelay: 120
+  storage:
+    size: 10Gi
+status:
+  certificates: {}
+  configMapResourceVersion: {}
+  managedRolesStatus: {}
+  secretsResourceVersion: {}
+  switchReplicaClusterStatus: {}
+  topology: {}

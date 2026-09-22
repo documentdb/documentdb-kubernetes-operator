@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -84,9 +84,9 @@ func DefaultSplitConfig() SplitConfig {
 	}
 }
 
-// ComputeResourceSplit resolves how the pod memory and CPU envelopes
-// (spec.resource.memory / spec.resource.cpu) are divided across the PostgreSQL,
-// gateway, and (when monitoring is enabled) OTel collector containers.
+// ComputeResourceSplitFromResource resolves how the pod memory and CPU envelopes
+// (resource.memory / resource.cpu) are divided across the PostgreSQL, gateway,
+// and (when monitoring is enabled) OTel collector containers.
 //
 // The envelope is OPTIONAL. For each dimension:
 //   - If the envelope is set, the operator carves it: the gateway and OTel
@@ -100,19 +100,16 @@ func DefaultSplitConfig() SplitConfig {
 //     PostgreSQL remainder) can only be derived when the envelope is set, so the
 //     omitted-envelope path requires those to be explicit — see ValidateResources.
 //
-// Legacy behavior is preserved: when neither the envelope nor any per-container
-// value is set for a dimension, that dimension is left unmanaged (no limits).
-func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) ResourceSplit {
-	res := documentdb.Spec.Resource
-	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
-
+// When neither the envelope nor any per-container value is set for a dimension,
+// that dimension is left unmanaged (no limits).
+func ComputeResourceSplitFromResource(res product.Resource, monitoring bool, cfg SplitConfig) ResourceSplit {
 	envelopeBytes := parseMemoryToBytes(res.Memory)
 	split := ResourceSplit{MonitoringEnabled: monitoring}
 
 	// --- OTel collector (memory) ---
 	var otelBytes int64
 	if monitoring {
-		if componentMemSet(res.OTel) {
+		if neutralMemSet(res.OTel) {
 			// Explicit override: requests == limits (Guaranteed).
 			split.OTel.setMemory(res.OTel.Memory)
 			otelBytes = parseMemoryToBytes(res.OTel.Memory)
@@ -127,7 +124,7 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 		// otherwise the collector keeps its Burstable default (request floor +
 		// a bounded limit ceiling). CPU is compressible, so the carve-out below
 		// only reserves the request from the envelope — the limit just caps burst.
-		if cpu := componentCPU(res.OTel); cpu != "" {
+		if cpu := neutralCPU(res.OTel); cpu != "" {
 			split.OTel.setCPU(cpu)
 		} else {
 			split.OTel.CPURequest = cfg.OTelCPURequest
@@ -137,7 +134,7 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 
 	// --- Gateway (memory) ---
 	var gatewayBytes int64
-	if componentMemSet(res.Gateway) {
+	if neutralMemSet(res.Gateway) {
 		split.Gateway.setMemory(res.Gateway.Memory)
 		gatewayBytes = parseMemoryToBytes(res.Gateway.Memory)
 	} else if envelopeBytes > 0 {
@@ -147,14 +144,14 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 
 	// Gateway CPU: explicit override wins, else operator-level limit (request
 	// mirrors the limit so the container is Guaranteed on CPU when bounded).
-	if cpu := componentCPU(res.Gateway); cpu != "" {
+	if cpu := neutralCPU(res.Gateway); cpu != "" {
 		split.Gateway.setCPU(cpu)
 	} else if cfg.GatewayCPULimit != "" {
 		split.Gateway.setCPU(cfg.GatewayCPULimit)
 	}
 
 	// --- PostgreSQL (remainder) ---
-	if componentMemSet(res.Database) {
+	if neutralMemSet(res.Database) {
 		split.Postgres.setMemory(res.Database.Memory)
 		split.PostgresMemoryBytes = parseMemoryToBytes(res.Database.Memory)
 	} else if envelopeBytes > 0 {
@@ -171,7 +168,7 @@ func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) Res
 	// PostgreSQL CPU (sink): database override wins; otherwise the pod CPU
 	// envelope minus the gateway and OTel CPU reservations, symmetric with the
 	// memory carve-out so the resolved container CPUs sum to the envelope.
-	if cpu := componentCPU(res.Database); cpu != "" {
+	if cpu := neutralCPU(res.Database); cpu != "" {
 		split.Postgres.setCPU(cpu)
 	} else if env := normalizeCPU(res.CPU); env != "" {
 		pgCPU := subtractCPU(env, split.Gateway.CPURequest, split.OTel.CPURequest)
@@ -219,12 +216,17 @@ func subtractCPU(envelope string, reserved ...string) string {
 
 // --- helpers ---
 
-// componentCPU returns the component's CPU override, or "" when unset/zero.
-func componentCPU(c *dbpreview.ComponentResources) string {
+// neutralCPU returns the component's CPU override, or "" when unset/zero.
+func neutralCPU(c *product.ComponentResource) string {
 	if c == nil {
 		return ""
 	}
 	return normalizeCPU(c.CPU)
+}
+
+// neutralMemSet reports whether the neutral component has an explicit memory value.
+func neutralMemSet(c *product.ComponentResource) bool {
+	return c != nil && isSet(c.Memory)
 }
 
 // normalizeCPU returns cpu unless it is unset/zero, in which case "".

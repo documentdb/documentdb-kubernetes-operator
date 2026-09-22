@@ -155,7 +155,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
 
 	currentCnpgCluster := &cnpgv1.Cluster{}
-	desiredCnpgCluster := cnpg.GetCnpgClusterSpecFromIntent(req, documentdb, intent, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
+	desiredCnpgCluster := cnpg.GetCnpgClusterSpecFromIntent(intent, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
 
 	if replicationContext.IsReplicating() {
 		err = r.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, desiredCnpgCluster)
@@ -1032,7 +1032,7 @@ func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, docum
 			return fmt.Errorf("failed to set owner reference: %w", err)
 		}
 
-		configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, namespace, documentdb.Spec.Monitoring)
+		configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, namespace, product.MonitoringConfigFromSpec(documentdb.Spec.Monitoring))
 		if err != nil {
 			return fmt.Errorf("failed to generate OTel config: %w", err)
 		}
