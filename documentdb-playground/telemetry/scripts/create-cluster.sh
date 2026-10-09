@@ -17,7 +17,9 @@ KUBERNETES_VERSION="1.35.0"
 # For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)
 # For production: use microsoft/documentdb-operator (official)
 OPERATOR_GITHUB_ORG="hossain-rayhan"
-OPERATOR_CHART_VERSION="0.1.112"
+# Chart version to install. Empty = latest stable (recommended, stays current
+# across releases). Set to a release from the GitHub Releases page to pin.
+OPERATOR_CHART_VERSION="${OPERATOR_CHART_VERSION:-}"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -406,21 +408,28 @@ Then run the script again with --install-operator"
     
     # Install DocumentDB operator from OCI registry
     log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+    if [ -n "$OPERATOR_CHART_VERSION" ]; then
+        VERSION_FLAG="--version $OPERATOR_CHART_VERSION"
+        VERSION_LABEL="$OPERATOR_CHART_VERSION"
+    else
+        VERSION_FLAG=""
+        VERSION_LABEL="latest stable"
+    fi
     helm install documentdb-operator \
         oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
+        $VERSION_FLAG \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
         --timeout 10m
 
     if [ $? -eq 0 ]; then
-        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})"
     else
         error "Failed to install DocumentDB operator from OCI registry. Please verify:
 - Your GitHub token has 'read:packages' scope
 - You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
+- The chart version (${VERSION_LABEL}) exists"
     fi
     
     # Wait for operator to be ready

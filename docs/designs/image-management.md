@@ -64,10 +64,10 @@ The two version tracks are **independent** — they follow different release cad
 | **Images** | operator, sidecar, wal-replica | documentdb, gateway |
 | **Source repo** | This repo (Go) | `documentdb/documentdb` (C + Rust) |
 | **Version source** | `Chart.appVersion` in `Chart.yaml` | `documentDbVersion` in `values.yaml` |
-| **Current version** | `0.2.0` | `0.117.0` |
+| **Current version** | see `Chart.appVersion` in `Chart.yaml` | see `documentDbVersion` in `values.yaml` |
 | **Build workflow** | `build_operator_images.yml` | `build_documentdb_images.yml` |
 | **Release workflow** | `release_operator.yml` | `release_documentdb_images.yml` |
-| **Tag example** | `ghcr.io/.../operator:0.2.0` | `ghcr.io/.../documentdb:0.117.0` |
+| **Tag example** | `ghcr.io/.../operator:<appVersion>` | `ghcr.io/.../documentdb:<documentDbVersion>` |
 
 ### Why Two Tracks?
 

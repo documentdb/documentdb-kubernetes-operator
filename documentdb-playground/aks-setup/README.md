@@ -110,7 +110,7 @@ Comprehensively removes all Azure resources and stops billing.
 - **Networking**: Virtual network with security policies
 
 ### **Kubernetes Components:**
-- **DocumentDB Operator**: Version 0.1.3 with Azure features
+- **DocumentDB Operator**: Latest stable release with Azure features
 - **CNPG**: CloudNative PostgreSQL for data persistence
 - **cert-manager**: Certificate lifecycle management
 - **Azure CSI Drivers**: Disk and File storage integration
@@ -125,7 +125,9 @@ LOCATION="westus2"
 NODE_COUNT=3
 NODE_SIZE="Standard_D4s_v5"
 KUBERNETES_VERSION="1.34.3"
-OPERATOR_CHART_VERSION="0.1.3"
+# Operator chart is unpinned by default (installs latest stable). To pin a
+# release, uncomment OPERATOR_CHART_VERSION and the matching --version line in
+# scripts/create-cluster.sh (see the GitHub Releases page for versions).
 ```
 
 ### Storage Configuration

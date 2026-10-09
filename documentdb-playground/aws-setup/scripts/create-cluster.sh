@@ -23,7 +23,9 @@ CLUSTER_TAGS="${CLUSTER_TAGS:-project=documentdb-playground,environment=dev,mana
 # DocumentDB Operator Configuration
 # For production: use documentdb/documentdb-operator (official)
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.0"
+# Chart version to install. Empty = latest stable (recommended, stays current
+# across releases). Set to a release from the GitHub Releases page to pin.
+OPERATOR_CHART_VERSION="${OPERATOR_CHART_VERSION:-}"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -446,18 +448,25 @@ install_documentdb_operator() {
     fi
 
     OCI_CHART="oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator"
-    log "Installing DocumentDB operator from ${OCI_CHART} (version ${OPERATOR_CHART_VERSION})..."
+    if [ -n "$OPERATOR_CHART_VERSION" ]; then
+        VERSION_FLAG="--version $OPERATOR_CHART_VERSION"
+        VERSION_LABEL="$OPERATOR_CHART_VERSION"
+    else
+        VERSION_FLAG=""
+        VERSION_LABEL="latest stable"
+    fi
+    log "Installing DocumentDB operator from ${OCI_CHART} (version ${VERSION_LABEL})..."
     if helm install documentdb-operator \
         "$OCI_CHART" \
-        --version "$OPERATOR_CHART_VERSION" \
+        $VERSION_FLAG \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
         --timeout 10m; then
-        success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})"
     else
         error "Failed to install DocumentDB operator. Please verify:
-- The chart version ${OPERATOR_CHART_VERSION} exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
+- The chart version (${VERSION_LABEL}) exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
 - If your network requires authentication, set GITHUB_USERNAME and GITHUB_TOKEN (read:packages scope) and re-run"
     fi
     
