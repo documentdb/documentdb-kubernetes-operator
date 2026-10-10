@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/environment"
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/forwardconnection"
@@ -42,7 +43,9 @@ const GatewayPort = 10260
 const ServiceNamePrefix = "documentdb-service-"
 
 // GatewayServiceName returns the Service name the operator creates for
-// the given DocumentDB CR.
+// the given DocumentDB CR. It must stay in sync with
+// util.GetDocumentDBServiceName in the operator, including the trailing
+// separator trim that keeps a truncated name a valid RFC 1123 label.
 func GatewayServiceName(dd *previewv1.DocumentDB) string {
 	if dd == nil {
 		return ""
@@ -51,7 +54,7 @@ func GatewayServiceName(dd *previewv1.DocumentDB) string {
 	if len(name) > 63 {
 		name = name[:63]
 	}
-	return name
+	return strings.TrimRight(name, "-.")
 }
 
 // OpenWithErr establishes a port-forward from localPort on the caller's

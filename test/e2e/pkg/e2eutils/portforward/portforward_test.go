@@ -30,6 +30,11 @@ func TestGatewayServiceName(t *testing.T) {
 			// 19 (prefix) + 44 xs = 63
 			"documentdb-service-" + strings.Repeat("x", 44),
 		},
+		{
+			"truncation trims a trailing hyphen",
+			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("x", 43) + "-" + strings.Repeat("y", 20)}},
+			"documentdb-service-" + strings.Repeat("x", 43),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
