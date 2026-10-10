@@ -173,8 +173,10 @@ my-documentdb   Cluster in healthy state   mongodb://...
 
 ### Option 1: Port forwarding
 
+Forward to the gateway Service, which selects the current primary:
+
 ```bash
-kubectl port-forward pod/my-documentdb-1 10260:10260 -n documentdb-ns
+kubectl port-forward svc/documentdb-service-my-documentdb 10260:10260 -n documentdb-ns
 ```
 
 In another terminal, get the connection string and connect:

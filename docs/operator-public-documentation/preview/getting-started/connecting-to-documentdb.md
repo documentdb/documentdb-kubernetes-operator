@@ -63,13 +63,16 @@ mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanis
 
 ### Port forwarding (local development)
 
-For `ClusterIP` services, use kubectl port-forward:
+For `ClusterIP` services, use kubectl port-forward to the gateway Service, which selects the current primary:
 
 ```bash
-kubectl port-forward pod/my-documentdb-1 10260:10260 -n documentdb-ns
+kubectl port-forward svc/documentdb-service-my-documentdb 10260:10260 -n documentdb-ns
 ```
 
 Then connect to `127.0.0.1:10260`.
+
+!!! note
+    Port forwarding binds to a pod selected by the Service when the command starts; it does not automatically reconnect after failover or pod replacement. If the primary changes or the selected pod restarts, stop and rerun the same command to connect to the current primary.
 
 ### LoadBalancer (cloud deployments)
 

@@ -189,10 +189,10 @@ Choose a connection method based on your service type. For more details on servi
 
 #### Option 1: ClusterIP service (default — for local development)
 
-**Step 1:** Set up port forwarding (keep this terminal open):
+**Step 1:** Set up port forwarding to the gateway Service, which selects the current primary (keep this terminal open):
 
 ```bash
-kubectl port-forward pod/documentdb-preview-1 10260:10260 -n documentdb-preview-ns
+kubectl port-forward svc/documentdb-service-documentdb-preview 10260:10260 -n documentdb-preview-ns
 ```
 
 **Step 2:** In a new terminal, connect with [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/):
