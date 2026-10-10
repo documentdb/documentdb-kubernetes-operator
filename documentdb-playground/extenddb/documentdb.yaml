@@ -1,0 +1,50 @@
+# Sample DocumentDB instance for the ExtendDB playground.
+#
+# Apply with:
+#   kubectl create namespace documentdb-test
+#   kubectl apply -f documentdb.yaml
+#
+# Notes:
+# - ExtendDB's MongoDB backend requires MongoDB 7.0+ semantics with
+#   multi-document transaction support. DocumentDB's gateway advertises a
+#   MongoDB-compatible wire protocol sufficient for ExtendDB's transactional
+#   item writes (put_item/update_item use single-document upserts; ExtendDB's
+#   transact_write path issues multi-document transactions — verify against
+#   your DocumentDB extension version if transactions are central to your use
+#   case).
+# - Replace the password before using outside a throwaway dev cluster.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: docdb-credentials
+  namespace: documentdb-test
+type: Opaque
+stringData:
+  username: docdbadmin
+  password: "ChangeMe!ReplaceBeforeUsing"
+---
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-cluster
+  namespace: documentdb-test
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  image:
+    # Local extension image built from documentdb/documentdb v0.116-0 (includes
+    # the PG 18.6 second-insert segfault fix, merged 2026-08-19; not yet
+    # published under an operator image tag as of this writing -- built
+    # locally per docs/developer-guides). Not a stable playground reference;
+    # bump to an official ghcr.io tag once one incorporates the fix.
+    documentDB: documentdb-ext:0.116.0-src
+    gateway: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.114.0
+  documentDbCredentialSecret: docdb-credentials
+  resource:
+    storage:
+      pvcSize: "10Gi"
+  exposeViaService:
+    serviceType: ClusterIP
+  plugins:
+    sidecarInjectorName: cnpg-i-sidecar-injector.documentdb.io
