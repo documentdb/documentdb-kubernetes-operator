@@ -481,6 +481,100 @@ jobs:
           fi
           echo "✅ Data-protection verifier ran (scheduled=${scheduled}, completed=${completed})."
 
+      - name: Restart driver over existing data (restart-resilience gate)
+        run: |
+          set -euo pipefail
+          # Restart-resilience gate. A pod restart wipes every piece of
+          # in-memory driver state (writer cursors, verifier sequence tracking,
+          # pruner floors) while the on-disk collection — including any prefix
+          # already removed by retention pruning — survives. This step brings
+          # the driver back up over that existing data (RESET_DATA=false) and
+          # requires it to resume cleanly and still report PASS.
+          #
+          # It is a general guard that all state a restart must reconstruct
+          # purely from the database is rebuilt correctly, so an entire class of
+          # restart-only regressions is caught by the PR gate here instead of
+          # only surfacing on the live long-haul cluster after a real restart.
+          # Phase A above has already pruned documents (asserted docs-pruned>0),
+          # so this restart genuinely exercises resuming over a pruned prefix.
+          #
+          # Operations and backups are disabled so the restart itself is the
+          # only thing under test; the window just needs enough verifier cycles
+          # to re-establish state and emit a fresh verdict.
+
+          # Read the fresh verdict from scratch, not a stale PASS from Phase A.
+          kubectl delete configmap longhaul-report -n "${DB_NS}" --ignore-not-found
+
+          PATCH=$(jq -nc \
+            '{data: {
+              LONGHAUL_MAX_DURATION: "2m",
+              LONGHAUL_RESET_DATA: "false",
+              LONGHAUL_OPERATION_MODE: "disabled",
+              LONGHAUL_OPERATION_SEQUENCE: "",
+              LONGHAUL_BACKUP_ENABLED: "false",
+              LONGHAUL_REPORT_INTERVAL: "15s"
+            }}')
+          kubectl patch configmap longhaul-test-config -n "${DB_NS}" --type merge -p "${PATCH}"
+
+          # Bring the driver back up (Phase A scaled it to 0 on completion) so
+          # it starts fresh against the surviving, already-pruned collection.
+          kubectl scale deployment/longhaul-test -n "${DB_NS}" --replicas=1
+          kubectl rollout status deployment/longhaul-test -n "${DB_NS}" --timeout=120s
+
+      - name: Wait for restart run to complete
+        id: wait_restart
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 600 ))  # 10 min hard cap
+          exit_code=""
+          while [[ $(date +%s) -lt ${deadline} ]]; do
+            pod=$(kubectl get pods -n "${DB_NS}" \
+              -l app.kubernetes.io/name=longhaul-test \
+              -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+            if [[ -z "${pod}" ]]; then
+              sleep 5; continue
+            fi
+            term_cur=$(kubectl get pod "${pod}" -n "${DB_NS}" \
+              -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || echo "")
+            term_prev=$(kubectl get pod "${pod}" -n "${DB_NS}" \
+              -o jsonpath='{.status.containerStatuses[0].lastState.terminated.exitCode}' 2>/dev/null || echo "")
+            if [[ -n "${term_cur}" ]]; then
+              exit_code="${term_cur}"
+            elif [[ -n "${term_prev}" ]]; then
+              exit_code="${term_prev}"
+            fi
+            if [[ -n "${exit_code}" ]]; then
+              echo "Restart-run driver container terminated with exit code ${exit_code}."
+              kubectl scale deployment/longhaul-test -n "${DB_NS}" --replicas=0 || true
+              break
+            fi
+            echo "  restart-run driver still running..."
+            sleep 10
+          done
+          if [[ -z "${exit_code}" ]]; then
+            echo "::error::Restart-run driver did not terminate within the window."
+            exit 1
+          fi
+          echo "exit_code=${exit_code}" >> "${GITHUB_OUTPUT}"
+
+      - name: Assert restart run stays PASS
+        run: |
+          set -euo pipefail
+          exit_code="${{ steps.wait_restart.outputs.exit_code }}"
+          result=$(kubectl get configmap longhaul-report -n "${DB_NS}" \
+            -o jsonpath='{.data.result}' 2>/dev/null || echo "MISSING")
+          echo "Restart-run exit code : ${exit_code}"
+          echo "Restart-run result    : ${result}"
+          if [[ "${exit_code}" != "0" ]]; then
+            echo "::error::Driver exited non-zero (${exit_code}) after restarting over existing data."
+            exit 1
+          fi
+          if [[ "${result}" != "PASS" ]]; then
+            echo "::error::After restarting over existing data, longhaul-report result is '${result}', expected PASS. A restart must reconstruct all state from the database without a false verdict."
+            exit 1
+          fi
+          echo "✅ Restart-resilience gate passed (driver resumed over existing pruned data and reported PASS)."
+
       - name: Diagnostics on failure
         if: failure()
         run: |
