@@ -30,8 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
@@ -72,6 +74,7 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -537,8 +540,31 @@ func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(clusterInstanceStatusChangedPredicate())).
 		Owns(&cnpgv1.Publication{}).
 		Owns(&cnpgv1.Subscription{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.documentDBsForPostgresTLSSecret),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Named("documentdb-controller").
 		Complete(r)
+}
+
+func (r *DocumentDBReconciler) documentDBsForPostgresTLSSecret(ctx context.Context, secret client.Object) []reconcile.Request {
+	var documentdbs dbpreview.DocumentDBList
+	if err := r.List(ctx, &documentdbs, client.InNamespace(secret.GetNamespace())); err != nil {
+		log.FromContext(ctx).Error(err, "Failed to find DocumentDBs referencing PostgreSQL TLS Secret",
+			"namespace", secret.GetNamespace(), "secret", secret.GetName())
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, documentdb := range documentdbs.Items {
+		if documentdb.Spec.ClusterReplication == nil || documentdb.Spec.TLS == nil || documentdb.Spec.TLS.Postgres == nil {
+			continue
+		}
+		certificates := documentdb.Spec.TLS.Postgres
+		if certificates.ReplicationTLSSecret != "" &&
+			(secret.GetName() == certificates.ReplicationTLSSecret || secret.GetName() == certificates.ServerCASecret) {
+			requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&documentdb)})
+		}
+	}
+	return requests
 }
 
 // COPIED FROM https://github.com/cloudnative-pg/cloudnative-pg/blob/release-1.25/internal/cmd/plugin/promote/promote.go

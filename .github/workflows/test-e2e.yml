@@ -364,6 +364,101 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  multicluster-postgres-tls:
+    name: Multi-cluster PostgreSQL TLS (${{ matrix.architecture }})
+    needs: [build]
+    if: always() && needs.build.result == 'success'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-22.04
+          - architecture: arm64
+            runner: ubuntu-22.04-arm
+    env:
+      TEST_DEPTH: Medium
+      E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_CLUSTER_PREFIX: pg-tls-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_ARTIFACTS_DIR: ${{ github.workspace }}/test/e2e/artifacts
+      OPERATOR_IMAGE: ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ needs.build.outputs.image_tag }}-${{ matrix.architecture }}
+      SIDECAR_IMAGE: ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/sidecar:${{ needs.build.outputs.image_tag }}-${{ matrix.architecture }}
+      DOCUMENTDB_IMAGE: ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/documentdb:${{ needs.build.outputs.ext_image_tag }}-${{ matrix.architecture }}
+      GATEWAY_IMAGE: ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/gateway:${{ needs.build.outputs.ext_image_tag }}-${{ matrix.architecture }}
+      E2E_CHART: ./artifacts/build-helm-chart-${{ matrix.architecture }}/documentdb-chart-${{ needs.build.outputs.chart_version }}-${{ matrix.architecture }}.tgz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: test/e2e/go.mod
+          cache-dependency-path: test/e2e/go.sum
+      - uses: azure/setup-helm@v3
+        with:
+          version: v3.19.0
+      - uses: helm/kind-action@v1.12.0
+        with:
+          install_only: true
+          version: v0.31.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-platform-images
+          path: ./artifacts/build-platform-images
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-helm-chart-${{ matrix.architecture }}
+          path: ./artifacts/build-helm-chart-${{ matrix.architecture }}
+      - name: Provision two independent Kubernetes clusters
+        run: |
+          set -euo pipefail
+          export E2E_KUBECONFIG_DIR="${RUNNER_TEMP}/pg-tls-kubeconfigs"
+          {
+            echo "E2E_KUBECONFIG_DIR=${E2E_KUBECONFIG_DIR}"
+            echo "E2E_PRIMARY_KUBECONFIG=${E2E_KUBECONFIG_DIR}/primary.yaml"
+            echo "E2E_REPLICA_KUBECONFIG=${E2E_KUBECONFIG_DIR}/replica.yaml"
+          } >> "$GITHUB_ENV"
+          echo "E2E_ORIGINAL_INOTIFY_INSTANCES=$(sysctl -n fs.inotify.max_user_instances)" >> "$GITHUB_ENV"
+          sudo sysctl -w fs.inotify.max_user_instances=1024
+          docker load < artifacts/build-platform-images/platform-specific-images.tar
+          bash test/e2e/scripts/provision-postgres-tls.sh
+      - name: Run required PostgreSQL TLS acceptance specs serially
+        working-directory: test/e2e
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          version="$(go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)"
+          go install "github.com/onsi/ginkgo/v2/ginkgo@${version}"
+          python3 -m unittest discover -s scripts -p 'test_postgres_tls_report.py'
+          ginkgo --procs=1 --timeout=65m \
+            --label-filter='tls && multi-cluster-postgres-tls' \
+            --junit-report=junit.xml --json-report=report.json --output-dir=artifacts \
+            ./tests/multicluster_postgres_tls 2>&1 | tee artifacts/ginkgo.log
+          python3 scripts/check-postgres-tls-report.py artifacts/report.json
+      - name: Collect safe diagnostics from both contexts
+        if: failure()
+        run: bash test/e2e/scripts/postgres-tls-diagnostics.sh
+      - name: Publish acceptance reports before cleanup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-multicluster-postgres-tls-${{ matrix.architecture }}-${{ github.run_attempt }}
+          path: test/e2e/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Always remove both Kind clusters and credentials
+        if: always()
+        run: |
+          status=0
+          kind delete cluster --name "${E2E_CLUSTER_PREFIX}-primary" || status=1
+          kind delete cluster --name "${E2E_CLUSTER_PREFIX}-replica" || status=1
+          rm -f "${RUNNER_TEMP}/pg-tls-kubeconfigs/primary.yaml" "${RUNNER_TEMP}/pg-tls-kubeconfigs/replica.yaml"
+          rmdir "${RUNNER_TEMP}/pg-tls-kubeconfigs" 2>/dev/null || true
+          if [[ -n "${E2E_ORIGINAL_INOTIFY_INSTANCES:-}" ]]; then
+            sudo sysctl -w "fs.inotify.max_user_instances=${E2E_ORIGINAL_INOTIFY_INSTANCES}" || status=1
+          fi
+          exit "$status"
+
   # ---------------------------------------------------------------------------
   # ImageVolume preflight (positive path, K8s < 1.35).
   #

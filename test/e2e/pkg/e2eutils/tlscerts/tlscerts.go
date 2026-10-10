@@ -48,6 +48,8 @@ type GenerateOptions struct {
 	IPAddresses []net.IP
 	// Validity defaults to 24 hours when zero.
 	Validity time.Duration
+	// ExtKeyUsage defaults to server-auth and client-auth when empty.
+	ExtKeyUsage []x509.ExtKeyUsage
 }
 
 // Generate builds a self-signed CA and a server certificate signed by
@@ -83,28 +85,77 @@ func Generate(opts GenerateOptions) (*Bundle, error) {
 		return nil, fmt.Errorf("tlscerts: sign CA: %w", err)
 	}
 
+	ca := &Bundle{
+		CACertPEM: pemEncode("CERTIFICATE", caDER),
+		CAKeyPEM:  pemEncode("RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(caKey)),
+	}
+	return Issue(ca, opts)
+}
+
+// Issue creates a fresh certificate under an existing test CA, for rotation
+// without changing the trust anchor. It never mutates the supplied bundle.
+func Issue(ca *Bundle, opts GenerateOptions) (*Bundle, error) {
+	if ca == nil {
+		return nil, fmt.Errorf("tlscerts: missing signing CA")
+	}
+	if len(opts.DNSNames) == 0 && len(opts.IPAddresses) == 0 {
+		return nil, fmt.Errorf("tlscerts: at least one DNSName or IPAddress SAN is required")
+	}
+	certBlock, _ := pem.Decode(ca.CACertPEM)
+	keyBlock, _ := pem.Decode(ca.CAKeyPEM)
+	if certBlock == nil || keyBlock == nil {
+		return nil, fmt.Errorf("tlscerts: invalid CA PEM")
+	}
+	caCert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("tlscerts: parse CA: %w", err)
+	}
+	caKey, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("tlscerts: parse CA key: %w", err)
+	}
+	publicKey, ok := caCert.PublicKey.(*rsa.PublicKey)
+	if !ok || !caCert.IsCA || !publicKey.Equal(&caKey.PublicKey) {
+		return nil, fmt.Errorf("tlscerts: signing certificate and key are not a matching CA")
+	}
+	validity := opts.Validity
+	if validity == 0 {
+		validity = 24 * time.Hour
+	}
+	cn := opts.CommonName
+	if cn == "" {
+		cn = "documentdb-e2e"
+	}
+	usages := opts.ExtKeyUsage
+	if len(usages) == 0 {
+		usages = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return nil, fmt.Errorf("tlscerts: generate serial: %w", err)
+	}
 	srvKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("tlscerts: generate server key: %w", err)
 	}
 	srvTmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(2),
+		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: cn},
 		NotBefore:    time.Now().Add(-5 * time.Minute),
 		NotAfter:     time.Now().Add(validity),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		ExtKeyUsage:  append([]x509.ExtKeyUsage(nil), usages...),
 		DNSNames:     append([]string(nil), opts.DNSNames...),
 		IPAddresses:  append([]net.IP(nil), opts.IPAddresses...),
 	}
-	srvDER, err := x509.CreateCertificate(rand.Reader, srvTmpl, caTmpl, &srvKey.PublicKey, caKey)
+	srvDER, err := x509.CreateCertificate(rand.Reader, srvTmpl, caCert, &srvKey.PublicKey, caKey)
 	if err != nil {
 		return nil, fmt.Errorf("tlscerts: sign server cert: %w", err)
 	}
 
 	return &Bundle{
-		CACertPEM:     pemEncode("CERTIFICATE", caDER),
-		CAKeyPEM:      pemEncode("RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(caKey)),
+		CACertPEM:     append([]byte(nil), ca.CACertPEM...),
+		CAKeyPEM:      append([]byte(nil), ca.CAKeyPEM...),
 		ServerCertPEM: pemEncode("CERTIFICATE", srvDER),
 		ServerKeyPEM:  pemEncode("RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(srvKey)),
 	}, nil

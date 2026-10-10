@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,6 +119,14 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 	postgresClientCertificateProvided := postgresReplicationTLSSecret != ""
 	postgresServerCAProvided := postgresServerCASecret != ""
+	tlsGeneration := ""
+	if postgresClientCertificateProvided {
+		var err error
+		tlsGeneration, err = r.postgresTLSGeneration(ctx, documentdb.Namespace, postgresReplicationTLSSecret, postgresServerCASecret)
+		if err != nil {
+			return err
+		}
+	}
 	if documentdb.Spec.ClusterReplication.DisableTLS {
 		cnpgCluster.Spec.PostgresConfiguration.PgHBA = []string{
 			"host all all localhost trust",
@@ -149,6 +158,10 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 			"user":   "streaming_replica",
 		}
 		if postgresClientCertificateProvided {
+			// Changing primary_conninfo makes PostgreSQL reconnect its WAL
+			// receiver after Secret rotation. A custom startup setting works
+			// with both pgx bootstrap probes and libpq, without changing HA names.
+			connectionParameters["options"] = "-c documentdb_operator.tls_generation=" + tlsGeneration
 			connectionParameters["sslmode"] = "require"
 			if postgresServerCAProvided {
 				connectionParameters["sslmode"] = "verify-full"
@@ -185,6 +198,30 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	}
 
 	return nil
+}
+
+func (r *DocumentDBReconciler) postgresTLSGeneration(ctx context.Context, namespace, certificateSecret, caSecret string) (string, error) {
+	digest := sha256.New()
+	for _, ref := range []struct{ name, key string }{
+		{certificateSecret, corev1.TLSCertKey},
+		{caSecret, corev1.ServiceAccountRootCAKey},
+	} {
+		if ref.name == "" {
+			continue
+		}
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.name}, secret); err != nil {
+			return "", fmt.Errorf("read PostgreSQL TLS Secret %s/%s: %w", namespace, ref.name, err)
+		}
+		material := secret.Data[ref.key]
+		if len(material) == 0 {
+			return "", fmt.Errorf("PostgreSQL TLS Secret %s/%s is missing %s", namespace, ref.name, ref.key)
+		}
+		// Only public material contributes to the connection-generation token.
+		_, _ = digest.Write(material)
+		_, _ = digest.Write([]byte{0})
+	}
+	return fmt.Sprintf("documentdb-tls-%x", digest.Sum(nil)[:16]), nil
 }
 
 // addAzureFleetManagedServices populates spec.managed.services.additional with a
