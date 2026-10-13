@@ -58,10 +58,10 @@ env:
   LIGHTRAG_VECTOR_STORAGE: NanoVectorDBStorage
   LIGHTRAG_GRAPH_STORAGE: MongoGraphStorage
   LIGHTRAG_DOC_STATUS_STORAGE: MongoDocStatusStorage
-  # DocumentDB connection — replace <user>, <password>, <service>, <namespace>
+  # DocumentDB connection — replace <username>, <password>, <service>, <namespace>
   # with values from your cluster, or let scripts/deploy.sh populate this
   # automatically from the DocumentDB resource's status.connectionString.
-  MONGO_URI: "mongodb://<user>:<password>@<documentdb-service>.<documentdb-namespace>.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+  MONGO_URI: "mongodb://<username>:<password>@<documentdb-service>.<documentdb-namespace>.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
   # Must match the chart default (helm/lightrag/values.yaml). If you change
   # this, change both — running with mismatched databases splits data silently.
   MONGO_DATABASE: "lightrag"

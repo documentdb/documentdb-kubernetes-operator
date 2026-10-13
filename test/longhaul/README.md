@@ -86,7 +86,7 @@ docker push <your-registry>/longhaul-test:latest
 
 # 2. Create the DocumentDB credentials secret
 kubectl create secret generic longhaul-documentdb-credentials \
-  --from-literal=uri='mongodb://docdb:YourPass@documentdb-service-documentdb-cluster.documentdb-test-ns.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true' \
+  --from-literal=uri='mongodb://<username>:<password>@documentdb-service-documentdb-cluster.documentdb-test-ns.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true' \
   -n documentdb-test-ns
 
 # 3. Deploy RBAC and Deployment. deployment.yaml has placeholders
