@@ -7,7 +7,8 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/hkuds/lightrag
-  tag: latest
+  # LightRAG v1.5.7 multi-architecture manifest.
+  digest: sha256:5bdbd524931b011df246fe20888d110cef691e6804c12cde636a2b746d7de27e
   imagePullSecrets: []
 
 updateStrategy:

@@ -259,7 +259,7 @@ kubectl exec -n lightrag "$OLLAMA_POD" -- ollama pull qwen2.5:3b
 | ------------------- | ----------------------------- |
 | DocumentDB operator | 0.2.0                         |
 | DocumentDB images   | 0.110.0+ (required for `_id` lookup fix) |
-| LightRAG            | `ghcr.io/hkuds/lightrag:latest` (core 1.4.x) |
+| LightRAG            | `ghcr.io/hkuds/lightrag@sha256:5bdbd524931b011df246fe20888d110cef691e6804c12cde636a2b746d7de27e` (v1.5.7) |
 | Ollama              | `ollama/ollama:latest`        |
 | Kubernetes          | 1.30+                         |
 
