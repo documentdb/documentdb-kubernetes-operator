@@ -19,9 +19,29 @@ var baseConfigYAML []byte
 
 const defaultPrometheusPort = 8888
 
+// prometheusMetricExpiration is how long the Prometheus exporter keeps serving
+// a series after its last update. It must exceed the longest receiver
+// collection_interval in base_config.yaml (sqlquery/catalog, 5m). With the
+// exporter's 5m default, a catalog update that arrives a moment late would
+// let the series expire, and scrapes in that window would miss it.
+const prometheusMetricExpiration = "6m"
+
 // MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
-// sidecar uses for its health-check query.
+// sidecar uses for its SQL metric queries.
 const MonitorRoleName = "otel_monitor"
+
+// MonitorSchemas are the DocumentDB schemas on which the operator grants
+// USAGE to MonitorRoleName. The DocumentDB planner hook resolves objects in
+// documentdb_core and documentdb_api_internal for any query that calls a
+// function or operator, and the catalog metrics read documentdb_api_catalog.
+// Document data lives in documentdb_data, which is not granted.
+var MonitorSchemas = []string{"documentdb_core", "documentdb_api_internal", "documentdb_api_catalog"}
+
+// DataVolumeMountPath is where the sidecar-injector plugin mounts the
+// PostgreSQL data volume (read-only, on an empty subPath) in the collector
+// container. The hostmetrics filesystem scraper in base_config.yaml reports
+// this mount point. The plugin module defines the same path; keep them equal.
+const DataVolumeMountPath = "/var/lib/otel/pgdata"
 
 // collectorConfig represents the OTel Collector configuration structure.
 type collectorConfig struct {
@@ -97,11 +117,13 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		},
 	}
 
-	// sqlquery (Postgres health) + otlp (gateway-pushed metrics) come from
-	// base_config.yaml. Container/node resource metrics are served by a
-	// node-level collector such as the playground reference DaemonSet, not
-	// this sidecar.
-	receiverNames := []string{"sqlquery", "otlp"}
+	// sqlquery (Postgres health), sqlquery/catalog (DocumentDB catalog),
+	// hostmetrics (data volume usage and pod network I/O), and otlp
+	// (gateway-pushed metrics) come from base_config.yaml. The sidecar reads
+	// only its own pod: it has no kubelet access, so container CPU/memory and
+	// node metrics come from a platform collector such as the playground
+	// reference DaemonSet.
+	receiverNames := []string{"sqlquery", "sqlquery/catalog", "hostmetrics", "otlp"}
 
 	exporterNames := []string{}
 
@@ -138,6 +160,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 				"resource_to_telemetry_conversion": map[string]any{
 					"enabled": true,
 				},
+				"metric_expiration": prometheusMetricExpiration,
 			}
 			exporterNames = append(exporterNames, "prometheus")
 		}
