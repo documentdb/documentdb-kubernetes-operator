@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.0.0-rc1] - 2026-10-09
+
+### Major Features
+
+- **Configurable image registries**: Support private and mirrored registries for
+  operator and data-plane images, with validated repository and tag overrides
+  (#464).
+- **ImageVolume capability validation**: Reject DocumentDB creation when the
+  required Kubernetes ImageVolume capability is unavailable (#431, #437).
+- **Database image updates**: Source Debian 13 DocumentDB extension packages
+  from PGDG, update the default DocumentDB version to 0.117.0, and remove the
+  temporary PostgreSQL image pin (#456, #459).
+- **Dedicated monitoring identity**: Use a dedicated identity for the
+  OpenTelemetry Collector sidecar (#420).
+- **Restore compatibility validation**: Validate schema-version compatibility
+  when restoring backups (#440).
+- **PostgreSQL connection certificates**: Support certificates for PostgreSQL
+  connections (#416).
+- **Arc and Fleet hybrid setup**: Add hybrid deployment setup for DocumentDB
+  portal visibility (#267).
+
+### Bug Fixes
+
+- Address dependency vulnerabilities reported by govulncheck, including gRPC
+  vulnerabilities.
+- Fix PostgreSQL image compatibility with the DocumentDB extension to unblock
+  E2E tests (#445).
+
+### Breaking Changes
+
+- Move gateway and DocumentDB image pull-policy Helm values to
+  `image.gateway.pullPolicy` and `image.documentdb.pullPolicy`; existing
+  top-level overrides must be migrated.
+
+### Enhancements & Fixes
+
+- Introduce a product-neutral ClusterIntent abstraction without functional
+  changes (#446).
+- Expand E2E schema-upgrade coverage for automatic migrations, rollback, high
+  availability, and unpullable versions (#426, #443).
+- Add expired-backup cleanup tests and long-running data-protection verification
+  using ScheduledBackup and retention (#393, #419).
+- Add operator-pod and primary-pod failure injection, plus retention pruning to
+  bound long-running workload disk usage (#421, #422).
+
+### Documentation
+
+- Add multi-cloud deployment documentation (#399).
+
 ## [Unreleased]
 
 ### Major Features

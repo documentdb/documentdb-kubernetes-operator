@@ -1,5 +1,5 @@
 ---
-description: 'Agent for cutting releases of the DocumentDB Kubernetes Operator.'
+description: 'Agent for cutting stable releases and release candidates of the DocumentDB Kubernetes Operator.'
 tools: [execute, read, terminal, editFiles]
 ---
 # Release Agent Instructions
@@ -13,6 +13,7 @@ This agent is invoked when a user says:
 - "prepare release"
 - "bump version"
 - "create release {version}"
+- "create release candidate {version}"
 
 ## Release Process
 
@@ -20,14 +21,18 @@ This agent is invoked when a user says:
 
 1. **Read current version** from `operator/documentdb-helm-chart/Chart.yaml`
 2. **Determine new version**:
-   - If user provides a specific version (e.g., "release 0.2.0"), use that version
-   - If no version specified, increment the **patch version** by 1 (e.g., `0.1.3` → `0.1.4`)
-3. **Validate version format**: Must match semantic versioning `X.Y.Z`
-   - Version must only contain numbers and dots (regex: `^[0-9]+\.[0-9]+\.[0-9]+$`)
+   - If user provides a specific version (e.g., "release 0.2.0" or "create release candidate 1.0.0-rc1"), use that version unchanged
+   - If no version specified, increment the **patch version** by 1 (e.g., `0.1.3` → `0.1.4`); for a current RC, remove the suffix before incrementing (e.g., `1.0.0-rc1` → `1.0.1`). Finalizing an RC requires an explicit version (e.g., "release 1.0.0")
+3. **Validate version format**: Accept stable `X.Y.Z` and release candidates `X.Y.Z-rcN` or `X.Y.Z-rc.N`, where `N` is a positive integer
+   - Use this anchored regex: `^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.?[1-9][0-9]*)?$`
+   - Reject leading zeros in core version components or RC numbers, other prerelease labels, and build metadata
    - **Security**: Always validate version format BEFORE using in any shell commands to prevent command injection
    - Reject any version containing shell metacharacters (`;`, `|`, `&`, `$`, `` ` ``, `(`, `)`, etc.)
 4. **Validate version increment**: New version must be greater than current version
-   - Compare major, minor, then patch components
+   - Use SemVer precedence: compare major, minor, then patch numerically; for the same core version, a stable release is greater than any RC
+   - Compare prerelease identifiers using SemVer rules, not the whole version string: `rc.N` compares `N` numerically, while `rcN` is a single nonnumeric identifier compared lexically (so `rc10` sorts before `rc2`)
+   - Prefer `rc.N` for new RC sequences and do not mix RC styles within a sequence. Preserve an explicitly requested style such as `1.0.0-rc1`
+   - Examples: `0.2.0 < 1.0.0-rc1 < 1.0.0-rc2 < 1.0.0` and `1.0.0-rc.2 < 1.0.0-rc.10 < 1.0.0`
    - If new version ≤ current version, show error:
      ```
      ❌ Error: New version (0.1.2) must be greater than current version (0.1.3).
@@ -40,6 +45,7 @@ This agent is invoked when a user says:
 Update `operator/documentdb-helm-chart/Chart.yaml`:
 - Change `version:` to the new version
 - Change `appVersion:` to the new version (with quotes)
+- Preserve the RC suffix in both fields (e.g., `version: 1.0.0-rc1` and `appVersion: "1.0.0-rc1"`)
 
 **Example:**
 ```yaml
@@ -57,8 +63,8 @@ dependencies:
 ### Step 3: Generate Changelog Entry
 
 1. **Get the date of the most recent release**:
-   - Read `CHANGELOG.md` and find the date from the most recent release entry (format: `## [X.Y.Z] - YYYY-MM-DD`)
-   - Format: `## [X.Y.Z] - YYYY-MM-DD`
+   - Read `CHANGELOG.md` and find the date from the most recent release entry, including release candidates (format: `## [VERSION] - YYYY-MM-DD`)
+   - `VERSION` is the full validated version, including any RC suffix (e.g., `1.0.0-rc1`)
 
 2. **Fetch commit messages since last release**:
    ```bash
@@ -77,7 +83,7 @@ dependencies:
 
 4. **Create changelog entry** at the top of CHANGELOG.md (after the `# Changelog` header):
    ```markdown
-   ## [X.Y.Z] - YYYY-MM-DD
+   ## [VERSION] - YYYY-MM-DD
 
    ### Major Features
    - **Feature description from commit**
@@ -111,6 +117,8 @@ After making changes, display:
 | "cut a minor release" | Increment minor: `0.1.3` → `0.2.0` |
 | "cut a major release" | Increment major: `0.1.3` → `1.0.0` |
 | "release 0.2.1" | Use exact version: `0.2.1` |
+| "create release candidate 1.0.0-rc1" | Use exact version: `1.0.0-rc1` |
+| "release 1.0.0-rc.2" | Use exact version: `1.0.0-rc.2` |
 
 ## Changelog Format
 
@@ -119,7 +127,7 @@ Follow the existing changelog format:
 ```markdown
 # Changelog
 
-## [X.Y.Z] - YYYY-MM-DD
+## [VERSION] - YYYY-MM-DD
 
 ### Major Features
 - **Feature Name**: Brief description
@@ -198,7 +206,7 @@ After completing the release preparation, output:
     - `fix` → **Bug Fixes**
     - `docs` → **Documentation**
     - `chore`, `refactor`, `test`, `perf` → **Enhancements & Fixes**
-- If version format is invalid, ask user to provide valid semantic version
+- If version format is invalid, ask user to provide a supported stable or RC version (e.g., `1.0.0`, `1.0.0-rc1`, or `1.0.0-rc.1`)
 
 ## Important Notes
 
@@ -218,6 +226,8 @@ Use these commands to trigger the release agent:
 | `/release minor` | Increment minor version | `0.1.3` → `0.2.0` |
 | `/release major` | Increment major version | `0.1.3` → `1.0.0` |
 | `/release X.Y.Z` | Set exact version | `/release 0.2.1` |
+| `/release X.Y.Z-rcN` | Set exact RC version | `/release 1.0.0-rc1` |
+| `/release X.Y.Z-rc.N` | Set exact dotted RC version | `/release 1.0.0-rc.1` |
 
 ## Example Usage
 
@@ -240,6 +250,13 @@ Use these commands to trigger the release agent:
 ```
 @release-agent release 1.0.0
 ```
+
+### Release Candidate
+```
+@release-agent create release candidate 1.0.0-rc1
+```
+
+Use the full RC version in changelog headings, branch names (e.g., `release/v1.0.0-rc1`), commit messages, PR titles, and release workflow inputs. Preparing an RC does not publish it or create a PR unless requested.
 
 ### Release with Custom Changelog Entry
 ```
