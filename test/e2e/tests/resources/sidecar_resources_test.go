@@ -25,6 +25,11 @@ import (
 //	otel     = 48Mi request / 128Mi limit; cpu 50m req / 200m limit (monitoring on)
 //	postgres = 1024 − 192            = 832Mi   (monitoring off)
 //	postgres = 1024 − 192 − 128      = 704Mi   (monitoring on)
+//
+// The specs also check the rest of the sidecar wiring. The gateway has TCP
+// startup and liveness probes and no readiness probe. The OTel collector mounts
+// the data volume read-only through an empty subPath, so its hostmetrics
+// filesystem scraper reports the volume's usage without seeing data files.
 const (
 	podEnvelope         = "1Gi"
 	wantGatewayMem      = "192Mi"
@@ -34,6 +39,14 @@ const (
 	wantOTelMemLimit    = "128Mi"
 	wantOTelCPURequest  = "50m"
 	wantOTelCPULimit    = "200m"
+
+	gatewayPort = 10260
+	// gatewayEntrypointWaitSeconds is how long the gateway entrypoint waits
+	// for PostgreSQL before it listens; the startup probe must outlast it.
+	gatewayEntrypointWaitSeconds = 600
+	dataVolumeName               = "pgdata"
+	wantOTelDataMountPath        = "/var/lib/otel/pgdata"
+	wantOTelDataSubPath          = "otel-statfs"
 )
 
 var _ = Describe("Sidecar memory carve-out",
@@ -59,6 +72,9 @@ var _ = Describe("Sidecar memory carve-out",
 				gw := containerByName(pod, gatewayContainerName)
 				Expect(gw).ToNot(BeNil(), "gateway container present")
 				assertGuaranteedMemory(gw, wantGatewayMem)
+
+				By("checking the gateway's TCP probes")
+				assertGatewayProbes(gw)
 
 				pg := containerByName(pod, postgresContainerName)
 				Expect(pg).ToNot(BeNil(), "postgres container present")
@@ -99,6 +115,9 @@ var _ = Describe("Sidecar memory carve-out",
 					"otel cpu limit = %s, want %s", otel.Resources.Limits.Cpu(), wantOTelCPULimit)
 				Expect(hasEnv(otel, "GOMEMLIMIT")).To(BeTrue(),
 					"otel collector should have a GOMEMLIMIT env var")
+
+				By("checking the collector's read-only data volume mount")
+				assertOTelDataVolumeMount(otel)
 
 				pg := containerByName(pod, postgresContainerName)
 				Expect(pg).ToNot(BeNil(), "postgres container present")
@@ -148,4 +167,35 @@ func hasEnv(ctr *corev1.Container, name string) bool {
 		}
 	}
 	return false
+}
+
+// assertGatewayProbes asserts the gateway has TCP startup and liveness probes
+// on its listener port and no readiness probe.
+func assertGatewayProbes(gw *corev1.Container) {
+	GinkgoHelper()
+	for kind, probe := range map[string]*corev1.Probe{"startup": gw.StartupProbe, "liveness": gw.LivenessProbe} {
+		Expect(probe).ToNot(BeNil(), "gateway %s probe present", kind)
+		Expect(probe.TCPSocket).ToNot(BeNil(), "gateway %s probe uses tcpSocket", kind)
+		Expect(probe.TCPSocket.Port.IntValue()).To(Equal(gatewayPort), "gateway %s probe port", kind)
+	}
+	Expect(gw.StartupProbe.PeriodSeconds*gw.StartupProbe.FailureThreshold).To(
+		BeNumerically(">", gatewayEntrypointWaitSeconds),
+		"gateway startup probe must outlast the entrypoint's wait for PostgreSQL")
+	Expect(gw.ReadinessProbe).To(BeNil(), "gateway must not have a readiness probe")
+}
+
+// assertOTelDataVolumeMount asserts the collector mounts the PostgreSQL data
+// volume read-only through its own subPath.
+func assertOTelDataVolumeMount(otel *corev1.Container) {
+	GinkgoHelper()
+	var mount *corev1.VolumeMount
+	for i := range otel.VolumeMounts {
+		if otel.VolumeMounts[i].Name == dataVolumeName {
+			mount = &otel.VolumeMounts[i]
+		}
+	}
+	Expect(mount).ToNot(BeNil(), "otel collector mounts the %s volume", dataVolumeName)
+	Expect(mount.MountPath).To(Equal(wantOTelDataMountPath))
+	Expect(mount.SubPath).To(Equal(wantOTelDataSubPath))
+	Expect(mount.ReadOnly).To(BeTrue(), "otel collector data volume mount is read-only")
 }

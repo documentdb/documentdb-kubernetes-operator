@@ -206,6 +206,19 @@ The failover process occurs in two phases:
 !!! tip "Tuning for RTO vs RPO"
     Lower `stopDelay` values favor faster recovery (RTO) but may increase data loss risk (RPO). Higher values prioritize data safety but may delay recovery.
 
+### Gateway Container Restarts
+
+The `documentdb-gateway` container in each pod has TCP probes on port 10260:
+
+| Probe | Settings | Effect |
+|-------|----------|--------|
+| Startup | Every 10 seconds, up to 66 failures | Gives the gateway up to 11 minutes to start listening, which covers its wait for PostgreSQL. |
+| Liveness | Every 10 seconds, 5 second timeout, 6 failures | Restarts the gateway container after about one minute without accepting connections. |
+
+A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. The gateway has no readiness probe, because pod readiness covers every container: a failing gateway would remove PostgreSQL from the CloudNative-PG Services and break replication.
+
+The probes check only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes them until its connection backlog fills. Each probe connection appears in the gateway logs; see [Gateway probe connections](../monitoring/metrics.md#gateway-probe-connections).
+
 ## Monitoring and Failover Detection
 
 Understanding when a failover has occurred is essential for operations.
@@ -243,6 +256,8 @@ Track replication health using PostgreSQL system views:
 # View streaming replication status (run on primary)
 kubectl exec -n documentdb my-documentdb-1 -- psql -U postgres -c "SELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn FROM pg_stat_replication;"
 ```
+
+With `spec.monitoring.enabled: true`, each standby's OTel Collector sidecar also reports replication lag and WAL receiver state. See [PostgreSQL instance metrics](../monitoring/metrics.md#postgresql-instance).
 
 !!! tip "Alerting and Observability"
     For production monitoring, see the [CloudNative-PG Monitoring documentation](https://cloudnative-pg.io/documentation/current/monitoring/) which covers Prometheus metrics, Grafana dashboards, and alerting rules for failover detection.
