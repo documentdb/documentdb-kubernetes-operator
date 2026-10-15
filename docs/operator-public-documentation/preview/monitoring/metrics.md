@@ -41,13 +41,14 @@ Each instance reports these metrics for its local PostgreSQL server. Use `k8s.po
 
 | OpenTelemetry metric | Prometheus name | Type | Unit | Description |
 |----------------------|-----------------|------|------|-------------|
-| `documentdb.postgres.up` | `documentdb_postgres_up` | Gauge | | `1` when the local PostgreSQL container responds to the sidecar health query. |
+| `documentdb.postgres.up` | `documentdb_postgres_up` | Gauge | | `1` each time the sidecar's health query to the local PostgreSQL server succeeds. The sidecar never reports `0`. |
 | `documentdb.postgres.uptime` | `documentdb_postgres_uptime_seconds` | Gauge | `s` | Time since the local PostgreSQL server started. Resets whenever PostgreSQL restarts, including restarts inside a running pod. |
 | `documentdb.postgres.replication.lag` | `documentdb_postgres_replication_lag_seconds` | Gauge | `s` | Standbys only. Time since the last replayed transaction, or `0` when the standby has replayed all the WAL it received. |
 | `documentdb.postgres.replication.receiver.up` | `documentdb_postgres_replication_receiver_up` | Gauge | | Standbys only. `1` while the WAL receiver process runs, otherwise `0`. |
 | `documentdb.postgres.blocks.hit` | `documentdb_postgres_blocks_hit_total` | Counter | `{block}` | Blocks found in PostgreSQL shared buffers. |
 | `documentdb.postgres.blocks.read` | `documentdb_postgres_blocks_read_total` | Counter | `{block}` | Blocks read from outside shared buffers, including reads that the OS page cache serves. |
 
+- When the local PostgreSQL server does not answer, the sidecar records no PostgreSQL instance metrics. The Prometheus exporter keeps serving their last values, including `1` for `documentdb_postgres_up`, for up to 6 minutes, and then the series disappear. Detect an unresponsive server from an uptime that stops increasing or a missing `documentdb_postgres_up` series, not from `documentdb_postgres_up == 0`.
 - A standby that loses its connection to the primary also reports a lag of `0` once it has replayed everything it received. Read the lag together with `documentdb.postgres.replication.receiver.up`.
 - The primary does not report the replication metrics. After a standby is promoted, the Prometheus exporter keeps serving its last replication values for up to 6 minutes.
 - The block counters cover the PostgreSQL database that stores DocumentDB data. Compute the shared-buffer hit ratio from their rates.
@@ -59,6 +60,13 @@ rate(documentdb_postgres_blocks_hit_total[5m])
 
 # Standbys whose WAL receiver is not running
 documentdb_postgres_replication_receiver_up == 0
+
+# Instances whose PostgreSQL has not answered the sidecar for 2 minutes, before their series expire
+changes(documentdb_postgres_uptime_seconds[2m]) == 0
+
+# Pods whose PostgreSQL series have expired or never appeared
+count by (k8s_namespace_name, documentdb_cluster, k8s_pod_name) (system_network_io_bytes_total)
+  unless on (k8s_namespace_name, documentdb_cluster, k8s_pod_name) documentdb_postgres_up
 ```
 
 ### DocumentDB catalog

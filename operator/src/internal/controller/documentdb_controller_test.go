@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -2768,6 +2769,39 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 	})
 
+	Describe("clusterInstanceStatusChangedPredicate", func() {
+		// absentOtelRoleCluster declares the OTel monitoring role absent, as a
+		// cluster restored with monitoring disabled does.
+		absentOtelRoleCluster := func() *cnpgv1.Cluster {
+			return &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
+				Spec: cnpgv1.ClusterSpec{
+					Managed: &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{{
+						Name:   "otel_monitor",
+						Ensure: cnpgv1.EnsureAbsent,
+					}}},
+				},
+			}
+		}
+
+		DescribeTable("triggers on CNPG managed role status only for the OTel monitoring role",
+			func(role string, want bool) {
+				oldCluster := absentOtelRoleCluster()
+				newCluster := oldCluster.DeepCopy()
+				newCluster.Status.ManagedRolesStatus.CannotReconcile = map[string][]string{
+					role: {"role cannot be dropped because some objects depend on it"},
+				}
+
+				Expect(clusterInstanceStatusChangedPredicate().Update(event.UpdateEvent{
+					ObjectOld: oldCluster,
+					ObjectNew: newCluster,
+				})).To(Equal(want))
+			},
+			Entry("when CNPG cannot drop the OTel monitoring role", "otel_monitor", true),
+			Entry("when CNPG cannot drop another role", "app_user", false),
+		)
+	})
+
 	Describe("SetupWithManager", func() {
 		It("should initialize SQLExecutor before manager registration", func() {
 			reconciler := &DocumentDBReconciler{
@@ -3281,7 +3315,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Expect(result.RequeueAfter).To(BeZero())
 			})
 
-			It("revokes the grants again while CNPG cannot drop the role", func() {
+			It("revokes the grants while CNPG cannot drop the role, for example after a restore", func() {
 				cluster := newCluster(true, otelRole(cnpgv1.EnsureAbsent))
 				cluster.Status.ManagedRolesStatus.CannotReconcile = map[string][]string{
 					"otel_monitor": {"role cannot be dropped because some objects depend on it"},

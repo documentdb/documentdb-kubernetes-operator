@@ -172,7 +172,6 @@ func (impl Implementation) reconcileMetadata(
 		},
 		Env:             envVars,
 		SecurityContext: gatewaySecurityContext(),
-		StartupProbe:    gatewayStartupProbe(),
 		LivenessProbe:   gatewayLivenessProbe(),
 	}
 	if resources := buildResources(
@@ -509,28 +508,22 @@ const otelDataVolumeMountPath = "/var/lib/otel/pgdata"
 // volume's capacity and usage while no data files are visible.
 const otelDataVolumeSubPath = "otel-statfs"
 
-// gatewayStartupProbe holds off the liveness probe until the gateway listens.
-// The gateway entrypoint waits up to 600 s for PostgreSQL before it opens its
-// port, so the probe allows 66 x 10 s = 660 s.
-func gatewayStartupProbe() *corev1.Probe {
-	return &corev1.Probe{
-		ProbeHandler:     gatewayTCPProbeHandler(),
-		PeriodSeconds:    10,
-		FailureThreshold: 66,
-	}
-}
-
 // gatewayLivenessProbe restarts only the gateway container after it stops
 // accepting TCP connections for about a minute; PostgreSQL keeps running.
-// The gateway deliberately has no readiness probe: pod readiness covers every
-// container, so a failing gateway would remove PostgreSQL from the CNPG
-// Services and break replication.
+// The first check waits 600 s because the gateway entrypoint waits up to that
+// long for PostgreSQL before it opens its port.
+//
+// The gateway deliberately has no readiness or startup probe. Pod readiness
+// covers every container, and a container with a startup probe is not ready
+// until that probe succeeds, so either probe would remove PostgreSQL from the
+// CNPG Services while the gateway is not listening and break replication.
 func gatewayLivenessProbe() *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler:     gatewayTCPProbeHandler(),
-		PeriodSeconds:    10,
-		TimeoutSeconds:   5,
-		FailureThreshold: 6,
+		ProbeHandler:        gatewayTCPProbeHandler(),
+		InitialDelaySeconds: 600,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
+		FailureThreshold:    6,
 	}
 }
 
