@@ -217,7 +217,7 @@ The `documentdb-gateway` container in each pod has TCP probes on port 10260:
 
 A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. The gateway has no readiness probe, because pod readiness covers every container: a failing gateway would remove PostgreSQL from the CloudNative-PG Services and break replication.
 
-The probes check only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes them until its connection backlog fills. Each probe connection appears in the gateway logs; see [Gateway probe connections](../monitoring/metrics.md#gateway-probe-connections).
+The probes check only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes them until its connection backlog fills. Each probe opens a connection and closes it without sending data, and the gateway logs it as a failed connection at `ERROR` level. With the liveness probe running every 10 seconds, expect about six of these entries per minute in each pod's gateway logs.
 
 ## Monitoring and Failover Detection
 

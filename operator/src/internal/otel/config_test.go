@@ -171,7 +171,7 @@ var _ = Describe("base_config.yaml embed", func() {
 		// The subPath mount is a bind mount; without this the scraper drops it.
 		Expect(filesystem["include_virtual_filesystems"]).To(BeTrue())
 		Expect(filesystem["include_mount_points"]).To(Equal(map[string]any{
-			"mount_points": []any{DataVolumeMountPath},
+			"mount_points": []any{"/var/lib/otel/pgdata"},
 			"match_type":   "strict",
 		}))
 
@@ -184,11 +184,6 @@ var _ = Describe("base_config.yaml embed", func() {
 		Expect(network["metrics"]).To(Equal(map[string]any{
 			"system.network.connections": map[string]any{"enabled": false},
 		}))
-	})
-
-	It("pins the data volume mount path shared with the sidecar-injector plugin", func() {
-		// The plugin module mounts the volume at the same literal path; change both together.
-		Expect(DataVolumeMountPath).To(Equal("/var/lib/otel/pgdata"))
 	})
 })
 

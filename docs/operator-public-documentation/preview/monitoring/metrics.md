@@ -140,10 +140,6 @@ The preview monitoring API is intentionally small while instrumentation lands. T
 | CNPG/PostgreSQL internals | The sidecar reports the curated PostgreSQL metrics listed above. Other CloudNativePG and PostgreSQL internals, such as WAL health, are out of preview scope. |
 | Operator controller metrics | Not yet exposed end-to-end through the operator Helm chart. |
 
-## Gateway probe connections
-
-The `documentdb-gateway` container has TCP startup and liveness probes on port 10260 (see [Gateway Container Restarts](../high-availability/local-ha.md#gateway-container-restarts)). Each probe opens a connection and closes it without sending data. The liveness probe runs every 10 seconds, so each pod's gateway accepts about six such connections per minute and logs each one as a failed connection at `ERROR` level. Expect this baseline in gateway logs, and in gateway connection metrics if your gateway image emits them.
-
 ## Pod and container resource metrics
 
 The sidecar reports the data volume usage and pod network I/O listed under [Pod filesystem and network](#pod-filesystem-and-network). CPU, memory, ephemeral storage, and node metrics are Kubernetes platform metrics. The DocumentDB operator does not install a node-level collector or grant kubelet permissions to DocumentDB pods.

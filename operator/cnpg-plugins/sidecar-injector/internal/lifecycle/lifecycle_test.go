@@ -261,9 +261,8 @@ func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
 
 // TestLifecycleHookMountsDataVolumeOnCollector checks that the collector
 // mounts the data volume read-only on an empty subPath, and only when the pod
-// has the CNPG pgdata volume. The mount path must stay equal to
-// DataVolumeMountPath in operator/src/internal/otel, which the hostmetrics
-// filesystem scraper reports.
+// has the CNPG pgdata volume. The mount path must stay equal to the hostmetrics
+// filesystem mount point in operator/src/internal/otel/base_config.yaml.
 func TestLifecycleHookMountsDataVolumeOnCollector(t *testing.T) {
 	wantMount := corev1.VolumeMount{
 		Name:      "pgdata",
