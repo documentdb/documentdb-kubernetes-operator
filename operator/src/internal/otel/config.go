@@ -37,12 +37,6 @@ const MonitorRoleName = "otel_monitor"
 // Document data lives in documentdb_data, which is not granted.
 var MonitorSchemas = []string{"documentdb_core", "documentdb_api_internal", "documentdb_api_catalog"}
 
-// DataVolumeMountPath is where the sidecar-injector plugin mounts the
-// PostgreSQL data volume (read-only, on an empty subPath) in the collector
-// container. The hostmetrics filesystem scraper in base_config.yaml reports
-// this mount point. The plugin module defines the same path; keep them equal.
-const DataVolumeMountPath = "/var/lib/otel/pgdata"
-
 // collectorConfig represents the OTel Collector configuration structure.
 type collectorConfig struct {
 	Receivers  map[string]any `yaml:"receivers,omitempty"`

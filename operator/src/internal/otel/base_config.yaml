@@ -150,6 +150,7 @@ receivers:
         # still limits the output to the data volume.
         include_virtual_filesystems: true
         include_mount_points:
+          # Keep equal to otelDataVolumeMountPath in the sidecar-injector plugin.
           mount_points: ["/var/lib/otel/pgdata"]
           match_type: strict
         metrics:

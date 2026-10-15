@@ -500,8 +500,8 @@ const dataVolumeName = "pgdata"
 
 // otelDataVolumeMountPath is where the collector mounts the data volume. The
 // hostmetrics filesystem scraper in the operator's collector config
-// (DataVolumeMountPath in operator/src/internal/otel) reports this mount
-// point; keep the two paths equal.
+// (operator/src/internal/otel/base_config.yaml) reports this mount point; keep
+// the two paths equal.
 const otelDataVolumeMountPath = "/var/lib/otel/pgdata"
 
 // otelDataVolumeSubPath is the directory the collector mounts from the data
