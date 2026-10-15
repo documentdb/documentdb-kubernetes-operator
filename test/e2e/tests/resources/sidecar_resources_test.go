@@ -10,6 +10,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
+	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
 )
 
 // These specs validate the pod memory carve-out (sidecar resource isolation).
@@ -103,6 +105,27 @@ var _ = Describe("Sidecar memory carve-out",
 				pg := containerByName(pod, postgresContainerName)
 				Expect(pg).ToNot(BeNil(), "postgres container present")
 				assertGuaranteedMemory(pg, wantPostgresWithMon)
+
+				// This is the suite's only monitoring-on cluster, so it is the
+				// only place the collector's PSA hardening (#387) can be checked
+				// end-to-end. Two separate assertions because they fail for
+				// different reasons: a missing collector is a plumbing problem,
+				// a bad securityContext is the #387 problem.
+				Eventually(assertions.AssertSidecarsInjected(
+					ctx, c, cr.Namespace, cr.Name, otelContainerName),
+					timeouts.For(timeouts.DocumentDBReady),
+					timeouts.PollInterval(timeouts.DocumentDBReady),
+				).Should(Succeed(), "monitoring-on cluster must have the otel-collector injected")
+
+				// The fixture labels the namespace restricted, so reaching
+				// healthy already proves the sidecars passed admission; the
+				// explicit field checks name the offending field instead of
+				// leaving an opaque pod-creation failure.
+				Eventually(assertions.AssertInjectedSidecarsPSARestricted(
+					ctx, c, cr.Namespace, cr.Name),
+					timeouts.For(timeouts.DocumentDBReady),
+					timeouts.PollInterval(timeouts.DocumentDBReady),
+				).Should(Succeed(), "monitoring-on cluster pods must carry PSA-restricted securityContext")
 			})
 
 		It("derives the envelope from per-container memory when the envelope is omitted",

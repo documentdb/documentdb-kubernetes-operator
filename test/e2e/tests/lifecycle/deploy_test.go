@@ -105,7 +105,8 @@ var _ = Describe("DocumentDB lifecycle — deploy",
 			// This spec deploys with monitoring off, so only the
 			// always-injected documentdb-gateway sidecar is present;
 			// the otel-collector sidecar (injected only when monitoring
-			// is enabled) is covered by the sidecar-injector unit test.
+			// is enabled) is covered end-to-end by the monitoring-on spec
+			// in tests/resources and by the sidecar-injector unit test.
 			// The shared helper errors if no injected sidecar is found,
 			// so this cannot pass vacuously.
 			Eventually(assertions.AssertInjectedSidecarsPSARestricted(ctx, c, ns, name),
