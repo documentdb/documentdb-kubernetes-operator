@@ -313,10 +313,11 @@ func TestLifecycleHookMountsDataVolumeOnCollector(t *testing.T) {
 	}
 }
 
-// TestLifecycleHookAddsGatewayTCPProbes checks the gateway startup and
-// liveness probes, and that the gateway has no readiness probe because a
-// failing gateway must not take PostgreSQL out of the CNPG Services.
-func TestLifecycleHookAddsGatewayTCPProbes(t *testing.T) {
+// TestLifecycleHookAddsGatewayLivenessProbe checks the gateway liveness probe,
+// and that the gateway has no readiness or startup probe: either would keep the
+// pod unready, and so take PostgreSQL out of the CNPG Services, while the
+// gateway is not listening.
+func TestLifecycleHookAddsGatewayLivenessProbe(t *testing.T) {
 	containers := runCreateHook(t, map[string]string{}, primaryPod())
 
 	gateway, ok := containers[gatewayContainerName]
@@ -326,26 +327,21 @@ func TestLifecycleHookAddsGatewayTCPProbes(t *testing.T) {
 	if gateway.ReadinessProbe != nil {
 		t.Errorf("gateway ReadinessProbe = %+v, want nil", gateway.ReadinessProbe)
 	}
-
-	startup := gateway.StartupProbe
-	assertTCPProbe(t, "startup", startup, 10260)
-	if startup != nil {
-		if startup.PeriodSeconds != 10 || startup.FailureThreshold != 66 {
-			t.Errorf("startup period/failureThreshold = %d/%d, want 10/66",
-				startup.PeriodSeconds, startup.FailureThreshold)
-		}
-		// The gateway entrypoint waits up to 600 s for PostgreSQL before it listens.
-		if budget := startup.PeriodSeconds * startup.FailureThreshold; budget <= 600 {
-			t.Errorf("startup probe budget = %d s, want more than 600 s", budget)
-		}
+	if gateway.StartupProbe != nil {
+		t.Errorf("gateway StartupProbe = %+v, want nil", gateway.StartupProbe)
 	}
 
 	liveness := gateway.LivenessProbe
 	assertTCPProbe(t, "liveness", liveness, 10260)
-	if liveness != nil &&
-		(liveness.PeriodSeconds != 10 || liveness.TimeoutSeconds != 5 || liveness.FailureThreshold != 6) {
-		t.Errorf("liveness period/timeout/failureThreshold = %d/%d/%d, want 10/5/6",
-			liveness.PeriodSeconds, liveness.TimeoutSeconds, liveness.FailureThreshold)
+	if liveness != nil {
+		if liveness.PeriodSeconds != 10 || liveness.TimeoutSeconds != 5 || liveness.FailureThreshold != 6 {
+			t.Errorf("liveness period/timeout/failureThreshold = %d/%d/%d, want 10/5/6",
+				liveness.PeriodSeconds, liveness.TimeoutSeconds, liveness.FailureThreshold)
+		}
+		// The gateway entrypoint waits up to 600 s for PostgreSQL before it listens.
+		if liveness.InitialDelaySeconds < 600 {
+			t.Errorf("liveness initialDelaySeconds = %d, want at least 600", liveness.InitialDelaySeconds)
+		}
 	}
 }
 

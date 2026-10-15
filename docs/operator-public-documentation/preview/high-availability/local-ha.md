@@ -208,16 +208,17 @@ The failover process occurs in two phases:
 
 ### Gateway Container Restarts
 
-The `documentdb-gateway` container in each pod has TCP probes on port 10260:
+The `documentdb-gateway` container in each pod has a TCP liveness probe on port 10260:
 
 | Probe | Settings | Effect |
 |-------|----------|--------|
-| Startup | Every 10 seconds, up to 66 failures | Gives the gateway up to 11 minutes to start listening, which covers its wait for PostgreSQL. |
-| Liveness | Every 10 seconds, 5 second timeout, 6 failures | Restarts the gateway container after about one minute without accepting connections. |
+| Liveness | First check 10 minutes after the container starts, then every 10 seconds, 5 second timeout, 6 failures | Restarts the gateway container after about one minute without accepting connections. The initial delay covers the gateway's wait for PostgreSQL at startup. |
 
-A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. The gateway has no readiness probe, because pod readiness covers every container: a failing gateway would remove PostgreSQL from the CloudNative-PG Services and break replication.
+A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. Because the first check waits 10 minutes, a gateway that never starts listening, or stops within 10 minutes of starting, is restarted about 11 minutes after it started.
 
-The probes check only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes them until its connection backlog fills. Each probe opens a connection and closes it without sending data, and the gateway logs it as a failed connection at `ERROR` level. With the liveness probe running every 10 seconds, expect about six of these entries per minute in each pod's gateway logs.
+The gateway has no readiness or startup probe. Pod readiness covers every container, and a container with a startup probe is not ready until that probe succeeds, so either probe would remove PostgreSQL from the CloudNative-PG Services while the gateway is not listening and break replication. The gateway affects pod readiness only while its container is restarting.
+
+The probe checks only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes it until its connection backlog fills. Each probe opens a connection and closes it without sending data, and the gateway logs it as a failed connection at `ERROR` level. Once the checks start, expect about six of these entries per minute in each pod's gateway logs.
 
 ## Monitoring and Failover Detection
 

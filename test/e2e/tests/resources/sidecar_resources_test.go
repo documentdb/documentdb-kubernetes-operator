@@ -26,8 +26,8 @@ import (
 //	postgres = 1024 − 192            = 832Mi   (monitoring off)
 //	postgres = 1024 − 192 − 128      = 704Mi   (monitoring on)
 //
-// The specs also check the rest of the sidecar wiring. The gateway has TCP
-// startup and liveness probes and no readiness probe. The OTel collector mounts
+// The specs also check the rest of the sidecar wiring. The gateway has a TCP
+// liveness probe and no startup or readiness probe. The OTel collector mounts
 // the data volume read-only through an empty subPath, so its hostmetrics
 // filesystem scraper reports the volume's usage without seeing data files.
 const (
@@ -42,7 +42,8 @@ const (
 
 	gatewayPort = 10260
 	// gatewayEntrypointWaitSeconds is how long the gateway entrypoint waits
-	// for PostgreSQL before it listens; the startup probe must outlast it.
+	// for PostgreSQL before it listens; the liveness probe's initial delay
+	// must cover it.
 	gatewayEntrypointWaitSeconds = 600
 	dataVolumeName               = "pgdata"
 	wantOTelDataMountPath        = "/var/lib/otel/pgdata"
@@ -73,7 +74,7 @@ var _ = Describe("Sidecar memory carve-out",
 				Expect(gw).ToNot(BeNil(), "gateway container present")
 				assertGuaranteedMemory(gw, wantGatewayMem)
 
-				By("checking the gateway's TCP probes")
+				By("checking the gateway's TCP liveness probe")
 				assertGatewayProbes(gw)
 
 				pg := containerByName(pod, postgresContainerName)
@@ -169,18 +170,18 @@ func hasEnv(ctr *corev1.Container, name string) bool {
 	return false
 }
 
-// assertGatewayProbes asserts the gateway has TCP startup and liveness probes
-// on its listener port and no readiness probe.
+// assertGatewayProbes asserts the gateway has a TCP liveness probe on its
+// listener port that waits out the entrypoint, and no startup or readiness
+// probe.
 func assertGatewayProbes(gw *corev1.Container) {
 	GinkgoHelper()
-	for kind, probe := range map[string]*corev1.Probe{"startup": gw.StartupProbe, "liveness": gw.LivenessProbe} {
-		Expect(probe).ToNot(BeNil(), "gateway %s probe present", kind)
-		Expect(probe.TCPSocket).ToNot(BeNil(), "gateway %s probe uses tcpSocket", kind)
-		Expect(probe.TCPSocket.Port.IntValue()).To(Equal(gatewayPort), "gateway %s probe port", kind)
-	}
-	Expect(gw.StartupProbe.PeriodSeconds*gw.StartupProbe.FailureThreshold).To(
-		BeNumerically(">", gatewayEntrypointWaitSeconds),
-		"gateway startup probe must outlast the entrypoint's wait for PostgreSQL")
+	probe := gw.LivenessProbe
+	Expect(probe).ToNot(BeNil(), "gateway liveness probe present")
+	Expect(probe.TCPSocket).ToNot(BeNil(), "gateway liveness probe uses tcpSocket")
+	Expect(probe.TCPSocket.Port.IntValue()).To(Equal(gatewayPort), "gateway liveness probe port")
+	Expect(probe.InitialDelaySeconds).To(BeNumerically(">=", gatewayEntrypointWaitSeconds),
+		"gateway liveness probe must wait out the entrypoint's wait for PostgreSQL")
+	Expect(gw.StartupProbe).To(BeNil(), "gateway must not have a startup probe")
 	Expect(gw.ReadinessProbe).To(BeNil(), "gateway must not have a readiness probe")
 }
 

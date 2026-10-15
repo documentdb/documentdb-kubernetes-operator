@@ -523,9 +523,14 @@ func clusterInstanceStatusChangedPredicate() predicate.Predicate {
 			if !ok {
 				return true
 			}
-			// Trigger on healthy instances change OR phase change
+			// Trigger on healthy instances change OR phase change, and when the
+			// OTel monitoring role may start or stop existing: CNPG reports a role
+			// it cannot drop only in its status, for example after restoring a
+			// backup taken with monitoring enabled, and the controller must then
+			// revoke the role's schema grants.
 			return !slices.Equal(oldCluster.Status.InstancesStatus[cnpgv1.PodHealthy], newCluster.Status.InstancesStatus[cnpgv1.PodHealthy]) ||
-				oldCluster.Status.Phase != newCluster.Status.Phase
+				oldCluster.Status.Phase != newCluster.Status.Phase ||
+				cnpg.OtelMonitorRoleMayExist(oldCluster) != cnpg.OtelMonitorRoleMayExist(newCluster)
 		},
 	}
 }
