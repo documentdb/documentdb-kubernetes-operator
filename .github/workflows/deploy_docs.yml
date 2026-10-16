@@ -8,18 +8,20 @@ on:
       - 'docs/**'
       - 'mkdocs.yml'
   release:
-    types: [published]
+    types: [published, released]
 
 permissions:
   contents: write
 
-# Allow only one concurrent deployment
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
   deploy-docs:
+    # A full release fires "published" and "released" and only "released" deploys it. Skipping the
+    # other run keeps it out of the queue, where it would replace a pending deploy.
+    if: github.event_name != 'release' || github.event.action == 'released' || github.event.release.prerelease
+    # Allow only one concurrent deployment
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +40,25 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # Release tags must be chart versions: the docs stamp the tag into `helm --version` and CRD URLs.
+      - name: Check release tag matches chart version
+        if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          CHART_VERSION=$(sed -nE 's/^version:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' operator/documentdb-helm-chart/Chart.yaml)
+          if [[ "$TAG" != "$CHART_VERSION" ]]; then
+            echo "::error::Release tag '$TAG' does not match Chart.yaml version '$CHART_VERSION'"
+            exit 1
+          fi
+
+      # Dev docs get main's chart version so copied commands stay runnable.
+      - name: Stamp chart version into dev docs
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: |
+          CHART_VERSION=$(sed -nE 's/^version:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' operator/documentdb-helm-chart/Chart.yaml)
+          find docs/operator-public-documentation -name '*.md' -exec sed -i "s|<release-version>|${CHART_VERSION}|g" {} +
+
       # On push to main: deploy as "dev" version
       - name: Deploy dev docs
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -50,9 +71,18 @@ jobs:
           VERSION=${{ github.event.release.tag_name }}
           find docs/operator-public-documentation -name '*.md' -exec sed -i "s|<release-version>|${VERSION}|g" {} +
 
+      # "released" also fires when a prerelease is later marked as a release.
       - name: Deploy release docs
         if: github.event_name == 'release'
+        env:
+          ACTION: ${{ github.event.action }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           VERSION=${{ github.event.release.tag_name }}
-          mike deploy ${VERSION} latest --push --update-aliases
-          mike set-default latest --push
+          # A prerelease must not take over the "latest" docs that external links point at.
+          if [[ "$ACTION" == "published" && "$PRERELEASE" == "true" ]]; then
+            mike deploy ${VERSION} --push
+          elif [[ "$ACTION" == "released" ]]; then
+            mike deploy ${VERSION} latest --push --update-aliases
+            mike set-default latest --push
+          fi

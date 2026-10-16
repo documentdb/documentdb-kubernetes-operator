@@ -54,7 +54,7 @@ const (
 
 	// DEFAULT_DOCUMENTDB_TAG is the default tag for the extension and gateway
 	// images when neither an explicit image nor a version is supplied.
-	DEFAULT_DOCUMENTDB_TAG = "0.117.0"
+	DEFAULT_DOCUMENTDB_TAG = "1.0.0"
 
 	// DEFAULT_DOCUMENTDB_IMAGE is the extension image used in ImageVolume mode.
 	DEFAULT_DOCUMENTDB_IMAGE = DOCUMENTDB_EXTENSION_IMAGE_REPO + ":" + DEFAULT_DOCUMENTDB_TAG

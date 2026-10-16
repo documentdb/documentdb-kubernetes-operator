@@ -237,7 +237,7 @@ var _ = Describe("DocumentDB upgrade — schema",
 
 			// Runs after the happy-path spec (Ordered), so the shared cluster
 			// is at newVersion with the schema finalized. We deliberately use a
-			// version ABOVE the installed schema (0.999.0) so the image-rollback
+			// version ABOVE the installed schema (<major>.999.0) so the image-rollback
 			// webhook admits the patch — a version below the installed schema
 			// would instead be rejected at admission (a different guard). The
 			// bogus tag has no published image, so its pods can never pull.
@@ -250,7 +250,7 @@ var _ = Describe("DocumentDB upgrade — schema",
 			// operator's safety contract: the installed schema must not advance
 			// while the target binary can't start, and the cluster must fully
 			// recover with data intact once the version is rolled back.
-			const bogusVersion = "0.999.0"
+			bogusVersion := unpullableVersionAbove(newVersion)
 
 			schemaVersion := schemaVersionGetter(ctx, c, key)
 

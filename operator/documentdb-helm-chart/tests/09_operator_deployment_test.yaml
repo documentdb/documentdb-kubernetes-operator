@@ -46,7 +46,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/operator:0.3.0"
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/operator:1.0.0"
 
   - it: should use a custom image tag when set
     set:
@@ -71,7 +71,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "mcr.microsoft.com/documentdb/documentdb-kubernetes-operator/operator:0.3.0"
+          value: "mcr.microsoft.com/documentdb/documentdb-kubernetes-operator/operator:1.0.0"
 
   - it: should use a per-component full-ref repository verbatim, ignoring image.registry
     set:
@@ -254,7 +254,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: DOCUMENTDB_VERSION
-            value: "1.0-RC2"
+            value: "1.0.0"
 
   - it: should omit DOCUMENTDB_VERSION env when documentDbVersion is empty
     set:

@@ -6,7 +6,7 @@ replicaCount: 1
 # which determines the default documentdb extension and gateway image tags at runtime.
 # This version is INDEPENDENT of Chart.appVersion (which controls operator/sidecar image tags).
 # When empty, the operator falls back to its compiled-in defaults (see constants.go).
-documentDbVersion: "1.0-RC2"
+documentDbVersion: "1.0.0"
 
 serviceAccount:
   create: true

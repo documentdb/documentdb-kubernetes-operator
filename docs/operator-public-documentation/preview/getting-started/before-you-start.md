@@ -74,6 +74,18 @@ Minimum resources for a basic DocumentDB deployment:
 | **Storage** | 10 GB | 50+ GB (SSD recommended) |
 | **Nodes** | 1 | 3+ (for high availability) |
 
+### Version compatibility
+
+The operator and the DocumentDB engine have separate version numbers. The Helm chart version is the operator version; each chart deploys a default engine version (the chart's `documentDbVersion`) that you can override per cluster with `spec.documentDBVersion`.
+
+| Operator (Helm chart) | Default DocumentDB engine | Status |
+|-----------------------|---------------------------|--------|
+| `1.0.0` | `1.0.0` (extension schema `1.0-0`) | Generally available |
+| `1.0.0-rc1` | `1.0-RC2` | Release candidate |
+| `0.3.0` | `0.110.0` | Preview |
+
+Use operator `1.0.0` for DocumentDB 1.0. To move existing clusters to 1.0, see [Upgrading to DocumentDB 1.0](../operations/upgrades.md#upgrading-to-documentdb-10).
+
 ## Terminology
 
 ### Kubernetes concepts
