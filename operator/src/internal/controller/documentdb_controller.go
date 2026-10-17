@@ -208,6 +208,21 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: requeueTime}, nil
 	}
 
+	// otelMonitorPending requeues the reconcile while the OTel monitoring
+	// role's schema grants are not settled, without blocking the steps below.
+	otelMonitorPending := false
+
+	// Schema grants block CNPG's DROP ROLE, so revoke them before the role is
+	// declared absent. Until they are revoked, keep the role as declared.
+	// Replica clusters skip this: CNPG manages roles only on the primary
+	// cluster, which revokes the grants and replicates the change.
+	if !monitoringEnabled && replicationContext.IsPrimary() && cnpg.OtelMonitorRoleMayExist(currentCnpgCluster) {
+		if !r.revokeOtelMonitorGrants(ctx, currentCnpgCluster) {
+			cnpg.RetainOtelMonitorRole(desiredCnpgCluster, currentCnpgCluster)
+			otelMonitorPending = true
+		}
+	}
+
 	// Sync all CNPG Cluster changes in one atomic patch (images + plugins + replication)
 	if err := cnpg.SyncCnpgCluster(ctx, r.Client, currentCnpgCluster, desiredCnpgCluster, replicationOps); err != nil {
 		logger.Error(err, "Failed to sync CNPG Cluster spec")
@@ -224,7 +239,7 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {
+	if isPrimaryHealthy(currentCnpgCluster) && replicationContext.IsPrimary() {
 		// Check if permissions have already been granted
 		checkCommand := "SELECT 1 FROM pg_roles WHERE rolname = 'streaming_replica' AND pg_has_role('streaming_replica', 'documentdb_admin_role', 'USAGE');"
 		output, err := r.SQLExecutor(ctx, currentCnpgCluster, checkCommand)
@@ -240,6 +255,15 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				logger.Error(err, "Failed to grant permissions to streaming_replica")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
+		}
+
+		// The grants replicate to standbys and replica clusters.
+		if monitoringEnabled {
+			roleMissing, err := r.grantOtelMonitorSchemas(ctx, currentCnpgCluster)
+			if err != nil {
+				logger.Error(err, "Failed to grant schema usage to the OTel monitoring role")
+			}
+			otelMonitorPending = otelMonitorPending || roleMissing || err != nil
 		}
 	}
 
@@ -315,6 +339,10 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Check if documentdb extension needs ALTER EXTENSION UPDATE
 	if err := r.handleExtensionUpgrade(ctx, currentCnpgCluster, documentdb); err != nil {
 		logger.Error(err, "Failed to handle DocumentDB extension upgrade")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	if otelMonitorPending {
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 
@@ -495,9 +523,14 @@ func clusterInstanceStatusChangedPredicate() predicate.Predicate {
 			if !ok {
 				return true
 			}
-			// Trigger on healthy instances change OR phase change
+			// Trigger on healthy instances change OR phase change, and when the
+			// OTel monitoring role may start or stop existing: CNPG reports a role
+			// it cannot drop only in its status, for example after restoring a
+			// backup taken with monitoring enabled, and the controller must then
+			// revoke the role's schema grants.
 			return !slices.Equal(oldCluster.Status.InstancesStatus[cnpgv1.PodHealthy], newCluster.Status.InstancesStatus[cnpgv1.PodHealthy]) ||
-				oldCluster.Status.Phase != newCluster.Status.Phase
+				oldCluster.Status.Phase != newCluster.Status.Phase ||
+				cnpg.OtelMonitorRoleMayExist(oldCluster) != cnpg.OtelMonitorRoleMayExist(newCluster)
 		},
 	}
 }
@@ -1066,4 +1099,101 @@ func (r *DocumentDBReconciler) deleteOtelConfigMap(ctx context.Context, clusterN
 	}
 	logger.Info("OTel ConfigMap deleted", "name", cmName)
 	return nil
+}
+
+// isPrimaryHealthy reports whether CNPG lists the cluster's current primary
+// among its healthy instances.
+func isPrimaryHealthy(cluster *cnpgv1.Cluster) bool {
+	return slices.Contains(cluster.Status.InstancesStatus[cnpgv1.PodHealthy], cluster.Status.CurrentPrimary)
+}
+
+// grantOtelMonitorSchemas grants the OTel monitoring role USAGE on
+// otelcfg.MonitorSchemas when it does not hold it yet. It returns true when the
+// role does not exist yet: CNPG creates managed roles asynchronously, so the
+// caller retries later.
+func (r *DocumentDBReconciler) grantOtelMonitorSchemas(ctx context.Context, cluster *cnpgv1.Cluster) (bool, error) {
+	output, err := r.SQLExecutor(ctx, cluster, otelMonitorGrantStateSQL())
+	if err != nil {
+		return false, fmt.Errorf("failed to check the OTel monitoring role's schema grants: %w", err)
+	}
+	switch state := parseOtelMonitorGrantState(output); state {
+	case otelMonitorGranted:
+		return false, nil
+	case otelMonitorRoleMissing:
+		return true, nil
+	case otelMonitorNotGranted:
+		if _, err := r.SQLExecutor(ctx, cluster, otelMonitorGrantSQL()); err != nil {
+			return false, err
+		}
+		log.FromContext(ctx).Info("Granted schema usage to the OTel monitoring role",
+			"role", otelcfg.MonitorRoleName, "schemas", otelcfg.MonitorSchemas)
+		return false, nil
+	default:
+		return false, fmt.Errorf("unexpected OTel monitoring role grant state: %q", output)
+	}
+}
+
+// revokeOtelMonitorGrants revokes the OTel monitoring role's schema grants on
+// the healthy primary so that CNPG can drop the role. It returns false when the
+// grants could not be revoked.
+func (r *DocumentDBReconciler) revokeOtelMonitorGrants(ctx context.Context, cluster *cnpgv1.Cluster) bool {
+	logger := log.FromContext(ctx)
+	if !isPrimaryHealthy(cluster) {
+		logger.Info("Keeping the OTel monitoring role until a healthy primary can revoke its schema grants")
+		return false
+	}
+	if _, err := r.SQLExecutor(ctx, cluster, otelMonitorRevokeSQL()); err != nil {
+		logger.Error(err, "Failed to revoke schema usage from the OTel monitoring role")
+		return false
+	}
+	return true
+}
+
+// States reported by otelMonitorGrantStateSQL.
+const (
+	otelMonitorGranted     = "granted"
+	otelMonitorNotGranted  = "pending"
+	otelMonitorRoleMissing = "missing"
+)
+
+// otelMonitorGrantStateSQL reports whether the OTel monitoring role is
+// missing, lacks USAGE on any of otelcfg.MonitorSchemas, or holds all of it.
+func otelMonitorGrantStateSQL() string {
+	checks := make([]string, 0, len(otelcfg.MonitorSchemas))
+	for _, schema := range otelcfg.MonitorSchemas {
+		checks = append(checks, fmt.Sprintf("has_schema_privilege(r.oid, '%s', 'USAGE')", schema))
+	}
+	return fmt.Sprintf(
+		"SELECT CASE WHEN r.oid IS NULL THEN '%s' WHEN %s THEN '%s' ELSE '%s' END AS otel_monitor_grants "+
+			"FROM (SELECT 1) AS one LEFT JOIN pg_roles r ON r.rolname = '%s';",
+		otelMonitorRoleMissing, strings.Join(checks, " AND "), otelMonitorGranted, otelMonitorNotGranted,
+		otelcfg.MonitorRoleName,
+	)
+}
+
+// parseOtelMonitorGrantState extracts the state from the psql output of
+// otelMonitorGrantStateSQL, or returns "" when no state is found.
+func parseOtelMonitorGrantState(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		switch state := strings.TrimSpace(line); state {
+		case otelMonitorGranted, otelMonitorNotGranted, otelMonitorRoleMissing:
+			return state
+		}
+	}
+	return ""
+}
+
+func otelMonitorGrantSQL() string {
+	return fmt.Sprintf("GRANT USAGE ON SCHEMA %s TO %s;",
+		strings.Join(otelcfg.MonitorSchemas, ", "), otelcfg.MonitorRoleName)
+}
+
+// otelMonitorRevokeSQL revokes the schema grants and does nothing when the
+// role does not exist.
+func otelMonitorRevokeSQL() string {
+	return fmt.Sprintf(
+		"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '%s') THEN "+
+			"REVOKE USAGE ON SCHEMA %s FROM %s; END IF; END $$;",
+		otelcfg.MonitorRoleName, strings.Join(otelcfg.MonitorSchemas, ", "), otelcfg.MonitorRoleName,
+	)
 }

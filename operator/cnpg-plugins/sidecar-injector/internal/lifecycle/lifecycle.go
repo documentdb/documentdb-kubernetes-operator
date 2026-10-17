@@ -167,11 +167,12 @@ func (impl Implementation) reconcileMetadata(
 		ImagePullPolicy: configuration.GatewayImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: 10260,
+				ContainerPort: gatewayPort,
 			},
 		},
 		Env:             envVars,
 		SecurityContext: gatewaySecurityContext(),
+		LivenessProbe:   gatewayLivenessProbe(),
 	}
 	if resources := buildResources(
 		configuration.GatewayCPURequest,
@@ -266,7 +267,10 @@ func (impl Implementation) reconcileMetadata(
 			})
 		}
 
-		otelSidecar := newOtelCollectorSidecar(configuration.OtelCollectorImage)
+		otelSidecar := newOtelCollectorSidecar(
+			configuration.OtelCollectorImage,
+			podHasVolume(mutatedPod, dataVolumeName),
+		)
 		if resources := buildResources(
 			configuration.OTelCPURequest,
 			configuration.OTelCPULimit,
@@ -486,6 +490,63 @@ func injectGatewayOTelEnv(pod *corev1.Pod) {
 const otelCollectorContainerName = "otel-collector"
 const otelMonitorRoleName = "otel_monitor"
 
+// gatewayPort is the port the documentdb-gateway container listens on.
+const gatewayPort = 10260
+
+// dataVolumeName is the CloudNativePG volume that holds PGDATA. CNPG mounts
+// it at /var/lib/postgresql/data and keeps PGDATA in its pgdata subdirectory.
+const dataVolumeName = "pgdata"
+
+// otelDataVolumeMountPath is where the collector mounts the data volume. The
+// hostmetrics filesystem scraper in the operator's collector config
+// (operator/src/internal/otel/base_config.yaml) reports this mount point; keep
+// the two paths equal.
+const otelDataVolumeMountPath = "/var/lib/otel/pgdata"
+
+// otelDataVolumeSubPath is the directory the collector mounts from the data
+// volume. Kubelet creates it empty next to PGDATA, so statfs reports the
+// volume's capacity and usage while no data files are visible.
+const otelDataVolumeSubPath = "otel-statfs"
+
+// gatewayLivenessProbe restarts only the gateway container after it stops
+// accepting TCP connections for about a minute; PostgreSQL keeps running.
+// The first check waits 600 s because the gateway entrypoint waits up to that
+// long for PostgreSQL before it opens its port.
+//
+// The gateway deliberately has no readiness or startup probe. Pod readiness
+// covers every container, and a container with a startup probe is not ready
+// until that probe succeeds, so either probe would remove PostgreSQL from the
+// CNPG Services while the gateway is not listening and break replication.
+func gatewayLivenessProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:        gatewayTCPProbeHandler(),
+		InitialDelaySeconds: 600,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
+		FailureThreshold:    6,
+	}
+}
+
+// gatewayTCPProbeHandler checks that the gateway accepts TCP connections. It
+// does not perform a TLS handshake, so it works with any gateway image.
+func gatewayTCPProbeHandler() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		TCPSocket: &corev1.TCPSocketAction{
+			Port: intstr.FromInt32(gatewayPort),
+		},
+	}
+}
+
+// podHasVolume reports whether the pod declares a volume with the given name.
+func podHasVolume(pod *corev1.Pod, name string) bool {
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // gatewaySecurityContext returns the SecurityContext for the documentdb-gateway
 // sidecar: the shared PSA-restricted hardening plus an explicit UID/GID of
 // 1000, the non-root user the gateway image is built to run as.
@@ -502,8 +563,12 @@ func gatewaySecurityContext() *corev1.SecurityContext {
 // explicit UID so the upstream collector image keeps its own baked-in non-root
 // user (UID 10001); PSA "restricted" only requires runAsNonRoot, not a fixed
 // UID.
-func newOtelCollectorSidecar(image string) *corev1.Container {
-	return &corev1.Container{
+//
+// When mountDataVolume is true, the container also mounts the data volume
+// read-only on an empty subPath so the hostmetrics filesystem scraper can
+// report the volume's usage.
+func newOtelCollectorSidecar(image string, mountDataVolume bool) *corev1.Container {
+	container := &corev1.Container{
 		Name:  otelCollectorContainerName,
 		Image: image,
 		Args: []string{
@@ -536,4 +601,13 @@ func newOtelCollectorSidecar(image string) *corev1.Container {
 		},
 		SecurityContext: hardenedSecurityContext(),
 	}
+	if mountDataVolume {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      dataVolumeName,
+			MountPath: otelDataVolumeMountPath,
+			SubPath:   otelDataVolumeSubPath,
+			ReadOnly:  true,
+		})
+	}
+	return container
 }
