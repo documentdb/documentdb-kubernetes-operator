@@ -162,10 +162,10 @@ my-documentdb-1   2/2     Running   0          2m
 
 ## Connect to DocumentDB
 
-Set up port forwarding to access the DocumentDB Gateway (port 10260):
+Set up port forwarding to the gateway Service to access the current primary (port 10260):
 
 ```bash
-kubectl port-forward pod/my-documentdb-1 10260:10260 -n documentdb-ns
+kubectl port-forward svc/documentdb-service-my-documentdb 10260:10260 -n documentdb-ns
 ```
 
 In a new terminal, retrieve the connection string from the DocumentDB cluster status and connect:
