@@ -29,6 +29,10 @@ Kubernetes cluster with the operator deployed. Backup specs additionally need th
 snapshot CRDs; TLS cert-manager specs need cert-manager. Both gate with a
 runtime probe and `Skip()` rather than fail when the dependency is missing.
 
+The dedicated `tests/multicluster_postgres_tls` package is an exception to
+skip-on-prerequisite handling: both clusters and all dependencies are required,
+and all five acceptance specs must run regardless of `TEST_DEPTH`.
+
 ## Quick start
 
 From the repository root:
@@ -52,6 +56,81 @@ Run a single area:
 ginkgo -r --label-filter=lifecycle ./tests/...
 ginkgo -r --label-filter='data && level:low' ./tests/data
 ```
+
+## Multi-cluster PostgreSQL TLS
+
+`tests/multicluster_postgres_tls` covers only `spec.tls.postgres`: the four
+provided certificate Secret fields, external-cluster CA/client Secret selectors, verified
+cross-cluster PostgreSQL connections, TLS replication identity/serials from
+`pg_stat_ssl`, exact document replication, independent rejection of an
+untrusted server CA, missing hostname SAN, and untrusted replication client,
+and live server/client certificate rotation under unchanged CAs.
+`tests/tls` separately covers `serverAltDNSNames` with CNPG-managed server
+certificates: CNPG rejects that field when `serverTLSSecret` is provided.
+
+The topology is two **independent one-node Kind Kubernetes clusters** on the
+same Docker network. The supported `crossCloudNetworkingStrategy: None`
+delegates networking to the caller: the tests create NodePort services on each
+cluster and selectorless Services/EndpointSlices targeting the *other*
+cluster's node IP and NodePort. Kubernetes provides DNS for the actual
+external-cluster names, included in the server SANs. There are no
+same-cluster ExternalName bridges, service mesh, TLS termination, or disabled
+PostgreSQL certificate verification. A verify-full connection from a probe pod
+in the replica cluster checks DNS, reachability, and certificate authentication
+before replica bootstrap.
+
+Build operator and sidecar images from the current branch and supply the same
+images/chart to both clusters. `provision-postgres-tls.sh` installs Kind 1.35,
+cert-manager 1.19.2, and the chart's CNPG dependency; it does not deploy a
+DocumentDB fixture. Its required environment variables are:
+
+| Variable | Purpose |
+|---|---|
+| `E2E_CLUSTER_PREFIX` | Unique names `<prefix>-primary` and `<prefix>-replica` |
+| `E2E_KUBECONFIG_DIR` | Private directory **outside** the artifacts directory |
+| `E2E_CHART` | Built Helm chart archive or local chart with dependencies restored |
+| `OPERATOR_IMAGE`, `SIDECAR_IMAGE` | Locally available built-from-branch images |
+| `DOCUMENTDB_IMAGE`, `GATEWAY_IMAGE` | Locally available database runtime images |
+
+On hosts with a low inotify instance limit (often 128), two Kind clusters may
+exhaust it and cause kubelet's `inotify_init: too many open files` failure.
+Raise `fs.inotify.max_user_instances` to at least 1024 before provisioning,
+with the host administrator's approval; restore the original value after
+cleanup. The dedicated CI job handles this on its isolated runner.
+
+From the repository root, after setting those variables:
+
+```bash
+export E2E_PRIMARY_KUBECONFIG="$E2E_KUBECONFIG_DIR/primary.yaml"
+export E2E_REPLICA_KUBECONFIG="$E2E_KUBECONFIG_DIR/replica.yaml"
+export E2E_ARTIFACTS_DIR="$PWD/test/e2e/artifacts"
+bash test/e2e/scripts/provision-postgres-tls.sh
+cd test/e2e
+ginkgo --procs=1 --timeout=65m --label-filter='tls && multi-cluster-postgres-tls' \
+  --junit-report=junit.xml --json-report=report.json --output-dir=artifacts \
+  ./tests/multicluster_postgres_tls
+python3 scripts/check-postgres-tls-report.py artifacts/report.json
+```
+
+On failure, `postgres-tls-diagnostics.sh` collects state, events, and logs from
+both explicit kubeconfigs; failed specs also collect before deleting fixtures.
+The collector whitelists resource types and exports only public certificate
+metadata, never Secret contents, private keys, or kubeconfig credentials.
+Ephemeral signing keys remain in process memory. After saving reports, always
+delete **both** dedicated Kind clusters and their kubeconfig files, including
+after a provisioning failure:
+
+```bash
+kind delete cluster --name "$E2E_CLUSTER_PREFIX-primary"
+kind delete cluster --name "$E2E_CLUSTER_PREFIX-replica"
+rm -f "$E2E_PRIMARY_KUBECONFIG" "$E2E_REPLICA_KUBECONFIG"
+```
+
+The `multicluster-postgres-tls` CI job runs all five specs serially at the
+default Medium depth on amd64 and arm64 for PRs and pushes to `main`. It uses
+the same branch-built image/chart artifacts in both clusters, rejects
+missing/skipped/filtered specs via the JSON report checker, publishes JUnit and
+safe diagnostics before cleanup, and always removes both clusters.
 
 ## Layout
 

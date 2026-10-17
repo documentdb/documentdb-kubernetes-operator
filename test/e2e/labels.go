@@ -26,6 +26,7 @@ const (
 	UpgradeLabel            = "upgrade"
 	ResourcesLabel          = "resources"
 	ClusterReplicationLabel = "cluster-replication"
+	MultiClusterTLSLabel    = "multi-cluster-postgres-tls"
 
 	// Cross-cutting selectors.
 	SmokeLabel       = "smoke"

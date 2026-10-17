@@ -347,6 +347,30 @@ spec:
 
 For cross-Kubernetes-cluster replication, see [Replication TLS (PostgreSQL)](../multi-region-deployment/setup.md#replication-tls-postgresql).
 
+### Rotating provided PostgreSQL certificates
+
+Create the referenced Secrets in every DocumentDB namespace; Secrets are not
+synchronized across Kubernetes clusters. Label provided PostgreSQL certificate
+and CA Secrets with `cnpg.io/reload: ""` so CloudNative-PG reloads updated files.
+Rotate leaf certificates under the existing trusted CAs by updating `tls.crt`
+and `tls.key` together in the existing Secrets. Server certificates must retain
+the actual connection hostname SANs, and replication client certificates must
+retain the `streaming_replica` identity and client-auth usage.
+
+For cross-cluster replication, the operator watches the referenced replication
+client and server CA Secrets. A change to their public certificate material
+updates a public-material generation token in the external connection's
+startup `options` (`documentdb_operator.tls_generation`). This changes PostgreSQL's `primary_conninfo` and
+automatically reconnects the WAL receiver using the refreshed certificate files,
+without restarting pods or requiring a manual SQL repair. The custom startup
+setting is compatible with CNPG's pgx bootstrap probes and PostgreSQL's libpq
+WAL receiver, and does not change the effective replication `application_name`
+or synchronous standby identity. Metadata
+updates and unchanged public certificate material do not trigger reconnects.
+The brief reconnection is asynchronous; monitor `pg_stat_replication` joined
+with `pg_stat_ssl` to confirm streaming resumes with the replacement client
+certificate, then verify the replica catches up.
+
 ## Additional resources
 
 The [`documentdb-playground/tls/`](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/tls) directory provides automated scripts and end-to-end guides for TLS setup on AKS:

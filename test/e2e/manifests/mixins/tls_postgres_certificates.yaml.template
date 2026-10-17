@@ -1,0 +1,12 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  tls:
+    postgres:
+      replicationTLSSecret: ${POSTGRES_REPLICATION_TLS_SECRET}
+      clientCASecret: ${POSTGRES_CLIENT_CA_SECRET}
+      serverTLSSecret: ${POSTGRES_SERVER_TLS_SECRET}
+      serverCASecret: ${POSTGRES_SERVER_CA_SECRET}
