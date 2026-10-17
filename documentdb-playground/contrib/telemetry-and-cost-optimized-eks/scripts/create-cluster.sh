@@ -765,18 +765,16 @@ metadata:
   name: documentdb-instance-ns
 EOF
     
-    # Create credentials secret
-    kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: documentdb-credentials
-  namespace: documentdb-instance-ns
-type: Opaque
-stringData:
-  username: docdbadmin
-  password: SecurePassword123!
-EOF
+    # Create credentials once so rerunning the script does not rotate the password.
+    if ! kubectl get secret documentdb-credentials -n documentdb-instance-ns &> /dev/null; then
+        command -v openssl &> /dev/null || error "openssl is required to generate the DocumentDB password."
+        local documentdb_password
+        documentdb_password=$(openssl rand -hex 24)
+        kubectl create secret generic documentdb-credentials \
+            -n documentdb-instance-ns \
+            --from-literal=username=docdbadmin \
+            --from-literal=password="$documentdb_password"
+    fi
     
     # Deploy DocumentDB instance
     kubectl apply -f - <<EOF
@@ -844,9 +842,13 @@ diagnose_documentdb() {
 
     # 5. Ping test via in-cluster mongosh (validate endpoint independently of app code)
     log "Testing DocumentDB connectivity via in-cluster mongosh..."
+    local documentdb_username documentdb_password connection_string
+    documentdb_username=$(kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.username}' | base64 -d)
+    documentdb_password=$(kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.password}' | base64 -d)
+    connection_string="mongodb://${documentdb_username}:${documentdb_password}@documentdb-service-sample-documentdb:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
     if kubectl run mongosh-diag-$RANDOM --rm -i --restart=Never --quiet \
         --image=mongo:7 -n documentdb-instance-ns -- \
-        mongosh "mongodb://docdbadmin:SecurePassword123!@documentdb-service-sample-documentdb:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true" \
+        mongosh "$connection_string" \
         --quiet --eval "db.runCommand({ping: 1})" 2>/dev/null | grep -q "ok.*1"; then
         success "DocumentDB ping succeeded"
     else
@@ -906,7 +908,7 @@ print_summary() {
         echo "  - Check DocumentDB: kubectl get documentdb -n documentdb-instance-ns"
         echo "  - Check service status: kubectl get svc -n documentdb-instance-ns"
         echo "  - Wait for LoadBalancer IP: kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns -w"
-        echo "  - Once IP is assigned, connect: mongodb://docdbadmin:SecurePassword123!@<EXTERNAL-IP>:10260/"
+        echo "  - Once IP is assigned, connect: mongodb://<username>:<password>@<EXTERNAL-IP>:10260/"
         echo ""
         echo "🔎 Troubleshooting (adapted from DocumentDB troubleshooting best practices):"
         echo ""
@@ -935,7 +937,7 @@ print_summary() {
         echo ""
         echo "  6. Validate the endpoint independently of your application code:"
         echo "     kubectl port-forward -n documentdb-instance-ns svc/documentdb-service-sample-documentdb 10260:10260 &"
-        echo "     mongosh \"mongodb://docdbadmin:SecurePassword123!@localhost:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true\""
+        echo "     mongosh \"mongodb://<username>:<password>@localhost:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true\""
         echo ""
         echo "  7. TLS / certificate errors:"
         echo "     - For self-signed certs (default): keep tlsAllowInvalidCertificates=true in the connection string"

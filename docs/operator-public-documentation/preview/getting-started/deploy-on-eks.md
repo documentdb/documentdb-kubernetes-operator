@@ -463,14 +463,14 @@ EXTERNAL_IP=$(kubectl get svc documentdb-service-my-documentdb \
     -n documentdb-instance-ns \
     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-echo "Connection string: mongodb://docdbadmin:YourSecurePassword123@${EXTERNAL_IP}:10260/"
+echo "Connection string: mongodb://<username>:<password>@${EXTERNAL_IP}:10260/"
 ```
 
 ### Test connection
 
 ```bash
 # Using mongosh (if installed)
-mongosh 'mongodb://docdbadmin:YourSecurePassword123@'"${EXTERNAL_IP}"':10260/'
+mongosh 'mongodb://<username>:<password>@'"${EXTERNAL_IP}"':10260/'
 
 # Or using kubectl exec into the pod
 kubectl exec -it -n documentdb-instance-ns \

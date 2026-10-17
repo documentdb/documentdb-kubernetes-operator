@@ -208,7 +208,7 @@ mongosh 127.0.0.1:10260 \
 Or use a connection string:
 
 ```bash
-mongosh "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
 #### Option 2: LoadBalancer service (for cloud deployments)

@@ -247,7 +247,7 @@ kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath=
 kubectl get secret documentdb-credentials -n documentdb-instance-ns -o jsonpath='{.data.password}' | base64 -d
 
 # Connection string format
-mongodb://username:password@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
+mongodb://<username>:<password>@EXTERNAL-IP:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
 ```
 
 ### Common Issues

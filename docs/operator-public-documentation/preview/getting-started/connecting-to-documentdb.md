@@ -114,7 +114,7 @@ For multi-region DocumentDB deployments with cross-cluster replication, the oper
     This enables `mongodb+srv://` connection strings that automatically resolve to the correct endpoint:
 
     ```bash
-    mongosh "mongodb+srv://docdb:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+    mongosh "mongodb+srv://<username>:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
     ```
 
     Set `ENABLE_AZURE_DNS=true` when running `deploy-documentdb.sh` in the multi-cloud playground. See the [multi-cloud deployment README](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/multi-cloud-deployment) for configuration options.
@@ -131,7 +131,7 @@ documentdb-service-my-documentdb.documentdb-ns.svc.cluster.local:10260
 ## Connect with mongosh
 
 ```bash
-mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
 Or use individual flags:
@@ -153,7 +153,7 @@ The [DocumentDB for VS Code](https://marketplace.visualstudio.com/items?itemName
 3. Select **Add Connection** and enter your connection string:
 
     ```text
-    mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
+    mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
     ```
 
 4. Browse databases, collections, and documents. You can also use the built-in playground to run queries interactively.
@@ -222,7 +222,7 @@ npm install mongodb
 const { MongoClient } = require("mongodb");
 
 const uri =
-  "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
+  "mongodb://<username>:<password>@127.0.0.1:10260/" +
   "?directConnection=true&authMechanism=SCRAM-SHA-256" +
   "&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0";
 
@@ -281,7 +281,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	uri := "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
+	uri := "mongodb://<username>:<password>@127.0.0.1:10260/" +
 		"?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true"
 
 	// For self-signed certificates, skip verification.
@@ -356,7 +356,7 @@ import java.util.concurrent.TimeUnit;
 
 public class ConnectDocumentDB {
     public static void main(String[] args) throws Exception {
-        String uri = "mongodb://dev_user:DevPassword123@127.0.0.1:10260/"
+        String uri = "mongodb://<username>:<password>@127.0.0.1:10260/"
             + "?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true";
 
         // For self-signed certificates, create a trust-all SSLContext.
@@ -435,7 +435,7 @@ When using `CertManager` or `Provided` mode with a trusted CA, remove `tlsAllowI
 === "mongosh"
 
     ```bash
-    mongosh "mongodb://dev_user:DevPassword123@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&replicaSet=rs0" \
+    mongosh "mongodb://<username>:<password>@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&replicaSet=rs0" \
       --tlsCAFile /path/to/ca.crt
     ```
 
