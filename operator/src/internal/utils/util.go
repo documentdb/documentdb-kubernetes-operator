@@ -449,6 +449,22 @@ func OtelCollectorImage() string {
 	return envOr(OTEL_COLLECTOR_IMAGE_ENV, DEFAULT_OTEL_COLLECTOR_IMAGE)
 }
 
+// HTTPProxy returns the operator's HTTP_PROXY value (empty when unset).
+func HTTPProxy() string { return os.Getenv(HTTP_PROXY_ENV) }
+
+// HTTPSProxy returns the operator's HTTPS_PROXY value (empty when unset).
+func HTTPSProxy() string { return os.Getenv(HTTPS_PROXY_ENV) }
+
+// NoProxy returns the operator's NO_PROXY value (empty when unset).
+func NoProxy() string { return os.Getenv(NO_PROXY_ENV) }
+
+// ProxyEnabled reports whether any outbound proxy routing variable is set. When
+// true, the operator forwards the proxy configuration to the OTel Collector
+// sidecar.
+func ProxyEnabled() bool {
+	return HTTPProxy() != "" || HTTPSProxy() != "" || NoProxy() != ""
+}
+
 // PostgresImage returns the operator-level base PostgreSQL operand image supplied
 // via the POSTGRES_IMAGE env, or empty when unset. An empty result means the
 // operator defers to CloudNativePG's built-in operand default (unless the CR

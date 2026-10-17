@@ -92,3 +92,36 @@ Usage:
 {{- .policy -}}
 {{- end -}}
 {{- end -}}
+{{/*
+documentdb.proxySecretName is the name of the Secret that holds the outbound
+proxy routing configuration (HTTP_PROXY / HTTPS_PROXY / NO_PROXY). It is created
+in the operator namespace when Azure.proxySettings.isProxyEnabled is true.
+*/}}
+{{- define "documentdb.proxySecretName" -}}
+documentdb-proxy-config
+{{- end -}}
+
+{{/*
+documentdb.noProxy composes the effective NO_PROXY value: the user-supplied
+Azure.proxySettings.noProxy (optional) followed by a standard in-cluster bypass
+list so that kube-apiserver, localhost Postgres scrapes and the in-pod OTLP
+receiver never route through the proxy. Duplicate/empty entries are dropped and
+the result is comma-joined.
+*/}}
+{{- define "documentdb.noProxy" -}}
+{{- $defaults := list "localhost" "127.0.0.1" "::1" ".svc" ".svc.cluster.local" "kubernetes.default.svc" "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" -}}
+{{- $user := list -}}
+{{- with .Values.Azure.proxySettings.noProxy -}}
+{{- $user = regexSplit "\\s*,\\s*" (trim .) -1 -}}
+{{- end -}}
+{{- $seen := dict -}}
+{{- $out := list -}}
+{{- range (concat $user $defaults) -}}
+{{- $e := trim . -}}
+{{- if and $e (not (hasKey $seen $e)) -}}
+{{- $_ := set $seen $e true -}}
+{{- $out = append $out $e -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $out -}}
+{{- end -}}

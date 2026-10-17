@@ -16,6 +16,12 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
+      {{- if .Values.Azure.proxySettings.isProxyEnabled }}
+      annotations:
+        # Roll the operator when the proxy configuration changes so the new
+        # HTTP_PROXY / HTTPS_PROXY / NO_PROXY values take effect.
+        checksum/proxy-config: {{ printf "%s|%s|%s" (.Values.Azure.proxySettings.httpProxy | toString) (.Values.Azure.proxySettings.httpsProxy | toString) (include "documentdb.noProxy" .) | sha256sum }}
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- with .Values.imagePullSecrets }}
@@ -90,6 +96,15 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: webhook-cert
           readOnly: true
+        {{- if .Values.Azure.proxySettings.isProxyEnabled }}
+        # Make the operator itself proxy-aware and provide the single source of
+        # truth for the proxy values it forwards to the OTel Collector sidecar.
+        # The Secret keys are the exact env var names (HTTP_PROXY, HTTPS_PROXY,
+        # NO_PROXY).
+        envFrom:
+        - secretRef:
+            name: {{ include "documentdb.proxySecretName" . }}
+        {{- end }}
         env:
         - name: GATEWAY_PORT
           value: "10260"

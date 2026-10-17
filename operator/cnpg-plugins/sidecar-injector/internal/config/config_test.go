@@ -229,6 +229,9 @@ func TestToParametersRoundTrip(t *testing.T) {
 		OTelMemoryRequest:      "64Mi",
 		OTelMemoryLimit:        "128Mi",
 		OTelCPURequest:         "100m",
+		HTTPProxy:              "http://proxy.example.com:3128",
+		HTTPSProxy:             "http://proxy.example.com:3128",
+		NoProxy:                "localhost,.svc.cluster.local",
 	}
 	original.applyDefaults()
 
@@ -277,5 +280,14 @@ func TestToParametersRoundTrip(t *testing.T) {
 	}
 	if restored.OTelCPURequest != original.OTelCPURequest {
 		t.Errorf("round-trip otel cpu request = %q, want %q", restored.OTelCPURequest, original.OTelCPURequest)
+	}
+	if restored.HTTPProxy != original.HTTPProxy {
+		t.Errorf("round-trip HTTP proxy = %q, want %q", restored.HTTPProxy, original.HTTPProxy)
+	}
+	if restored.HTTPSProxy != original.HTTPSProxy {
+		t.Errorf("round-trip HTTPS proxy = %q, want %q", restored.HTTPSProxy, original.HTTPSProxy)
+	}
+	if restored.NoProxy != original.NoProxy {
+		t.Errorf("round-trip no proxy = %q, want %q", restored.NoProxy, original.NoProxy)
 	}
 }

@@ -126,6 +126,12 @@ func GetCnpgClusterSpecFromIntent(req ctrl.Request, documentdb *dbpreview.Docume
 						} else {
 							log.Error(err, "Failed to generate OTel config hash; config changes may not trigger rolling restart")
 						}
+						// Forward outbound proxy configuration to the OTel Collector
+						// sidecar so its OTLP exporter egress honors the proxy. The
+						// collector's Go runtime reads these env vars natively.
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_HTTP_PROXY, util.HTTPProxy())
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_HTTPS_PROXY, util.HTTPSProxy())
+						addPluginParamIfSet(params, util.PLUGIN_PARAM_NO_PROXY, util.NoProxy())
 					}
 					return []cnpgv1.PluginConfiguration{{
 						Name:       sidecarPluginName,

@@ -1002,3 +1002,27 @@ func TestSemverToExtensionVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestProxyEnabledAndReaders(t *testing.T) {
+	t.Setenv(HTTP_PROXY_ENV, "")
+	t.Setenv(HTTPS_PROXY_ENV, "")
+	t.Setenv(NO_PROXY_ENV, "")
+	if ProxyEnabled() {
+		t.Fatal("ProxyEnabled() = true with no proxy env set, want false")
+	}
+
+	t.Setenv(HTTPS_PROXY_ENV, "http://proxy.example.com:3128")
+	t.Setenv(NO_PROXY_ENV, "localhost,.svc.cluster.local")
+	if !ProxyEnabled() {
+		t.Fatal("ProxyEnabled() = false with HTTPS_PROXY set, want true")
+	}
+	if got := HTTPSProxy(); got != "http://proxy.example.com:3128" {
+		t.Errorf("HTTPSProxy() = %q", got)
+	}
+	if got := NoProxy(); got != "localhost,.svc.cluster.local" {
+		t.Errorf("NoProxy() = %q", got)
+	}
+	if got := HTTPProxy(); got != "" {
+		t.Errorf("HTTPProxy() = %q, want empty", got)
+	}
+}

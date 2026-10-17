@@ -278,6 +278,9 @@ func (impl Implementation) reconcileMetadata(
 		if goMemLimitEnv, ok := buildGoMemLimitEnv(configuration.OTelMemoryLimit); ok {
 			otelSidecar.Env = append(otelSidecar.Env, goMemLimitEnv)
 		}
+		// Route the collector's OTLP exporter egress through the configured
+		// outbound proxy. The collector's Go runtime reads these natively.
+		otelSidecar.Env = append(otelSidecar.Env, proxyEnvVars(configuration)...)
 
 		// Expose Prometheus metrics port when configured
 		if configuration.PrometheusPort > 0 {
@@ -378,6 +381,28 @@ func buildResources(cpuReq, cpuLim, memReq, memLim string) corev1.ResourceRequir
 
 func hasResourceRequirements(resources corev1.ResourceRequirements) bool {
 	return len(resources.Requests) > 0 || len(resources.Limits) > 0
+}
+
+// proxyEnvVars returns the outbound proxy environment variables for the OTel
+// Collector sidecar. Both the UPPERCASE and lowercase spellings are emitted:
+// Go's http.ProxyFromEnvironment reads both and some libraries only check the
+// lowercase form. Only non-empty values are included, so a pod gets no proxy
+// env when the operator is not proxy-configured.
+func proxyEnvVars(cfg *config.Configuration) []corev1.EnvVar {
+	env := []corev1.EnvVar{}
+	add := func(upper, lower, value string) {
+		if value == "" {
+			return
+		}
+		env = append(env,
+			corev1.EnvVar{Name: upper, Value: value},
+			corev1.EnvVar{Name: lower, Value: value},
+		)
+	}
+	add("HTTP_PROXY", "http_proxy", cfg.HTTPProxy)
+	add("HTTPS_PROXY", "https_proxy", cfg.HTTPSProxy)
+	add("NO_PROXY", "no_proxy", cfg.NoProxy)
+	return env
 }
 
 func buildGoMemLimitEnv(memoryLimit string) (corev1.EnvVar, bool) {

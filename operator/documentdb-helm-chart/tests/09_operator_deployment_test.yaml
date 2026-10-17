@@ -478,3 +478,26 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/managed-by"]
           value: "Helm"
+
+  # -------------------------------------------------------------------
+  # Outbound proxy
+  # -------------------------------------------------------------------
+  - it: should not wire proxy envFrom when proxy is disabled
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/proxy-config"]
+
+  - it: should wire proxy envFrom and checksum annotation when proxy is enabled
+    set:
+      Azure.proxySettings.isProxyEnabled: true
+      Azure.proxySettings.httpsProxy: "http://proxy.example.com:3128"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: documentdb-proxy-config
+      - exists:
+          path: spec.template.metadata.annotations["checksum/proxy-config"]

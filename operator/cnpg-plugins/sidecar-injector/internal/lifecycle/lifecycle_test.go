@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
 	pluginmetadata "github.com/documentdb/cnpg-i-sidecar-injector/pkg/metadata"
 )
 
@@ -434,4 +435,46 @@ func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
 		}
 	}
 	t.Fatal("missing PGUSER env var")
+}
+
+// TestProxyEnvVars asserts the OTel collector receives the outbound proxy
+// routing env vars (both UPPER and lowercase spellings) only when the operator
+// forwards them, and nothing when the operator is not proxy-configured.
+func TestProxyEnvVars(t *testing.T) {
+	empty := proxyEnvVars(&config.Configuration{})
+	if len(empty) != 0 {
+		t.Fatalf("expected no proxy env when unconfigured, got %v", empty)
+	}
+
+	cfg := &config.Configuration{
+		HTTPProxy:  "http://proxy.example.com:3128",
+		HTTPSProxy: "http://proxy.example.com:3128",
+		NoProxy:    "localhost,.svc.cluster.local",
+	}
+	got := map[string]string{}
+	for _, e := range proxyEnvVars(cfg) {
+		got[e.Name] = e.Value
+	}
+	want := map[string]string{
+		"HTTP_PROXY":  cfg.HTTPProxy,
+		"http_proxy":  cfg.HTTPProxy,
+		"HTTPS_PROXY": cfg.HTTPSProxy,
+		"https_proxy": cfg.HTTPSProxy,
+		"NO_PROXY":    cfg.NoProxy,
+		"no_proxy":    cfg.NoProxy,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("proxy env count = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Errorf("proxy env %q = %q, want %q", name, got[name], value)
+		}
+	}
+
+	// Only HTTPS set → only the HTTPS pair is emitted.
+	partial := proxyEnvVars(&config.Configuration{HTTPSProxy: "http://p:3128"})
+	if len(partial) != 2 {
+		t.Fatalf("expected 2 env vars for HTTPS-only, got %d (%v)", len(partial), partial)
+	}
 }
