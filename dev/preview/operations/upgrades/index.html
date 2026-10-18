@@ -967,6 +967,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#upgrading-to-documentdb-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      Upgrading to DocumentDB 1.0
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1713,6 +1722,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#upgrading-to-documentdb-10" class="md-nav__link">
+    <span class="md-ellipsis">
+      Upgrading to DocumentDB 1.0
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1781,7 +1799,11 @@
 </table>
 <hr />
 <h2 id="upgrading-the-operator">Upgrading the Operator<a class="headerlink" href="#upgrading-the-operator" title="Permanent link">&para;</a></h2>
-<p>The operator is deployed via Helm. Upgrading it does <strong>not</strong> restart your DocumentDB cluster pods or change any cluster components.</p>
+<p>The operator is deployed via Helm. Clusters that pin <code>spec.documentDBVersion</code>, or both <code>spec.image.documentDB</code> and <code>spec.image.gateway</code>, keep their DocumentDB engine images across an operator upgrade.</p>
+<div class="admonition warning">
+<p class="admonition-title">Unpinned clusters follow the chart's engine version</p>
+<p>A cluster without <code>spec.documentDBVersion</code> runs the engine version bundled with the chart for every image it does not set explicitly in <code>spec.image</code>. Upgrading the chart rolls those images to the new chart's engine version (a rolling restart), and a cluster with <code>spec.schemaVersion: "auto"</code> then migrates its schema immediately. To control when the engine changes, pin <code>spec.documentDBVersion</code> on each cluster before upgrading the operator.</p>
+</div>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
 <p>The operator Helm chart bundles <a href="https://cloudnative-pg.io/">CloudNative-PG</a> as a dependency. Upgrading the operator automatically upgrades the bundled CloudNative-PG version.</p>
@@ -1791,7 +1813,7 @@
 <p><a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">https://github.com/documentdb/documentdb-kubernetes-operator/releases</a></p>
 <p>Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Set this to the release tag you are upgrading to.</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span>&lt;release-version&gt;
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">1</span>.0.0
 </code></pre></div>
 <h3 id="step-2-review-the-release-notes">Step 2: Review the Release Notes<a class="headerlink" href="#step-2-review-the-release-notes" title="Permanent link">&para;</a></h3>
 <p>Open the GitHub release page for <code>${TARGET_VERSION}</code> to review breaking changes, new features, and any required migration steps before proceeding.</p>
@@ -2041,6 +2063,33 @@
 <p class="admonition-title">Tip</p>
 <p>This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting <code>schemaVersion</code>.</p>
 </div>
+<h3 id="upgrading-to-documentdb-10">Upgrading to DocumentDB 1.0<a class="headerlink" href="#upgrading-to-documentdb-10" title="Permanent link">&para;</a></h3>
+<p>Run DocumentDB 1.0 on operator <code>1.0.0</code>, the release tested with it. Before upgrading the operator, pin <code>spec.documentDBVersion</code> on every cluster to the version it runs now (see the warning in <a href="#upgrading-the-operator">Upgrading the Operator</a>), and remove <code>schemaVersion: "auto"</code> so nothing migrates before you choose to. Then upgrade the operator and move each cluster:</p>
+<table>
+<thead>
+<tr>
+<th>Current engine</th>
+<th>Steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0.117.0</code> or earlier <code>0.x</code></td>
+<td>Two-phase upgrade: set <code>documentDBVersion: "1.0.0"</code>, validate, then set <code>schemaVersion: "1.0.0"</code>. This runs <code>ALTER EXTENSION documentdb UPDATE TO '1.0-0'</code>, which cannot be undone.</td>
+</tr>
+<tr>
+<td><code>1.0-RC2</code> (from chart <code>1.0.0-rc1</code>)</td>
+<td>In-place upgrade is not supported: release-candidate clusters are for fresh instances only. Keep the cluster pinned to <code>1.0-RC2</code>, create a new <code>1.0.0</code> cluster, and move your data with <code>mongodump</code>/<code>mongorestore</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>For a <code>0.x</code> cluster (if it sets <code>spec.image.documentDB</code> or <code>spec.image.gateway</code>, remove them in the first patch; explicit images take precedence over <code>documentDBVersion</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"documentDBVersion":"1.0.0"}}'</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="c1"># After validating the new binary:</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"schemaVersion":"1.0.0"}}'</span>
+</code></pre></div>
 <hr />
 <h2 id="multi-region-upgrades">Multi-Region Upgrades<a class="headerlink" href="#multi-region-upgrades" title="Permanent link">&para;</a></h2>
 <p>When running DocumentDB across multiple regions or clusters, use the two-phase upgrade pattern across all regions:</p>
@@ -2060,16 +2109,16 @@
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Extension Image Override</label><label for="__tabbed_3_2">Gateway Image Override</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">    </span><span class="nt">documentDB</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="nt">documentDB</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;"</span>
 </code></pre></div>
 <p>This overrides only the database extension image while keeping the gateway at the version set by <code>documentDBVersion</code>.</p>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
-<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="nt">gateway</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">    </span><span class="nt">gateway</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;"</span>
 </code></pre></div>
 <p>This overrides only the gateway sidecar image while keeping the extension at the version set by <code>documentDBVersion</code>.</p>
 </div>

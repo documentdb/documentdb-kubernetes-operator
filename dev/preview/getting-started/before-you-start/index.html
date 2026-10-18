@@ -454,6 +454,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#version-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version compatibility
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1590,6 +1599,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#version-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      Version compatibility
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1819,6 +1837,35 @@
 </tr>
 </tbody>
 </table>
+<h3 id="version-compatibility">Version compatibility<a class="headerlink" href="#version-compatibility" title="Permanent link">&para;</a></h3>
+<p>The operator and the DocumentDB engine have separate version numbers. The Helm chart version is the operator version; each chart deploys a default engine version (the chart's <code>documentDbVersion</code>) that you can override per cluster with <code>spec.documentDBVersion</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Operator (Helm chart)</th>
+<th>Default DocumentDB engine</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1.0.0</code></td>
+<td><code>1.0.0</code> (extension schema <code>1.0-0</code>)</td>
+<td>Generally available</td>
+</tr>
+<tr>
+<td><code>1.0.0-rc1</code></td>
+<td><code>1.0-RC2</code></td>
+<td>Release candidate</td>
+</tr>
+<tr>
+<td><code>0.3.0</code></td>
+<td><code>0.110.0</code></td>
+<td>Preview</td>
+</tr>
+</tbody>
+</table>
+<p>Use operator <code>1.0.0</code> for DocumentDB 1.0. To move existing clusters to 1.0, see <a href="../../operations/upgrades/#upgrading-to-documentdb-10">Upgrading to DocumentDB 1.0</a>.</p>
 <h2 id="terminology">Terminology<a class="headerlink" href="#terminology" title="Permanent link">&para;</a></h2>
 <h3 id="kubernetes-concepts">Kubernetes concepts<a class="headerlink" href="#kubernetes-concepts" title="Permanent link">&para;</a></h3>
 <p>Understanding these Kubernetes concepts helps you work effectively with the DocumentDB operator:</p>

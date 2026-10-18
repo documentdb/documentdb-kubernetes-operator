@@ -2017,7 +2017,7 @@
 <h4 id="2-documentdb-operator">2. DocumentDB operator<a class="headerlink" href="#2-documentdb-operator" title="Permanent link">&para;</a></h4>
 <p>Install the operator on each Kubernetes cluster.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Choose a release version (see https://github.com/documentdb/documentdb-kubernetes-operator/releases)</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">DOCUMENTDB_VERSION</span><span class="o">=</span>&lt;release-version&gt;
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">DOCUMENTDB_VERSION</span><span class="o">=</span><span class="m">1</span>.0.0
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--version<span class="w"> </span><span class="si">${</span><span class="nv">DOCUMENTDB_VERSION</span><span class="si">}</span><span class="w"> </span><span class="se">\</span>

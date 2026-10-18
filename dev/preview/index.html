@@ -1880,7 +1880,7 @@
 <p>When you deploy a DocumentDB cluster, the operator creates and manages PostgreSQL instances, the <a href="https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw">DocumentDB Gateway</a>, and supporting Kubernetes resources. The gateway enables you to connect with MongoDB-compatible drivers, APIs, and tools, while PostgreSQL serves as the underlying storage engine.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This project is under active development but not yet recommended for production use. We welcome your feedback and contributions!</p>
+<p>Operator <code>1.0.0</code> is generally available for DocumentDB 1.0. The <code>preview</code> in the API version (<code>documentdb.io/preview</code>) and in these docs' URLs is a name kept for compatibility. We welcome your feedback and contributions!</p>
 </div>
 <h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
 <p>Follow these steps to install the operator, deploy a DocumentDB cluster, and connect using <code>mongosh</code>.</p>
@@ -1927,13 +1927,14 @@
 <p>If CloudNativePG is already installed in your cluster, you may experience conflicts. See the Helm chart documentation for options to skip the CNPG dependency.</p>
 </div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--wait
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="m">1</span>.0.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--wait
 </code></pre></div>
 <div class="admonition tip">
-<p class="admonition-title">Pin production installs</p>
-<p>Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from <a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">GitHub Releases</a> and add <code>--version &lt;release-version&gt;</code>.</p>
+<p class="admonition-title">Chart version</p>
+<p><code>--version</code> pins the chart these docs were published for. The chart version is the operator's version, not the DocumentDB engine's; see <a href="getting-started/before-you-start/#version-compatibility">version compatibility</a>.</p>
 </div>
 <p>Verify the operator is running:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>-n<span class="w"> </span>documentdb-operator
