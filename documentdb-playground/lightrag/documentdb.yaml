@@ -7,8 +7,7 @@
 # Notes:
 # - LightRAG requires DocumentDB extension v0.110.0 or later for the `_id`
 #   lookup fix (https://github.com/documentdb/documentdb/pull/459).
-#   v0.110.0+ is the default in recent operator releases; pinning the images
-#   here makes the requirement explicit.
+#   The operator's default engine (1.0.0) includes it.
 # - Replace the password before using outside a throwaway dev cluster.
 ---
 apiVersion: v1
@@ -29,9 +28,6 @@ metadata:
 spec:
   nodeCount: 1
   instancesPerNode: 1
-  image:
-    documentDB: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
-    gateway: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
   documentDbCredentialSecret: docdb-credentials
   resource:
     storage:

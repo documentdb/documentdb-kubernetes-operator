@@ -103,9 +103,9 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
 kubectl config use-context $ON_PREM_MEMBER
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
 
-# Install just the CRDs on the hub for propagation
+# Install on the hub too: the operator chart's webhook certificate needs the controllers, not just the CRDs
 kubectl config use-context hub
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.crds.yaml
+helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
 ```
 
 Verify that `cert-manager` is installed correctly on each cluster:
@@ -128,7 +128,7 @@ cert-manager        cert-manager-webhook-7cc5dccc4b-7jmrh           1/1     Runn
 
 ```bash
 kubectl config use-context hub
-helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator --version 0.0.1-multi-arch --namespace documentdb-operator --create-namespace
+helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator --version 1.1.0 --namespace documentdb-operator --create-namespace
 ```
 
 Verify the namespaces cnpg-system and documentdb-operator were created

@@ -124,8 +124,7 @@ RESOURCE_GROUP="documentdb-rg"
 LOCATION="westus2"
 NODE_COUNT=3
 NODE_SIZE="Standard_D4s_v5"
-KUBERNETES_VERSION="1.34.3"
-OPERATOR_CHART_VERSION="0.1.3"
+KUBERNETES_VERSION="1.35.0"
 ```
 
 ### Storage Configuration

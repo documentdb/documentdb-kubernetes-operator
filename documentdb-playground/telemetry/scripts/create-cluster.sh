@@ -14,10 +14,9 @@ NODE_SIZE="Standard_D4s_v5"
 KUBERNETES_VERSION="1.35.0"
 
 # DocumentDB Operator Configuration
-# For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)
-# For production: use microsoft/documentdb-operator (official)
-OPERATOR_GITHUB_ORG="hossain-rayhan"
-OPERATOR_CHART_VERSION="0.1.112"
+# For testing: update with your account/org if using a fork
+OPERATOR_GITHUB_ORG="documentdb"
+OPERATOR_CHART_VERSION="1.1.0"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
