@@ -854,7 +854,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Verify both SQL calls were made
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version (default version as semver)
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1361,7 +1361,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Both version-check and ALTER EXTENSION should have been called
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1433,7 +1433,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Should run ALTER EXTENSION UPDATE TO specific version
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE TO '0.110-0'"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'`))
 
 			// Status should reflect the explicit version
 			updatedDB := &dbpreview.DocumentDB{}

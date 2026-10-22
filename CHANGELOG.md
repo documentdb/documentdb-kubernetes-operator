@@ -5,6 +5,13 @@
 ### Security
 - Require Go 1.26.10 across all six modules and pin Go builder images to that patch release to address [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`. Unit-test workflows now resolve Go from the operator module instead of an older hard-coded version.
 
+### Bug Fixes
+- Keep truncated gateway Service names DNS-valid and gateway certificate DNS names aligned with the actual Service name.
+- Quote product-defined extension and replication role names in lifecycle SQL, and use a product-independent ImageVolume probe name so display names such as `Cosmos DB` do not bypass capability checks.
+
+### Major Features
+- **Product-neutral operator core**: The CNPG `Cluster` renderer, sync, PostgreSQL parameter merge, resource split/validation and extension lifecycle SQL are now driven by a `ProductProfile` and `ClusterIntent` instead of the `DocumentDB` custom resource, and are exported for other operator modules through `operator/src/pkg/core`. The sidecar injector accepts optional `gatewayContainerName`, `gatewayPort`, `gatewayArgs`, `gatewayUsernameEnv` and `gatewayPasswordEnv` parameters for non-DocumentDB gateways. The operator keeps these parameters in sync on existing clusters, and the client Service port follows the gateway port. Other products can build multi-region topologies with `core.NewReplicationContext` and name the OTel SQL health metric with `NamingProfile.HealthMetricName` (DocumentDB keeps `documentdb.postgres.up`). The cluster, certificate, persistent volume, backup and scheduled-backup reconcilers and the admission validation rules are generic over the custom resource type through a `ClusterAdapter`, with DocumentDB as the first implementation; `pkg/core` exports them too. Rendered DocumentDB clusters are byte-identical to before, CRDs and RBAC are unchanged, and existing deployments see no change. See [Product-neutral operator core](docs/designs/product-neutral-core.md).
+
 ## [1.0.0] - 2026-10-19
 
 First generally available operator release, for DocumentDB 1.0. The operator and the DocumentDB engine keep separate version numbers; this chart deploys engine `1.0.0` (extension schema `1.0-0`) by default. See [Upgrading to DocumentDB 1.0](docs/operator-public-documentation/preview/operations/upgrades.md#upgrading-to-documentdb-10).

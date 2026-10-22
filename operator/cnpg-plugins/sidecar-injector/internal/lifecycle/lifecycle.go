@@ -134,10 +134,10 @@ func (impl Implementation) reconcileMetadata(
 
 	// Add USERNAME and PASSWORD environment variables from secret defined in configuration
 	credentialSecretName := configuration.DocumentDbCredentialSecret
-	log.Printf("Adding USERNAME and PASSWORD environment variables from secret '%s'", credentialSecretName)
+	log.Printf("Adding %s and %s environment variables from secret '%s'", configuration.GatewayUsernameEnv, configuration.GatewayPasswordEnv, credentialSecretName)
 	envVars = append(envVars,
 		corev1.EnvVar{
-			Name: "USERNAME",
+			Name: configuration.GatewayUsernameEnv,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -148,7 +148,7 @@ func (impl Implementation) reconcileMetadata(
 			},
 		},
 		corev1.EnvVar{
-			Name: "PASSWORD",
+			Name: configuration.GatewayPasswordEnv,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -162,12 +162,12 @@ func (impl Implementation) reconcileMetadata(
 
 	// Initialize the sidecar container with configurable gateway image
 	sidecar := &corev1.Container{
-		Name:            "documentdb-gateway",
+		Name:            configuration.GatewayContainerName,
 		Image:           configuration.GatewayImage,
 		ImagePullPolicy: configuration.GatewayImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: 10260,
+				ContainerPort: configuration.GatewayPort,
 			},
 		},
 		Env:             envVars,
@@ -229,6 +229,11 @@ func (impl Implementation) reconcileMetadata(
 	if hasTLSSecret {
 		// Pass cert and key via CLI args to align with emulator_entrypoint.sh interface
 		args = append(args, "--cert-path", "/tls/tls.crt", "--key-file", "/tls/tls.key")
+	}
+	if configuration.GatewayArgs != nil {
+		// A product-specific gateway supplies its own arguments; TLS material is
+		// still mounted and advertised through the env vars above.
+		args = configuration.GatewayArgs
 	}
 	sidecar.Args = args
 
@@ -317,7 +322,7 @@ func (impl Implementation) reconcileMetadata(
 		// sidecar and so that every signal carries a per-pod service.instance.id
 		// resource attribute. Only set when the sidecar is present to avoid
 		// connection errors and resource-attribute drift.
-		injectGatewayOTelEnv(mutatedPod)
+		injectGatewayOTelEnv(mutatedPod, configuration.GatewayContainerName)
 
 		log.Printf("OTel Collector sidecar injected successfully")
 	}
@@ -341,10 +346,10 @@ func (impl Implementation) reconcileMetadata(
 	}, nil
 }
 
-// gatewayContainerName is the name of the documentdb gateway container that
+// gatewayContainerName is the default name of the gateway container that
 // pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
 // Kept as a package-level constant so tests can reference it.
-const gatewayContainerName = "documentdb-gateway"
+const gatewayContainerName = config.DefaultGatewayContainerName
 
 func buildResources(cpuReq, cpuLim, memReq, memLim string) corev1.ResourceRequirements {
 	var requests corev1.ResourceList
@@ -462,10 +467,10 @@ func gatewayOTelEnvVars() []corev1.EnvVar {
 // Idempotency keeps pod construction stable if a caller passes an already
 // mutated pod. Container injection itself runs only for CREATE because
 // Kubernetes forbids adding or removing containers from an existing pod.
-func injectGatewayOTelEnv(pod *corev1.Pod) {
+func injectGatewayOTelEnv(pod *corev1.Pod, containerName string) {
 	envs := gatewayOTelEnvVars()
 	for i := range pod.Spec.Containers {
-		if pod.Spec.Containers[i].Name != gatewayContainerName {
+		if pod.Spec.Containers[i].Name != containerName {
 			continue
 		}
 		existing := make(map[string]bool, len(pod.Spec.Containers[i].Env))

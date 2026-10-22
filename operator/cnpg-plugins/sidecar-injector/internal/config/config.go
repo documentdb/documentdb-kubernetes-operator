@@ -33,6 +33,23 @@ const (
 	otelCPURequestParameter             = "otelCpuRequest"
 	otelCPULimitParameter               = "otelCpuLimit"
 	prometheusPortParameter             = "prometheusPort"
+
+	// Gateway contract parameters. They are optional and default to the
+	// DocumentDB gateway so other products can reuse this injector with a
+	// different gateway binary.
+	gatewayContainerNameParameter = "gatewayContainerName"
+	gatewayPortParameter          = "gatewayPort"
+	gatewayArgsParameter          = "gatewayArgs"
+	gatewayUsernameEnvParameter   = "gatewayUsernameEnv"
+	gatewayPasswordEnvParameter   = "gatewayPasswordEnv"
+)
+
+// Defaults for the gateway contract (the DocumentDB gateway).
+const (
+	DefaultGatewayContainerName = "documentdb-gateway"
+	DefaultGatewayPort          = int32(10260)
+	DefaultGatewayUsernameEnv   = "USERNAME"
+	DefaultGatewayPasswordEnv   = "PASSWORD"
 )
 
 // Configuration represents the plugin configuration parameters
@@ -54,6 +71,16 @@ type Configuration struct {
 	OTelCPURequest             string
 	OTelCPULimit               string
 	PrometheusPort             int32
+	// GatewayContainerName and GatewayPort name and expose the gateway sidecar.
+	GatewayContainerName string
+	GatewayPort          int32
+	// GatewayArgs, when non-nil, replaces the DocumentDB gateway arguments
+	// (--create-user/--start-pg/--pg-port and the TLS file flags) verbatim.
+	GatewayArgs []string
+	// GatewayUsernameEnv and GatewayPasswordEnv are the env var names the
+	// credential secret's username/password keys are exposed as.
+	GatewayUsernameEnv string
+	GatewayPasswordEnv string
 }
 
 // FromParameters builds a plugin configuration from the configuration parameters
@@ -98,6 +125,29 @@ func FromParameters(
 		otelCPURequestParameter,
 		otelCPULimitParameter,
 	)
+
+	var gatewayArgs []string
+	if raw := helper.Parameters[gatewayArgsParameter]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &gatewayArgs); err != nil {
+			validationErrors = append(
+				validationErrors,
+				validation.BuildErrorForParameter(helper, gatewayArgsParameter, "must be a JSON array of strings: "+err.Error()),
+			)
+		}
+	}
+
+	var gatewayPort int32
+	if portStr := helper.Parameters[gatewayPortParameter]; portStr != "" {
+		p, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil || p <= 0 || p > 65535 {
+			validationErrors = append(
+				validationErrors,
+				validation.BuildErrorForParameter(helper, gatewayPortParameter, "invalid port number: "+portStr),
+			)
+		} else {
+			gatewayPort = int32(p)
+		}
+	}
 
 	var prometheusPort int32
 	if portStr := helper.Parameters[prometheusPortParameter]; portStr != "" {
@@ -161,6 +211,11 @@ func FromParameters(
 		OTelCPURequest:             helper.Parameters[otelCPURequestParameter],
 		OTelCPULimit:               helper.Parameters[otelCPULimitParameter],
 		PrometheusPort:             prometheusPort,
+		GatewayContainerName:       helper.Parameters[gatewayContainerNameParameter],
+		GatewayPort:                gatewayPort,
+		GatewayArgs:                gatewayArgs,
+		GatewayUsernameEnv:         helper.Parameters[gatewayUsernameEnvParameter],
+		GatewayPasswordEnv:         helper.Parameters[gatewayPasswordEnvParameter],
 	}
 
 	configuration.applyDefaults()
@@ -228,6 +283,18 @@ func (config *Configuration) applyDefaults() {
 	if config.DocumentDbCredentialSecret == "" {
 		config.DocumentDbCredentialSecret = "documentdb-credentials"
 	}
+	if config.GatewayContainerName == "" {
+		config.GatewayContainerName = DefaultGatewayContainerName
+	}
+	if config.GatewayPort == 0 {
+		config.GatewayPort = DefaultGatewayPort
+	}
+	if config.GatewayUsernameEnv == "" {
+		config.GatewayUsernameEnv = DefaultGatewayUsernameEnv
+	}
+	if config.GatewayPasswordEnv == "" {
+		config.GatewayPasswordEnv = DefaultGatewayPasswordEnv
+	}
 }
 
 // parsePullPolicy converts a string to a corev1.PullPolicy.
@@ -276,6 +343,27 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	setIfNotEmpty(otelCPULimitParameter, config.OTelCPULimit)
 	if config.PrometheusPort > 0 {
 		result[prometheusPortParameter] = strconv.FormatInt(int64(config.PrometheusPort), 10)
+	}
+	// Gateway contract parameters are only serialized when they differ from
+	// the DocumentDB defaults, keeping existing parameter maps unchanged.
+	if config.GatewayContainerName != DefaultGatewayContainerName {
+		setIfNotEmpty(gatewayContainerNameParameter, config.GatewayContainerName)
+	}
+	if config.GatewayPort > 0 && config.GatewayPort != DefaultGatewayPort {
+		result[gatewayPortParameter] = strconv.FormatInt(int64(config.GatewayPort), 10)
+	}
+	if config.GatewayArgs != nil {
+		serializedArgs, err := json.Marshal(config.GatewayArgs)
+		if err != nil {
+			return nil, err
+		}
+		result[gatewayArgsParameter] = string(serializedArgs)
+	}
+	if config.GatewayUsernameEnv != DefaultGatewayUsernameEnv {
+		setIfNotEmpty(gatewayUsernameEnvParameter, config.GatewayUsernameEnv)
+	}
+	if config.GatewayPasswordEnv != DefaultGatewayPasswordEnv {
+		setIfNotEmpty(gatewayPasswordEnvParameter, config.GatewayPasswordEnv)
 	}
 
 	return result, nil

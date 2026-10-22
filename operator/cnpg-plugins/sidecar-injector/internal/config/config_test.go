@@ -279,3 +279,60 @@ func TestToParametersRoundTrip(t *testing.T) {
 		t.Errorf("round-trip otel cpu request = %q, want %q", restored.OTelCPURequest, original.OTelCPURequest)
 	}
 }
+
+func TestGatewayContract(t *testing.T) {
+	t.Run("defaults to the DocumentDB gateway and is not serialized", func(t *testing.T) {
+		config, errs := FromParameters(&common.Plugin{Parameters: map[string]string{}})
+		if len(errs) != 0 {
+			t.Fatalf("unexpected validation errors: %v", errs)
+		}
+		if config.GatewayContainerName != "documentdb-gateway" || config.GatewayPort != 10260 ||
+			config.GatewayUsernameEnv != "USERNAME" || config.GatewayPasswordEnv != "PASSWORD" || config.GatewayArgs != nil {
+			t.Errorf("unexpected defaults: %+v", config)
+		}
+		params, err := config.ToParameters()
+		if err != nil {
+			t.Fatalf("ToParameters() error: %v", err)
+		}
+		for _, key := range []string{"gatewayContainerName", "gatewayPort", "gatewayArgs", "gatewayUsernameEnv", "gatewayPasswordEnv"} {
+			if _, ok := params[key]; ok {
+				t.Errorf("default contract serialized %q", key)
+			}
+		}
+	})
+
+	t.Run("custom contract round-trips", func(t *testing.T) {
+		params := map[string]string{
+			"gatewayContainerName": "pgcosmos-gateway",
+			"gatewayPort":          "8081",
+			"gatewayArgs":          `["--listen","0.0.0.0:8081"]`,
+			"gatewayUsernameEnv":   "COSMOS_USER",
+			"gatewayPasswordEnv":   "COSMOS_KEY",
+		}
+		config, errs := FromParameters(&common.Plugin{Parameters: params})
+		if len(errs) != 0 {
+			t.Fatalf("unexpected validation errors: %v", errs)
+		}
+		out, err := config.ToParameters()
+		if err != nil {
+			t.Fatalf("ToParameters() error: %v", err)
+		}
+		for k, v := range params {
+			if out[k] != v {
+				t.Errorf("%s = %q, want %q", k, out[k], v)
+			}
+		}
+	})
+
+	t.Run("rejects invalid values", func(t *testing.T) {
+		for _, params := range []map[string]string{
+			{"gatewayPort": "0"},
+			{"gatewayPort": "abc"},
+			{"gatewayArgs": "--not-json"},
+		} {
+			if _, errs := FromParameters(&common.Plugin{Parameters: params}); len(errs) == 0 {
+				t.Errorf("expected validation error for %v", params)
+			}
+		}
+	})
+}

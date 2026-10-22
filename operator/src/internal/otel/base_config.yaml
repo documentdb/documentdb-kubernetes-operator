@@ -12,7 +12,7 @@ receivers:
     queries:
       - sql: "SELECT 1 as up"
         metrics:
-          - metric_name: documentdb.postgres.up
+          - metric_name: {{ .HealthMetricName }}
             value_column: up
             data_type: gauge
 

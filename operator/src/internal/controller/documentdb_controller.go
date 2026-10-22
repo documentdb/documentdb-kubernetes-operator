@@ -4,11 +4,8 @@
 package controller
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,43 +13,32 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/resources/status"
 	pgTime "github.com/cloudnative-pg/machinery/pkg/postgres/time"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/tools/remotecommand"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
-	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
+	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 const (
-	RequeueAfterShort = 10 * time.Second
-	RequeueAfterLong  = 30 * time.Second
+	RequeueAfterShort = engine.RequeueAfterShort
+	RequeueAfterLong  = engine.RequeueAfterLong
 
 	// documentDBFinalizer ensures we can emit PV retention warnings before deletion completes
 	documentDBFinalizer = "documentdb.io/pv-retention-finalizer"
-
-	// cnpgClusterHealthyPhase is the CNPG cluster status phase indicating a healthy cluster.
-	// This value is from CNPG's internal status representation.
-	cnpgClusterHealthyPhase = "Cluster in healthy state"
 )
 
-// DocumentDBReconciler reconciles a DocumentDB object
+// DocumentDBReconciler reconciles a DocumentDB object. The single-region
+// lifecycle is implemented by the product-neutral engine.ClusterReconciler;
+// this type supplies the DocumentDB adapter and the multi-region hooks.
 type DocumentDBReconciler struct {
 	client.Client
 	Scheme    *runtime.Scheme
@@ -61,12 +47,27 @@ type DocumentDBReconciler struct {
 	// Recorder emits Kubernetes events for this controller, including PV retention warnings during deletion.
 	Recorder record.EventRecorder
 	// SQLExecutor executes SQL commands against a CNPG cluster's primary pod.
-	// Defaults to executeSQLCommand (real pod exec via SPDY). Override in tests
+	// Defaults to engine.NewPodSQLExecutor (real pod exec via SPDY). Override in tests
 	// to inject canned responses without requiring a live Kubernetes cluster.
 	SQLExecutor func(ctx context.Context, cluster *cnpgv1.Cluster, sqlCommand string) (string, error)
 }
 
 var reconcileMutex sync.Mutex
+
+// engine returns the product-neutral reconciler bound to this reconciler's
+// clients. It is built per call so struct-literal construction (as in tests)
+// keeps working.
+func (r *DocumentDBReconciler) engine() *engine.ClusterReconciler[*dbpreview.DocumentDB] {
+	return &engine.ClusterReconciler[*dbpreview.DocumentDB]{
+		Client:      r.Client,
+		Scheme:      r.Scheme,
+		Recorder:    r.Recorder,
+		SQLExecutor: r.SQLExecutor,
+		Adapter:     product.DocumentDBAdapter{},
+		Replication: documentDBReplication{r},
+		Mutex:       &reconcileMutex,
+	}
+}
 
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=documentdb.io,resources=dbs/status,verbs=get;update;patch
@@ -75,450 +76,92 @@ var reconcileMutex sync.Mutex
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumes,verbs=get;list;watch;update;patch
 func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	reconcileMutex.Lock()
-	defer reconcileMutex.Unlock()
-
-	logger := log.FromContext(ctx)
-
-	// Fetch the DocumentDB instance
-	documentdb := &dbpreview.DocumentDB{}
-	err := r.Get(ctx, req.NamespacedName, documentdb)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// DocumentDB resource not found, handle cleanup
-			logger.Info("DocumentDB resource not found. Cleaning up associated resources.")
-			if err := r.cleanupResources(ctx, req); err != nil {
-				return ctrl.Result{}, err
-			}
-			return ctrl.Result{}, nil
-		}
-		logger.Error(err, "Failed to get DocumentDB resource")
-		return ctrl.Result{}, err
-	}
-
-	// Handle finalizer lifecycle (add on create, remove on delete)
-	if done, result, err := r.reconcileFinalizer(ctx, documentdb); done || err != nil {
-		return result, err
-	}
-
-	replicationContext, err := util.GetReplicationContext(ctx, r.Client, *documentdb)
-	if err != nil {
-		logger.Error(err, "Failed to determine replication context")
-		return ctrl.Result{}, err
-	}
-
-	if replicationContext.IsNotPresent() {
-		logger.Info("DocumentDB instance is not part of the replication setup; skipping reconciliation and deleting any present resources")
-		if err := r.cleanupResources(ctx, req); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := util.DeleteOwnedResources(ctx, r.Client, documentdb.ObjectMeta); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	var documentDbServiceIp string
-
-	// Only create/manage the service if ExposeViaService is configured
-	if documentdb.Spec.ExposeViaService.ServiceType != "" {
-		serviceType := corev1.ServiceTypeClusterIP
-		if documentdb.Spec.ExposeViaService.ServiceType == "LoadBalancer" {
-			serviceType = corev1.ServiceTypeLoadBalancer // Public LoadBalancer service
-		}
-
-		// Define the Service for this DocumentDB instance
-		ddbService := util.GetDocumentDBServiceDefinition(documentdb, replicationContext, req.Namespace, serviceType)
-
-		// Check if the DocumentDB Service already exists for this instance
-		foundService, err := util.UpsertService(ctx, r.Client, ddbService)
-		if err != nil {
-			logger.Error(err, "Failed to create DocumentDB Service; Requeuing.")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-
-		// Ensure DocumentDB Service has an IP assigned
-		documentDbServiceIp, err = util.EnsureServiceIP(ctx, foundService)
-		if err != nil {
-			logger.Info("DocumentDB Service IP not assigned, pausing until update posted.")
-			return ctrl.Result{}, nil
-		}
-	}
-
-	// Ensure App ServiceAccount, Role and RoleBindings are created
-	if err := r.EnsureServiceAccountRoleAndRoleBinding(ctx, documentdb, req.Namespace); err != nil {
-		logger.Info("Failed to create ServiceAccount, Role and RoleBinding; Requeuing.")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-	}
-
-	// create the CNPG Cluster
-	intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
-
-	currentCnpgCluster := &cnpgv1.Cluster{}
-	desiredCnpgCluster := cnpg.GetCnpgClusterSpecFromIntent(req, documentdb, intent, documentdb.Name, replicationContext.StorageClass, replicationContext.IsPrimary(), logger)
-
-	if replicationContext.IsReplicating() {
-		err = r.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, desiredCnpgCluster)
-		if err != nil {
-			logger.Error(err, "Failed to add physical replication features cnpg Cluster spec")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-	}
-
-	// Handle PV recovery lifecycle (create temp PVC before CNPG, cleanup after healthy)
-	if result, err := r.reconcilePVRecovery(ctx, documentdb, req.Namespace, desiredCnpgCluster.Name); err != nil {
-		logger.Error(err, "Failed to reconcile PV recovery")
-		return result, err
-	} else if result.Requeue || result.RequeueAfter > 0 {
-		return result, nil
-	}
-
-	// Reconcile OTel resources when monitoring is enabled.
-	// The sidecar itself is added/removed via CNPG plugin parameters;
-	// the operator triggers a rolling restart (via restart annotation)
-	// and CNPG manages the pod rollout.
-	monitoringEnabled := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
-	if monitoringEnabled {
-		if err := r.reconcileOtelConfigMap(ctx, documentdb, req.Namespace); err != nil {
-			logger.Error(err, "Failed to reconcile OTel ConfigMap")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-	}
-
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
-		if errors.IsNotFound(err) {
-			if err := r.Client.Create(ctx, desiredCnpgCluster); err != nil {
-				logger.Error(err, "Failed to create CNPG Cluster")
-				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-			}
-			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
-			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
-		}
-		logger.Error(err, "Failed to get CNPG Cluster")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-	}
-
-	// Build replication patch ops (performs side effects: HTTP token reads, service creation).
-	// syncReplicationChanges handles non-replicating cases internally via nil checks.
-	replicationOps, err, requeueTime := r.syncReplicationChanges(ctx, currentCnpgCluster, desiredCnpgCluster, documentdb, replicationContext)
-	if err != nil {
-		logger.Error(err, "Failed to build replication patch ops")
-	}
-	if requeueTime > 0 {
-		return ctrl.Result{RequeueAfter: requeueTime}, nil
-	}
-
-	// Sync all CNPG Cluster changes in one atomic patch (images + plugins + replication)
-	if err := cnpg.SyncCnpgCluster(ctx, r.Client, currentCnpgCluster, desiredCnpgCluster, replicationOps); err != nil {
-		logger.Error(err, "Failed to sync CNPG Cluster spec")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-	}
-
-	// Delete the OTel ConfigMap only after the CNPG Cluster spec no longer
-	// references it. If cluster sync fails, retaining it keeps the existing
-	// sidecar configuration functional and allows a subsequent reconcile to retry.
-	if !monitoringEnabled {
-		if err := r.deleteOtelConfigMap(ctx, documentdb.Name, req.Namespace); err != nil {
-			logger.Error(err, "Failed to clean up OTel ConfigMap")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-	}
-
-	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {
-		// Check if permissions have already been granted
-		checkCommand := "SELECT 1 FROM pg_roles WHERE rolname = 'streaming_replica' AND pg_has_role('streaming_replica', 'documentdb_admin_role', 'USAGE');"
-		output, err := r.SQLExecutor(ctx, currentCnpgCluster, checkCommand)
-		if err != nil {
-			logger.Error(err, "Failed to check if permissions already granted")
-			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
-		}
-
-		if !strings.Contains(output, "(1 row)") {
-			grantCommand := "GRANT documentdb_admin_role TO streaming_replica;"
-
-			if _, err := r.SQLExecutor(ctx, currentCnpgCluster, grantCommand); err != nil {
-				logger.Error(err, "Failed to grant permissions to streaming_replica")
-				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-			}
-		}
-	}
-
-	if replicationContext.IsPrimary() && documentdb.Status.TargetPrimary != "" {
-		// If these are different, we need to initiate a failover
-		if documentdb.Status.TargetPrimary != currentCnpgCluster.Status.TargetPrimary {
-
-			if err = Promote(ctx, r.Client, currentCnpgCluster.Namespace, currentCnpgCluster.Name, documentdb.Status.TargetPrimary); err != nil {
-				logger.Error(err, "Failed to promote standby cluster to primary")
-				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-			}
-		} else if documentdb.Status.TargetPrimary != documentdb.Status.LocalPrimary &&
-			documentdb.Status.TargetPrimary == currentCnpgCluster.Status.CurrentPrimary {
-
-			logger.Info("Marking failover as complete")
-			documentdb.Status.LocalPrimary = currentCnpgCluster.Status.CurrentPrimary
-			if err := r.Status().Update(ctx, documentdb); err != nil {
-				logger.Error(err, "Failed to update DocumentDB status")
-				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-			}
-		}
-	}
-
-	// Update DocumentDB status with CNPG Cluster phase and connection string
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err == nil {
-		statusChanged := false
-
-		// Update phase status from CNPG Cluster
-		if currentCnpgCluster.Status.Phase != "" && documentdb.Status.Status != currentCnpgCluster.Status.Phase {
-			documentdb.Status.Status = currentCnpgCluster.Status.Phase
-			statusChanged = true
-		}
-
-		// Update connection string if primary and service IP available
-		if replicationContext.IsPrimary() && documentDbServiceIp != "" {
-			trustTLS := documentdb.Status.TLS != nil && documentdb.Status.TLS.Ready
-			newConnStr := util.GenerateConnectionString(documentdb, documentDbServiceIp, trustTLS)
-			if documentdb.Status.ConnectionString != newConnStr {
-				documentdb.Status.ConnectionString = newConnStr
-				statusChanged = true
-			}
-		}
-
-		if statusChanged {
-			if err := r.Status().Update(ctx, documentdb); err != nil {
-				logger.Error(err, "Failed to update DocumentDB status")
-			}
-		}
-	}
-
-	// Check for fleet-networking issues and attempt to remediate
-	if replicationContext.IsAzureFleetNetworking() {
-		deleted, imports, err := r.CleanupMismatchedServiceImports(ctx, documentdb.Namespace, replicationContext)
-		if err != nil {
-			log.Log.Error(err, "Failed to cleanup ServiceImports")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-		if deleted {
-			log.Log.Info("Deleted mismatched ServiceImports; requeuing to allow for proper recreation")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-		reconciled, err := r.ForceReconcileInternalServiceExports(ctx, documentdb.Namespace, replicationContext, imports)
-		if err != nil {
-			log.Log.Error(err, "Failed to force reconcile InternalServiceExports")
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-		if reconciled {
-			log.Log.Info("Annotated InternalServiceExports for reconciliation; requeuing to allow fleet-networking to recreate ServiceImports")
-			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
-		}
-	}
-
-	// Check if documentdb extension needs ALTER EXTENSION UPDATE
-	if err := r.handleExtensionUpgrade(ctx, currentCnpgCluster, documentdb); err != nil {
-		logger.Error(err, "Failed to handle DocumentDB extension upgrade")
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-	}
-
-	// Don't requeue again unless there is a change
-	return ctrl.Result{}, nil
+	return r.engine().Reconcile(ctx, req)
 }
 
-// cleanupResources handles the cleanup of associated resources when a DocumentDB resource is not found
-func (r *DocumentDBReconciler) cleanupResources(ctx context.Context, req ctrl.Request) error {
-	log := log.FromContext(ctx)
+// documentDBReplication wires DocumentDB multi-region replication into the engine.
+type documentDBReplication struct{ r *DocumentDBReconciler }
 
-	// Cleanup ServiceAccount, Role and RoleBinding
-	if err := util.DeleteRoleBinding(ctx, r.Client, req.Name, req.Namespace); err != nil {
-		log.Error(err, "Failed to delete RoleBinding during cleanup", "RoleBindingName", req.Name)
-		// Continue with other cleanup even if this fails
+func (h documentDBReplication) Context(ctx context.Context, documentdb *dbpreview.DocumentDB) (*util.ReplicationContext, error) {
+	return util.GetReplicationContext(ctx, h.r.Client, *documentdb)
+}
+
+func (h documentDBReplication) AddToClusterSpec(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext, desired *cnpgv1.Cluster) error {
+	return h.r.AddClusterReplicationToClusterSpec(ctx, documentdb, rc, desired)
+}
+
+func (h documentDBReplication) SyncChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
+	return h.r.syncReplicationChanges(ctx, current, desired, documentdb, rc)
+}
+
+func (h documentDBReplication) ReconcilePrimary(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext, currentCnpgCluster *cnpgv1.Cluster) *ctrl.Result {
+	logger := log.FromContext(ctx)
+	if !rc.IsPrimary() || documentdb.Status.TargetPrimary == "" {
+		return nil
 	}
+	// If these are different, we need to initiate a failover
+	if documentdb.Status.TargetPrimary != currentCnpgCluster.Status.TargetPrimary {
+		if err := Promote(ctx, h.r.Client, currentCnpgCluster.Namespace, currentCnpgCluster.Name, documentdb.Status.TargetPrimary); err != nil {
+			logger.Error(err, "Failed to promote standby cluster to primary")
+			return &ctrl.Result{RequeueAfter: RequeueAfterShort}
+		}
+	} else if documentdb.Status.TargetPrimary != documentdb.Status.LocalPrimary &&
+		documentdb.Status.TargetPrimary == currentCnpgCluster.Status.CurrentPrimary {
 
-	if err := util.DeleteServiceAccount(ctx, r.Client, req.Name, req.Namespace); err != nil {
-		log.Error(err, "Failed to delete ServiceAccount during cleanup", "ServiceAccountName", req.Name)
-		// Continue with other cleanup even if this fails
+		logger.Info("Marking failover as complete")
+		documentdb.Status.LocalPrimary = currentCnpgCluster.Status.CurrentPrimary
+		if err := h.r.Status().Update(ctx, documentdb); err != nil {
+			logger.Error(err, "Failed to update DocumentDB status")
+			return &ctrl.Result{RequeueAfter: RequeueAfterShort}
+		}
 	}
-
-	if err := util.DeleteRole(ctx, r.Client, req.Name, req.Namespace); err != nil {
-		log.Error(err, "Failed to delete Role during cleanup", "RoleName", req.Name)
-		// Continue with other cleanup even if this fails
-	}
-
-	log.Info("Cleanup process completed", "DocumentDB", req.Name, "Namespace", req.Namespace)
 	return nil
 }
 
-// reconcileFinalizer handles the finalizer lifecycle:
-//   - If resource is being deleted: process deletion and remove finalizer
-//   - If finalizer is missing: add it
-//   - Otherwise: continue with normal reconciliation
-//
-// Returns (done, result, error) where done=true means reconciliation should stop.
+func (h documentDBReplication) ReconcileNetworking(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext) *ctrl.Result {
+	// Check for fleet-networking issues and attempt to remediate
+	if !rc.IsAzureFleetNetworking() {
+		return nil
+	}
+	deleted, imports, err := h.r.CleanupMismatchedServiceImports(ctx, documentdb.Namespace, rc)
+	if err != nil {
+		log.Log.Error(err, "Failed to cleanup ServiceImports")
+		return &ctrl.Result{RequeueAfter: RequeueAfterShort}
+	}
+	if deleted {
+		log.Log.Info("Deleted mismatched ServiceImports; requeuing to allow for proper recreation")
+		return &ctrl.Result{RequeueAfter: RequeueAfterShort}
+	}
+	reconciled, err := h.r.ForceReconcileInternalServiceExports(ctx, documentdb.Namespace, rc, imports)
+	if err != nil {
+		log.Log.Error(err, "Failed to force reconcile InternalServiceExports")
+		return &ctrl.Result{RequeueAfter: RequeueAfterShort}
+	}
+	if reconciled {
+		log.Log.Info("Annotated InternalServiceExports for reconciliation; requeuing to allow fleet-networking to recreate ServiceImports")
+		return &ctrl.Result{RequeueAfter: RequeueAfterLong}
+	}
+	return nil
+}
+
+// reconcileFinalizer handles the finalizer lifecycle; see engine.ClusterReconciler.ReconcileFinalizer.
 func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentdb *dbpreview.DocumentDB) (bool, ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	// Handle deletion
-	if !documentdb.ObjectMeta.DeletionTimestamp.IsZero() {
-		if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
-			// Finalizer already removed, nothing to do
-			return true, ctrl.Result{}, nil
-		}
-
-		// Check if PVs will be retained and emit warning
-		if documentdb.ShouldWarnAboutRetainedPVs() {
-			if err := r.emitPVRetentionWarning(ctx, documentdb); err != nil {
-				// Log but don't block deletion
-				logger.Error(err, "Failed to emit PV retention warning, continuing with deletion")
-			}
-		}
-
-		// Remove finalizer to allow deletion to proceed
-		controllerutil.RemoveFinalizer(documentdb, documentDBFinalizer)
-		if err := r.Update(ctx, documentdb); err != nil {
-			logger.Error(err, "Failed to remove finalizer")
-			return true, ctrl.Result{}, err
-		}
-
-		logger.Info("Removed finalizer, deletion will proceed")
-		return true, ctrl.Result{}, nil
-	}
-
-	// Ensure finalizer is present for non-deleting resources
-	if !controllerutil.ContainsFinalizer(documentdb, documentDBFinalizer) {
-		controllerutil.AddFinalizer(documentdb, documentDBFinalizer)
-		if err := r.Update(ctx, documentdb); err != nil {
-			logger.Error(err, "Failed to add finalizer")
-			return true, ctrl.Result{}, err
-		}
-		logger.Info("Added finalizer to DocumentDB")
-		return true, ctrl.Result{Requeue: true}, nil
-	}
-
-	// Finalizer is present and resource is not being deleted, continue reconciliation
-	return false, ctrl.Result{}, nil
+	return r.engine().ReconcileFinalizer(ctx, documentdb)
 }
 
 // emitPVRetentionWarning emits a warning event listing PVs that will be retained after deletion
 func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, documentdb *dbpreview.DocumentDB) error {
-	logger := log.FromContext(ctx)
-
-	if r.Recorder == nil {
-		logger.Info("Event recorder not configured, skipping PV retention warning")
-		return nil
-	}
-
-	// Find PVs associated with this DocumentDB
-	pvNames, err := r.findPVsForDocumentDB(ctx, documentdb)
-	if err != nil {
-		return fmt.Errorf("failed to find PVs: %w", err)
-	}
-
-	if len(pvNames) == 0 {
-		logger.V(1).Info("No PVs found for DocumentDB")
-		return nil
-	}
-
-	// Emit actionable warning event
-	message := fmt.Sprintf(
-		"PersistentVolumes retained after cluster deletion (policy=Retain). "+
-			"To delete when no longer needed: kubectl delete pv %s",
-		strings.Join(pvNames, " "))
-
-	r.Recorder.Event(documentdb, corev1.EventTypeWarning, "PVsRetained", message)
-	logger.Info("Emitted PV retention warning", "pvCount", len(pvNames), "pvNames", pvNames)
-
-	return nil
+	return r.engine().EmitPVRetentionWarning(ctx, documentdb)
 }
 
-// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster.
-// Uses the documentdb.io/cluster and documentdb.io/namespace labels on PVs, which is set by the PV controller.
-// This works correctly in both single and multi-cluster scenarios where CNPG
-// cluster names may differ from the DocumentDB name.
+// findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster
+// through the documentdb.io/cluster and documentdb.io/namespace PV labels.
 func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
-	pvList := &corev1.PersistentVolumeList{}
-	if err := r.List(ctx, pvList,
-		client.MatchingLabels{
-			util.LabelCluster:   documentdb.Name,
-			util.LabelNamespace: documentdb.Namespace,
-		},
-	); err != nil {
-		return nil, err
-	}
-
-	pvNames := make([]string, 0, len(pvList.Items))
-	for _, pv := range pvList.Items {
-		pvNames = append(pvNames, pv.Name)
-	}
-
-	return pvNames, nil
+	return r.engine().FindPVNames(ctx, documentdb)
 }
 
 func (r *DocumentDBReconciler) EnsureServiceAccountRoleAndRoleBinding(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
-	log := log.FromContext(ctx)
-
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods", "services", "endpoints"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-	}
-
-	// Create Role
-	if err := util.CreateRole(ctx, r.Client, documentdb.Name, namespace, rules); err != nil {
-		log.Error(err, "Failed to create Role for DocumentDB", "DocumentDB.Name", documentdb.Name, "Namespace", namespace)
-		return err
-	}
-
-	// Create ServiceAccount
-	if err := util.CreateServiceAccount(ctx, r.Client, documentdb.Name, namespace); err != nil {
-		log.Error(err, "Failed to create ServiceAccount for DocumentDB", "DocumentDB.Name", documentdb.Name, "Namespace", namespace)
-		return err
-	}
-
-	// Create RoleBinding
-	if err := util.CreateRoleBinding(ctx, r.Client, documentdb.Name, namespace); err != nil {
-		log.Error(err, "Failed to create RoleBinding for DocumentDB", "DocumentDB.Name", documentdb.Name, "Namespace", namespace)
-		return err
-	}
-
-	return nil
-}
-
-// If you ever have another state from the cluster that you want to trigger on, add it here
-func clusterInstanceStatusChangedPredicate() predicate.Predicate {
-	return predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldCluster, ok := e.ObjectOld.(*cnpgv1.Cluster)
-			if !ok {
-				return true
-			}
-			newCluster, ok := e.ObjectNew.(*cnpgv1.Cluster)
-			if !ok {
-				return true
-			}
-			// Trigger on healthy instances change OR phase change
-			return !slices.Equal(oldCluster.Status.InstancesStatus[cnpgv1.PodHealthy], newCluster.Status.InstancesStatus[cnpgv1.PodHealthy]) ||
-				oldCluster.Status.Phase != newCluster.Status.Phase
-		},
-	}
-}
-
-// documentDBServicePredicate returns a predicate that only triggers reconciliation
-// for services created by the DocumentDB operator (with the documentdb-service- prefix)
-func documentDBServicePredicate() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			return strings.HasPrefix(e.Object.GetName(), util.DOCUMENTDB_SERVICE_PREFIX)
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return strings.HasPrefix(e.ObjectNew.GetName(), util.DOCUMENTDB_SERVICE_PREFIX)
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			return strings.HasPrefix(e.Object.GetName(), util.DOCUMENTDB_SERVICE_PREFIX)
-		},
-		GenericFunc: func(e event.GenericEvent) bool {
-			return strings.HasPrefix(e.Object.GetName(), util.DOCUMENTDB_SERVICE_PREFIX)
-		},
-	}
+	return r.engine().EnsureRBAC(ctx, documentdb, namespace)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -528,16 +171,12 @@ func (r *DocumentDBReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if r.SQLExecutor == nil {
-		r.SQLExecutor = r.executeSQLCommand
+		r.SQLExecutor = engine.NewPodSQLExecutor(r.Client, r.Clientset, r.Config)
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&dbpreview.DocumentDB{}).
-		Owns(&corev1.Service{}, builder.WithPredicates(documentDBServicePredicate())).
-		Owns(&cnpgv1.Cluster{}, builder.WithPredicates(clusterInstanceStatusChangedPredicate())).
+	return r.engine().ControllerBuilder(mgr, "documentdb-controller").
 		Owns(&cnpgv1.Publication{}).
 		Owns(&cnpgv1.Subscription{}).
-		Named("documentdb-controller").
 		Complete(r)
 }
 
@@ -588,482 +227,34 @@ func Promote(ctx context.Context, cli client.Client,
 	return nil
 }
 
-// executeSQLCommand executes SQL commands directly in the postgres container of a running pod
-func (r *DocumentDBReconciler) executeSQLCommand(ctx context.Context, cluster *cnpgv1.Cluster, sqlCommand string) (string, error) {
-	logger := log.FromContext(ctx)
-
-	var targetPod corev1.Pod
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: cluster.Status.CurrentPrimary, Namespace: cluster.Namespace}, &targetPod); err != nil {
-		return "", fmt.Errorf("failed to get primary pod: %w", err)
-	}
-
-	// Execute psql command in the postgres container
-	cmd := []string{
-		"psql",
-		"-U", "postgres",
-		"-d", "postgres",
-		"-c", sqlCommand,
-	}
-
-	req := r.Clientset.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(targetPod.Name).
-		Namespace(cluster.Namespace).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: "postgres",
-			Command:   cmd,
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       false,
-		}, scheme.ParameterCodec)
-
-	exec, err := remotecommand.NewSPDYExecutor(r.Config, "POST", req.URL())
-	if err != nil {
-		return "", fmt.Errorf("failed to create executor: %w", err)
-	}
-
-	var stdout, stderr bytes.Buffer
-	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
-
-	if err != nil {
-		logger.Error(err, "Failed to execute SQL command",
-			"stdout", stdout.String(),
-			"stderr", stderr.String())
-		return "", fmt.Errorf("failed to execute command: %w (stderr: %s)", err, stderr.String())
-	}
-
-	if stderr.Len() > 0 && !strings.Contains(stderr.String(), "GRANT") {
-		logger.Info("SQL command executed with warnings", "stderr", stderr.String())
-	}
-
-	return stdout.String(), nil
-}
-
-// reconcilePVRecovery handles recovery from a retained PersistentVolume.
-//
-// CNPG only supports recovery from PVC (via VolumeSnapshots.Storage with Kind: PersistentVolumeClaim),
-// not directly from PV. To bridge this gap, we create a temporary PVC that binds to the retained PV
-// via spec.volumeName. CNPG then clones the data from this temp PVC to new cluster PVCs.
-// After recovery completes (cluster healthy), we delete the temp PVC to release the source PV
-// back to the user for manual cleanup or reuse.
-//
-// Flow:
-//   - If no PV recovery configured, return immediately
-//   - If CNPG exists and healthy, delete temp PVC (recovery complete)
-//   - If CNPG doesn't exist, validate PV and create temp PVC bound to it
+// reconcilePVRecovery handles recovery from a retained PersistentVolume; see
+// engine.ClusterReconciler.ReconcilePVRecovery.
 func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace, cnpgClusterName string) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	// Skip if PV recovery is not configured
-	if !documentdb.IsPVRecoveryConfigured() {
-		return ctrl.Result{}, nil
-	}
-
-	pvName := documentdb.GetPVNameForRecovery()
-	tempPVCName := util.TempPVCNameForPVRecovery(documentdb.Name)
-
-	// Check if CNPG cluster exists
-	cnpgCluster := &cnpgv1.Cluster{}
-	cnpgErr := r.Get(ctx, types.NamespacedName{Name: cnpgClusterName, Namespace: namespace}, cnpgCluster)
-
-	if cnpgErr == nil {
-		// CNPG exists - check if healthy and cleanup temp PVC
-		if cnpgCluster.Status.Phase == cnpgClusterHealthyPhase {
-			tempPVC := &corev1.PersistentVolumeClaim{}
-			if err := r.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: namespace}, tempPVC); err == nil {
-				logger.Info("Deleting temp PVC after successful recovery", "pvc", tempPVCName)
-				if err := r.Delete(ctx, tempPVC); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete temp PVC %s: %w", tempPVCName, err)
-				}
-			}
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if !errors.IsNotFound(cnpgErr) {
-		return ctrl.Result{}, fmt.Errorf("failed to get CNPG cluster: %w", cnpgErr)
-	}
-
-	// CNPG doesn't exist - prepare temp PVC for recovery
-
-	// Check if temp PVC already exists
-	tempPVC := &corev1.PersistentVolumeClaim{}
-	tempPVCErr := r.Get(ctx, types.NamespacedName{Name: tempPVCName, Namespace: namespace}, tempPVC)
-	if tempPVCErr == nil {
-		// Temp PVC exists, check if bound
-		if tempPVC.Status.Phase != corev1.ClaimBound {
-			logger.Info("Waiting for temp PVC to bind to PV", "pvc", tempPVCName, "phase", tempPVC.Status.Phase)
-			return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-		}
-		// PVC is bound, ready to proceed with CNPG creation
-		return ctrl.Result{}, nil
-	}
-
-	if !errors.IsNotFound(tempPVCErr) {
-		return ctrl.Result{}, fmt.Errorf("failed to get temp PVC %s: %w", tempPVCName, tempPVCErr)
-	}
-
-	// Verify PV exists and is available
-	pv := &corev1.PersistentVolume{}
-	if err := r.Get(ctx, types.NamespacedName{Name: pvName}, pv); err != nil {
-		if errors.IsNotFound(err) {
-			return ctrl.Result{}, fmt.Errorf("PV %s not found for recovery", pvName)
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to get PV %s: %w", pvName, err)
-	}
-
-	if !util.IsPVAvailableForRecovery(pv) {
-		return ctrl.Result{}, fmt.Errorf("PV %s must be Available or Released for recovery, current phase: %s.", pvName, pv.Status.Phase)
-	}
-
-	// Clear claimRef if PV is Released
-	if util.NeedsToClearClaimRef(pv) {
-		logger.Info("Clearing claimRef on Released PV", "pv", pvName)
-		pv.Spec.ClaimRef = nil
-		if err := r.Update(ctx, pv); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to clear claimRef on PV %s: %w", pvName, err)
-		}
-		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
-	}
-
-	// Create temp PVC
-	newPVC := util.BuildTempPVCForPVRecovery(documentdb.Name, namespace, pv)
-	if err := controllerutil.SetControllerReference(documentdb, newPVC, r.Scheme); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to set owner reference on temp PVC: %w", err)
-	}
-
-	if err := r.Create(ctx, newPVC); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create temp PVC %s: %w", tempPVCName, err)
-	}
-
-	logger.Info("Created temp PVC for PV recovery", "pvc", tempPVCName, "pv", pvName)
-	return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	return r.engine().ReconcilePVRecovery(ctx, documentdb, namespace, cnpgClusterName)
 }
 
-// parseExtensionVersionsFromOutput parses the output of pg_available_extensions query
-// Returns defaultVersion, installedVersion, and a boolean indicating if parsing was successful
-// Expected output format:
-//
-//	 default_version | installed_version
-//	-----------------+-------------------
-//	 0.110-0         | 0.110-0
-//
-// TODO: This parsing is fragile as it relies on psql tabular output format which can vary
-// with locale or PostgreSQL version. Consider one of these improvements:
-// - Option 1: Add -t -A flags to SQLExecutor for unaligned, tuples-only output ("0.110-0|0.110-0")
-// - Option 2: Use json_build_object() in SQL and json.Unmarshal() in Go for robust parsing
+// parseExtensionVersionsFromOutput parses the output of the pg_available_extensions query.
 func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedVersion string, ok bool) {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) < 3 {
-		return "", "", false
-	}
-
-	// Parse the data row (3rd line, index 2)
-	dataLine := strings.TrimSpace(lines[2])
-	parts := strings.Split(dataLine, "|")
-	if len(parts) != 2 {
-		return "", "", false
-	}
-
-	defaultVersion = strings.TrimSpace(parts[0])
-	installedVersion = strings.TrimSpace(parts[1])
-	return defaultVersion, installedVersion, true
+	return engine.ParseExtensionVersions(output)
 }
 
-// handleExtensionUpgrade handles the ALTER EXTENSION lifecycle after images have been synced
-// by SyncCnpgCluster. It:
-// 1. Updates DocumentDB status with the current images from the CNPG cluster
-// 2. Checks if ALTER EXTENSION UPDATE is needed and runs it (with two-phase upgrade support)
-// 3. Updates the DocumentDB schema version status
+// handleExtensionUpgrade handles the ALTER EXTENSION lifecycle; see
+// engine.ClusterReconciler.HandleExtensionUpgrade.
 func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, currentCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
-	logger := log.FromContext(ctx)
-
-	// Refetch documentdb to avoid potential race conditions with status updates
-	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
-		return fmt.Errorf("failed to refetch DocumentDB resource: %w", err)
-	}
-
-	// Update image status fields to reflect what's currently applied
-	if err := r.updateImageStatus(ctx, documentdb, currentCluster); err != nil {
-		logger.Error(err, "Failed to update image status")
-	}
-
-	// CNPG will trigger a rolling restart when images change. Wait for pods to become healthy
-	// before running ALTER EXTENSION.
-	if !slices.Contains(currentCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCluster.Status.CurrentPrimary) {
-		logger.Info("Current primary pod is not healthy; skipping DocumentDB extension upgrade")
-		return nil
-	}
-
-	// Check if ALTER EXTENSION UPDATE is needed
-	checkVersionSQL := "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'documentdb'"
-	output, err := r.SQLExecutor(ctx, currentCluster, checkVersionSQL)
-	if err != nil {
-		return fmt.Errorf("failed to check documentdb extension versions: %w", err)
-	}
-
-	defaultVersion, installedVersion, ok := parseExtensionVersionsFromOutput(output)
-	if !ok {
-		logger.Info("DocumentDB extension not found or not installed yet", "output", output)
-		return nil
-	}
-
-	if installedVersion == "" {
-		logger.Info("DocumentDB extension is not installed yet")
-		return nil
-	}
-
-	// Update DocumentDB schema version in status (even if no upgrade needed)
-	// Convert from pg_available_extensions format ("0.110-0") to semver ("0.110.0")
-	installedSemver := util.ExtensionVersionToSemver(installedVersion)
-	if documentdb.Status.SchemaVersion != installedSemver {
-		// Re-fetch to get latest resourceVersion before status update
-		if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
-			return fmt.Errorf("failed to refetch DocumentDB before schema version update: %w", err)
-		}
-		documentdb.Status.SchemaVersion = installedSemver
-		if err := r.Status().Update(ctx, documentdb); err != nil {
-			logger.Error(err, "Failed to update DocumentDB status with schema version")
-			return fmt.Errorf("failed to update DocumentDB status with schema version: %w", err)
-		}
-	}
-
-	// If versions match, no upgrade needed
-	if defaultVersion == installedVersion {
-		logger.V(1).Info("DocumentDB extension is up to date", "version", installedVersion)
-		return nil
-	}
-
-	// Rollback detection — check if the new binary is older than the installed schema.
-	// Note: Image rollback below installed schema version is also blocked by the validating
-	// webhook at admission time. This is a defense-in-depth guard.
-	cmp, err := util.CompareExtensionVersions(defaultVersion, installedVersion)
-	if err != nil {
-		logger.Error(err, "Failed to compare extension versions, skipping ALTER EXTENSION as a safety measure",
-			"defaultVersion", defaultVersion,
-			"installedVersion", installedVersion)
-		return nil
-	}
-
-	if cmp < 0 {
-		// ALTER EXTENSION UPDATE would attempt an unsupported downgrade. Skip it and warn the user.
-		msg := fmt.Sprintf(
-			"Extension rollback detected: binary offers version %s but schema is at %s. "+
-				"ALTER EXTENSION UPDATE skipped — DocumentDB does not provide downgrade scripts. "+
-				"The cluster will run with the older binary against the newer schema, which may cause issues. "+
-				"To resolve, update the extension image to a version that matches or exceeds %s.",
-			defaultVersion, installedVersion, installedVersion)
-		logger.Info(msg)
-		if r.Recorder != nil {
-			r.Recorder.Event(documentdb, corev1.EventTypeWarning, "ExtensionRollback", msg)
-		}
-		return nil
-	}
-
-	// Determine schema target based on spec.schemaVersion (two-phase upgrade logic)
-	schemaTarget, updateSQL := r.determineSchemaTarget(ctx, documentdb, defaultVersion, installedVersion)
-	if schemaTarget == "" {
-		// Two-phase mode or validation failure — do not run ALTER EXTENSION
-		return nil
-	}
-
-	// Run ALTER EXTENSION to upgrade
-	logger.Info("Upgrading DocumentDB extension",
-		"fromVersion", installedVersion,
-		"toVersion", schemaTarget)
-
-	if _, err := r.SQLExecutor(ctx, currentCluster, updateSQL); err != nil {
-		return fmt.Errorf("failed to run ALTER EXTENSION documentdb UPDATE: %w", err)
-	}
-
-	logger.Info("Successfully upgraded DocumentDB extension",
-		"fromVersion", installedVersion,
-		"toVersion", schemaTarget)
-
-	// Update DocumentDB schema version in status after upgrade
-	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
-		return fmt.Errorf("failed to refetch DocumentDB after schema upgrade: %w", err)
-	}
-	documentdb.Status.SchemaVersion = util.ExtensionVersionToSemver(schemaTarget)
-	if err := r.Status().Update(ctx, documentdb); err != nil {
-		logger.Error(err, "Failed to update DocumentDB status after schema upgrade")
-		return fmt.Errorf("failed to update DocumentDB status after schema upgrade: %w", err)
-	}
-
-	return nil
+	return r.engine().HandleExtensionUpgrade(ctx, currentCluster, documentdb)
 }
 
-// determineSchemaTarget decides the target schema version based on spec.schemaVersion.
-// Returns the target version (in pg_available_extensions format) and the SQL to execute.
-// Returns ("", "") if no schema update should run (two-phase mode or validation failure).
-func (r *DocumentDBReconciler) determineSchemaTarget(
-	ctx context.Context,
-	documentdb *dbpreview.DocumentDB,
-	binaryVersion string,
-	installedVersion string,
-) (string, string) {
-	logger := log.FromContext(ctx)
-	specSchemaVersion := documentdb.Spec.SchemaVersion
-
-	switch {
-	case specSchemaVersion == "":
-		// Two-phase mode: schema stays at current version until user explicitly sets schemaVersion.
-		// Use V(1) to avoid log spam — this fires every reconcile while upgrade is pending.
-		logger.V(1).Info("Schema update available but not requested (two-phase mode). "+
-			"Set spec.schemaVersion to finalize the upgrade.",
-			"binaryVersion", binaryVersion,
-			"installedVersion", installedVersion)
-		// Only emit the event when the binary is actually ahead of the installed schema
-		// (avoids firing on new clusters where status.schemaVersion is empty).
-		// Kubernetes deduplicates events with the same reason+message, but skipping
-		// entirely is cleaner.
-		if r.Recorder != nil && binaryVersion != installedVersion {
-			msg := fmt.Sprintf(
-				"Schema update available: binary version is %s, schema is at %s. "+
-					"Set spec.schemaVersion to %q or \"auto\" to finalize the upgrade.",
-				util.ExtensionVersionToSemver(binaryVersion),
-				util.ExtensionVersionToSemver(installedVersion),
-				util.ExtensionVersionToSemver(binaryVersion))
-			r.Recorder.Event(documentdb, corev1.EventTypeNormal, "SchemaUpdateAvailable", msg)
-		}
-		return "", ""
-
-	case specSchemaVersion == "auto":
-		// Auto-finalize: update schema to match binary version
-		return binaryVersion, "ALTER EXTENSION documentdb UPDATE"
-
-	default:
-		// Explicit version: update to that specific version.
-		targetPgVersion := util.SemverToExtensionVersion(specSchemaVersion)
-
-		// Guard: target must not exceed binary version.
-		// Note: schemaVersion <= binary version is enforced by the validating webhook at
-		// admission time. This is a defense-in-depth guard.
-		targetCmp, err := util.CompareExtensionVersions(targetPgVersion, binaryVersion)
-		if err != nil {
-			logger.Error(err, "Failed to compare target schema version with binary version",
-				"targetVersion", specSchemaVersion,
-				"binaryVersion", binaryVersion)
-			return "", ""
-		}
-		if targetCmp > 0 {
-			logger.Info("Skipping schema update: schemaVersion exceeds binary version (should have been rejected by webhook)",
-				"schemaVersion", specSchemaVersion,
-				"binaryVersion", util.ExtensionVersionToSemver(binaryVersion))
-			return "", ""
-		}
-
-		// Check: target must be > installed version (otherwise no-op)
-		installedCmp, err := util.CompareExtensionVersions(targetPgVersion, installedVersion)
-		if err != nil {
-			logger.Error(err, "Failed to compare target schema version with installed version",
-				"targetVersion", specSchemaVersion,
-				"installedVersion", installedVersion)
-			return "", ""
-		}
-		if installedCmp <= 0 {
-			logger.V(1).Info("Schema already at or beyond requested version",
-				"requestedVersion", specSchemaVersion,
-				"installedVersion", installedVersion)
-			return "", ""
-		}
-
-		// Safety: targetPgVersion is derived from spec.schemaVersion via SemverToExtensionVersion,
-		// which produces a "Major.Minor-Patch" string (e.g., "0.112-0"). The input is validated
-		// by the CRD schema regex pattern and the validating webhook's version parsing, so it
-		// contains only digits, dots, and hyphens — no SQL injection risk.
-		return targetPgVersion, fmt.Sprintf("ALTER EXTENSION documentdb UPDATE TO '%s'", targetPgVersion)
-	}
-}
-
-// updateImageStatus reads the current extension and gateway images from the CNPG cluster
-// and persists them into the DocumentDB status fields. This is a no-op if both fields
-// are already up to date.
+// updateImageStatus persists the current extension and gateway images into the DocumentDB status.
 func (r *DocumentDBReconciler) updateImageStatus(ctx context.Context, documentdb *dbpreview.DocumentDB, cluster *cnpgv1.Cluster) error {
-	// Read current extension image
-	currentExtImage := ""
-	for _, ext := range cluster.Spec.PostgresConfiguration.Extensions {
-		if ext.Name == "documentdb" {
-			currentExtImage = ext.ImageVolumeSource.Reference
-			break
-		}
-	}
-
-	// Read current gateway image
-	currentGwImage := ""
-	if len(cluster.Spec.Plugins) > 0 && cluster.Spec.Plugins[0].Parameters != nil {
-		currentGwImage = cluster.Spec.Plugins[0].Parameters["gatewayImage"]
-	}
-
-	// Only update if something changed
-	if documentdb.Status.DocumentDBImage == currentExtImage && documentdb.Status.GatewayImage == currentGwImage {
-		return nil
-	}
-
-	// Re-fetch to get latest resourceVersion before status update
-	if err := r.Get(ctx, types.NamespacedName{Name: documentdb.Name, Namespace: documentdb.Namespace}, documentdb); err != nil {
-		return fmt.Errorf("failed to refetch DocumentDB before image status update: %w", err)
-	}
-	documentdb.Status.DocumentDBImage = currentExtImage
-	documentdb.Status.GatewayImage = currentGwImage
-	if err := r.Status().Update(ctx, documentdb); err != nil {
-		return fmt.Errorf("failed to update DocumentDB image status: %w", err)
-	}
-	return nil
+	return r.engine().UpdateImageStatus(ctx, documentdb, cluster)
 }
 
 // reconcileOtelConfigMap ensures the OTel Collector base config ConfigMap exists and is up-to-date.
 func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
-	logger := log.FromContext(ctx)
-	cmName := otelcfg.ConfigMapName(documentdb.Name)
-
-	cm := &corev1.ConfigMap{}
-	cm.Name = cmName
-	cm.Namespace = namespace
-
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, cm, func() error {
-		// Set owner reference so the ConfigMap is garbage-collected with the DocumentDB CR.
-		if err := controllerutil.SetControllerReference(documentdb, cm, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set owner reference: %w", err)
-		}
-
-		configData, err := otelcfg.GenerateConfigMapData(documentdb.Name, namespace, documentdb.Spec.Monitoring)
-		if err != nil {
-			return fmt.Errorf("failed to generate OTel config: %w", err)
-		}
-		cm.Data = configData
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to reconcile OTel ConfigMap %s: %w", cmName, err)
-	}
-	if result != controllerutil.OperationResultNone {
-		logger.Info("OTel ConfigMap reconciled", "name", cmName, "operation", result)
-	}
-	return nil
+	return r.engine().ReconcileOtelConfigMap(ctx, documentdb, namespace)
 }
 
 // deleteOtelConfigMap removes the OTel ConfigMap when monitoring is no longer configured.
 func (r *DocumentDBReconciler) deleteOtelConfigMap(ctx context.Context, clusterName, namespace string) error {
-	logger := log.FromContext(ctx)
-	cmName := otelcfg.ConfigMapName(clusterName)
-
-	cm := &corev1.ConfigMap{}
-	cm.Name = cmName
-	cm.Namespace = namespace
-
-	err := r.Client.Delete(ctx, cm)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to delete OTel ConfigMap %s: %w", cmName, err)
-	}
-	logger.Info("OTel ConfigMap deleted", "name", cmName)
-	return nil
+	return r.engine().DeleteOtelConfigMap(ctx, clusterName, namespace)
 }

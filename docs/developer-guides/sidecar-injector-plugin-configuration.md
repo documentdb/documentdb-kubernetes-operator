@@ -78,6 +78,32 @@ plugins:
       annotations: '{"prometheus.io/scrape":"true","prometheus.io/port":"8080"}'
 ```
 
+### 4. Gateway Container Contract
+
+These optional parameters let a product other than DocumentDB run its own
+gateway with the same injector. The DocumentDB operator never sets them, so the
+defaults below apply.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `gatewayContainerName` | `documentdb-gateway` | Name of the injected gateway container |
+| `gatewayPort` | `10260` | Gateway container port |
+| `gatewayArgs` | DocumentDB gateway args | JSON array that replaces `--create-user <bool> --start-pg false --pg-port 5432` and the TLS `--cert-path`/`--key-file` flags verbatim |
+| `gatewayUsernameEnv` | `USERNAME` | Env var that receives the credential secret's `username` key |
+| `gatewayPasswordEnv` | `PASSWORD` | Env var that receives the credential secret's `password` key |
+
+The operator forwards these from `ProductProfile.Gateway` (see
+[Product-neutral operator core](../designs/product-neutral-core.md)).
+
+```yaml
+plugins:
+  - name: cnpg-i-sidecar-injector.documentdb.io
+    parameters:
+      gatewayContainerName: "pgcosmos-gateway"
+      gatewayPort: "8081"
+      gatewayArgs: '["--port","8081"]'
+```
+
 ## CNPG Plugin Parameters
 
 The DocumentDB controller automatically passes all configuration parameters to the sidecar injector plugin via CNPG's plugin parameter mechanism:

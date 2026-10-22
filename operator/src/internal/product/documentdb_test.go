@@ -6,6 +6,8 @@ package product
 import (
 	"testing"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -136,4 +138,56 @@ func TestDocumentDBAdapterPostgresImage(t *testing.T) {
 			t.Errorf("Postgres = %q, want %q", got, want)
 		}
 	})
+}
+
+// TestDocumentDBAdapterRendererInputs covers the per-instance renderer inputs the
+// adapter maps from the custom resource onto the intent.
+func TestDocumentDBAdapterRendererInputs(t *testing.T) {
+	t.Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, "bogus")
+	t.Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
+	certs := &cnpgv1.CertificatesConfiguration{ServerTLSSecret: "pg-tls"}
+	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+		Resource: dbpreview.Resource{
+			Memory:  "8Gi",
+			CPU:     "2",
+			Gateway: &dbpreview.ComponentResources{Memory: "1Gi"},
+		},
+		Monitoring:   &dbpreview.MonitoringSpec{Enabled: true},
+		LogLevel:     "debug",
+		Timeouts:     dbpreview.Timeouts{StopDelay: 90},
+		Postgres:     &dbpreview.PostgresSpec{Parameters: map[string]string{"work_mem": "8MB"}},
+		FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		TLS:          &dbpreview.TLSConfiguration{Postgres: certs},
+	}}
+	db.Status.TLS = &dbpreview.TLSStatus{Ready: false, SecretName: "gw-tls"}
+
+	intent := DocumentDBAdapter{}.ToClusterIntent(db)
+
+	if intent.Resources.Memory != "8Gi" || intent.Resources.CPU != "2" ||
+		intent.Resources.Gateway == nil || intent.Resources.Gateway.Memory != "1Gi" || intent.Resources.Database != nil {
+		t.Errorf("Resources = %+v", intent.Resources)
+	}
+	if intent.Monitoring != db.Spec.Monitoring {
+		t.Errorf("Monitoring not passed through")
+	}
+	if intent.Postgres.LogLevel != "debug" || intent.Postgres.StopDelay != 90 || intent.Postgres.Parameters["work_mem"] != "8MB" {
+		t.Errorf("Postgres = %+v", intent.Postgres)
+	}
+	if !intent.FeatureGates.ChangeStreams || intent.FeatureGates.IOUring {
+		t.Errorf("FeatureGates = %+v", intent.FeatureGates)
+	}
+	if intent.TLS.GatewaySecret != "" {
+		t.Errorf("gateway TLS secret must stay empty until TLS is ready, got %q", intent.TLS.GatewaySecret)
+	}
+	if intent.TLS.Postgres != certs {
+		t.Errorf("Postgres certificates not passed through")
+	}
+	if intent.Images.PostgresExtensionPullPolicy != "" || intent.Images.GatewayPullPolicy != "Never" {
+		t.Errorf("pull policies = %q/%q", intent.Images.PostgresExtensionPullPolicy, intent.Images.GatewayPullPolicy)
+	}
+
+	db.Status.TLS.Ready = true
+	if got := (DocumentDBAdapter{}).ToClusterIntent(db).TLS.GatewaySecret; got != "gw-tls" {
+		t.Errorf("ready gateway TLS secret = %q, want gw-tls", got)
+	}
 }

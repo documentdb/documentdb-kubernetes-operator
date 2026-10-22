@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
 // ValidateResources checks that spec.resource is internally consistent under the
@@ -28,10 +29,12 @@ import (
 //   - If neither the envelope nor any container sets the dimension, it is left
 //     unmanaged (no error).
 func ValidateResources(documentdb *dbpreview.DocumentDB, cfg SplitConfig) field.ErrorList {
-	res := documentdb.Spec.Resource
-	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
-	base := field.NewPath("spec", "resource")
+	return ValidateResourcesFor(product.DocumentDBResources(documentdb), monitoringEnabled(documentdb.Spec.Monitoring), field.NewPath("spec", "resource"), cfg)
+}
 
+// ValidateResourcesFor is the product-neutral form of ValidateResources. base is
+// the field path of the resource stanza on the product's custom resource.
+func ValidateResourcesFor(res product.Resources, monitoring bool, base *field.Path, cfg SplitConfig) field.ErrorList {
 	// Memory reservations, with defaults applied when a container omits the
 	// value (gateway always defaults to its fraction of the envelope).
 	memEnv := parseMemoryToBytes(res.Memory)
@@ -112,7 +115,7 @@ func validateDimension(base *field.Path, d dimension) field.ErrorList {
 		// database pin the dimension; any other partial configuration is invalid.
 		if (d.gwSet || d.dbSet || d.otelSet) && !(d.gwSet && d.dbSet) {
 			errs = append(errs, field.Required(base.Child(d.noun),
-				fmt.Sprintf("pod %s envelope is required unless %s is set on both spec.resource.gateway and spec.resource.database", d.noun, d.noun)))
+				fmt.Sprintf("pod %s envelope is required unless %s is set on both %s and %s", d.noun, d.noun, base.Child("gateway"), base.Child("database"))))
 		}
 		return errs
 	}
@@ -136,29 +139,29 @@ func validateDimension(base *field.Path, d dimension) field.ErrorList {
 
 func isSet(s string) bool { return s != "" && s != "0" }
 
-func componentMemSet(c *dbpreview.ComponentResources) bool {
+func componentMemSet(c *product.ComponentResources) bool {
 	return c != nil && isSet(c.Memory)
 }
 
-func componentCPUSet(c *dbpreview.ComponentResources) bool {
+func componentCPUSet(c *product.ComponentResources) bool {
 	return c != nil && isSet(c.CPU)
 }
 
-func componentMemBytes(c *dbpreview.ComponentResources) int64 {
+func componentMemBytes(c *product.ComponentResources) int64 {
 	if c == nil {
 		return 0
 	}
 	return parseMemoryToBytes(c.Memory)
 }
 
-func componentMemoryValue(c *dbpreview.ComponentResources) string {
+func componentMemoryValue(c *product.ComponentResources) string {
 	if c == nil {
 		return ""
 	}
 	return c.Memory
 }
 
-func componentCPUValue(c *dbpreview.ComponentResources) string {
+func componentCPUValue(c *product.ComponentResources) string {
 	if c == nil {
 		return ""
 	}
@@ -168,7 +171,7 @@ func componentCPUValue(c *dbpreview.ComponentResources) string {
 // milliCPUString renders a milli-CPU count as a Kubernetes quantity (e.g. "500m").
 func milliCPUString(m int64) string { return fmt.Sprintf("%dm", m) }
 
-func componentCPUMilli(c *dbpreview.ComponentResources) int64 {
+func componentCPUMilli(c *product.ComponentResources) int64 {
 	if c == nil {
 		return 0
 	}
