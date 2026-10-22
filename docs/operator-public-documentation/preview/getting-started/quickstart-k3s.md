@@ -138,6 +138,9 @@ stringData:
 EOF
 ```
 
+!!! warning "Demo credentials"
+    `dev_user` and `DevPassword123` are example credentials for local evaluation only. Replace them before using this configuration outside a disposable demo environment.
+
 ### Create the DocumentDB cluster
 
 ```bash title="Deploy a single-node DocumentDB cluster"
@@ -184,7 +187,7 @@ In another terminal, get the connection string and connect:
 # View the connection string from the DocumentDB cluster status
 kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.connectionString}'
 
-# Connect with mongosh (substitute your credentials)
+# Connect with mongosh using the demo credentials created above
 mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
@@ -230,7 +233,7 @@ kubectl get documentdb my-documentdb -n documentdb-ns
 
 ```text
 NAME            STATUS                     CONNECTION STRING
-my-documentdb   Cluster in healthy state   mongodb://...@192.168.1.100:10260/...
+my-documentdb   Cluster in healthy state   mongodb://dev_user:DevPassword123@192.168.1.100:10260/...
 ```
 
 Connect with `mongosh` using the external IP:

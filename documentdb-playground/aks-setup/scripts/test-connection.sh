@@ -204,13 +204,13 @@ print_connection_info() {
     echo "External IP: $EXTERNAL_IP"
     echo "Port: $SERVICE_PORT"
     echo "Username: $DB_USERNAME"
-    echo "Password: $DB_PASSWORD"
+    echo "Password: [HIDDEN]"
     echo ""
     echo "Connection String:"
-    echo "mongodb://${DB_USERNAME}:${DB_PASSWORD}@${EXTERNAL_IP}:${SERVICE_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+    echo "mongodb://<username>:<password>@${EXTERNAL_IP}:${SERVICE_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
     echo ""
     echo "Connect using mongosh:"
-    echo "mongosh 'mongodb://${DB_USERNAME}:${DB_PASSWORD}@${EXTERNAL_IP}:${SERVICE_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0'"
+    echo "mongosh 'mongodb://<username>:<password>@${EXTERNAL_IP}:${SERVICE_PORT}/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0'"
     echo "=================================================="
 }
 

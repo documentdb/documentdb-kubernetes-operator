@@ -66,7 +66,7 @@ kubectl apply -f manifests/drain-jobs.yaml
 The setup script builds a connection string for DocumentDB and stores it in a Kubernetes Secret:
 
 ```text
-mongodb://<user>:<pass>@documentdb-service-keda-demo.documentdb-ns.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true
+mongodb://<username>:<password>@documentdb-service-keda-demo.documentdb-ns.svc.cluster.local:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true
 ```
 
 | Parameter | Value | Why it's needed |

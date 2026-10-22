@@ -490,18 +490,16 @@ metadata:
   name: documentdb-instance-ns
 EOF
     
-    # Create credentials secret
-    kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: documentdb-credentials
-  namespace: documentdb-instance-ns
-type: Opaque
-stringData:
-  username: docdbadmin
-  password: SecurePassword123!
-EOF
+    # Create credentials once so rerunning the script does not rotate the password.
+    if ! kubectl get secret documentdb-credentials -n documentdb-instance-ns &> /dev/null; then
+        command -v openssl &> /dev/null || error "openssl is required to generate the DocumentDB password."
+        local documentdb_password
+        documentdb_password=$(openssl rand -hex 24)
+        kubectl create secret generic documentdb-credentials \
+            -n documentdb-instance-ns \
+            --from-literal=username=docdbadmin \
+            --from-literal=password="$documentdb_password"
+    fi
     
     # Deploy DocumentDB instance
     kubectl apply -f - <<EOF
@@ -580,7 +578,7 @@ print_summary() {
         echo "  - Check DocumentDB: kubectl get documentdb -n documentdb-instance-ns"
         echo "  - Check service status: kubectl get svc -n documentdb-instance-ns"
         echo "  - Wait for LoadBalancer IP: kubectl get svc documentdb-service-sample-documentdb -n documentdb-instance-ns -w"
-        echo "  - Once IP is assigned, connect: mongodb://docdbadmin:SecurePassword123!@<EXTERNAL-IP>:10260/"
+        echo "  - Once IP is assigned, connect: mongodb://<username>:<password>@<EXTERNAL-IP>:10260/"
     fi
     echo ""
     echo "⚠️  IMPORTANT: Run './delete-cluster.sh' when done to avoid AWS charges!"

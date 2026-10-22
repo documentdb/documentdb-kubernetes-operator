@@ -34,6 +34,7 @@ resource memberVnets 'Microsoft.Network/virtualNetworks@2023-09-01' = [for (regi
         name: 'aks-subnet'
         properties: {
           addressPrefix: '10.${i}.0.0/20'
+          defaultOutboundAccess: false
         }
       }
     ]
