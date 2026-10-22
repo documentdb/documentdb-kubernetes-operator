@@ -26,7 +26,7 @@ The project manages **5 container images** across two independent version tracks
 - **Operator track**: images built from Go source code in this repository
 - **Database track**: extension `.deb` from [PGDG](https://apt.postgresql.org/) (`trixie-pgdg`), gateway payload from the upstream [`documentdb/documentdb`](https://github.com/documentdb/documentdb) `documentdb-local` image
 
-All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/documentdb/documentdb-kubernetes-operator/`. A sixth image (PostgreSQL) comes from the CloudNative-PG project and is consumed as-is.
+All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/documentdb/documentdb-kubernetes-operator/`. A sixth image (PostgreSQL) comes from the CloudNative-PG project and is consumed as-is. For the Microsoft Container Registry (MCR) copies used by the Azure Arc extension, see [Container images on Microsoft Container Registry](mcr-images.md).
 
 ---
 
