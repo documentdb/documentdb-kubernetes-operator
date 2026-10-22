@@ -3141,15 +3141,19 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			var (
 				// events records SQL commands and CNPG Cluster patches in order.
-				events     []string
-				grantState string
-				revokeErr  error
+				events        []string
+				grantState    string
+				grantStateErr error
+				grantErr      error
+				revokeErr     error
 			)
 
 			BeforeEach(func() {
 				Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 				events = nil
 				grantState = "granted"
+				grantStateErr = nil
+				grantErr = nil
 				revokeErr = nil
 			})
 
@@ -3236,7 +3240,9 @@ var _ = Describe("DocumentDB Controller", func() {
 						events = append(events, cmd)
 						switch {
 						case strings.Contains(cmd, "has_schema_privilege"):
-							return " otel_monitor_grants\n---------------------\n " + grantState + "\n(1 row)", nil
+							return " otel_monitor_grants\n---------------------\n " + grantState + "\n(1 row)", grantStateErr
+						case cmd == grantSQL:
+							return "", grantErr
 						case strings.Contains(cmd, "REVOKE"):
 							return "DO", revokeErr
 						case strings.Contains(cmd, "pg_roles"):
@@ -3276,8 +3282,10 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			DescribeTable("on a healthy primary with monitoring enabled",
-				func(state string, wantGrants int, wantRequeue bool) {
+				func(state string, stateErr, execErr error, wantGrants int, wantRequeue bool) {
 					grantState = state
+					grantStateErr = stateErr
+					grantErr = execErr
 					result, _ := reconcile(true, newCluster(true, otelRole(cnpgv1.EnsurePresent)))
 
 					grants := 0
@@ -3287,15 +3295,20 @@ var _ = Describe("DocumentDB Controller", func() {
 						}
 					}
 					Expect(grants).To(Equal(wantGrants))
+					Expect(events).To(ContainElement(ContainSubstring("pg_available_extensions")))
 					if wantRequeue {
 						Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
 					} else {
 						Expect(result.RequeueAfter).To(BeZero())
 					}
 				},
-				Entry("grants schema usage once when the role lacks it", "pending", 1, false),
-				Entry("skips the grant when the role already holds it", "granted", 0, false),
-				Entry("requeues until CNPG creates the role", "missing", 0, true),
+				Entry("grants schema usage once when the role lacks it", "pending", nil, nil, 1, false),
+				Entry("skips the grant when the role already holds it", "granted", nil, nil, 0, false),
+				Entry("requeues until CNPG creates the role", "missing", nil, nil, 0, true),
+				Entry("requeues when the grant state is empty", "", nil, nil, 0, true),
+				Entry("requeues when the grant state is unexpected", "unexpected", nil, nil, 0, true),
+				Entry("requeues without granting when the grant-state query fails", "pending", fmt.Errorf("simulated grant-state query failure"), nil, 0, true),
+				Entry("requeues when granting schema usage fails", "pending", nil, fmt.Errorf("simulated grant failure"), 1, true),
 			)
 
 			It("does not query or grant schema usage until the primary is healthy", func() {
