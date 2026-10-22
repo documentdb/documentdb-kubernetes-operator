@@ -449,6 +449,15 @@ func OtelCollectorImage() string {
 	return envOr(OTEL_COLLECTOR_IMAGE_ENV, DEFAULT_OTEL_COLLECTOR_IMAGE)
 }
 
+// HTTPProxy returns the OTel Collector sidecar's HTTP proxy (DOCUMENTDB_OTEL_HTTP_PROXY) value (empty when unset).
+func HTTPProxy() string { return os.Getenv(HTTP_PROXY_ENV) }
+
+// HTTPSProxy returns the OTel Collector sidecar's HTTPS proxy (DOCUMENTDB_OTEL_HTTPS_PROXY) value (empty when unset).
+func HTTPSProxy() string { return os.Getenv(HTTPS_PROXY_ENV) }
+
+// NoProxy returns the OTel Collector sidecar's NO_PROXY (DOCUMENTDB_OTEL_NO_PROXY) value (empty when unset).
+func NoProxy() string { return os.Getenv(NO_PROXY_ENV) }
+
 // PostgresImage returns the operator-level base PostgreSQL operand image supplied
 // via the POSTGRES_IMAGE env, or empty when unset. An empty result means the
 // operator defers to CloudNativePG's built-in operand default (unless the CR

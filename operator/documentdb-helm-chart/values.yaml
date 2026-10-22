@@ -213,3 +213,47 @@ cloudnative-pg:
   additionalEnv:
     - name: ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES
       value: "true"
+
+# ---------------------------------------------------------------------------
+# Outbound proxy support
+# ---------------------------------------------------------------------------
+# When isProxyEnabled is true, the chart hydrates a proxy Secret in the operator
+# namespace and passes it to the operator as DOCUMENTDB_OTEL_* variables. The
+# operator forwards them (via plugin parameters) to the OTel Collector sidecar
+# injected into each DocumentDB pod as the standard HTTP_PROXY / HTTPS_PROXY /
+# NO_PROXY. The collector's Go runtime honors these natively
+# (http.ProxyFromEnvironment), so the OTLP exporter's egress is routed through
+# the proxy with no image change. The operator process itself is NOT proxied.
+# Works with standard forward proxies and CONNECT-tunneling gateways such as
+# Azure Arc Gateway.
+#
+# NO_PROXY: the chart appends a standard bypass list (localhost, .svc,
+# .svc.cluster.local and, unless bypassPrivateRanges is false, the RFC1918
+# ranges) to whatever you set here. Proxy
+# matching uses the requested HOSTNAME, not the IP it resolves to, so this list
+# does not cover every in-cluster destination. Short Service names such as
+# `otel-collector.monitoring` (no .svc suffix) and custom hostnames are sent to
+# the proxy unless you add them to noProxy. If your OTLP exporter endpoint is
+# in-cluster or otherwise must not use the proxy, add its host here.
+#
+# SECURITY: proxy URLs are copied into the Secret, the operator env, the CNPG
+# Cluster plugin parameters and the collector container env. Do NOT embed
+# credentials (http://user:pass@host) in these URLs; they would be readable by
+# anyone who can read those resources. Credentialed proxies are not supported yet.
+#
+# Use either `proxy` or the Azure Arc `Azure.proxySettings` key, not both; the
+# chart fails if both are enabled.
+#
+# httpsProxy: the collector's OTLP exporter uses gRPC, which only consults the
+# HTTPS proxy, even for plaintext connections. If only httpProxy is set, it is
+# also used as the HTTPS proxy for the collector.
+proxy:
+  isProxyEnabled: false
+  httpProxy: ""
+  httpsProxy: ""
+  noProxy: ""
+  # Set to false to send private-network destinations (10.0.0.0/8, 172.16.0.0/12,
+  # 192.168.0.0/16) through the proxy, e.g. an OTLP endpoint reachable only via
+  # the proxy. Only applies to `proxy`, not Azure.proxySettings. Cluster-local
+  # destinations (.svc, localhost) always bypass the proxy.
+  bypassPrivateRanges: true

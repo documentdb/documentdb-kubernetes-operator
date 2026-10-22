@@ -120,6 +120,9 @@ func SyncCnpgCluster(
 				util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT,
 				util.PLUGIN_PARAM_OTEL_CPU_REQUEST,
 				util.PLUGIN_PARAM_OTEL_CPU_LIMIT,
+				util.PLUGIN_PARAM_HTTP_PROXY,
+				util.PLUGIN_PARAM_HTTPS_PROXY,
+				util.PLUGIN_PARAM_NO_PROXY,
 			}
 			for _, key := range sidecarParamKeys {
 				desiredVal := getParam(desiredPlugin.Parameters, key)

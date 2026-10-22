@@ -33,6 +33,9 @@ const (
 	otelCPURequestParameter             = "otelCpuRequest"
 	otelCPULimitParameter               = "otelCpuLimit"
 	prometheusPortParameter             = "prometheusPort"
+	httpProxyParameter                  = "httpProxy"
+	httpsProxyParameter                 = "httpsProxy"
+	noProxyParameter                    = "noProxy"
 )
 
 // Configuration represents the plugin configuration parameters
@@ -54,6 +57,12 @@ type Configuration struct {
 	OTelCPURequest             string
 	OTelCPULimit               string
 	PrometheusPort             int32
+	// Outbound proxy routing for the OTel Collector sidecar. Empty when the
+	// operator is not proxy-configured. The collector's Go runtime reads these
+	// via http.ProxyFromEnvironment.
+	HTTPProxy  string
+	HTTPSProxy string
+	NoProxy    string
 }
 
 // FromParameters builds a plugin configuration from the configuration parameters
@@ -161,6 +170,9 @@ func FromParameters(
 		OTelCPURequest:             helper.Parameters[otelCPURequestParameter],
 		OTelCPULimit:               helper.Parameters[otelCPULimitParameter],
 		PrometheusPort:             prometheusPort,
+		HTTPProxy:                  helper.Parameters[httpProxyParameter],
+		HTTPSProxy:                 helper.Parameters[httpsProxyParameter],
+		NoProxy:                    helper.Parameters[noProxyParameter],
 	}
 
 	configuration.applyDefaults()
@@ -277,6 +289,9 @@ func (config *Configuration) ToParameters() (map[string]string, error) {
 	if config.PrometheusPort > 0 {
 		result[prometheusPortParameter] = strconv.FormatInt(int64(config.PrometheusPort), 10)
 	}
+	setIfNotEmpty(httpProxyParameter, config.HTTPProxy)
+	setIfNotEmpty(httpsProxyParameter, config.HTTPSProxy)
+	setIfNotEmpty(noProxyParameter, config.NoProxy)
 
 	return result, nil
 }
