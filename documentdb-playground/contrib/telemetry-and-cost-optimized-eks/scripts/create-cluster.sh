@@ -23,7 +23,7 @@ CLUSTER_TAGS="${CLUSTER_TAGS:-project=documentdb-playground,environment=dev,mana
 # DocumentDB Operator Configuration
 # For production: use documentdb/documentdb-operator (official)
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.0"
+OPERATOR_CHART_VERSION="1.0.0"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -678,21 +678,18 @@ install_documentdb_operator() {
         return 0
     fi
     
-    # Try public Helm repository first (no authentication required)
-    log "Adding DocumentDB public Helm repository..."
-    helm repo add documentdb https://documentdb.github.io/documentdb-kubernetes-operator 2>/dev/null || true
-    helm repo update documentdb
-    
-    log "Installing DocumentDB operator from public Helm repository..."
-    if helm install documentdb-operator documentdb/documentdb-operator \
+    # Try an anonymous OCI install first (the chart is public)
+    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+    if helm install documentdb-operator oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
+        --version ${OPERATOR_CHART_VERSION} \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
         --timeout 10m 2>/dev/null; then
-        success "DocumentDB operator installed successfully from public Helm repository"
+        success "DocumentDB operator installed successfully from OCI registry"
     else
         # Fallback to OCI registry with GitHub authentication
-        warn "Public Helm repository installation failed. Falling back to OCI registry..."
+        warn "Anonymous OCI installation failed. Retrying with GitHub authentication..."
         
         # Check for GitHub authentication
         if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then

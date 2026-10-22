@@ -67,7 +67,7 @@ spec:
   nodeCount: 1
   instancesPerNode: 1
   # Set to the PV data's schema version or newer (see Version compatibility).
-  documentDBVersion: "0.110.0"
+  documentDBVersion: "1.0.0"
   documentDbCredentialSecret: documentdb-credentials
   resource:
     storage:

@@ -17,7 +17,7 @@ KUBERNETES_VERSION="1.35.0"
 # For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)
 # For production: use microsoft/documentdb-operator (official)
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="0.1.0"
+OPERATOR_CHART_VERSION="1.0.0"
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
 DEPLOY_INSTANCE="${DEPLOY_INSTANCE:-false}"

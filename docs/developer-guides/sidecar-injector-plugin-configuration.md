@@ -43,7 +43,7 @@ spec:
       pvcSize: "10Gi"
   # Explicitly specify gateway image
   image:
-    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+    gateway: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0"
   exposeViaService:
     serviceType: "ClusterIP"
 ```
@@ -51,7 +51,7 @@ spec:
 **Built-in Fallback:**
 If no explicit spec configuration is set, the system falls back to:
 ```
-ghcr.io/microsoft/documentdb/documentdb-local:16
+ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0
 ```
 
 ### 2. Pod Labels Configuration
@@ -92,7 +92,7 @@ spec:
   plugins:
     - name: cnpg-i-sidecar-injector.documentdb.io
       parameters:
-        gatewayImage: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+        gatewayImage: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0"
         labels: '{"environment":"production","team":"data"}'
         annotations: '{"prometheus.io/scrape":"true"}'
 ```
@@ -113,7 +113,7 @@ spec:
     storage:
       pvcSize: "10Gi"
   image:
-    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+    gateway: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0"
 ```
 
 ### Advanced Configuration (All Parameters)
@@ -130,7 +130,7 @@ spec:
     storage:
       pvcSize: "20Gi"
   image:
-    gateway: "ghcr.io/microsoft/documentdb/documentdb-local:17"
+    gateway: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0"
   plugins:
     sidecarInjectorName: "cnpg-i-sidecar-injector.documentdb.io"
   exposeViaService:

@@ -234,14 +234,11 @@ kubectl create namespace documentdb-operator --dry-run=client -o yaml | kubectl 
 # Install operator (adjust image references as needed)
 cd /path/to/operator/documentdb-helm-chart
 helm upgrade --install documentdb-operator . \
-  -n documentdb-operator \
-  --set documentDbVersion="16"
+  -n documentdb-operator
 
 # Verify installation
 kubectl -n documentdb-operator get pods
 ```
-
-**Why override `documentDbVersion`?** The Helm chart defaults to `0.1.0`, and the operator uses that value when selecting the gateway image. Without this override, the CNPG pod attempts to pull `ghcr.io/documentdb/documentdb/documentdb-local:0.1.0`, which doesn't exist.
 
 ## Step 1: Deploy DocumentDB with LoadBalancer
 
