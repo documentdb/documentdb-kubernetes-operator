@@ -1018,6 +1018,19 @@ var _ = Describe("Physical Replication", func() {
 })
 
 var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", func() {
+	tlsSecrets := func(certs *cnpgv1.CertificatesConfiguration, namespace string) []runtime.Object {
+		result := []runtime.Object{&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: certs.ReplicationTLSSecret, Namespace: namespace},
+			Data:       map[string][]byte{"tls.crt": []byte("client-certificate")},
+		}}
+		if certs.ServerCASecret != "" {
+			result = append(result, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: certs.ServerCASecret, Namespace: namespace},
+				Data:       map[string][]byte{"ca.crt": []byte("server-ca")},
+			})
+		}
+		return result
+	}
 	// Helper to build a minimal cnpgCluster suitable for AddClusterReplicationToClusterSpec.
 	buildCnpgCluster := func(name, namespace string) *cnpgv1.Cluster {
 		return &cnpgv1.Cluster{
@@ -1068,7 +1081,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		cnpgCluster.Spec.Certificates = documentdb.Spec.TLS.Postgres
 		replicationContext := buildPrimaryReplicationContext("docdb-cert-provided", "", "")
 
-		reconciler := buildDocumentDBReconciler()
+		reconciler := buildDocumentDBReconciler(tlsSecrets(documentdb.Spec.TLS.Postgres, namespace)...)
 		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
 
 		Expect(cnpgCluster.Spec.Certificates).ToNot(BeNil())
@@ -1088,6 +1101,8 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 			// External (remote) clusters use the dedicated replication user with generated TLS material.
 			Expect(ec.ConnectionParameters["user"]).To(Equal("streaming_replica"))
 			Expect(ec.ConnectionParameters).To(HaveKeyWithValue("sslmode", "verify-full"))
+			Expect(ec.ConnectionParameters["options"]).To(HavePrefix("-c documentdb_operator.tls_generation=documentdb-tls-"))
+			Expect(ec.ConnectionParameters).NotTo(HaveKey("application_name"))
 			Expect(ec.SSLCert.Name).To(Equal("provided-replication-tls"))
 			Expect(ec.SSLKey.Name).To(Equal("provided-replication-tls"))
 			Expect(ec.SSLRootCert.Name).To(Equal("provided-server-ca"))
@@ -1118,7 +1133,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		cnpgCluster.Spec.Certificates = documentdb.Spec.TLS.Postgres
 		replicationContext := buildPrimaryReplicationContext("docdb-cert-partial", "", "")
 
-		reconciler := buildDocumentDBReconciler()
+		reconciler := buildDocumentDBReconciler(tlsSecrets(documentdb.Spec.TLS.Postgres, namespace)...)
 		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
 
 		Expect(cnpgCluster.Spec.Certificates).ToNot(BeNil())
@@ -1159,7 +1174,7 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		cnpgCluster.Spec.Certificates = documentdb.Spec.TLS.Postgres
 		replicationContext := buildPrimaryReplicationContext("docdb-distinct-ca", "", "")
 
-		reconciler := buildDocumentDBReconciler()
+		reconciler := buildDocumentDBReconciler(tlsSecrets(documentdb.Spec.TLS.Postgres, namespace)...)
 		Expect(reconciler.AddClusterReplicationToClusterSpec(ctx, documentdb, replicationContext, cnpgCluster)).To(Succeed())
 
 		for _, ec := range cnpgCluster.Spec.ExternalClusters {

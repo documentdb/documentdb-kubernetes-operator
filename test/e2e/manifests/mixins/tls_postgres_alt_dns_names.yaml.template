@@ -1,0 +1,10 @@
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  tls:
+    postgres:
+      serverAltDNSNames:
+        - postgres-extra.example.test
