@@ -548,12 +548,57 @@ func TestGenerateServiceName_PublicFunction(t *testing.T) {
 	}
 }
 
+func TestGetDocumentDBServiceName(t *testing.T) {
+	tests := []struct {
+		name           string
+		documentDBName string
+		expected       string
+	}{
+		{
+			name:           "short name is prefixed verbatim",
+			documentDBName: "test-db",
+			expected:       "documentdb-service-test-db",
+		},
+		{
+			name:           "name at the limit is not truncated",
+			documentDBName: strings.Repeat("a", 44),
+			expected:       "documentdb-service-" + strings.Repeat("a", 44),
+		},
+		{
+			name:           "long name is truncated to 63 characters",
+			documentDBName: strings.Repeat("a", 80),
+			expected:       "documentdb-service-" + strings.Repeat("a", 44),
+		},
+		{
+			name:           "truncation does not leave a trailing hyphen",
+			documentDBName: strings.Repeat("a", 43) + "-" + strings.Repeat("b", 20),
+			expected:       "documentdb-service-" + strings.Repeat("a", 43),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetDocumentDBServiceName(tt.documentDBName)
+			if result != tt.expected {
+				t.Errorf("GetDocumentDBServiceName(%q) = %q; expected %q", tt.documentDBName, result, tt.expected)
+			}
+			if len(result) > 63 {
+				t.Errorf("GetDocumentDBServiceName(%q) returned %d characters, exceeding the 63-character limit", tt.documentDBName, len(result))
+			}
+			if strings.HasSuffix(result, "-") || strings.HasSuffix(result, ".") {
+				t.Errorf("GetDocumentDBServiceName(%q) = %q, which is not a valid RFC 1123 label", tt.documentDBName, result)
+			}
+		})
+	}
+}
+
 func TestEnsureServiceIP(t *testing.T) {
 	tests := []struct {
-		name        string
-		service     *corev1.Service
-		expectError bool
-		errorMsg    string
+		name           string
+		service        *corev1.Service
+		expectError    bool
+		errorMsg       string
+		expectedResult string
 	}{
 		{
 			name:        "nil service returns error",
@@ -562,14 +607,19 @@ func TestEnsureServiceIP(t *testing.T) {
 			errorMsg:    "service is nil",
 		},
 		{
-			name: "ClusterIP service with valid IP",
+			name: "ClusterIP service returns in-cluster DNS name, not the raw IP",
 			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "documentdb-service-test-db",
+					Namespace: "test-namespace",
+				},
 				Spec: corev1.ServiceSpec{
 					Type:      corev1.ServiceTypeClusterIP,
 					ClusterIP: "10.0.0.1",
 				},
 			},
-			expectError: false,
+			expectError:    false,
+			expectedResult: "documentdb-service-test-db.test-namespace.svc",
 		},
 		{
 			name: "ClusterIP service with None returns error",
@@ -593,6 +643,40 @@ func TestEnsureServiceIP(t *testing.T) {
 			expectError: true,
 			errorMsg:    "ClusterIP not assigned",
 		},
+		{
+			name: "LoadBalancer service returns external IP",
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "documentdb-service-test-db",
+					Namespace: "test-namespace",
+				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "203.0.113.10"}},
+					},
+				},
+			},
+			expectError:    false,
+			expectedResult: "203.0.113.10",
+		},
+		{
+			name: "LoadBalancer service returns external hostname",
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "documentdb-service-test-db",
+					Namespace: "test-namespace",
+				},
+				Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
+					},
+				},
+			},
+			expectError:    false,
+			expectedResult: "lb.example.com",
+		},
 	}
 
 	for _, tt := range tests {
@@ -610,8 +694,8 @@ func TestEnsureServiceIP(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				if result == "" {
-					t.Error("Expected non-empty result")
+				if result != tt.expectedResult {
+					t.Errorf("EnsureServiceIP() = %q; expected %q", result, tt.expectedResult)
 				}
 			}
 		})

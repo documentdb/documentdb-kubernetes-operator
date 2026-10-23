@@ -28,6 +28,23 @@ import (
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 )
 
+// GetDocumentDBServiceName returns the name of the Service published for a DocumentDB
+// instance, truncated to the 63-character RFC 1123 label limit enforced by Kubernetes.
+//
+// This is the single source of truth for that name. Anything that has to agree with the
+// Service name — most importantly the gateway certificate SANs, which must match the
+// hostname published in status.connectionString for strict TLS verification to succeed —
+// must derive it from here rather than concatenating the prefix and the DocumentDB name
+// itself, otherwise long names silently diverge.
+func GetDocumentDBServiceName(documentDBName string) string {
+	serviceName := DOCUMENTDB_SERVICE_PREFIX + documentDBName
+	if len(serviceName) > 63 {
+		serviceName = serviceName[:63]
+	}
+	// A label may not end in a non-alphanumeric character, which truncation can produce.
+	return strings.TrimRight(serviceName, "-.")
+}
+
 // GetDocumentDBServiceDefinition returns the LoadBalancer Service definition for a given DocumentDB instance
 func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicationContext *ReplicationContext, namespace string, serviceType corev1.ServiceType) *corev1.Service {
 	// If no local HA, these two should be empty
@@ -41,11 +58,7 @@ func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicatio
 		}
 	}
 
-	// Ensure service name doesn't exceed 63 characters (Kubernetes limit)
-	serviceName := DOCUMENTDB_SERVICE_PREFIX + documentdb.Name
-	if len(serviceName) > 63 {
-		serviceName = serviceName[:63]
-	}
+	serviceName := GetDocumentDBServiceName(documentdb.Name)
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -107,16 +120,28 @@ func getEnvironmentSpecificAnnotations(environment string) map[string]string {
 	}
 }
 
-// EnsureServiceIP ensures that the Service has an IP assigned and returns it, or returns an error if not available
+// EnsureServiceIP ensures that the Service has a reachable endpoint and returns
+// the address clients should connect to, or an error if it is not available yet.
+//
+// For ClusterIP services this returns the in-cluster DNS name (<service>.<namespace>.svc)
+// rather than the raw ClusterIP. The DNS name resolves from any pod in the cluster, stays
+// valid when the Service is recreated with a different ClusterIP, and matches the SANs on
+// the gateway certificate, so strict TLS verification succeeds. A raw ClusterIP has no
+// matching SAN and fails hostname verification once TLS is trusted.
+//
+// For LoadBalancer services the externally reachable ingress IP/hostname is returned,
+// since cluster-internal DNS is not resolvable by outside clients.
+//
+// NOTE: the returned value is therefore not always an IP address, despite the name.
 func EnsureServiceIP(ctx context.Context, service *corev1.Service) (string, error) {
 	if service == nil {
 		return "", fmt.Errorf("service is nil")
 	}
 
-	// For ClusterIP services, return the ClusterIP directly
+	// For ClusterIP services, return the stable in-cluster DNS name
 	if service.Spec.Type == corev1.ServiceTypeClusterIP {
 		if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
-			return service.Spec.ClusterIP, nil
+			return fmt.Sprintf("%s.%s.svc", service.Name, service.Namespace), nil
 		}
 		return "", fmt.Errorf("ClusterIP not assigned")
 	}
