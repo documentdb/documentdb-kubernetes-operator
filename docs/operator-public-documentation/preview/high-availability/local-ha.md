@@ -218,7 +218,9 @@ A liveness restart affects only the gateway container: PostgreSQL keeps running 
 
 The gateway has no readiness or startup probe. Pod readiness covers every container, and a container with a startup probe is not ready until that probe succeeds, so either probe would remove PostgreSQL from the CloudNative-PG Services while the gateway is not listening and break replication. The gateway affects pod readiness only while its container is restarting.
 
-The probe checks only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes it until its connection backlog fills. Each probe opens a connection and closes it without sending data, and the gateway logs it as a failed connection at `ERROR` level. Once the checks start, expect about six of these entries per minute in each pod's gateway logs.
+The probe checks only that port 10260 accepts TCP connections, without a TLS handshake or a request. A gateway that hangs with its port open passes it until its connection backlog fills. Each probe opens a connection and closes it without sending data. Once the checks start, this produces about six connection attempts per minute per pod. These attempts can produce connection-closed or TLS-handshake error logs; the messages and line counts depend on the gateway runtime and TLS settings.
+
+Connection metric effects also depend on the gateway runtime and metric. In the Nacelle-based runtime, a probe that closes during TLS detection or the handshake does not reach the `server.connection.opened`, `server.connection.accepted`, or `server.connection.closed` counter hooks. The runtime-wide `server.connection.active` gauge can briefly include admitted probe sockets, and `server.connection.rejected` can count probes rejected by connection limits. Do not interpret the probe frequency as an increment rate for every connection metric.
 
 ## Monitoring and Failover Detection
 

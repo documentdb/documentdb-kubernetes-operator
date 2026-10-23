@@ -138,13 +138,13 @@ The sidecar connects to PostgreSQL as the `otel_monitor` role. Once the primary 
 
 Until the grants apply, the sidecar reports only `documentdb.postgres.up` and the filesystem and network metrics. When you disable monitoring, the operator revokes the grants before it removes the role.
 
-## Planned DocumentDB metric groups
+## Other metric groups
 
-The preview monitoring API is intentionally small while instrumentation lands. These areas are planned or out of scope for the current preview docs:
+The inventory above covers the sidecar's SQL and hostmetrics receivers. Other telemetry sources have a separate scope:
 
 | Area | Status |
 |------|--------|
-| Gateway application metrics | Planned. The sidecar can receive local OTLP from the gateway, but user-facing gateway metrics will be documented after a public gateway image emits them. |
+| Gateway application metrics | The public gateway includes [Nacelle](https://github.com/microsoft/nacelle) `server.connection.*` instrumentation. The sidecar can receive gateway OTLP, but gateway-emitted metrics are outside the inventory on this page. |
 | CNPG/PostgreSQL internals | The sidecar reports the curated PostgreSQL metrics listed above. Other CloudNativePG and PostgreSQL internals, such as WAL health, are out of preview scope. |
 | Operator controller metrics | Not yet exposed end-to-end through the operator Helm chart. |
 

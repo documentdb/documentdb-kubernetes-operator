@@ -22,7 +22,7 @@ The operator-owned monitoring surface is intentionally narrow:
 |------|----------------|
 | Sidecar injection | `spec.monitoring.enabled: true` adds one OTel Collector sidecar to each DocumentDB pod. |
 | Exporter routing | `spec.monitoring.exporter` chooses OTLP push, Prometheus pull, or both. |
-| DocumentDB-specific metrics | The sidecar emits pod-local metrics: PostgreSQL instance health and replication, per-database collection, index, and storage metrics, and data volume and pod network usage. See [Available metrics](metrics.md#available-metrics). Gateway application metrics will be documented when a public gateway image emits them. |
+| DocumentDB-specific metrics | The sidecar emits pod-local metrics: PostgreSQL instance health and replication, per-database collection, index, and storage metrics, and data volume and pod network usage. See [Available metrics](metrics.md#available-metrics) and [Other metric groups](metrics.md#other-metric-groups) for the scope of gateway application metrics. |
 | Monitoring role grants | The operator grants the sidecar's `otel_monitor` PostgreSQL role `USAGE` on the DocumentDB schemas that the metric queries need, and revokes the grants when you disable monitoring. The role has no access to document data. See [Monitoring role permissions](metrics.md#monitoring-role-permissions). |
 
 The operator chart does not install a node-level collector, a Prometheus stack, Grafana, or vendor dashboards. Those are downstream platform choices.
