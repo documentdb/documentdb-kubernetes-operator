@@ -13,15 +13,15 @@ This page documents metrics that are part of the DocumentDB operator monitoring 
 
 ## Available metrics
 
-### PostgreSQL health
+The sidecar in each DocumentDB pod collects three groups of metrics:
 
-The sidecar runs a lightweight SQL health query against the local PostgreSQL container in each DocumentDB pod.
+| Group | Source | Interval | Reported by |
+|-------|--------|----------|-------------|
+| [PostgreSQL instance](#postgresql-instance) | SQL queries against the local PostgreSQL server | 30 seconds | Every instance |
+| [DocumentDB catalog](#documentdb-catalog) | SQL queries against the DocumentDB catalog | 5 minutes | Primary only |
+| [Pod filesystem and network](#pod-filesystem-and-network) | OpenTelemetry Collector `hostmetrics` receiver | 30 seconds | Every instance |
 
-| OpenTelemetry metric | Type | Description |
-|----------------------|------|-------------|
-| `documentdb.postgres.up` | Gauge | `1` when the local PostgreSQL container responds to the sidecar health query. |
-
-Common resource attributes include:
+Every metric carries these resource attributes:
 
 | Attribute | Description |
 |-----------|-------------|
@@ -29,25 +29,128 @@ Common resource attributes include:
 | `k8s.namespace.name` | Kubernetes namespace |
 | `k8s.pod.name` | Kubernetes pod name |
 
-When exported through the Prometheus exporter, this metric is commonly queried as:
+The Prometheus exporter turns attributes into labels, replaces dots with underscores, and adds unit and type suffixes to metric names. The tables below list both forms. For example:
 
 ```promql
 documentdb_postgres_up{documentdb_cluster="my-cluster"}
 ```
 
-## Planned DocumentDB metric groups
+### PostgreSQL instance
 
-The preview monitoring API is intentionally small while instrumentation lands. These areas are planned or out of scope for the current preview docs:
+Each instance reports these metrics for its local PostgreSQL server. Use `k8s.pod.name` to tell instances apart.
+
+| OpenTelemetry metric | Prometheus name | Type | Unit | Description |
+|----------------------|-----------------|------|------|-------------|
+| `documentdb.postgres.up` | `documentdb_postgres_up` | Gauge | | `1` each time the sidecar's health query to the local PostgreSQL server succeeds. The sidecar never reports `0`. |
+| `documentdb.postgres.uptime` | `documentdb_postgres_uptime_seconds` | Gauge | `s` | Time since the local PostgreSQL server started. Resets whenever PostgreSQL restarts, including restarts inside a running pod. |
+| `documentdb.postgres.replication.lag` | `documentdb_postgres_replication_lag_seconds` | Gauge | `s` | Standbys only. Time since the last replayed transaction, or `0` when the standby has replayed all the WAL it received. |
+| `documentdb.postgres.replication.receiver.up` | `documentdb_postgres_replication_receiver_up` | Gauge | | Standbys only. `1` while the WAL receiver process runs, otherwise `0`. |
+| `documentdb.postgres.blocks.hit` | `documentdb_postgres_blocks_hit_total` | Counter | `{block}` | Blocks found in PostgreSQL shared buffers. |
+| `documentdb.postgres.blocks.read` | `documentdb_postgres_blocks_read_total` | Counter | `{block}` | Blocks read from outside shared buffers, including reads that the OS page cache serves. |
+
+- When the local PostgreSQL server does not answer, the sidecar records no PostgreSQL instance metrics. The Prometheus exporter keeps serving their last values, including `1` for `documentdb_postgres_up`, for up to 6 minutes, and then the series disappear. Detect an unresponsive server from an uptime that stops increasing or a missing `documentdb_postgres_up` series, not from `documentdb_postgres_up == 0`.
+- A standby that loses its connection to the primary also reports a lag of `0` once it has replayed everything it received. Read the lag together with `documentdb.postgres.replication.receiver.up`.
+- The primary does not report the replication metrics. After a standby is promoted, the Prometheus exporter keeps serving its last replication values for up to 6 minutes.
+- The block counters cover the PostgreSQL database that stores DocumentDB data. Compute the shared-buffer hit ratio from their rates.
+
+```promql
+# Shared-buffer hit ratio per instance
+rate(documentdb_postgres_blocks_hit_total[5m])
+  / (rate(documentdb_postgres_blocks_hit_total[5m]) + rate(documentdb_postgres_blocks_read_total[5m]))
+
+# Standbys whose WAL receiver is not running
+documentdb_postgres_replication_receiver_up == 0
+
+# Instances whose PostgreSQL has not answered the sidecar for 2 minutes, before their series expire
+changes(documentdb_postgres_uptime_seconds[2m]) == 0
+
+# Pods whose PostgreSQL series have expired or never appeared
+count by (k8s_namespace_name, documentdb_cluster, k8s_pod_name) (system_network_io_bytes_total)
+  unless on (k8s_namespace_name, documentdb_cluster, k8s_pod_name) documentdb_postgres_up
+```
+
+### DocumentDB catalog
+
+The primary reports these metrics; standbys report none. They describe user data only: the `admin`, `config`, and `local` databases and collections whose names start with `system.` are excluded.
+
+| OpenTelemetry metric | Prometheus name | Type | Unit | Description |
+|----------------------|-----------------|------|------|-------------|
+| `documentdb.database.count` | `documentdb_database_count` | Gauge | `{database}` | Number of user databases. |
+| `documentdb.database.collection.count` | `documentdb_database_collection_count` | Gauge | `{collection}` | Number of collections in the database, not counting views. |
+| `documentdb.database.view.count` | `documentdb_database_view_count` | Gauge | `{view}` | Number of views in the database. |
+| `documentdb.database.index.count` | `documentdb_database_index_count` | Gauge | `{index}` | Number of indexes in the database whose build has completed, including `_id` indexes. |
+| `documentdb.database.storage.size` | `documentdb_database_storage_size_bytes` | Gauge | `By` | On-disk size of the database's collections, excluding indexes. Matches `storageSize` from the `dbStats` command. |
+
+- Every catalog metric except `documentdb.database.count` has a `db.namespace` attribute (`db_namespace` in Prometheus) that holds the database name. Database names leave the cluster with your metrics, and each database adds four series.
+- After a switchover or failover, the new primary reports catalog metrics at its next collection, within 5 minutes. The Prometheus exporter on the former primary keeps serving its last values for up to 6 minutes, so aggregate across pods with `max` rather than `sum`.
+- With OTLP push, the backend receives one data point per series every 5 minutes. In backends with a 5 minute lookback window, such as Prometheus, query over a longer range.
+
+```promql
+# Storage size per database
+max by (k8s_namespace_name, documentdb_cluster, db_namespace) (documentdb_database_storage_size_bytes)
+
+# The same query for series ingested over OTLP
+max by (k8s_namespace_name, documentdb_cluster, db_namespace) (last_over_time(documentdb_database_storage_size_bytes[10m]))
+```
+
+### Pod filesystem and network
+
+The sidecar reads these metrics from inside its own pod with the OpenTelemetry Collector `hostmetrics` receiver. It needs no node-level collector or kubelet access. A node-level collector that runs the same receiver reports the same `system.*` names; the sidecar's series are the ones with the `documentdb.cluster` attribute.
+
+The `system.*` names and attributes come from OpenTelemetry Collector Contrib 0.149.0, the operator's default collector version. Upstream marks these metrics as Development stability, so other collector versions can rename them or change their attributes.
+
+#### Data volume
+
+The operator mounts the PostgreSQL data volume into the sidecar read-only, on an empty subdirectory, at `/var/lib/otel/pgdata`. The sidecar sees the capacity and usage of the whole volume but none of its data files.
+
+| OpenTelemetry metric | Prometheus name | Type | Unit | Description |
+|----------------------|-----------------|------|------|-------------|
+| `system.filesystem.usage` | `system_filesystem_usage_bytes` | UpDownCounter | `By` | Data volume space by `state`: `used`, `free`, or `reserved`. `free` is the space available to PostgreSQL, as in the `Avail` column of `df`. |
+| `system.filesystem.inodes.usage` | `system_filesystem_inodes_usage` | UpDownCounter | `{inodes}` | Data volume inodes by `state`: `used` or `free`. |
+| `system.filesystem.utilization` | `system_filesystem_utilization_ratio` | Gauge | `1` | Fraction of the data volume in use, from `0` to `1`, as in the `Use%` column of `df`. |
+
+These series also carry `device`, `mode`, `mountpoint`, and `type` attributes. `mountpoint` is always `/var/lib/otel/pgdata`, and `mode` is `ro` because the sidecar's mount is read-only; PostgreSQL's own mount stays writable.
+
+#### Network
+
+The sidecar shares the pod's network namespace, so these metrics count all pod traffic on each non-loopback interface (the `device` attribute, such as `eth0`): client traffic to the gateway, replication between instances, and metric export. Loopback traffic between the gateway, PostgreSQL, and the sidecar is excluded.
+
+| OpenTelemetry metric | Prometheus name | Type | Unit | Description |
+|----------------------|-----------------|------|------|-------------|
+| `system.network.io` | `system_network_io_bytes_total` | Counter | `By` | Bytes by `direction`: `receive` or `transmit`. |
+| `system.network.packets` | `system_network_packets_total` | Counter | `{packets}` | Packets by `direction`. |
+| `system.network.errors` | `system_network_errors_total` | Counter | `{errors}` | Errors by `direction`. |
+| `system.network.dropped` | `system_network_dropped_total` | Counter | `{packets}` | Dropped packets by `direction`. |
+
+Each pod reports 6 filesystem series, plus 8 network series per non-loopback interface.
+
+```promql
+# Free space on the data volume
+system_filesystem_usage_bytes{documentdb_cluster="my-cluster", state="free"}
+
+# Pod network throughput in bytes per second
+rate(system_network_io_bytes_total{documentdb_cluster="my-cluster"}[5m])
+```
+
+### Monitoring role permissions
+
+The sidecar connects to PostgreSQL as the `otel_monitor` role. Once the primary is healthy, the operator grants this role `USAGE` on the `documentdb_core`, `documentdb_api_internal`, and `documentdb_api_catalog` schemas. DocumentDB checks the first two for any query that calls a function or operator, and the catalog metrics read the third. The role has no access to the `documentdb_data` schema that stores documents.
+
+Until the grants apply, the sidecar reports only `documentdb.postgres.up` and the filesystem and network metrics. When you disable monitoring, the operator revokes the grants before it removes the role.
+
+## Other metric groups
+
+The inventory above covers the sidecar's SQL and hostmetrics receivers. Other telemetry sources have a separate scope:
 
 | Area | Status |
 |------|--------|
-| Gateway application metrics | Planned. The sidecar can receive local OTLP from the gateway, but user-facing gateway metrics will be documented after a public gateway image emits them. |
-| CNPG/PostgreSQL internals | Out of preview scope. A future revision may expose a curated subset such as replication freshness, PostgreSQL availability, WAL health, and database size. |
+| Gateway application metrics | The public gateway includes [Nacelle](https://github.com/microsoft/nacelle) `server.connection.*` instrumentation. The sidecar can receive gateway OTLP, but gateway-emitted metrics are outside the inventory on this page. |
+| CNPG/PostgreSQL internals | The sidecar reports the curated PostgreSQL metrics listed above. Other CloudNativePG and PostgreSQL internals, such as WAL health, are out of preview scope. |
 | Operator controller metrics | Not yet exposed end-to-end through the operator Helm chart. |
 
 ## Pod and container resource metrics
 
-Pod CPU, container memory, network I/O, filesystem usage, and node metrics are Kubernetes platform metrics. The DocumentDB operator does not install a node-level collector or grant kubelet permissions to DocumentDB pods.
+The sidecar reports the data volume usage and pod network I/O listed under [Pod filesystem and network](#pod-filesystem-and-network). CPU, memory, ephemeral storage, and node metrics are Kubernetes platform metrics. The DocumentDB operator does not install a node-level collector or grant kubelet permissions to DocumentDB pods.
 
 Use your existing platform collector, managed cloud agent, kube-prometheus-stack, or OTel Collector DaemonSet for these metrics. Filter that data to DocumentDB workloads using pod or container attributes such as:
 

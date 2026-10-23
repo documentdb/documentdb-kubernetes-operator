@@ -12,7 +12,7 @@ tags:
 
 DocumentDB monitoring is built around an opt-in OpenTelemetry Collector sidecar that the operator injects into each DocumentDB pod. The sidecar collects DocumentDB-owned, pod-local metrics and can export them to an OTLP backend, expose them for Prometheus scraping, or do both.
 
-Pod, container, and node resource metrics are Kubernetes platform metrics, not DocumentDB-specific metrics. Use your platform collector for those signals. If your cluster does not already collect them, the telemetry playground includes a reference kubeletstats DaemonSet you can deploy as an example.
+The sidecar also reports data volume usage and network I/O for its own pod. CPU, memory, and ephemeral storage metrics for pods and containers, and node metrics, are Kubernetes platform metrics, not DocumentDB-specific metrics. Use your platform collector for those signals. If your cluster does not already collect them, the telemetry playground includes a reference kubeletstats DaemonSet you can deploy as an example.
 
 ## What the operator owns
 
@@ -22,7 +22,8 @@ The operator-owned monitoring surface is intentionally narrow:
 |------|----------------|
 | Sidecar injection | `spec.monitoring.enabled: true` adds one OTel Collector sidecar to each DocumentDB pod. |
 | Exporter routing | `spec.monitoring.exporter` chooses OTLP push, Prometheus pull, or both. |
-| DocumentDB-specific metrics | The sidecar emits pod-local metrics such as PostgreSQL health. Gateway application metrics will be documented when a public gateway image emits them. |
+| DocumentDB-specific metrics | The sidecar emits pod-local metrics: PostgreSQL instance health and replication, per-database collection, index, and storage metrics, and data volume and pod network usage. See [Available metrics](metrics.md#available-metrics) and [Other metric groups](metrics.md#other-metric-groups) for the scope of gateway application metrics. |
+| Monitoring role grants | The operator grants the sidecar's `otel_monitor` PostgreSQL role `USAGE` on the DocumentDB schemas that the metric queries need, and revokes the grants when you disable monitoring. The role has no access to document data. See [Monitoring role permissions](metrics.md#monitoring-role-permissions). |
 
 The operator chart does not install a node-level collector, a Prometheus stack, Grafana, or vendor dashboards. Those are downstream platform choices.
 
@@ -129,7 +130,9 @@ spec:
 
 ## Pod and container resource metrics
 
-CPU, memory, network, filesystem, and node metrics are collected from the Kubernetes platform, usually from kubelet, cAdvisor, a managed cloud agent, kube-prometheus-stack, or an OTel Collector DaemonSet. They are useful for operating DocumentDB, but they are not produced by the DocumentDB operator.
+The sidecar reports two pod-level resource signals itself: data volume usage and pod network I/O. See [Pod filesystem and network](metrics.md#pod-filesystem-and-network).
+
+CPU, memory, ephemeral storage, and node metrics are collected from the Kubernetes platform, usually from kubelet, cAdvisor, a managed cloud agent, kube-prometheus-stack, or an OTel Collector DaemonSet. They are useful for operating DocumentDB, but they are not produced by the DocumentDB operator.
 
 If your platform already collects these metrics, filter to DocumentDB pods or containers in that backend. For example, Prometheus metrics produced by an OTel kubeletstats collector commonly use filters like:
 
@@ -165,6 +168,7 @@ If metrics are missing, check:
 - At least one exporter is configured under `spec.monitoring.exporter`.
 - The pods include an `otel-collector` container.
 - The sidecar logs do not show exporter connection errors: `kubectl logs <pod> -c otel-collector -n "$NS"`.
+- If the sidecar reports only `documentdb.postgres.up` and the `system.*` metrics, the monitoring role does not have its schema grants yet. The operator applies them once the primary is healthy. Check the operator logs for `Failed to grant schema usage to the OTel monitoring role`.
 
 ## Telemetry playground
 
