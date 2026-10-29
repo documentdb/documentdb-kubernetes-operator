@@ -1,4 +1,4 @@
 ## Append samples of your project ##
 resources:
-- db_preview_documentdb.yaml
+- db_v1_documentdb.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

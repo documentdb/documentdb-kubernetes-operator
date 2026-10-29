@@ -188,7 +188,7 @@ func TestFindDocumentDBServiceEndpointMatchesOwnerNotSubstring(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name, Namespace: namespace,
 				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: "documentdb.io/preview", Kind: "DocumentDB", Name: owner,
+					APIVersion: "documentdb.io/v1", Kind: "DocumentDB", Name: owner,
 					UID: uid, Controller: &[]bool{true}[0],
 				}},
 			},

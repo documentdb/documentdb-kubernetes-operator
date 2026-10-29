@@ -46,6 +46,7 @@ help: ## Display this help.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	./hack/sync-preview-api.sh
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	cp -f config/crd/bases/*.yaml ../documentdb-helm-chart/crds/
 
@@ -95,13 +96,13 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 ##@ Documentation
 
-API_REFERENCE_OUTPUT ?= ../../docs/operator-public-documentation/preview/api-reference.md
+API_REFERENCE_OUTPUT ?= ../../docs/operator-public-documentation/v1/api-reference.md
 API_REFERENCE_CONFIG ?= ../../docs/crd-ref-docs-config.yaml
 
 .PHONY: api-docs
 api-docs: crd-ref-docs ## Generate CRD API reference documentation.
 	$(CRD_REF_DOCS) \
-		--source-path=api/preview/ \
+		--source-path=api/v1/ \
 		--config=$(API_REFERENCE_CONFIG) \
 		--renderer=markdown \
 		--output-path=$(API_REFERENCE_OUTPUT)

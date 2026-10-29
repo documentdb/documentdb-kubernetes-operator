@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -30,8 +30,8 @@ type BackupAdapter[B client.Object] interface {
 	NewList() client.ObjectList
 	// Items returns pointers to the items of a list built by NewList.
 	Items(list client.ObjectList) []B
-	Spec(B) *dbpreview.BackupSpec
-	Status(B) *dbpreview.BackupStatus
+	Spec(B) *dbv1.BackupSpec
+	Status(B) *dbv1.BackupStatus
 }
 
 // BackupReconciler takes on-demand volume-snapshot backups of a product
@@ -202,10 +202,10 @@ func BuildVolumeSnapshotClass(environment string) *snapshotv1.VolumeSnapshotClas
 }
 
 // CreateCNPGBackup creates a new CNPG Backup resource
-func (r *BackupReconciler[T, B]) CreateCNPGBackup(ctx context.Context, backup B, backupConfiguration *dbpreview.BackupConfiguration, replicationContext *util.ReplicationContext) (ctrl.Result, error) {
+func (r *BackupReconciler[T, B]) CreateCNPGBackup(ctx context.Context, backup B, backupConfiguration *dbv1.BackupConfiguration, replicationContext *util.ReplicationContext) (ctrl.Result, error) {
 	cnpgClusterName := replicationContext.CNPGClusterName
 
-	cnpgBackup, err := dbpreview.NewCNPGBackup(r.Scheme, backup, cnpgClusterName)
+	cnpgBackup, err := dbv1.NewCNPGBackup(r.Scheme, backup, cnpgClusterName)
 	if err != nil {
 		return r.SetBackupPhaseFailed(ctx, backup, "Failed to initialize backup: "+err.Error(), backupConfiguration)
 	}
@@ -220,8 +220,8 @@ func (r *BackupReconciler[T, B]) CreateCNPGBackup(ctx context.Context, backup B,
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
-func (r *BackupReconciler[T, B]) expirationTime(backup B, backupConfiguration *dbpreview.BackupConfiguration) *metav1.Time {
-	return dbpreview.BackupExpirationTime(r.Backups.Spec(backup), r.Backups.Status(backup), backup.GetCreationTimestamp(), backupConfiguration)
+func (r *BackupReconciler[T, B]) expirationTime(backup B, backupConfiguration *dbv1.BackupConfiguration) *metav1.Time {
+	return dbv1.BackupExpirationTime(r.Backups.Spec(backup), r.Backups.Status(backup), backup.GetCreationTimestamp(), backupConfiguration)
 }
 
 func (r *BackupReconciler[T, B]) patchStatus(ctx context.Context, backup B, original client.Object) error {
@@ -234,10 +234,10 @@ func (r *BackupReconciler[T, B]) patchStatus(ctx context.Context, backup B, orig
 }
 
 // UpdateBackupStatus reconciles and persists the Backup's status, returning the reconcile result.
-func (r *BackupReconciler[T, B]) UpdateBackupStatus(ctx context.Context, backup B, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbpreview.BackupConfiguration, sourceSchemaVersion string) (ctrl.Result, error) {
+func (r *BackupReconciler[T, B]) UpdateBackupStatus(ctx context.Context, backup B, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbv1.BackupConfiguration, sourceSchemaVersion string) (ctrl.Result, error) {
 	original := backup.DeepCopyObject().(client.Object)
 	status := r.Backups.Status(backup)
-	needsUpdate := dbpreview.UpdateBackupStatus(r.Backups.Spec(backup), status, backup.GetCreationTimestamp(), cnpgBackup, backupConfiguration, sourceSchemaVersion)
+	needsUpdate := dbv1.UpdateBackupStatus(r.Backups.Spec(backup), status, backup.GetCreationTimestamp(), cnpgBackup, backupConfiguration, sourceSchemaVersion)
 
 	if needsUpdate {
 		if err := r.patchStatus(ctx, backup, original); err != nil {
@@ -257,7 +257,7 @@ func (r *BackupReconciler[T, B]) UpdateBackupStatus(ctx context.Context, backup 
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
-func (r *BackupReconciler[T, B]) setTerminalPhase(ctx context.Context, backup B, phase cnpgv1.BackupPhase, reason, message string, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
+func (r *BackupReconciler[T, B]) setTerminalPhase(ctx context.Context, backup B, phase cnpgv1.BackupPhase, reason, message string, backupConfiguration *dbv1.BackupConfiguration) (ctrl.Result, error) {
 	original := backup.DeepCopyObject().(client.Object)
 
 	status := r.Backups.Status(backup)
@@ -278,13 +278,13 @@ func (r *BackupReconciler[T, B]) setTerminalPhase(ctx context.Context, backup B,
 }
 
 // SetBackupPhaseFailed marks the backup failed and records errMessage.
-func (r *BackupReconciler[T, B]) SetBackupPhaseFailed(ctx context.Context, backup B, errMessage string, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
+func (r *BackupReconciler[T, B]) SetBackupPhaseFailed(ctx context.Context, backup B, errMessage string, backupConfiguration *dbv1.BackupConfiguration) (ctrl.Result, error) {
 	return r.setTerminalPhase(ctx, backup, cnpgv1.BackupPhaseFailed, "BackupFailed", errMessage, backupConfiguration)
 }
 
 // SetBackupPhaseSkipped marks the backup skipped and records message.
-func (r *BackupReconciler[T, B]) SetBackupPhaseSkipped(ctx context.Context, backup B, message string, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
-	return r.setTerminalPhase(ctx, backup, dbpreview.BackupPhaseSkipped, "BackupSkipped", message, backupConfiguration)
+func (r *BackupReconciler[T, B]) SetBackupPhaseSkipped(ctx context.Context, backup B, message string, backupConfiguration *dbv1.BackupConfiguration) (ctrl.Result, error) {
+	return r.setTerminalPhase(ctx, backup, dbv1.BackupPhaseSkipped, "BackupSkipped", message, backupConfiguration)
 }
 
 // SetupWithManager registers the reconciler with the manager.

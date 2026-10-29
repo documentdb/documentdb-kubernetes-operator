@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -43,7 +43,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
-		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+		Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 		Expect(storagev1.AddToScheme(scheme)).To(Succeed())
@@ -139,10 +139,10 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns Retain when spec specifies Retain", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -152,10 +152,10 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns Delete when spec specifies Delete", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Delete",
 						},
 					},
@@ -165,10 +165,10 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns Retain when spec is empty (default)", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{},
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{},
 					},
 				},
 			}
@@ -176,10 +176,10 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns Retain for unknown policy value", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Unknown",
 						},
 					},
@@ -205,11 +205,11 @@ var _ = Describe("PersistentVolume Controller", func() {
 					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -231,11 +231,11 @@ var _ = Describe("PersistentVolume Controller", func() {
 					MountOptions:                  []string{"rw"},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Delete",
 						},
 					},
@@ -263,11 +263,11 @@ var _ = Describe("PersistentVolume Controller", func() {
 					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -292,16 +292,16 @@ var _ = Describe("PersistentVolume Controller", func() {
 					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
 				},
-				Status: dbpreview.DocumentDBStatus{SchemaVersion: "0.112.0"},
+				Status: dbv1.DocumentDBStatus{SchemaVersion: "0.112.0"},
 			}
 
 			needsUpdate := reconciler.applyDesiredPVConfiguration(ctx, pv, documentdb)
@@ -326,11 +326,11 @@ var _ = Describe("PersistentVolume Controller", func() {
 					MountOptions:                  []string{"nodev", "noexec", "nosuid"},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -532,15 +532,15 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("updates PV when associated with DocumentDB and changes needed", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
 					UID:       "documentdb-uid",
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -659,15 +659,15 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns error when PV update fails", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
 					UID:       "documentdb-uid",
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
 					},
@@ -787,7 +787,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 	Describe("findPVsForDocumentDB", func() {
 		It("returns reconcile requests for PVs with matching documentdb.io/cluster label", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -818,7 +818,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns empty when no PVs have matching label", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -848,7 +848,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns empty when PV has same cluster name but different namespace", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -896,7 +896,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns nil when listing PVs fails", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -1029,21 +1029,21 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 		Describe("UpdateFunc", func() {
 			It("returns true when reclaim policy changes", func() {
-				oldDB := &dbpreview.DocumentDB{
+				oldDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Spec: dbpreview.DocumentDBSpec{
-						Resource: dbpreview.Resource{
-							Storage: dbpreview.StorageConfiguration{
+					Spec: dbv1.DocumentDBSpec{
+						Resource: dbv1.Resource{
+							Storage: dbv1.StorageConfiguration{
 								PersistentVolumeReclaimPolicy: "Delete",
 							},
 						},
 					},
 				}
-				newDB := &dbpreview.DocumentDB{
+				newDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Spec: dbpreview.DocumentDBSpec{
-						Resource: dbpreview.Resource{
-							Storage: dbpreview.StorageConfiguration{
+					Spec: dbv1.DocumentDBSpec{
+						Resource: dbv1.Resource{
+							Storage: dbv1.StorageConfiguration{
 								PersistentVolumeReclaimPolicy: "Retain",
 							},
 						},
@@ -1054,21 +1054,21 @@ var _ = Describe("PersistentVolume Controller", func() {
 			})
 
 			It("returns false when reclaim policy unchanged", func() {
-				oldDB := &dbpreview.DocumentDB{
+				oldDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Spec: dbpreview.DocumentDBSpec{
-						Resource: dbpreview.Resource{
-							Storage: dbpreview.StorageConfiguration{
+					Spec: dbv1.DocumentDBSpec{
+						Resource: dbv1.Resource{
+							Storage: dbv1.StorageConfiguration{
 								PersistentVolumeReclaimPolicy: "Retain",
 							},
 						},
 					},
 				}
-				newDB := &dbpreview.DocumentDB{
+				newDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Spec: dbpreview.DocumentDBSpec{
-						Resource: dbpreview.Resource{
-							Storage: dbpreview.StorageConfiguration{
+					Spec: dbv1.DocumentDBSpec{
+						Resource: dbv1.Resource{
+							Storage: dbv1.StorageConfiguration{
 								PersistentVolumeReclaimPolicy: "Retain",
 							},
 						},
@@ -1079,13 +1079,13 @@ var _ = Describe("PersistentVolume Controller", func() {
 			})
 
 			It("returns true when the installed schema version changes", func() {
-				oldDB := &dbpreview.DocumentDB{
+				oldDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Status:     dbpreview.DocumentDBStatus{SchemaVersion: "0.110.0"},
+					Status:     dbv1.DocumentDBStatus{SchemaVersion: "0.110.0"},
 				}
-				newDB := &dbpreview.DocumentDB{
+				newDB := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
-					Status:     dbpreview.DocumentDBStatus{SchemaVersion: "0.112.0"},
+					Status:     dbv1.DocumentDBStatus{SchemaVersion: "0.112.0"},
 				}
 				e := event.UpdateEvent{ObjectOld: oldDB, ObjectNew: newDB}
 				Expect(pred.Update(e)).To(BeTrue())
@@ -1102,7 +1102,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 		Describe("CreateFunc", func() {
 			It("always returns false", func() {
-				db := &dbpreview.DocumentDB{
+				db := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				}
 				e := event.CreateEvent{Object: db}
@@ -1112,7 +1112,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 
 		Describe("DeleteFunc", func() {
 			It("always returns false", func() {
-				db := &dbpreview.DocumentDB{
+				db := &dbv1.DocumentDB{
 					ObjectMeta: metav1.ObjectMeta{Name: documentdbName, Namespace: testNamespace},
 				}
 				e := event.DeleteEvent{Object: db}
@@ -1192,7 +1192,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns DocumentDB when full ownership chain exists", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -1423,7 +1423,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 		})
 
 		It("returns DocumentDB when cluster is owned by DocumentDB", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentdbName,
 					Namespace: testNamespace,
@@ -1482,7 +1482,7 @@ var _ = Describe("PersistentVolume Controller", func() {
 				WithScheme(scheme).
 				WithInterceptorFuncs(interceptor.Funcs{
 					Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-						if _, ok := obj.(*dbpreview.DocumentDB); ok {
+						if _, ok := obj.(*dbv1.DocumentDB); ok {
 							return fmt.Errorf("api timeout")
 						}
 						return client.Get(ctx, key, obj, opts...)

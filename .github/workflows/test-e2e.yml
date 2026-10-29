@@ -533,7 +533,7 @@ jobs:
           # is expected to FAIL with a message mentioning ImageVolume.
           set +e
           APPLY_OUTPUT="$(cat <<EOF | kubectl apply -f - 2>&1
-          apiVersion: documentdb.io/preview
+          apiVersion: documentdb.io/v1
           kind: DocumentDB
           metadata:
             name: ${{ env.DB_NAME }}

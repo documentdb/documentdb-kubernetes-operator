@@ -26,11 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // GetDocumentDBServiceDefinition returns the LoadBalancer Service definition for a given DocumentDB instance
-func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicationContext *ReplicationContext, namespace string, serviceType corev1.ServiceType) *corev1.Service {
+func GetDocumentDBServiceDefinition(documentdb *dbv1.DocumentDB, replicationContext *ReplicationContext, namespace string, serviceType corev1.ServiceType) *corev1.Service {
 	return BuildGatewayService(GatewayServiceOptions{
 		Name:            GatewayServiceName(DOCUMENTDB_SERVICE_PREFIX, documentdb.Name),
 		Namespace:       namespace,
@@ -537,7 +537,7 @@ func isCRDMissing(err error) bool {
 
 // GenerateConnectionString returns a MongoDB connection string for the DocumentDB instance.
 // When trustTLS is true, tlsAllowInvalidCertificates is omitted for strict verification.
-func GenerateConnectionString(documentdb *dbpreview.DocumentDB, serviceIp string, trustTLS bool) string {
+func GenerateConnectionString(documentdb *dbv1.DocumentDB, serviceIp string, trustTLS bool) string {
 	secretName := documentdb.Spec.DocumentDbCredentialSecret
 	if secretName == "" {
 		secretName = DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET

@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -103,7 +103,7 @@ func DefaultSplitConfig() SplitConfig {
 //
 // Legacy behavior is preserved: when neither the envelope nor any per-container
 // value is set for a dimension, that dimension is left unmanaged (no limits).
-func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) ResourceSplit {
+func ComputeResourceSplit(documentdb *dbv1.DocumentDB, cfg SplitConfig) ResourceSplit {
 	return ComputeResourceSplitFor(product.DocumentDBResources(documentdb), monitoringEnabled(documentdb.Spec.Monitoring), cfg)
 }
 
@@ -225,7 +225,7 @@ func subtractCPU(envelope string, reserved ...string) string {
 // --- helpers ---
 
 // monitoringEnabled reports whether the monitoring sidecar is requested.
-func monitoringEnabled(m *dbpreview.MonitoringSpec) bool {
+func monitoringEnabled(m *dbv1.MonitoringSpec) bool {
 	return m != nil && m.Enabled
 }
 

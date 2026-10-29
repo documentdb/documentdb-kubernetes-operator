@@ -8,7 +8,7 @@
 // 10260). This package opens a local port-forward to that service and
 // returns a stop func the caller defers.
 //
-// Fallback note
+// # Fallback note
 //
 // forwardconnection.NewDialerFromService is generic over service name
 // and does NOT hardcode Postgres, despite the package's origin in the
@@ -30,7 +30,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/forwardconnection"
 	"github.com/onsi/ginkgo/v2"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // GatewayPort is the default DocumentDB gateway TCP port inside the
@@ -52,7 +52,7 @@ const ServiceNameAnnotation = "documentdb.io/gateway-service-name"
 
 // GatewayServiceName returns the Service name the operator creates for
 // the given DocumentDB CR.
-func GatewayServiceName(dd *previewv1.DocumentDB) string {
+func GatewayServiceName(dd *dbv1.DocumentDB) string {
 	if dd == nil {
 		return ""
 	}
@@ -85,7 +85,7 @@ func GatewayServiceName(dd *previewv1.DocumentDB) string {
 func OpenWithErr(
 	ctx context.Context,
 	env *environment.TestingEnvironment,
-	dd *previewv1.DocumentDB,
+	dd *dbv1.DocumentDB,
 	localPort int,
 ) (stop func() error, err error) {
 	if env == nil {
@@ -150,7 +150,7 @@ func OpenWithErr(
 func Open(
 	ctx context.Context,
 	env *environment.TestingEnvironment,
-	dd *previewv1.DocumentDB,
+	dd *dbv1.DocumentDB,
 	localPort int,
 ) (stop func(), err error) {
 	stopE, err := OpenWithErr(ctx, env, dd, localPort)

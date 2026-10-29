@@ -36,7 +36,7 @@ In this phase, our Backup resource acts as a wrapper around CNPG Backup. We main
 Create an on-demand backup by applying the following resource:
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: Backup
 metadata:
   name: backup-example
@@ -62,7 +62,7 @@ Since we have our own Backup CRD with custom logic, we need our own ScheduledBac
 Create a scheduled backup using a cron expression:
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: ScheduledBackup
 metadata:
   name: backup-example
@@ -91,7 +91,7 @@ The DocumentDB operator supports retention policies at three levels, with the fo
 
 **Example:**
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: Backup
 metadata:
   name: backup-example
@@ -109,7 +109,7 @@ spec:
 
 **Example:**
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: ScheduledBackup
 metadata:
   name: backup-example
@@ -128,7 +128,7 @@ spec:
 
 **Example:**
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview
@@ -163,7 +163,7 @@ The operator supports bootstrapping a new cluster from an existing backup. In-pl
 **Recovery Example:**
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview-restore

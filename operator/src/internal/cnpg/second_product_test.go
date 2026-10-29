@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -32,7 +32,7 @@ func pgcosmosIntent() product.ClusterIntent {
 		Topology:              product.Topology{Instances: 3},
 		Storage:               product.Storage{PvcSize: "20Gi"},
 		Resources:             product.Resources{Memory: "4Gi", CPU: "2"},
-		Monitoring:            &dbpreview.MonitoringSpec{Enabled: true},
+		Monitoring:            &dbv1.MonitoringSpec{Enabled: true},
 		TLS:                   product.TLS{GatewaySecret: "acct-tls"},
 		Identity:              product.Identity{Name: "acct", UID: "uid-1", APIVersion: "cosmos.azure.com/v1", Kind: "CosmosAccount"},
 		Postgres:              product.Postgres{Parameters: map[string]string{"work_mem": "8MB", "pgcosmos.locked": "user"}},

@@ -30,7 +30,7 @@ Controls which DocumentDB Gateway container image is injected into PostgreSQL po
 
 **Per DocumentDB Instance (Explicit):**
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: my-documentdb
@@ -136,7 +136,7 @@ spec:
 ### Basic Configuration (Gateway Image Only)
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: basic-documentdb
@@ -153,7 +153,7 @@ spec:
 ### Advanced Configuration (All Parameters)
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: advanced-documentdb

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
@@ -35,7 +35,7 @@ const (
 
 func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 	ctx context.Context,
-	documentdb *dbpreview.DocumentDB,
+	documentdb *dbv1.DocumentDB,
 	replicationContext *util.ReplicationContext,
 	cnpgCluster *cnpgv1.Cluster,
 ) error {
@@ -192,7 +192,7 @@ func (r *DocumentDBReconciler) AddClusterReplicationToClusterSpec(
 // configuration (e.g. the OTel monitoring role set by GetCnpgClusterSpec) rather
 // than replacing the whole managed block, so enabling fleet networking does not
 // drop managed roles.
-func addAzureFleetManagedServices(cnpgCluster *cnpgv1.Cluster, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) {
+func addAzureFleetManagedServices(cnpgCluster *cnpgv1.Cluster, replicationContext *util.ReplicationContext, documentdb *dbv1.DocumentDB) {
 	if cnpgCluster.Spec.Managed == nil {
 		cnpgCluster.Spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}
@@ -212,7 +212,7 @@ func addAzureFleetManagedServices(cnpgCluster *cnpgv1.Cluster, replicationContex
 	}
 }
 
-func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
+func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbv1.DocumentDB) error {
 	// Create dummy -rw services for remote clusters so DNS resolution works
 	// These services have non-matching selectors, so they have no local endpoints
 	// Istio will automatically route traffic through the east-west gateway
@@ -264,7 +264,7 @@ func (r *DocumentDBReconciler) CreateIstioRemoteServices(ctx context.Context, re
 	return nil
 }
 
-func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbpreview.DocumentDB) error {
+func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context, replicationContext *util.ReplicationContext, documentdb *dbv1.DocumentDB) error {
 	labels := map[string]string{
 		util.LABEL_DOCUMENTDB_NAME: documentdb.Name,
 	}
@@ -383,7 +383,7 @@ func (r *DocumentDBReconciler) CreateServiceImportAndExport(ctx context.Context,
 // replica list change).
 // It performs side effects (HTTP token reads, service creation, goroutines) but returns the
 // patch ops for the caller to include in the consolidated SyncCnpgCluster patch.
-func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
+func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbv1.DocumentDB, replicationContext *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
 	if current.Spec.ReplicaCluster == nil || desired.Spec.ReplicaCluster == nil {
 		// FOR NOW assume that we aren't going to turn on or off physical replication
 		return nil, nil, -1
@@ -428,7 +428,7 @@ func (r *DocumentDBReconciler) syncReplicationChanges(ctx context.Context, curre
 	return patchOps, nil, -1
 }
 
-func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]cnpg.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
+func (r *DocumentDBReconciler) getPrimaryChangePatchOps(ctx context.Context, patchOps *[]cnpg.JSONPatch, current, desired *cnpgv1.Cluster, documentdb *dbv1.DocumentDB, replicationContext *util.ReplicationContext) (error, time.Duration) {
 
 	// Remove old bootstrap method if present
 	if current.Spec.Bootstrap != nil {
@@ -584,7 +584,7 @@ func getReplicasChangePatchOps(patchOps *[]cnpg.JSONPatch, current, desired *cnp
 	}
 }
 
-func (r *DocumentDBReconciler) ReadToken(ctx context.Context, documentdb *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
+func (r *DocumentDBReconciler) ReadToken(ctx context.Context, documentdb *dbv1.DocumentDB, replicationContext *util.ReplicationContext) (string, error, time.Duration) {
 	tokenServiceName := "promotion-token"
 	namespace := documentdb.Namespace
 

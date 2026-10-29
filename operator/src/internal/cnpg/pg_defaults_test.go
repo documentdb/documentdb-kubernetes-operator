@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 var _ = Describe("formatMB", func() {
@@ -171,8 +171,8 @@ var _ = Describe("ProtectedParameters", func() {
 		var result map[string]string
 
 		BeforeEach(func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{},
 			}
 			result = ProtectedParameters(documentdb)
 		})
@@ -206,10 +206,10 @@ var _ = Describe("ProtectedParameters", func() {
 		var result map[string]string
 
 		BeforeEach(func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					FeatureGates: map[string]bool{
-						dbpreview.FeatureGateChangeStreams: true,
+						dbv1.FeatureGateChangeStreams: true,
 					},
 				},
 			}
@@ -229,10 +229,10 @@ var _ = Describe("ProtectedParameters", func() {
 		var result map[string]string
 
 		BeforeEach(func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					FeatureGates: map[string]bool{
-						dbpreview.FeatureGateIOUring: true,
+						dbv1.FeatureGateIOUring: true,
 					},
 				},
 			}
@@ -252,9 +252,9 @@ var _ = Describe("ProtectedParameters", func() {
 var _ = Describe("MergeParameters", func() {
 	Context("user override takes precedence over defaults", func() {
 		It("uses user-specified max_connections over static default", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Postgres: &dbpreview.PostgresSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Postgres: &dbv1.PostgresSpec{
 						Parameters: map[string]string{
 							"max_connections": "500",
 						},
@@ -268,9 +268,9 @@ var _ = Describe("MergeParameters", func() {
 
 	Context("protected params always win", func() {
 		It("overrides user-specified cron.database_name", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Postgres: &dbpreview.PostgresSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Postgres: &dbv1.PostgresSpec{
 						Parameters: map[string]string{
 							"cron.database_name": "mydb",
 						},
@@ -284,8 +284,8 @@ var _ = Describe("MergeParameters", func() {
 
 	Context("memory-aware defaults override static", func() {
 		It("computes shared_buffers from memory instead of using a static value", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{},
 			}
 			result := MergeParameters(documentdb, 8*1024*1024*1024)
 			Expect(result["shared_buffers"]).To(Equal("2GB"))
@@ -294,12 +294,12 @@ var _ = Describe("MergeParameters", func() {
 
 	Context("all layers present", func() {
 		It("merges feature gates, user overrides, and memory-aware defaults", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					FeatureGates: map[string]bool{
-						dbpreview.FeatureGateChangeStreams: true,
+						dbv1.FeatureGateChangeStreams: true,
 					},
-					Postgres: &dbpreview.PostgresSpec{
+					Postgres: &dbv1.PostgresSpec{
 						Parameters: map[string]string{
 							"max_connections":  "500",
 							"random_page_cost": "1.5",
@@ -326,8 +326,8 @@ var _ = Describe("MergeParameters", func() {
 
 	Context("empty user params", func() {
 		It("uses defaults when Parameters is nil", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{},
 			}
 			result := MergeParameters(documentdb, 8*1024*1024*1024)
 
@@ -339,8 +339,8 @@ var _ = Describe("MergeParameters", func() {
 
 	Context("zero memory", func() {
 		It("uses fallback defaults for memory-aware parameters", func() {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{},
 			}
 			result := MergeParameters(documentdb, 0)
 

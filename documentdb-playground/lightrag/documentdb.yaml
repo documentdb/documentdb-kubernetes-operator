@@ -21,7 +21,7 @@ stringData:
   username: docdbadmin
   password: "ChangeMe!ReplaceBeforeUsing"
 ---
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-cluster

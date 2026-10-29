@@ -18,7 +18,7 @@ The operator manages PostgreSQL parameters through a layered merge system with c
 Configure CPU and memory for your DocumentDB pods using the `spec.resource` section. The `memory` and `cpu` values are total pod envelopes, not only PostgreSQL resources:
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: my-cluster
@@ -51,7 +51,7 @@ The operator treats `spec.resource.memory` and `spec.resource.cpu` as total pod 
 Override individual containers with `spec.resource.gateway`, `spec.resource.database`, and `spec.resource.otel` when a cluster needs explicit sizing:
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: sized-cluster
@@ -189,7 +189,7 @@ These parameters are managed by the operator and **cannot be overridden**:
 ## Complete Example
 
 ```yaml
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: production-cluster

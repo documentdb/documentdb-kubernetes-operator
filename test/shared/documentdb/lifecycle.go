@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Package documentdb provides framework-agnostic CRUD and lifecycle
-// helpers for the DocumentDB preview CR. It is consumed by both the
+// helpers for the DocumentDB v1 CR. It is consumed by both the
 // e2e suite (which wraps these in gomega.Eventually) and the long-haul
 // driver (a plain Go binary). Manifest rendering / template assembly
 // stays in test/e2e/pkg/e2eutils/documentdb because it depends on the
@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 const (
@@ -31,12 +31,12 @@ const (
 	// ReadyStatus is the DocumentDBStatus.Status value the operator
 	// surfaces once the underlying CNPG cluster is healthy. It mirrors
 	// the CNPG Cluster status verbatim (see
-	// operator/src/api/preview/documentdb_types.go). Single source of
+	// operator/src/api/v1/documentdb_types.go). Single source of
 	// truth for both e2e and long-haul callers.
 	ReadyStatus = "Cluster in healthy state"
 )
 
-// NewScheme returns a fresh runtime.Scheme with the DocumentDB preview
+// NewScheme returns a fresh runtime.Scheme with the DocumentDB v1
 // API group always pre-registered, plus any caller-supplied adders run
 // in order. The variadic shape lets call sites layer on additional
 // groups (corev1, cnpgv1, snapshotv1, ...) without re-implementing the
@@ -44,11 +44,11 @@ const (
 // otherwise repeat across both the e2e suite and the long-haul driver.
 //
 // Returns the first AddToScheme error encountered, including the
-// preview registration so a broken upstream import is loud.
+// v1 registration so a broken upstream import is loud.
 func NewScheme(adders ...func(*runtime.Scheme) error) (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
-	if err := previewv1.AddToScheme(s); err != nil {
-		return nil, fmt.Errorf("registering documentdb preview group: %w", err)
+	if err := dbv1.AddToScheme(s); err != nil {
+		return nil, fmt.Errorf("registering documentdb v1 group: %w", err)
 	}
 	for i, add := range adders {
 		if add == nil {
@@ -62,11 +62,11 @@ func NewScheme(adders ...func(*runtime.Scheme) error) (*runtime.Scheme, error) {
 }
 
 // Get fetches the DocumentDB identified by key.
-func Get(ctx context.Context, c client.Client, key client.ObjectKey) (*previewv1.DocumentDB, error) {
+func Get(ctx context.Context, c client.Client, key client.ObjectKey) (*dbv1.DocumentDB, error) {
 	if c == nil {
 		return nil, errors.New("Get: client must not be nil")
 	}
-	dd := &previewv1.DocumentDB{}
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, key, dd); err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func PatchInstances(ctx context.Context, c client.Client, ns, name string, want 
 	if want < 1 || want > 3 {
 		return fmt.Errorf("PatchInstances: want=%d out of supported range 1..3", want)
 	}
-	dd := &previewv1.DocumentDB{}
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, dd); err != nil {
 		return fmt.Errorf("get DocumentDB %s/%s: %w", ns, name, err)
 	}
@@ -104,7 +104,7 @@ func PatchInstances(ctx context.Context, c client.Client, ns, name string, want 
 // DocumentDB's spec in place. mutate receives a pointer to the Spec
 // and may set any fields; the diff against the pre-mutation object is
 // sent to the API server.
-func PatchSpec(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, mutate func(*previewv1.DocumentDBSpec)) error {
+func PatchSpec(ctx context.Context, c client.Client, dd *dbv1.DocumentDB, mutate func(*dbv1.DocumentDBSpec)) error {
 	if c == nil {
 		return errors.New("PatchSpec: client must not be nil")
 	}
@@ -128,7 +128,7 @@ func PatchSpec(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, m
 // state on timeout.
 func WaitHealthy(ctx context.Context, c client.Client, key client.ObjectKey, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	var last previewv1.DocumentDB
+	var last dbv1.DocumentDB
 	for {
 		if err := c.Get(ctx, key, &last); err == nil {
 			if IsHealthy(&last) {
@@ -152,7 +152,7 @@ func WaitHealthy(ctx context.Context, c client.Client, key client.ObjectKey, tim
 // IsHealthy implements the predicate documented on WaitHealthy.
 // Exported so callers (e.g. long-haul HealthMonitor) can reuse the
 // same definition without duplicating the readiness string.
-func IsHealthy(dd *previewv1.DocumentDB) bool {
+func IsHealthy(dd *dbv1.DocumentDB) bool {
 	if dd == nil {
 		return false
 	}
@@ -161,7 +161,7 @@ func IsHealthy(dd *previewv1.DocumentDB) bool {
 
 // Delete issues a foreground delete on the given DocumentDB and polls
 // until the object is gone or timeout elapses.
-func Delete(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, timeout time.Duration) error {
+func Delete(ctx context.Context, c client.Client, dd *dbv1.DocumentDB, timeout time.Duration) error {
 	if dd == nil {
 		return errors.New("Delete: dd must not be nil")
 	}
@@ -171,7 +171,7 @@ func Delete(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, time
 	key := client.ObjectKeyFromObject(dd)
 	deadline := time.Now().Add(timeout)
 	for {
-		var got previewv1.DocumentDB
+		var got dbv1.DocumentDB
 		err := c.Get(ctx, key, &got)
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -191,11 +191,11 @@ func Delete(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, time
 }
 
 // List returns all DocumentDB objects in the given namespace.
-func List(ctx context.Context, c client.Client, ns string) ([]previewv1.DocumentDB, error) {
+func List(ctx context.Context, c client.Client, ns string) ([]dbv1.DocumentDB, error) {
 	if c == nil {
 		return nil, errors.New("List: client must not be nil")
 	}
-	var ddl previewv1.DocumentDBList
+	var ddl dbv1.DocumentDBList
 	if err := c.List(ctx, &ddl, client.InNamespace(ns)); err != nil {
 		return nil, fmt.Errorf("listing DocumentDB in %s: %w", ns, err)
 	}

@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // SharedScaleNamespace returns the per-process namespace name used by
@@ -47,8 +47,8 @@ func (h *SharedScaleHandle) Namespace() string { return h.namespace }
 func (h *SharedScaleHandle) Name() string { return h.name }
 
 // GetCR fetches the current state of the underlying DocumentDB CR.
-func (h *SharedScaleHandle) GetCR(ctx context.Context, c client.Client) (*previewv1.DocumentDB, error) {
-	dd := &previewv1.DocumentDB{}
+func (h *SharedScaleHandle) GetCR(ctx context.Context, c client.Client) (*dbv1.DocumentDB, error) {
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: h.namespace, Name: h.name}, dd); err != nil {
 		return nil, fmt.Errorf("get shared-scale documentdb: %w", err)
 	}
@@ -66,7 +66,7 @@ func (h *SharedScaleHandle) GetCR(ctx context.Context, c client.Client) (*previe
 // second replica, which would cause the next spec's scale assertions
 // to observe a transient single-instance cluster.
 func (h *SharedScaleHandle) ResetToTwoInstances(ctx context.Context, c client.Client) error {
-	dd := &previewv1.DocumentDB{}
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: h.namespace, Name: h.name}, dd); err != nil {
 		return fmt.Errorf("get shared-scale for reset: %w", err)
 	}

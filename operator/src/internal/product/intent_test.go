@@ -10,13 +10,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 func TestToClusterIntentDefaults(t *testing.T) {
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+	db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}
 
 	intent := a.ToClusterIntent(db)
 
@@ -45,14 +45,14 @@ func TestToClusterIntentDefaults(t *testing.T) {
 
 func TestToClusterIntentOverrides(t *testing.T) {
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-		Image: &dbpreview.ImageSpec{
+	db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{
+		Image: &dbv1.ImageSpec{
 			DocumentDB: "reg/ext:v2",
 			Gateway:    "reg/gw:v2",
 			Postgres:   "reg/pg:16",
 		},
 		DocumentDbCredentialSecret: "my-secret",
-		Plugins:                    &dbpreview.PluginsSpec{SidecarInjectorName: "custom-injector.example.io"},
+		Plugins:                    &dbv1.PluginsSpec{SidecarInjectorName: "custom-injector.example.io"},
 	}}
 
 	intent := a.ToClusterIntent(db)
@@ -76,13 +76,13 @@ func TestToClusterIntentOverrides(t *testing.T) {
 
 func TestToClusterIntentTopologyStorageIdentity(t *testing.T) {
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{
+	db := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-db", UID: "uid-123"},
-		TypeMeta:   metav1.TypeMeta{APIVersion: "documentdb.io/preview", Kind: "DocumentDB"},
-		Spec: dbpreview.DocumentDBSpec{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "documentdb.io/v1", Kind: "DocumentDB"},
+		Spec: dbv1.DocumentDBSpec{
 			InstancesPerNode: 3,
-			Resource: dbpreview.Resource{
-				Storage: dbpreview.StorageConfiguration{PvcSize: "20Gi"},
+			Resource: dbv1.Resource{
+				Storage: dbv1.StorageConfiguration{PvcSize: "20Gi"},
 			},
 			ImagePullSecrets: []corev1.LocalObjectReference{{Name: "regcred"}},
 		},
@@ -102,22 +102,22 @@ func TestToClusterIntentTopologyStorageIdentity(t *testing.T) {
 	if intent.Identity.Name != "my-db" || intent.Identity.UID != "uid-123" {
 		t.Errorf("Identity = %+v, want name=my-db uid=uid-123", intent.Identity)
 	}
-	if intent.Identity.APIVersion != "documentdb.io/preview" || intent.Identity.Kind != "DocumentDB" {
-		t.Errorf("Identity type = %s/%s, want documentdb.io/preview/DocumentDB", intent.Identity.APIVersion, intent.Identity.Kind)
+	if intent.Identity.APIVersion != "documentdb.io/v1" || intent.Identity.Kind != "DocumentDB" {
+		t.Errorf("Identity type = %s/%s, want documentdb.io/v1/DocumentDB", intent.Identity.APIVersion, intent.Identity.Kind)
 	}
 }
 
 func TestToClusterIntentPostgresAndFeatureGates(t *testing.T) {
 	a := DocumentDBAdapter{}
 	uid, gid := int64(26), int64(999)
-	db := &dbpreview.DocumentDB{
-		Spec: dbpreview.DocumentDBSpec{
-			Postgres: &dbpreview.PostgresSpec{
+	db := &dbv1.DocumentDB{
+		Spec: dbv1.DocumentDBSpec{
+			Postgres: &dbv1.PostgresSpec{
 				UID:         &uid,
 				GID:         &gid,
 				PostInitSQL: []string{"SELECT 1"},
 			},
-			FeatureGates: map[string]bool{dbpreview.FeatureGateIOUring: true},
+			FeatureGates: map[string]bool{dbv1.FeatureGateIOUring: true},
 		},
 	}
 
@@ -140,9 +140,9 @@ func TestToClusterIntentPostgresAndFeatureGates(t *testing.T) {
 func TestToClusterIntentBootstrapRecovery(t *testing.T) {
 	a := DocumentDBAdapter{}
 
-	backup := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-		Bootstrap: &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+	backup := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{
+		Bootstrap: &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		},
@@ -151,10 +151,10 @@ func TestToClusterIntentBootstrapRecovery(t *testing.T) {
 		t.Errorf("Bootstrap.Recovery = %+v, want BackupName=my-backup", r)
 	}
 
-	pv := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-		Bootstrap: &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
-				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "my-pv"},
+	pv := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{
+		Bootstrap: &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
+				PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "my-pv"},
 			},
 		},
 	}}
@@ -162,7 +162,7 @@ func TestToClusterIntentBootstrapRecovery(t *testing.T) {
 		t.Errorf("Bootstrap.Recovery = %+v, want PersistentVolumeName=my-pv", r)
 	}
 
-	none := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+	none := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}
 	if r := a.ToClusterIntent(none).Bootstrap.Recovery; r != nil {
 		t.Errorf("Bootstrap.Recovery = %+v, want nil", r)
 	}

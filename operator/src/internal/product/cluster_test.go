@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -77,12 +77,12 @@ func TestServiceNameKeepsLongClusterNamesDistinct(t *testing.T) {
 
 func TestDocumentDBAdapterStatusRoundTrip(t *testing.T) {
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{}
+	db := &dbv1.DocumentDB{}
 	db.Status.TargetPrimary = "keep-me"
 	db.Status.LocalPrimary = "keep-me-too"
 	want := ClusterStatus{
 		Phase: "Cluster in healthy state", ConnectionString: "conn", SchemaVersion: "0.110.0",
-		ExtensionImage: "ext:1", GatewayImage: "gw:1", TLS: &dbpreview.TLSStatus{Ready: true},
+		ExtensionImage: "ext:1", GatewayImage: "gw:1", TLS: &dbv1.TLSStatus{Ready: true},
 	}
 	a.SetStatus(db, want)
 	if got := a.Status(db); got != want {
@@ -95,12 +95,12 @@ func TestDocumentDBAdapterStatusRoundTrip(t *testing.T) {
 
 func TestDocumentDBAdapterSpecAndConnectionString(t *testing.T) {
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"}}
+	db := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"}}
 	db.Spec.ExposeViaService.ServiceType = "LoadBalancer"
 	db.Spec.Resource.Storage.StorageClass = "fast"
-	db.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "Provided"}}
-	db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{Recovery: &dbpreview.RecoveryConfiguration{
-		PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"}}}
+	db.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: "Provided"}}
+	db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{Recovery: &dbv1.RecoveryConfiguration{
+		PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "pv-1"}}}
 
 	spec := a.Spec(db)
 	if spec.ServiceType != "LoadBalancer" || spec.StorageClass != "fast" ||

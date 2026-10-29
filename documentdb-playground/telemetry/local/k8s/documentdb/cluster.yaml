@@ -15,7 +15,7 @@ stringData:
   username: demo_user
   password: DemoPassword100
 ---
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview

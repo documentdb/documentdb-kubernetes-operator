@@ -161,7 +161,7 @@ apply_documentdb_manifest() {
   if [[ "$MODE" == "selfsigned" ]]; then
     {
       cat <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: ${DOCDB_NAME}
@@ -190,7 +190,7 @@ EOF
       exit 1
     fi
     cat <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: ${DOCDB_NAME}

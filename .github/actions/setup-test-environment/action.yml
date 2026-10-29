@@ -769,7 +769,7 @@ runs:
         
         # Create DocumentDB resource
         cat <<EOF | kubectl apply -f -
-        apiVersion: documentdb.io/preview
+        apiVersion: documentdb.io/v1
         kind: DocumentDB
         metadata:
           name: ${{ inputs.db-cluster-name }}

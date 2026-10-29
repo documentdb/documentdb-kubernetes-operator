@@ -7,7 +7,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // SharedRONamespace returns the per-process namespace name used by the
@@ -41,8 +41,8 @@ func (h *SharedROHandle) Name() string { return h.name }
 // resource. Callers that try to Update/Patch the returned CR against
 // the API server will succeed silently only if they re-use the real
 // client — prefer to treat this as read-only.
-func (h *SharedROHandle) GetCR(ctx context.Context, c client.Client) (*previewv1.DocumentDB, error) {
-	dd := &previewv1.DocumentDB{}
+func (h *SharedROHandle) GetCR(ctx context.Context, c client.Client) (*dbv1.DocumentDB, error) {
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: h.namespace, Name: h.name}, dd); err != nil {
 		return nil, fmt.Errorf("get shared-ro documentdb: %w", err)
 	}

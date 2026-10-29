@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // Images holds the fully-resolved container images for a cluster.
@@ -139,7 +139,7 @@ type ClusterIntent struct {
 
 	// Monitoring is the optional OTel collector sidecar configuration. The
 	// MonitoringSpec API type is shared across products.
-	Monitoring *dbpreview.MonitoringSpec
+	Monitoring *dbv1.MonitoringSpec
 
 	// TLS is the resolved gateway and PostgreSQL TLS material.
 	TLS TLS

@@ -50,7 +50,7 @@ introspection, backup CR helpers, timeouts map).
 
 - **Ginkgo v2 + Gomega** — BDD runner + matchers. Same framework the operator already
   uses for `envtest`, so contributors share patterns and caches.
-- **`sigs.k8s.io/controller-runtime/pkg/client`** — typed CR access via our `api/preview`
+- **`sigs.k8s.io/controller-runtime/pkg/client`** — typed CR access via our `api/v1`
   types (no dynamic client / unstructured dicts).
 - **`go.mongodb.org/mongo-driver/v2`** — data-plane assertions.
 - **CNPG `tests/utils/`** — imported as a library (Apache-2.0, compatible with our MIT).
@@ -188,7 +188,7 @@ registration; env vars mirror flags.
 
 **Per-spec (cheap or mutating), constructed in `BeforeEach`:**
 
-- `FreshDocumentDB(spec *apiv1preview.DocumentDB)` — factory used by lifecycle/tls/
+- `FreshDocumentDB(spec *dbv1.DocumentDB)` — factory used by lifecycle/tls/
   feature/exposure/backup/upgrade. Unique namespace, wait healthy, register cleanup via
   `DeferCleanup`.
 - `MongoClient(documentdb)` — mongo-driver client bound to the CR's service via a
@@ -393,7 +393,7 @@ Key enabling fact: DocumentDB's operator **wraps CNPG's `apiv1.Cluster` and
    area-package skeleton with empty `*_suite_test.go` in each.
 3. `testenv` — `pkg/e2eutils/testenv/env.go`: constructor that wraps
    `environment.NewTestingEnvironment()` with dummy `POSTGRES_IMG`; exposes our typed
-   `client.Client` with `api/preview` scheme registered.
+   `client.Client` with `api/v1` scheme registered.
 4. `helpers-documentdb` — `documentdb.go`: `Create`, `PatchSpec`, `WaitHealthy`,
    `Delete`, `List`, `RenderCR` (base+mixin envsubst pipeline).
 5. `helpers-mongo` — `mongo/client.go`: `NewClient(host, port, user, pw, tls)`,

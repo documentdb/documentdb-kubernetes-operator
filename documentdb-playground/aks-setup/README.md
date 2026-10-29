@@ -4,7 +4,7 @@ This directory contains comprehensive automation scripts for deploying DocumentD
 on Azure Kubernetes Service (AKS) with production-ready configurations.
 
 For general AKS guidance (architecture, configuration, troubleshooting, cost, and
-security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/deploy-on-aks/)
+security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/getting-started/deploy-on-aks/)
 
 ## 🚀 Quick Start
 
@@ -185,7 +185,7 @@ export GITHUB_TOKEN="your-token"
 
 # 3. Deploy DocumentDB instance manually
 kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: my-documentdb
@@ -302,7 +302,7 @@ NODE_COUNT=1
 
 ## Additional Resources
 
-- [Deploy on AKS Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/getting-started/deploy-on-aks.md)
+- [Deploy on AKS Guide](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/getting-started/deploy-on-aks.md)
 - [AKS Documentation](https://learn.microsoft.com/azure/aks/)
 - [DocumentDB Operator GitHub](https://github.com/documentdb/documentdb-operator)
 - [MongoDB Shell (mongosh)](https://www.mongodb.com/try/download/shell)

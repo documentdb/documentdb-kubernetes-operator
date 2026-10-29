@@ -351,7 +351,7 @@ EOF
     
     # Create DocumentDB cluster manifest
     cat > /tmp/documentdb-$team-cluster.yaml <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: $cluster_name

@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
@@ -52,7 +52,7 @@ func TestRenderBaseDocumentDB(t *testing.T) {
 	if dd.Spec.ExposeViaService.ServiceType != "ClusterIP" {
 		t.Fatalf("expected ClusterIP exposure, got %q", dd.Spec.ExposeViaService.ServiceType)
 	}
-	if _, ok := interface{}(dd).(*previewv1.DocumentDB); !ok {
+	if _, ok := interface{}(dd).(*dbv1.DocumentDB); !ok {
 		t.Fatalf("render did not produce *DocumentDB")
 	}
 }
@@ -81,7 +81,7 @@ func TestRenderTLSMixins(t *testing.T) {
 // variant (the `-changestream` tag line) that is not part of the
 // default e2e image set, so we removed the render+behaviour tests to
 // keep the default pipeline green. The API symbol
-// previewv1.FeatureGateChangeStreams and the operator's wal_level
+// dbv1.FeatureGateChangeStreams and the operator's wal_level
 // translation remain in place — this is purely about test coverage.
 
 // The following tests exercise the label-selector teardown contract and
@@ -122,7 +122,7 @@ func TestRunIDFirstWriterWins(t *testing.T) {
 }
 
 // newFakeClient builds a controller-runtime fake client registered for
-// the core + preview schemes used by the fixtures helpers.
+// the core + DocumentDB v1 schemes used by the fixtures helpers.
 func newFakeClient(t *testing.T) *fakeclient.ClientBuilder {
 	t.Helper()
 	s, err := shareddb.NewScheme(corev1.AddToScheme)

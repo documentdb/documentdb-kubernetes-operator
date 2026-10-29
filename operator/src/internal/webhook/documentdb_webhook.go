@@ -15,7 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -37,12 +37,12 @@ type DocumentDBValidator struct {
 	client.Client
 }
 
-var _ admission.Validator[*dbpreview.DocumentDB] = &DocumentDBValidator{}
+var _ admission.Validator[*dbv1.DocumentDB] = &DocumentDBValidator{}
 
 // SetupWebhookWithManager registers the validating webhook with the manager.
 func (v *DocumentDBValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	v.Client = mgr.GetClient()
-	return ctrl.NewWebhookManagedBy(mgr, &dbpreview.DocumentDB{}).
+	return ctrl.NewWebhookManagedBy(mgr, &dbv1.DocumentDB{}).
 		WithValidator(v).
 		Complete()
 }
@@ -50,10 +50,10 @@ func (v *DocumentDBValidator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The kubebuilder marker below is used for local development with `make run`.
 // For Helm-based deployments, the authoritative webhook configuration is in
 // operator/documentdb-helm-chart/templates/10_documentdb_webhook.yaml.
-// +kubebuilder:webhook:path=/validate-documentdb-io-preview-documentdb,mutating=false,failurePolicy=fail,sideEffects=None,groups=documentdb.io,resources=dbs,verbs=create;update,versions=preview,name=vdocumentdb.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-documentdb-io-v1-documentdb,mutating=false,failurePolicy=fail,sideEffects=None,groups=documentdb.io,resources=dbs,verbs=create;update,versions=v1,name=vdocumentdb.kb.io,admissionReviewVersions=v1
 
 // ValidateCreate validates a DocumentDB resource on creation.
-func (v *DocumentDBValidator) ValidateCreate(ctx context.Context, documentdb *dbpreview.DocumentDB) (admission.Warnings, error) {
+func (v *DocumentDBValidator) ValidateCreate(ctx context.Context, documentdb *dbv1.DocumentDB) (admission.Warnings, error) {
 	documentdbLog.Info("Validation for DocumentDB upon creation", "name", documentdb.Name, "namespace", documentdb.Namespace)
 
 	// Cluster-capability preflight: block creation up-front when the cluster
@@ -82,7 +82,7 @@ func (v *DocumentDBValidator) ValidateCreate(ctx context.Context, documentdb *db
 }
 
 // ValidateUpdate validates a DocumentDB resource on update.
-func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldDB, newDB *dbpreview.DocumentDB) (admission.Warnings, error) {
+func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldDB, newDB *dbv1.DocumentDB) (admission.Warnings, error) {
 	documentdbLog.Info("Validation for DocumentDB upon update", "name", newDB.Name, "namespace", newDB.Namespace)
 
 	allErrs := append(
@@ -98,7 +98,7 @@ func (v *DocumentDBValidator) ValidateUpdate(_ context.Context, oldDB, newDB *db
 }
 
 // ValidateDelete is a no-op for DocumentDB.
-func (v *DocumentDBValidator) ValidateDelete(_ context.Context, _ *dbpreview.DocumentDB) (admission.Warnings, error) {
+func (v *DocumentDBValidator) ValidateDelete(_ context.Context, _ *dbv1.DocumentDB) (admission.Warnings, error) {
 	return nil, nil
 }
 
@@ -107,8 +107,8 @@ func (v *DocumentDBValidator) ValidateDelete(_ context.Context, _ *dbpreview.Doc
 // ---------------------------------------------------------------------------
 
 // validate runs all spec-level validation rules, returning a combined error list.
-func (v *DocumentDBValidator) validate(db *dbpreview.DocumentDB) (allErrs field.ErrorList) {
-	type validationFunc func(*dbpreview.DocumentDB) field.ErrorList
+func (v *DocumentDBValidator) validate(db *dbv1.DocumentDB) (allErrs field.ErrorList) {
+	type validationFunc func(*dbv1.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateSchemaVersionNotExceedsBinary,
 		v.validateResources,
@@ -124,12 +124,12 @@ func (v *DocumentDBValidator) validate(db *dbpreview.DocumentDB) (allErrs field.
 // envelope-optional model: the pod memory/cpu envelope may be omitted only when
 // the gateway and database both specify that dimension, and an explicit envelope
 // must leave room for PostgreSQL after the sidecar reservations.
-func (v *DocumentDBValidator) validateResources(db *dbpreview.DocumentDB) field.ErrorList {
+func (v *DocumentDBValidator) validateResources(db *dbv1.DocumentDB) field.ErrorList {
 	return cnpg.ValidateResources(db, cnpg.DefaultSplitConfig())
 }
 
 // validateSchemaVersionNotExceedsBinary ensures spec.schemaVersion <= binary version.
-func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbpreview.DocumentDB) field.ErrorList {
+func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbv1.DocumentDB) field.ErrorList {
 	return validation.SchemaVersionNotExceedsBinary(db.Spec.SchemaVersion, resolveBinaryVersion(db), documentDBTerms)
 }
 
@@ -138,8 +138,8 @@ func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbprevie
 // ---------------------------------------------------------------------------
 
 // validateChanges runs all update-specific validation rules that compare old vs new state.
-func (v *DocumentDBValidator) validateChanges(newDB, oldDB *dbpreview.DocumentDB) (allErrs field.ErrorList) {
-	type validationFunc func(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList
+func (v *DocumentDBValidator) validateChanges(newDB, oldDB *dbv1.DocumentDB) (allErrs field.ErrorList) {
+	type validationFunc func(newDB, oldDB *dbv1.DocumentDB) field.ErrorList
 	validations := []validationFunc{
 		v.validateImageRollback,
 		v.validateImmutableFields,
@@ -154,7 +154,7 @@ func (v *DocumentDBValidator) validateChanges(newDB, oldDB *dbpreview.DocumentDB
 // validateImageRollback blocks image downgrades below the installed schema version.
 // Once ALTER EXTENSION UPDATE has run, the schema is irreversible. Running an older
 // binary against a newer schema is untested and may cause data corruption.
-func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbv1.DocumentDB) field.ErrorList {
 	installedSchemaVersion := oldDB.Status.SchemaVersion
 	if installedSchemaVersion == "" {
 		return nil
@@ -204,7 +204,7 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 // controller). Both sources follow the same logic: when the schema version
 // cannot be determined the restore is allowed with a warning; only a resolved
 // binary older than a known schema is rejected.
-func (v *DocumentDBValidator) validateRestoreSchemaCompatibility(ctx context.Context, newDB *dbpreview.DocumentDB) (admission.Warnings, field.ErrorList) {
+func (v *DocumentDBValidator) validateRestoreSchemaCompatibility(ctx context.Context, newDB *dbv1.DocumentDB) (admission.Warnings, field.ErrorList) {
 	if newDB.Spec.Bootstrap == nil || newDB.Spec.Bootstrap.Recovery == nil {
 		return nil, nil
 	}
@@ -223,7 +223,7 @@ func (v *DocumentDBValidator) validateRestoreSchemaCompatibility(ctx context.Con
 
 // restoreSourceFor identifies the restore source from a recovery configuration,
 // returning false when neither a backup nor a PersistentVolume source is set.
-func restoreSourceFor(recovery *dbpreview.RecoveryConfiguration) (validation.RestoreSource, bool) {
+func restoreSourceFor(recovery *dbv1.RecoveryConfiguration) (validation.RestoreSource, bool) {
 	base := field.NewPath("spec", "bootstrap", "recovery")
 	if recovery.Backup.Name != "" {
 		return validation.BackupSource(base, recovery.Backup.Name), true
@@ -238,7 +238,7 @@ func restoreSourceFor(recovery *dbpreview.RecoveryConfiguration) (validation.Res
 // schema version. See validation.SourceSchemaVersion.
 func (v *DocumentDBValidator) resolveSourceSchemaVersion(ctx context.Context, namespace string, src validation.RestoreSource) (string, admission.Warnings) {
 	return validation.SourceSchemaVersion(ctx, v.Client, src, util.AnnotationSchemaVersion, func() (string, error) {
-		backup := &dbpreview.Backup{}
+		backup := &dbv1.Backup{}
 		if err := v.Get(ctx, client.ObjectKey{Name: src.Name, Namespace: namespace}, backup); err != nil {
 			return "", err
 		}
@@ -249,7 +249,7 @@ func (v *DocumentDBValidator) resolveSourceSchemaVersion(ctx context.Context, na
 // validateImmutableFields rejects updates to fields that cannot be changed after creation.
 // Note: credentialSecret, storageClass, and sidecarInjectorPluginName are enforced via
 // CEL transition rules on the CRD schema (see documentdb_types.go).
-func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbv1.DocumentDB) field.ErrorList {
 	var allErrs field.ErrorList
 
 	// Bootstrap configuration is only used during initial cluster creation and is
@@ -268,13 +268,13 @@ func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.Do
 }
 
 // validateStorageResize ensures PVC size can only grow, never shrink.
-func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
+func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbv1.DocumentDB) field.ErrorList {
 	return validation.StorageResize(field.NewPath("spec", "resource", "storage", "pvcSize"),
 		oldDB.Spec.Resource.Storage.PvcSize, newDB.Spec.Resource.Storage.PvcSize)
 }
 
 // isBootstrapEqual compares two BootstrapConfiguration pointers for equality.
-func isBootstrapEqual(a, b *dbpreview.BootstrapConfiguration) bool {
+func isBootstrapEqual(a, b *dbv1.BootstrapConfiguration) bool {
 	if a == nil && b == nil {
 		return true
 	}
@@ -292,7 +292,7 @@ func isBootstrapEqual(a, b *dbpreview.BootstrapConfiguration) bool {
 // Priority: image.documentDB tag > documentDBVersion > "" (unknown).
 // Digest-only references (e.g., "image@sha256:...") are not parseable as versions
 // and return "".
-func resolveBinaryVersion(db *dbpreview.DocumentDB) string {
+func resolveBinaryVersion(db *dbv1.DocumentDB) string {
 	return validation.ResolveBinaryVersion(specImageDocumentDB(db), db.Spec.DocumentDBVersion)
 }
 
@@ -301,7 +301,7 @@ func resolveBinaryVersion(db *dbpreview.DocumentDB) string {
 // when the spec pins no version. Restore validation uses this rather than the
 // spec-only resolveBinaryVersion so a restore whose effective binary would be
 // older than the source schema is blocked, not merely warned.
-func resolveEffectiveBinaryVersion(db *dbpreview.DocumentDB) string {
+func resolveEffectiveBinaryVersion(db *dbv1.DocumentDB) string {
 	if v := resolveBinaryVersion(db); v != "" {
 		return v
 	}
@@ -314,7 +314,7 @@ func resolveEffectiveBinaryVersion(db *dbpreview.DocumentDB) string {
 	return validation.ImageTagSemver(product.DocumentDBAdapter{}.ExtensionImage(db))
 }
 
-func specImageDocumentDB(db *dbpreview.DocumentDB) string {
+func specImageDocumentDB(db *dbv1.DocumentDB) string {
 	if db == nil || db.Spec.Image == nil {
 		return ""
 	}

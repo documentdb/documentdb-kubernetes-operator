@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 func TestOtel(t *testing.T) {
@@ -89,10 +89,10 @@ var _ = Describe("base_config.yaml embed", func() {
 
 var _ = Describe("GenerateConfigMapData", func() {
 	It("returns static.yaml from embedded base_config.yaml", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -106,10 +106,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("generates dynamic.yaml with resource processor and exporters", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("test-cluster", "test-ns", spec)
@@ -135,10 +135,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes OTLP exporter in dynamic.yaml when configured", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP: &dbpreview.OTLPExporterSpec{
+			Exporter: &dbv1.ExporterSpec{
+				OTLP: &dbv1.OTLPExporterSpec{
 					Endpoint: "otel-collector.monitoring:4317",
 				},
 			},
@@ -152,11 +152,11 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("skips OTLP exporter when endpoint is empty", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: ""},
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				OTLP:       &dbv1.OTLPExporterSpec{Endpoint: ""},
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -167,10 +167,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes Prometheus exporter with default port", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -184,10 +184,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes Prometheus exporter with custom port", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -200,11 +200,11 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("includes both OTLP and Prometheus exporters", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: "otel-collector:4317"},
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				OTLP:       &dbv1.OTLPExporterSpec{Endpoint: "otel-collector:4317"},
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -218,7 +218,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("generates no pipeline when no exporters configured", func() {
-		spec := &dbpreview.MonitoringSpec{Enabled: true, Exporter: nil}
+		spec := &dbv1.MonitoringSpec{Enabled: true, Exporter: nil}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -229,10 +229,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 
 	// Regression guards — see comments in config.go for the why behind each.
 	It("uses 'insert' (not 'upsert') on the resource processor so per-datapoint k8s attrs survive", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -246,10 +246,10 @@ var _ = Describe("GenerateConfigMapData", func() {
 	})
 
 	It("enables resource_to_telemetry_conversion on the prometheus exporter so resource attrs become labels", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		data, err := GenerateConfigMapData("cluster", "ns", spec)
@@ -293,25 +293,25 @@ var _ = Describe("ResolvePrometheusPort", func() {
 	})
 
 	It("returns 0 when Prometheus is not configured", func() {
-		spec := &dbpreview.MonitoringSpec{Enabled: true}
+		spec := &dbv1.MonitoringSpec{Enabled: true}
 		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(0)))
 	})
 
 	It("returns default port when Port is 0", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{},
 			},
 		}
 		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(8888)))
 	})
 
 	It("returns custom port when set", func() {
-		spec := &dbpreview.MonitoringSpec{
+		spec := &dbv1.MonitoringSpec{
 			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+			Exporter: &dbv1.ExporterSpec{
+				Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 			},
 		}
 		Expect(ResolvePrometheusPort(spec)).To(Equal(int32(9090)))

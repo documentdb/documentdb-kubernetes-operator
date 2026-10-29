@@ -10,13 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 var _ = Describe("DocumentDB lifecycle — update logLevel",
@@ -58,10 +58,10 @@ var _ = Describe("DocumentDB lifecycle — update logLevel",
 			).Should(Succeed())
 
 			// Patch spec.logLevel; field is exported verbatim as
-			// LogLevel in api/preview/documentdb_types.go.
+			// LogLevel in api/v1/documentdb_types.go.
 			fresh := getDD(ctx, ns, name)
 			Expect(fresh.Spec.LogLevel).To(Equal("info"))
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				s.LogLevel = "debug"
 			})).To(Succeed())
 

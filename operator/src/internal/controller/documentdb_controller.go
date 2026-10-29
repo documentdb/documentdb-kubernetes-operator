@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
 	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
@@ -57,8 +57,8 @@ var reconcileMutex sync.Mutex
 // engine returns the product-neutral reconciler bound to this reconciler's
 // clients. It is built per call so struct-literal construction (as in tests)
 // keeps working.
-func (r *DocumentDBReconciler) engine() *engine.ClusterReconciler[*dbpreview.DocumentDB] {
-	return &engine.ClusterReconciler[*dbpreview.DocumentDB]{
+func (r *DocumentDBReconciler) engine() *engine.ClusterReconciler[*dbv1.DocumentDB] {
+	return &engine.ClusterReconciler[*dbv1.DocumentDB]{
 		Client:      r.Client,
 		Scheme:      r.Scheme,
 		Recorder:    r.Recorder,
@@ -82,19 +82,19 @@ func (r *DocumentDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // documentDBReplication wires DocumentDB multi-region replication into the engine.
 type documentDBReplication struct{ r *DocumentDBReconciler }
 
-func (h documentDBReplication) Context(ctx context.Context, documentdb *dbpreview.DocumentDB) (*util.ReplicationContext, error) {
+func (h documentDBReplication) Context(ctx context.Context, documentdb *dbv1.DocumentDB) (*util.ReplicationContext, error) {
 	return util.GetReplicationContext(ctx, h.r.Client, *documentdb)
 }
 
-func (h documentDBReplication) AddToClusterSpec(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext, desired *cnpgv1.Cluster) error {
+func (h documentDBReplication) AddToClusterSpec(ctx context.Context, documentdb *dbv1.DocumentDB, rc *util.ReplicationContext, desired *cnpgv1.Cluster) error {
 	return h.r.AddClusterReplicationToClusterSpec(ctx, documentdb, rc, desired)
 }
 
-func (h documentDBReplication) SyncChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
+func (h documentDBReplication) SyncChanges(ctx context.Context, current, desired *cnpgv1.Cluster, documentdb *dbv1.DocumentDB, rc *util.ReplicationContext) ([]cnpg.JSONPatch, error, time.Duration) {
 	return h.r.syncReplicationChanges(ctx, current, desired, documentdb, rc)
 }
 
-func (h documentDBReplication) ReconcilePrimary(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext, currentCnpgCluster *cnpgv1.Cluster) *ctrl.Result {
+func (h documentDBReplication) ReconcilePrimary(ctx context.Context, documentdb *dbv1.DocumentDB, rc *util.ReplicationContext, currentCnpgCluster *cnpgv1.Cluster) *ctrl.Result {
 	logger := log.FromContext(ctx)
 	if !rc.IsPrimary() || documentdb.Status.TargetPrimary == "" {
 		return nil
@@ -118,7 +118,7 @@ func (h documentDBReplication) ReconcilePrimary(ctx context.Context, documentdb 
 	return nil
 }
 
-func (h documentDBReplication) ReconcileNetworking(ctx context.Context, documentdb *dbpreview.DocumentDB, rc *util.ReplicationContext) *ctrl.Result {
+func (h documentDBReplication) ReconcileNetworking(ctx context.Context, documentdb *dbv1.DocumentDB, rc *util.ReplicationContext) *ctrl.Result {
 	// Check for fleet-networking issues and attempt to remediate
 	if !rc.IsAzureFleetNetworking() {
 		return nil
@@ -145,22 +145,22 @@ func (h documentDBReplication) ReconcileNetworking(ctx context.Context, document
 }
 
 // reconcileFinalizer handles the finalizer lifecycle; see engine.ClusterReconciler.ReconcileFinalizer.
-func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentdb *dbpreview.DocumentDB) (bool, ctrl.Result, error) {
+func (r *DocumentDBReconciler) reconcileFinalizer(ctx context.Context, documentdb *dbv1.DocumentDB) (bool, ctrl.Result, error) {
 	return r.engine().ReconcileFinalizer(ctx, documentdb)
 }
 
 // emitPVRetentionWarning emits a warning event listing PVs that will be retained after deletion
-func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, documentdb *dbpreview.DocumentDB) error {
+func (r *DocumentDBReconciler) emitPVRetentionWarning(ctx context.Context, documentdb *dbv1.DocumentDB) error {
 	return r.engine().EmitPVRetentionWarning(ctx, documentdb)
 }
 
 // findPVsForDocumentDB finds all PV names associated with a DocumentDB cluster
 // through the documentdb.io/cluster and documentdb.io/namespace PV labels.
-func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbpreview.DocumentDB) ([]string, error) {
+func (r *DocumentDBReconciler) findPVsForDocumentDB(ctx context.Context, documentdb *dbv1.DocumentDB) ([]string, error) {
 	return r.engine().FindPVNames(ctx, documentdb)
 }
 
-func (r *DocumentDBReconciler) EnsureServiceAccountRoleAndRoleBinding(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
+func (r *DocumentDBReconciler) EnsureServiceAccountRoleAndRoleBinding(ctx context.Context, documentdb *dbv1.DocumentDB, namespace string) error {
 	return r.engine().EnsureRBAC(ctx, documentdb, namespace)
 }
 
@@ -229,7 +229,7 @@ func Promote(ctx context.Context, cli client.Client,
 
 // reconcilePVRecovery handles recovery from a retained PersistentVolume; see
 // engine.ClusterReconciler.ReconcilePVRecovery.
-func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace, cnpgClusterName string) (ctrl.Result, error) {
+func (r *DocumentDBReconciler) reconcilePVRecovery(ctx context.Context, documentdb *dbv1.DocumentDB, namespace, cnpgClusterName string) (ctrl.Result, error) {
 	return r.engine().ReconcilePVRecovery(ctx, documentdb, namespace, cnpgClusterName)
 }
 
@@ -240,17 +240,17 @@ func parseExtensionVersionsFromOutput(output string) (defaultVersion, installedV
 
 // handleExtensionUpgrade handles the ALTER EXTENSION lifecycle; see
 // engine.ClusterReconciler.HandleExtensionUpgrade.
-func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, currentCluster *cnpgv1.Cluster, documentdb *dbpreview.DocumentDB) error {
+func (r *DocumentDBReconciler) handleExtensionUpgrade(ctx context.Context, currentCluster *cnpgv1.Cluster, documentdb *dbv1.DocumentDB) error {
 	return r.engine().HandleExtensionUpgrade(ctx, currentCluster, documentdb)
 }
 
 // updateImageStatus persists the current extension and gateway images into the DocumentDB status.
-func (r *DocumentDBReconciler) updateImageStatus(ctx context.Context, documentdb *dbpreview.DocumentDB, cluster *cnpgv1.Cluster) error {
+func (r *DocumentDBReconciler) updateImageStatus(ctx context.Context, documentdb *dbv1.DocumentDB, cluster *cnpgv1.Cluster) error {
 	return r.engine().UpdateImageStatus(ctx, documentdb, cluster)
 }
 
 // reconcileOtelConfigMap ensures the OTel Collector base config ConfigMap exists and is up-to-date.
-func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, documentdb *dbpreview.DocumentDB, namespace string) error {
+func (r *DocumentDBReconciler) reconcileOtelConfigMap(ctx context.Context, documentdb *dbv1.DocumentDB, namespace string) error {
 	return r.engine().ReconcileOtelConfigMap(ctx, documentdb, namespace)
 }
 

@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
@@ -60,7 +60,7 @@ func sourceSchemaVersion(ctx context.Context, c client.Client, key types.Namespa
 // clearing spec.image (whose tag would otherwise win in resolveBinaryVersion)
 // and setting spec.documentDBVersion. This makes the admission decision
 // deterministic regardless of the DOCUMENTDB_IMAGE the CI job injects.
-func pinBinaryVersion(dd *previewv1.DocumentDB, v string) {
+func pinBinaryVersion(dd *dbv1.DocumentDB, v string) {
 	dd.Spec.Image = nil
 	dd.Spec.DocumentDBVersion = v
 }
@@ -142,7 +142,7 @@ func manifestsRoot() string {
 // the spec before calling Create themselves.
 func buildRecoveryDocumentDB(
 	ns, name, templateName string, extra map[string]string,
-) *previewv1.DocumentDB {
+) *dbv1.DocumentDB {
 	vars := baseVars(name, ns, "")
 	for k, v := range extra {
 		vars[k] = v
@@ -150,7 +150,7 @@ func buildRecoveryDocumentDB(
 	path := filepath.Join(manifestsRoot(), "backup", templateName)
 	raw, err := bkp.RenderTemplateFrom(path, vars)
 	Expect(err).NotTo(HaveOccurred(), "render %s", templateName)
-	dd := &previewv1.DocumentDB{}
+	dd := &dbv1.DocumentDB{}
 	Expect(yaml.Unmarshal(raw, dd)).To(Succeed(), "unmarshal rendered %s", templateName)
 	if dd.Namespace == "" {
 		dd.Namespace = ns
@@ -166,7 +166,7 @@ func buildRecoveryDocumentDB(
 func createRecoveryDocumentDB(
 	ctx context.Context, c client.Client,
 	ns, name, templateName string, extra map[string]string,
-) *previewv1.DocumentDB {
+) *dbv1.DocumentDB {
 	dd := buildRecoveryDocumentDB(ns, name, templateName, extra)
 	Expect(c.Create(ctx, dd)).To(Succeed(), "create recovery DocumentDB %s/%s", ns, name)
 	return dd

@@ -11,7 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
@@ -33,17 +33,17 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return r.engine().Reconcile(ctx, req)
 }
 
-func (r *CertificateReconciler) engine() *engine.CertificateReconciler[*dbpreview.DocumentDB] {
-	return &engine.CertificateReconciler[*dbpreview.DocumentDB]{Client: r.Client, Scheme: r.Scheme, Adapter: product.DocumentDBAdapter{}}
+func (r *CertificateReconciler) engine() *engine.CertificateReconciler[*dbv1.DocumentDB] {
+	return &engine.CertificateReconciler[*dbv1.DocumentDB]{Client: r.Client, Scheme: r.Scheme, Adapter: product.DocumentDBAdapter{}}
 }
 
-func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbpreview.DocumentDB) (ctrl.Result, error) {
+func (r *CertificateReconciler) reconcileCertificates(ctx context.Context, ddb *dbv1.DocumentDB) (ctrl.Result, error) {
 	return r.engine().ReconcileCertificates(ctx, ddb)
 }
 
 func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&dbpreview.DocumentDB{}).
+		For(&dbv1.DocumentDB{}).
 		Owns(&cmapi.Certificate{}).
 		Owns(&cmapi.Issuer{}).
 		Named("certificate-controller").

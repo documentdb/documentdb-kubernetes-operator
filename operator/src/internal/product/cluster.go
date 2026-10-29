@@ -6,7 +6,7 @@ package product
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -71,7 +71,7 @@ func (n NamingProfile) LegacyServiceName(clusterName string) (string, bool) {
 }
 
 // ClusterSpec is the product-neutral, read-only view of the operational inputs
-// the shared reconcilers act on. Products typically reuse the api/preview
+// the shared reconcilers act on. Products typically reuse the api/v1
 // sub-types in their own custom resources and copy them here.
 type ClusterSpec struct {
 	// ServiceType is "", "ClusterIP", or "LoadBalancer"; empty means no
@@ -88,14 +88,14 @@ type ClusterSpec struct {
 	// retained PersistentVolume.
 	RecoveryPersistentVolume string
 	// GatewayTLS is the gateway TLS configuration; nil means self-signed.
-	GatewayTLS *dbpreview.GatewayTLS
+	GatewayTLS *dbv1.GatewayTLS
 	// SchemaVersion controls the extension upgrade: "" (two-phase, manual),
 	// "auto", or an explicit semantic version.
 	SchemaVersion string
 	// Monitoring is the optional OTel collector configuration.
-	Monitoring *dbpreview.MonitoringSpec
+	Monitoring *dbv1.MonitoringSpec
 	// Backup is the cluster-level backup configuration.
-	Backup *dbpreview.BackupConfiguration
+	Backup *dbv1.BackupConfiguration
 }
 
 // MonitoringEnabled reports whether the OTel collector sidecar is enabled.
@@ -123,7 +123,7 @@ type ClusterStatus struct {
 	ExtensionImage string
 	GatewayImage   string
 	// TLS is the gateway TLS status.
-	TLS *dbpreview.TLSStatus
+	TLS *dbv1.TLSStatus
 }
 
 // ClusterAdapter is the full contract a product implements to run on the shared

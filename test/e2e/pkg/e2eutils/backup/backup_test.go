@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
@@ -49,7 +49,7 @@ func TestRenderTemplateFromSubstitutesVars(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := writeTempFile(t, dir, "b.tpl",
-		"apiVersion: documentdb.io/preview\nkind: Backup\nmetadata:\n  name: ${NAME}\n  namespace: ${NAMESPACE}\nspec:\n  cluster:\n    name: ${CLUSTER_NAME}\n  retentionDays: ${RETENTION_DAYS}\n")
+		"apiVersion: documentdb.io/v1\nkind: Backup\nmetadata:\n  name: ${NAME}\n  namespace: ${NAMESPACE}\nspec:\n  cluster:\n    name: ${CLUSTER_NAME}\n  retentionDays: ${RETENTION_DAYS}\n")
 	raw, err := RenderTemplateFrom(path, map[string]string{
 		"NAME": "on-demand", "NAMESPACE": "e2e",
 		"CLUSTER_NAME": "c", "RETENTION_DAYS": "3",
@@ -68,7 +68,7 @@ func TestRenderTemplateFromSubstitutesVars(t *testing.T) {
 func TestDecodeBackupFillsNameAndNamespace(t *testing.T) {
 	t.Parallel()
 	// Manifest omits metadata.name/namespace; decoder should inject them.
-	raw := []byte("apiVersion: documentdb.io/preview\nkind: Backup\nspec:\n  cluster:\n    name: c\n")
+	raw := []byte("apiVersion: documentdb.io/v1\nkind: Backup\nspec:\n  cluster:\n    name: c\n")
 	obj, err := decodeBackup(raw, "fallback-name", "fallback-ns")
 	if err != nil {
 		t.Fatalf("decodeBackup: %v", err)
@@ -87,11 +87,11 @@ func TestIsCompletedAndTerminalFailure(t *testing.T) {
 		{"", false, false},
 		{cnpgv1.BackupPhaseCompleted, true, false},
 		{cnpgv1.BackupPhaseFailed, false, true},
-		{previewv1.BackupPhaseSkipped, false, true},
+		{dbv1.BackupPhaseSkipped, false, true},
 		{cnpgv1.BackupPhaseRunning, false, false},
 	}
 	for _, tc := range cases {
-		b := &previewv1.Backup{Status: previewv1.BackupStatus{Phase: tc.phase}}
+		b := &dbv1.Backup{Status: dbv1.BackupStatus{Phase: tc.phase}}
 		if got := IsCompleted(b); got != tc.wantDone {
 			t.Errorf("IsCompleted(%q)=%v want %v", tc.phase, got, tc.wantDone)
 		}
@@ -104,10 +104,10 @@ func TestIsCompletedAndTerminalFailure(t *testing.T) {
 func TestWaitForCompletedReturnsWhenCompleted(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	ready := &previewv1.Backup{
+	ready := &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
-		Spec:       previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
-		Status:     previewv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
+		Spec:       dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
+		Status:     dbv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
 	}
 	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(ready).Build()
 	got, err := WaitForCompleted(context.Background(), c, "ns", "b", 500*time.Millisecond)
@@ -122,9 +122,9 @@ func TestWaitForCompletedReturnsWhenCompleted(t *testing.T) {
 func TestWaitForCompletedShortCircuitsOnFailure(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	failed := &previewv1.Backup{
+	failed := &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
-		Status:     previewv1.BackupStatus{Phase: cnpgv1.BackupPhaseFailed, Message: "oh no"},
+		Status:     dbv1.BackupStatus{Phase: cnpgv1.BackupPhaseFailed, Message: "oh no"},
 	}
 	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(failed).Build()
 	_, err := WaitForCompleted(context.Background(), c, "ns", "b", 5*time.Second)
@@ -137,9 +137,9 @@ func TestListChildBackupsFiltersByClusterName(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
 	objs := []client.Object{
-		&previewv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b1", Namespace: "ns"}, Spec: previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c1"}}},
-		&previewv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b2", Namespace: "ns"}, Spec: previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c2"}}},
-		&previewv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b3", Namespace: "ns"}, Spec: previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c1"}}},
+		&dbv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b1", Namespace: "ns"}, Spec: dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c1"}}},
+		&dbv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b2", Namespace: "ns"}, Spec: dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c2"}}},
+		&dbv1.Backup{ObjectMeta: metav1.ObjectMeta{Name: "b3", Namespace: "ns"}, Spec: dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c1"}}},
 	}
 	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
 	children, err := ListChildBackups(context.Background(), c, "ns", "c1")
@@ -211,14 +211,14 @@ func TestPVBelongsToClusterMatchesLabelsOrClaimPrefix(t *testing.T) {
 func TestMarkExpiredPatchesStatusViaSubresource(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	bkp := &previewv1.Backup{
+	bkp := &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
-		Spec:       previewv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
+		Spec:       dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "c"}},
 	}
 	c := fakeclient.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(bkp).
-		WithStatusSubresource(&previewv1.Backup{}).
+		WithStatusSubresource(&dbv1.Backup{}).
 		Build()
 
 	when := time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -226,7 +226,7 @@ func TestMarkExpiredPatchesStatusViaSubresource(t *testing.T) {
 		t.Fatalf("MarkExpired: %v", err)
 	}
 
-	var got previewv1.Backup
+	var got dbv1.Backup
 	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "ns", Name: "b"}, &got); err != nil {
 		t.Fatalf("Get after MarkExpired: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestMarkExpiredErrorsOnNotFound(t *testing.T) {
 	s := newScheme(t)
 	c := fakeclient.NewClientBuilder().
 		WithScheme(s).
-		WithStatusSubresource(&previewv1.Backup{}).
+		WithStatusSubresource(&dbv1.Backup{}).
 		Build()
 
 	err := MarkExpired(context.Background(), c, "ns", "missing", time.Unix(0, 0))
@@ -267,9 +267,9 @@ func TestWaitForBackupDeletedReturnsWhenMissing(t *testing.T) {
 func TestWaitForBackupDeletedTimesOutWhenPresent(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	bkp := &previewv1.Backup{
+	bkp := &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns"},
-		Status:     previewv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
+		Status:     dbv1.BackupStatus{Phase: cnpgv1.BackupPhaseCompleted},
 	}
 	c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(bkp).Build()
 	err := WaitForBackupDeleted(context.Background(), c, "ns", "b", 500*time.Millisecond)

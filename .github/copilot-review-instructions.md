@@ -38,6 +38,6 @@ When a PR changes files matching any of these paths, apply the full documentatio
 - `mkdocs.yml`
 - `documentdb-playground/**/README.md`
 - `*.md` (top-level Markdown files)
-- `operator/src/api/preview/*_types.go` (Go doc comments become API reference text)
+- `operator/src/api/v1/*_types.go` (Go doc comments become API reference text)
 
 The documentation agent covers Microsoft Writing Style Guide compliance, MkDocs link and nav rules, cloud-specific documentation patterns, and single source of truth guidelines. Refer to it for the complete checklist rather than duplicating rules here.

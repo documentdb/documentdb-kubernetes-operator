@@ -17,12 +17,12 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
-func newTestDocumentDB(ns, name string, modify func(dd *previewv1.DocumentDB)) *previewv1.DocumentDB {
-	dd := &previewv1.DocumentDB{
+func newTestDocumentDB(ns, name string, modify func(dd *dbv1.DocumentDB)) *dbv1.DocumentDB {
+	dd := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
 	}
 	if modify != nil {
@@ -75,7 +75,7 @@ var _ = Describe("K8sClusterClient", func() {
 					},
 				},
 			}
-			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+			cr := newTestDocumentDB(ns, cluster, func(dd *dbv1.DocumentDB) {
 				dd.Status.Status = shareddb.ReadyStatus
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(pods...), cr)
@@ -90,7 +90,7 @@ var _ = Describe("K8sClusterClient", func() {
 		})
 
 		It("flags CRReady=false when status is not healthy and no pods exist", func() {
-			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+			cr := newTestDocumentDB(ns, cluster, func(dd *dbv1.DocumentDB) {
 				dd.Status.Status = "Reconciling"
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
@@ -104,7 +104,7 @@ var _ = Describe("K8sClusterClient", func() {
 
 	Describe("GetInstancesPerNode", func() {
 		DescribeTable("returns spec.instancesPerNode (defaulting to 1)",
-			func(modify func(dd *previewv1.DocumentDB), want int) {
+			func(modify func(dd *dbv1.DocumentDB), want int) {
 				cr := newTestDocumentDB(ns, cluster, modify)
 				k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
 				got, err := k.GetInstancesPerNode(context.Background())
@@ -112,11 +112,11 @@ var _ = Describe("K8sClusterClient", func() {
 				Expect(got).To(Equal(want))
 			},
 			Entry("explicit ipn=2",
-				func(dd *previewv1.DocumentDB) { dd.Spec.InstancesPerNode = 2 }, 2),
+				func(dd *dbv1.DocumentDB) { dd.Spec.InstancesPerNode = 2 }, 2),
 			Entry("explicit ipn=3",
-				func(dd *previewv1.DocumentDB) { dd.Spec.InstancesPerNode = 3 }, 3),
+				func(dd *dbv1.DocumentDB) { dd.Spec.InstancesPerNode = 3 }, 3),
 			Entry("unset defaults to 1",
-				func(dd *previewv1.DocumentDB) {}, 1),
+				func(dd *dbv1.DocumentDB) {}, 1),
 		)
 
 		It("returns an error when the CR is missing", func() {
@@ -127,7 +127,7 @@ var _ = Describe("K8sClusterClient", func() {
 	})
 
 	It("ScaleCluster patches instancesPerNode", func() {
-		cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+		cr := newTestDocumentDB(ns, cluster, func(dd *dbv1.DocumentDB) {
 			dd.Spec.InstancesPerNode = 1
 		})
 		k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
@@ -140,7 +140,7 @@ var _ = Describe("K8sClusterClient", func() {
 
 	DescribeTable("GetCurrentDocumentDBImageTag",
 		func(image string, want string) {
-			cr := newTestDocumentDB(ns, cluster, func(dd *previewv1.DocumentDB) {
+			cr := newTestDocumentDB(ns, cluster, func(dd *dbv1.DocumentDB) {
 				dd.Status.DocumentDBImage = image
 			})
 			k := newTestK8sClient(ns, cluster, fake.NewSimpleClientset(), cr)
@@ -161,7 +161,7 @@ var _ = Describe("K8sClusterClient", func() {
 
 		Expect(k.UpgradeDocumentDB(context.Background(), "0.110.0")).To(Succeed())
 
-		var got previewv1.DocumentDB
+		var got dbv1.DocumentDB
 		Expect(k.crClient.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: cluster}, &got)).To(Succeed())
 		Expect(got.Spec.DocumentDBVersion).To(Equal("0.110.0"))
 		Expect(got.Spec.SchemaVersion).To(Equal("auto"))

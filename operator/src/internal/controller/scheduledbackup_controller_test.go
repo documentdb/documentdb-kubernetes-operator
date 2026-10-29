@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 var _ = Describe("ScheduledBackup Controller", func() {
@@ -36,23 +36,23 @@ var _ = Describe("ScheduledBackup Controller", func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
 		recorder = record.NewFakeRecorder(10)
-		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+		Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 	})
 
 	It("returns error for invalid cron schedule", func() {
 		invalidSchedule := "invalid cron expression"
-		cluster := &dbpreview.DocumentDB{
+		cluster := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName,
 				Namespace: scheduledBackupNamespace,
 			},
 		}
-		scheduledBackup := &dbpreview.ScheduledBackup{
+		scheduledBackup := &dbv1.ScheduledBackup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      scheduledBackupName,
 				Namespace: scheduledBackupNamespace,
 			},
-			Spec: dbpreview.ScheduledBackupSpec{
+			Spec: dbv1.ScheduledBackupSpec{
 				Schedule: invalidSchedule,
 				Cluster: cnpgv1.LocalObjectReference{
 					Name: clusterName,

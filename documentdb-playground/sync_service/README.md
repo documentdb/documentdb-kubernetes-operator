@@ -30,7 +30,7 @@ Follow the [Getting Started guide][getting-started] to install the operator, dep
 
 ```sh
 cat <<EOF | kubectl apply -f -
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview
@@ -295,7 +295,7 @@ Auto-generated in the sync service directory:
 [documentdb-oss]: https://github.com/documentdb/documentdb
 [documentdb-k8s-operator]: https://github.com/documentdb/documentdb-kubernetes-operator
 [discord]: https://discord.gg/WfTZxRh9qX
-[getting-started]: ../../docs/operator-public-documentation/preview/index.md
+[getting-started]: ../../docs/operator-public-documentation/v1/index.md
 [changestream-branch]: https://github.com/WentingWu666666/documentdb/tree/users/wentingwu/changefeed_vibe
 [mongosh]: https://www.mongodb.com/docs/mongodb-shell/install/
 [vscode-documentdb]: https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-documentdb

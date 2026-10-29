@@ -15,16 +15,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	e2emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
-	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/seed"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 // DocumentDB upgrade — images: with the operator already running at
@@ -50,12 +50,12 @@ var _ = Describe("DocumentDB upgrade — images",
 			collName = "seed"
 		)
 		var (
-			oldImage    string
-			newImage    string
-			oldGwImage  string
-			newGwImage  string
-			ctx         context.Context
-			cancel      context.CancelFunc
+			oldImage   string
+			newImage   string
+			oldGwImage string
+			newGwImage string
+			ctx        context.Context
+			cancel     context.CancelFunc
 		)
 
 		BeforeAll(func() {
@@ -133,9 +133,9 @@ var _ = Describe("DocumentDB upgrade — images",
 			By("patching spec.image.documentDB (and optionally image.gateway) to the new image")
 			fresh, err := shareddb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before patch")
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				if s.Image == nil {
-					s.Image = &previewv1.ImageSpec{}
+					s.Image = &dbv1.ImageSpec{}
 				}
 				s.Image.DocumentDB = newImage
 				if newGwImage != "" {

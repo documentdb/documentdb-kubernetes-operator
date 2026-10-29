@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -35,7 +35,7 @@ func newTestScheme(t *testing.T) *runtime.Scheme {
 	s := runtime.NewScheme()
 	for _, add := range []func(*runtime.Scheme) error{
 		clientgoscheme.AddToScheme,
-		dbpreview.AddToScheme,
+		dbv1.AddToScheme,
 		cnpgv1.AddToScheme,
 		snapshotv1.AddToScheme,
 		cmapi.AddToScheme,
@@ -54,9 +54,9 @@ func newFakeClient(t *testing.T, s *runtime.Scheme, funcs *interceptor.Funcs, ob
 	b := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(objs...).
-		WithStatusSubresource(&dbpreview.DocumentDB{}, &dbpreview.Backup{}, &dbpreview.ScheduledBackup{}).
-		WithIndex(&dbpreview.Backup{}, BackupClusterField, func(o client.Object) []string {
-			return []string{o.(*dbpreview.Backup).Spec.Cluster.Name}
+		WithStatusSubresource(&dbv1.DocumentDB{}, &dbv1.Backup{}, &dbv1.ScheduledBackup{}).
+		WithIndex(&dbv1.Backup{}, BackupClusterField, func(o client.Object) []string {
+			return []string{o.(*dbv1.Backup).Spec.Cluster.Name}
 		})
 	if funcs != nil {
 		b = b.WithInterceptorFuncs(*funcs)

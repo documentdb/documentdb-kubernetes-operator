@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 )
 
@@ -24,9 +24,9 @@ import (
 type fakeBackupClient struct {
 	ensureCalls []ensureArgs
 	ensureErr   error
-	sb          *previewv1.ScheduledBackup
+	sb          *dbv1.ScheduledBackup
 	sbErr       error
-	children    []previewv1.Backup
+	children    []dbv1.Backup
 	childErr    error
 }
 
@@ -41,11 +41,11 @@ func (f *fakeBackupClient) EnsureScheduledBackup(_ context.Context, name, schedu
 	return f.ensureErr
 }
 
-func (f *fakeBackupClient) GetScheduledBackup(_ context.Context, _ string) (*previewv1.ScheduledBackup, error) {
+func (f *fakeBackupClient) GetScheduledBackup(_ context.Context, _ string) (*dbv1.ScheduledBackup, error) {
 	return f.sb, f.sbErr
 }
 
-func (f *fakeBackupClient) ListScheduledChildBackups(_ context.Context, _ string) ([]previewv1.Backup, error) {
+func (f *fakeBackupClient) ListScheduledChildBackups(_ context.Context, _ string) ([]dbv1.Backup, error) {
 	return f.children, f.childErr
 }
 
@@ -53,10 +53,10 @@ func (f *fakeBackupClient) ListScheduledChildBackups(_ context.Context, _ string
 // A zero stopped time is left nil. RetentionDays/ExpiredAt are omitted
 // because the leak oracle derives its deadline from the verifier config,
 // not from the backup's own fields.
-func mkBackup(name string, phase cnpgv1.BackupPhase, stopped time.Time) previewv1.Backup {
-	b := previewv1.Backup{
+func mkBackup(name string, phase cnpgv1.BackupPhase, stopped time.Time) dbv1.Backup {
+	b := dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Status:     previewv1.BackupStatus{Phase: phase},
+		Status:     dbv1.BackupStatus{Phase: phase},
 	}
 	if !stopped.IsZero() {
 		b.Status.StoppedAt = &metav1.Time{Time: stopped}
@@ -95,8 +95,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 
 	It("counts scheduling advances without double counting", func() {
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{
-				Status: previewv1.ScheduledBackupStatus{
+			sb: &dbv1.ScheduledBackup{
+				Status: dbv1.ScheduledBackupStatus{
 					LastScheduledTime: &metav1.Time{Time: now.Add(-time.Hour)},
 				},
 			},
@@ -119,10 +119,10 @@ var _ = Describe("Verifier.checkOnce", func() {
 	It("counts completed, skipped and failed child backups once each", func() {
 		stopped := now.Add(-30 * time.Minute)
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{
+			sb: &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{
 				mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped),
-				mkBackup("b2", previewv1.BackupPhaseSkipped, time.Time{}),
+				mkBackup("b2", dbv1.BackupPhaseSkipped, time.Time{}),
 				mkBackup("b3", cnpgv1.BackupPhaseFailed, time.Time{}),
 			},
 		}
@@ -143,8 +143,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 		// retentionDays=1; stopped 1h ago → well within the 1-day window.
 		stopped := now.Add(-time.Hour)
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -156,8 +156,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 		// → well past the 1-day window + grace.
 		stopped := now.Add(-48 * time.Hour)
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 
@@ -170,8 +170,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 		// stopped just over 1 day ago but inside the 10m GC grace.
 		stopped := now.Add(-24 * time.Hour).Add(-1 * time.Minute)
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -181,8 +181,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 	It("ignores incomplete backups for leak detection", func() {
 		// A never-completed backup has no stoppedAt → not a leak candidate.
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseRunning, time.Time{})},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseRunning, time.Time{})},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -198,8 +198,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 		rd := 7
 		b.Spec.RetentionDays = &rd
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{b},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{b},
 		}
 		v, m := newTestVerifier(fc)
 		v.checkOnce(context.Background(), now)
@@ -209,8 +209,8 @@ var _ = Describe("Verifier.checkOnce", func() {
 	It("prunes dedup state for garbage-collected backups without double-counting", func() {
 		stopped := now.Add(-30 * time.Minute)
 		fc := &fakeBackupClient{
-			sb:       &previewv1.ScheduledBackup{},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
+			sb:       &dbv1.ScheduledBackup{},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, stopped)},
 		}
 		v, m := newTestVerifier(fc)
 
@@ -219,7 +219,7 @@ var _ = Describe("Verifier.checkOnce", func() {
 		Expect(m.Snapshot().Completed).To(Equal(int64(1)))
 
 		// b1 is garbage-collected and replaced by a new backup b2.
-		fc.children = []previewv1.Backup{mkBackup("b2", cnpgv1.BackupPhaseCompleted, stopped)}
+		fc.children = []dbv1.Backup{mkBackup("b2", cnpgv1.BackupPhaseCompleted, stopped)}
 		v.checkOnce(context.Background(), now)
 
 		// Map stays bounded to the live set; b1 pruned, b2 counted once.
@@ -246,8 +246,8 @@ var _ = Describe("Verifier.checkScheduling liveness", func() {
 		// backup has been scheduled since → the scheduler appears stalled.
 		overdue := now.Add(-livenessGrace).Add(-time.Minute)
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{
-				Status: previewv1.ScheduledBackupStatus{
+			sb: &dbv1.ScheduledBackup{
+				Status: dbv1.ScheduledBackupStatus{
 					NextScheduledTime: &metav1.Time{Time: overdue},
 				},
 			},
@@ -272,8 +272,8 @@ var _ = Describe("Verifier.checkScheduling liveness", func() {
 
 	It("does not warn when the next scheduled time is still within grace", func() {
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{
-				Status: previewv1.ScheduledBackupStatus{
+			sb: &dbv1.ScheduledBackup{
+				Status: dbv1.ScheduledBackupStatus{
 					// 1m overdue < 5m grace.
 					NextScheduledTime: &metav1.Time{Time: now.Add(-time.Minute)},
 				},
@@ -288,8 +288,8 @@ var _ = Describe("Verifier.checkScheduling liveness", func() {
 	It("does not warn when a backup was scheduled after the deadline", func() {
 		overdue := now.Add(-livenessGrace).Add(-time.Minute)
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{
-				Status: previewv1.ScheduledBackupStatus{
+			sb: &dbv1.ScheduledBackup{
+				Status: dbv1.ScheduledBackupStatus{
 					// A backup fired just after nextScheduledTime → not stalled.
 					LastScheduledTime: &metav1.Time{Time: overdue.Add(time.Second)},
 					NextScheduledTime: &metav1.Time{Time: overdue},
@@ -306,14 +306,14 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 	now := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
 
 	It("flags a stall when backups keep scheduling but never complete", func() {
-		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		fc := &fakeBackupClient{sb: &dbv1.ScheduledBackup{}}
 		v, m := newTestVerifier(fc)
 
 		// Successive schedules, each with only a failing child backup.
 		for i := 1; i <= completionStallThreshold; i++ {
 			t := now.Add(time.Duration(i) * time.Hour)
 			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
+			fc.children = []dbv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
 			v.checkOnce(context.Background(), t)
 		}
 
@@ -324,14 +324,14 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 	})
 
 	It("does not flag a stall when completions keep pace with scheduling", func() {
-		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		fc := &fakeBackupClient{sb: &dbv1.ScheduledBackup{}}
 		v, m := newTestVerifier(fc)
 
 		for i := 1; i <= completionStallThreshold+3; i++ {
 			t := now.Add(time.Duration(i) * time.Hour)
 			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
 			// The freshly scheduled backup completes in the same cycle.
-			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("c%d", i), cnpgv1.BackupPhaseCompleted, t)}
+			fc.children = []dbv1.Backup{mkBackup(fmt.Sprintf("c%d", i), cnpgv1.BackupPhaseCompleted, t)}
 			v.checkOnce(context.Background(), t)
 		}
 
@@ -341,14 +341,14 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 	})
 
 	It("resets the running gap once a completion recovers the path", func() {
-		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		fc := &fakeBackupClient{sb: &dbv1.ScheduledBackup{}}
 		v, m := newTestVerifier(fc)
 
 		// Two schedules fail (gap climbs to 2, still under threshold)...
 		for i := 1; i <= 2; i++ {
 			t := now.Add(time.Duration(i) * time.Hour)
 			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
+			fc.children = []dbv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
 			v.checkOnce(context.Background(), t)
 		}
 		Expect(m.Snapshot().MaxScheduledWithoutCompletion).To(Equal(int64(2)))
@@ -356,7 +356,7 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 		// ...then one completes, resetting the running gap.
 		t := now.Add(3 * time.Hour)
 		fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-		fc.children = []previewv1.Backup{mkBackup("c1", cnpgv1.BackupPhaseCompleted, t)}
+		fc.children = []dbv1.Backup{mkBackup("c1", cnpgv1.BackupPhaseCompleted, t)}
 		v.checkOnce(context.Background(), t)
 
 		Expect(v.scheduledSinceCompleted).To(BeZero())
@@ -364,7 +364,7 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 	})
 
 	It("does not flag a stall when a standby cluster skips every scheduled backup", func() {
-		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		fc := &fakeBackupClient{sb: &dbv1.ScheduledBackup{}}
 		v, m := newTestVerifier(fc)
 
 		// A standby cluster skips every backup. Well past the threshold to
@@ -372,7 +372,7 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 		for i := 1; i <= completionStallThreshold+2; i++ {
 			t := now.Add(time.Duration(i) * time.Hour)
 			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("s%d", i), previewv1.BackupPhaseSkipped, time.Time{})}
+			fc.children = []dbv1.Backup{mkBackup(fmt.Sprintf("s%d", i), dbv1.BackupPhaseSkipped, time.Time{})}
 			v.checkOnce(context.Background(), t)
 		}
 
@@ -385,14 +385,14 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 	})
 
 	It("resets the running gap once a skip is observed", func() {
-		fc := &fakeBackupClient{sb: &previewv1.ScheduledBackup{}}
+		fc := &fakeBackupClient{sb: &dbv1.ScheduledBackup{}}
 		v, m := newTestVerifier(fc)
 
 		// Two schedules fail (gap climbs to 2, still under threshold)...
 		for i := 1; i <= 2; i++ {
 			t := now.Add(time.Duration(i) * time.Hour)
 			fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-			fc.children = []previewv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
+			fc.children = []dbv1.Backup{mkBackup(fmt.Sprintf("f%d", i), cnpgv1.BackupPhaseFailed, time.Time{})}
 			v.checkOnce(context.Background(), t)
 		}
 		Expect(m.Snapshot().MaxScheduledWithoutCompletion).To(Equal(int64(2)))
@@ -401,7 +401,7 @@ var _ = Describe("Verifier completion-stall oracle", func() {
 		// is skipped, which resets the running gap just like a completion.
 		t := now.Add(3 * time.Hour)
 		fc.sb.Status.LastScheduledTime = &metav1.Time{Time: t}
-		fc.children = []previewv1.Backup{mkBackup("s1", previewv1.BackupPhaseSkipped, time.Time{})}
+		fc.children = []dbv1.Backup{mkBackup("s1", dbv1.BackupPhaseSkipped, time.Time{})}
 		v.checkOnce(context.Background(), t)
 
 		Expect(v.scheduledSinceCompleted).To(BeZero())
@@ -414,12 +414,12 @@ var _ = Describe("Verifier Run loop", func() {
 	It("observes a scheduled+completed backup through the periodic loop", func() {
 		scheduledAt := time.Now()
 		fc := &fakeBackupClient{
-			sb: &previewv1.ScheduledBackup{
-				Status: previewv1.ScheduledBackupStatus{
+			sb: &dbv1.ScheduledBackup{
+				Status: dbv1.ScheduledBackupStatus{
 					LastScheduledTime: &metav1.Time{Time: scheduledAt},
 				},
 			},
-			children: []previewv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, scheduledAt)},
+			children: []dbv1.Backup{mkBackup("b1", cnpgv1.BackupPhaseCompleted, scheduledAt)},
 		}
 		// Short interval → the loop ticks many times in-test, the mechanism the
 		// smoke gate uses to observe completions through the real periodic path.

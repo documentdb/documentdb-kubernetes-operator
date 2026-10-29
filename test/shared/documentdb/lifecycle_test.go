@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 func newScheme() *runtime.Scheme {
@@ -36,9 +36,9 @@ var _ = Describe("Shared lifecycle helpers", func() {
 		It("returns the named object and filters by namespace", func() {
 			s := newScheme()
 			objs := []client.Object{
-				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}},
-				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns1"}},
-				&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns2"}},
+				&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}},
+				&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "ns1"}},
+				&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns2"}},
 			}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
 
@@ -59,15 +59,15 @@ var _ = Describe("Shared lifecycle helpers", func() {
 	Describe("PatchSpec", func() {
 		It("mutates and persists the spec", func() {
 			s := newScheme()
-			dd := &previewv1.DocumentDB{
+			dd := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"},
-				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 1},
+				Spec:       dbv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 1},
 			}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 
 			fresh, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(PatchSpec(ctx, c, fresh, func(spec *previewv1.DocumentDBSpec) {
+			Expect(PatchSpec(ctx, c, fresh, func(spec *dbv1.DocumentDBSpec) {
 				spec.LogLevel = "debug"
 			})).To(Succeed())
 
@@ -77,10 +77,10 @@ var _ = Describe("Shared lifecycle helpers", func() {
 		})
 
 		It("returns an error when the client is nil", func() {
-			dd := &previewv1.DocumentDB{
+			dd := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"},
 			}
-			err := PatchSpec(ctx, nil, dd, func(*previewv1.DocumentDBSpec) {})
+			err := PatchSpec(ctx, nil, dd, func(*dbv1.DocumentDBSpec) {})
 			Expect(err).To(MatchError(ContainSubstring("client must not be nil")))
 		})
 	})
@@ -88,12 +88,12 @@ var _ = Describe("Shared lifecycle helpers", func() {
 	Describe("IsHealthy", func() {
 		It("only matches the canonical ReadyStatus", func() {
 			Expect(IsHealthy(nil)).To(BeFalse())
-			Expect(IsHealthy(&previewv1.DocumentDB{})).To(BeFalse())
-			Expect(IsHealthy(&previewv1.DocumentDB{
-				Status: previewv1.DocumentDBStatus{Status: ReadyStatus},
+			Expect(IsHealthy(&dbv1.DocumentDB{})).To(BeFalse())
+			Expect(IsHealthy(&dbv1.DocumentDB{
+				Status: dbv1.DocumentDBStatus{Status: ReadyStatus},
 			})).To(BeTrue())
-			Expect(IsHealthy(&previewv1.DocumentDB{
-				Status: previewv1.DocumentDBStatus{Status: "Running"},
+			Expect(IsHealthy(&dbv1.DocumentDB{
+				Status: dbv1.DocumentDBStatus{Status: "Running"},
 			})).To(BeFalse())
 		})
 	})
@@ -101,7 +101,7 @@ var _ = Describe("Shared lifecycle helpers", func() {
 	Describe("WaitHealthy", func() {
 		It("returns an error when the deadline elapses", func() {
 			s := newScheme()
-			dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
+			dd := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 			ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
@@ -112,7 +112,7 @@ var _ = Describe("Shared lifecycle helpers", func() {
 	Describe("Delete", func() {
 		It("removes the object from the API", func() {
 			s := newScheme()
-			dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
+			dd := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns1"}}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 			Expect(Delete(ctx, c, dd, 2*time.Second)).To(Succeed())
 			_, err := Get(ctx, c, client.ObjectKeyFromObject(dd))
@@ -123,9 +123,9 @@ var _ = Describe("Shared lifecycle helpers", func() {
 	Describe("PatchInstances", func() {
 		It("updates InstancesPerNode", func() {
 			s := newScheme()
-			dd := &previewv1.DocumentDB{
+			dd := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1"},
-				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
+				Spec:       dbv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
 			}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 			Expect(PatchInstances(ctx, c, "ns1", "dd", 3)).To(Succeed())
@@ -137,9 +137,9 @@ var _ = Describe("Shared lifecycle helpers", func() {
 
 		It("is a no-op when the requested value already matches", func() {
 			s := newScheme()
-			dd := &previewv1.DocumentDB{
+			dd := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: "dd", Namespace: "ns1", ResourceVersion: "7"},
-				Spec:       previewv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
+				Spec:       dbv1.DocumentDBSpec{NodeCount: 1, InstancesPerNode: 2},
 			}
 			c := fakeclient.NewClientBuilder().WithScheme(s).WithObjects(dd).Build()
 			Expect(PatchInstances(ctx, c, "ns1", "dd", 2)).To(Succeed())

@@ -7,7 +7,7 @@
 //
 //   - CloudNative-PG's apiv1 (Cluster, Backup, ScheduledBackup, Pooler, …)
 //   - k8s.io client-go scheme (core/v1, apps/v1, …)
-//   - the DocumentDB operator preview API (documentdb.io/preview)
+//   - the DocumentDB operator v1 API (documentdb.io/v1)
 //
 // NewDocumentDBTestingEnvironment registers those groups onto the shared
 // scheme and rebuilds env.Client so it can Get/List/Watch DocumentDB CRs.
@@ -30,7 +30,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // DefaultOperatorNamespace is the namespace the DocumentDB operator is
@@ -47,7 +47,7 @@ const DefaultPostgresImage = "busybox:17.2"
 const postgresImgEnv = "POSTGRES_IMG"
 
 // NewDocumentDBTestingEnvironment returns a CNPG *TestingEnvironment with
-// the CloudNative-PG apiv1, client-go and DocumentDB preview schemes
+// the CloudNative-PG apiv1, client-go and DocumentDB v1 schemes
 // registered and env.Client rebuilt against that scheme. The supplied
 // context is stored on the returned environment for callers that need it.
 func NewDocumentDBTestingEnvironment(ctx context.Context) (*environment.TestingEnvironment, error) {
@@ -64,7 +64,7 @@ func NewDocumentDBTestingEnvironment(ctx context.Context) (*environment.TestingE
 
 	utilruntime.Must(cnpgv1.AddToScheme(env.Scheme))
 	utilruntime.Must(clientgoscheme.AddToScheme(env.Scheme))
-	utilruntime.Must(previewv1.AddToScheme(env.Scheme))
+	utilruntime.Must(dbv1.AddToScheme(env.Scheme))
 
 	c, err := client.New(env.RestClientConfig, client.Options{Scheme: env.Scheme})
 	if err != nil {
@@ -102,8 +102,8 @@ func DefaultDocumentDBScheme() (*runtime.Scheme, error) {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		return nil, fmt.Errorf("adding client-go scheme: %w", err)
 	}
-	if err := previewv1.AddToScheme(s); err != nil {
-		return nil, fmt.Errorf("adding documentdb preview scheme: %w", err)
+	if err := dbv1.AddToScheme(s); err != nil {
+		return nil, fmt.Errorf("adding documentdb v1 scheme: %w", err)
 	}
 	return s, nil
 }

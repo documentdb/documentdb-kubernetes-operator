@@ -780,7 +780,7 @@ EOF
     
     # Deploy DocumentDB instance
     kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: sample-documentdb

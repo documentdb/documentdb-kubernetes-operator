@@ -11,7 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
@@ -24,8 +24,8 @@ type ScheduledBackupReconciler struct {
 	Recorder record.EventRecorder
 }
 
-func (r *ScheduledBackupReconciler) engine() *engine.ScheduledBackupReconciler[*dbpreview.DocumentDB, *dbpreview.ScheduledBackup, *dbpreview.Backup] {
-	return &engine.ScheduledBackupReconciler[*dbpreview.DocumentDB, *dbpreview.ScheduledBackup, *dbpreview.Backup]{
+func (r *ScheduledBackupReconciler) engine() *engine.ScheduledBackupReconciler[*dbv1.DocumentDB, *dbv1.ScheduledBackup, *dbv1.Backup] {
+	return &engine.ScheduledBackupReconciler[*dbv1.DocumentDB, *dbv1.ScheduledBackup, *dbv1.Backup]{
 		Client:    r.Client,
 		Scheme:    r.Scheme,
 		Recorder:  r.Recorder,

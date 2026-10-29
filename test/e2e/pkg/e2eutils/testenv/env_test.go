@@ -10,7 +10,7 @@ import (
 	"time"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -23,8 +23,8 @@ func TestDefaultDocumentDBSchemeRegistersExpectedGroups(t *testing.T) {
 	if !s.Recognizes(cnpgv1.SchemeGroupVersion.WithKind("Cluster")) {
 		t.Errorf("expected scheme to recognize cnpg apiv1 Cluster")
 	}
-	if !s.Recognizes(previewv1.GroupVersion.WithKind("DocumentDB")) {
-		t.Errorf("expected scheme to recognize DocumentDB preview group")
+	if !s.Recognizes(dbv1.GroupVersion.WithKind("DocumentDB")) {
+		t.Errorf("expected scheme to recognize DocumentDB v1 group")
 	}
 	if !s.Recognizes(corev1.SchemeGroupVersion.WithKind("Pod")) {
 		t.Errorf("expected scheme to recognize core/v1 Pod")

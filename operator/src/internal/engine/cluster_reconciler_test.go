@@ -26,13 +26,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
-type clusterReconciler = ClusterReconciler[*dbpreview.DocumentDB]
+type clusterReconciler = ClusterReconciler[*dbv1.DocumentDB]
 
 var clusterKey = ctrl.Request{NamespacedName: types.NamespacedName{Name: "db", Namespace: testNamespace}}
 
@@ -45,7 +45,7 @@ func TestClusterReconcileResolvesTypeMetaForDirectClients(t *testing.T) {
 	c := newFakeClient(t, s, &interceptor.Funcs{
 		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			err := c.Get(ctx, key, obj, opts...)
-			if _, ok := obj.(*dbpreview.DocumentDB); ok {
+			if _, ok := obj.(*dbv1.DocumentDB); ok {
 				obj.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 			}
 			return err
@@ -60,7 +60,7 @@ func TestClusterReconcileResolvesTypeMetaForDirectClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := metav1.GetControllerOf(cluster)
-	if owner == nil || owner.APIVersion != "documentdb.io/preview" || owner.Kind != "DocumentDB" || owner.UID != db.UID {
+	if owner == nil || owner.APIVersion != "documentdb.io/v1" || owner.Kind != "DocumentDB" || owner.UID != db.UID {
 		t.Fatalf("direct-client resource lost its owner identity: %+v", owner)
 	}
 }
@@ -115,7 +115,7 @@ func newClusterReconciler(c client.Client, s *runtime.Scheme, sql *sqlRecorder) 
 }
 
 // reconcilableCluster returns a DocumentDB with the finalizer already present.
-func reconcilableCluster() *dbpreview.DocumentDB {
+func reconcilableCluster() *dbv1.DocumentDB {
 	db := testCluster()
 	db.Finalizers = []string{finalizer}
 	db.Spec.InstancesPerNode = 1
@@ -136,7 +136,7 @@ func gatewayService(ip string) *corev1.Service {
 
 // healthyCNPGCluster returns a healthy CNPG cluster that already matches the
 // images the reconciler renders, so no rollout is needed.
-func healthyCNPGCluster(t *testing.T, s *runtime.Scheme, db *dbpreview.DocumentDB) *cnpgv1.Cluster {
+func healthyCNPGCluster(t *testing.T, s *runtime.Scheme, db *dbv1.DocumentDB) *cnpgv1.Cluster {
 	t.Helper()
 	seed := db.DeepCopy()
 	seed.Spec.ExposeViaService.ServiceType = ""
@@ -158,9 +158,9 @@ func healthyCNPGCluster(t *testing.T, s *runtime.Scheme, db *dbpreview.DocumentD
 	return cluster
 }
 
-func getDocumentDB(t *testing.T, c client.Client) *dbpreview.DocumentDB {
+func getDocumentDB(t *testing.T, c client.Client) *dbv1.DocumentDB {
 	t.Helper()
-	db := &dbpreview.DocumentDB{}
+	db := &dbv1.DocumentDB{}
 	if err := c.Get(context.Background(), clusterKey.NamespacedName, db); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestClusterReconcileFinalizerLifecycle(t *testing.T) {
 		}
 	})
 
-	deleting := func(finalizers ...string) *dbpreview.DocumentDB {
+	deleting := func(finalizers ...string) *dbv1.DocumentDB {
 		db := testCluster()
 		now := metav1.Now()
 		db.DeletionTimestamp = &now
@@ -319,7 +319,7 @@ func TestClusterReconcileReplicationContext(t *testing.T) {
 		s := newTestScheme(t)
 		c := newFakeClient(t, s, nil, reconcilableCluster())
 		r, _ := newClusterReconciler(c, s, &sqlRecorder{})
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{contextErr: errInjected}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{contextErr: errInjected}
 		if _, err := r.Reconcile(context.Background(), clusterKey); err != errInjected {
 			t.Fatalf("expected injected error, got %v", err)
 		}
@@ -328,14 +328,14 @@ func TestClusterReconcileReplicationContext(t *testing.T) {
 	t.Run("not present deletes owned resources", func(t *testing.T) {
 		s := newTestScheme(t)
 		db := reconcilableCluster()
-		owned := metav1.OwnerReference{APIVersion: "documentdb.io/preview", Kind: "DocumentDB", Name: "db", UID: db.UID}
+		owned := metav1.OwnerReference{APIVersion: "documentdb.io/v1", Kind: "DocumentDB", Name: "db", UID: db.UID}
 		svc := gatewayService("10.0.0.1")
 		svc.OwnerReferences = []metav1.OwnerReference{owned}
 		cnpgCluster := &cnpgv1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: testNamespace, OwnerReferences: []metav1.OwnerReference{owned}}}
 		role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: testNamespace}}
 		c := newFakeClient(t, s, nil, db, svc, cnpgCluster, role)
 		r, _ := newClusterReconciler(c, s, &sqlRecorder{})
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{rc: util.NewReplicationContext(util.NotPresent, "", "")}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{rc: util.NewReplicationContext(util.NotPresent, "", "")}
 		if res, err := r.Reconcile(context.Background(), clusterKey); err != nil || res != (ctrl.Result{}) {
 			t.Fatalf("expected no-op result, got %v, %v", res, err)
 		}
@@ -356,7 +356,7 @@ func TestClusterReconcileReplicationContext(t *testing.T) {
 			return errInjected
 		}}, reconcilableCluster())
 		r, _ := newClusterReconciler(c, s, &sqlRecorder{})
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{rc: util.NewReplicationContext(util.NotPresent, "", "")}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{rc: util.NewReplicationContext(util.NotPresent, "", "")}
 		if _, err := r.Reconcile(context.Background(), clusterKey); err == nil {
 			t.Fatal("expected error")
 		}
@@ -367,7 +367,7 @@ func TestClusterReconcileCreatesResourcesThenConverges(t *testing.T) {
 	s := newTestScheme(t)
 	db := reconcilableCluster()
 	db.Spec.ExposeViaService.ServiceType = "ClusterIP"
-	db.Spec.Monitoring = &dbpreview.MonitoringSpec{Enabled: true}
+	db.Spec.Monitoring = &dbv1.MonitoringSpec{Enabled: true}
 	c := newFakeClient(t, s, nil, db, gatewayService("10.0.0.7"))
 	sql := &sqlRecorder{roleOut: "(0 rows)"}
 	r, _ := newClusterReconciler(c, s, sql)
@@ -435,7 +435,7 @@ func TestClusterReconcileLoadBalancerServiceWithReplicationHooks(t *testing.T) {
 	c := newFakeClient(t, s, nil, db, svc, cluster)
 	sql := &sqlRecorder{roleOut: "(1 row)"}
 	r, _ := newClusterReconciler(c, s, sql)
-	hooks := &fakeReplication[*dbpreview.DocumentDB]{rc: util.NewReplicationContext(util.Primary, "db", "db")}
+	hooks := &fakeReplication[*dbv1.DocumentDB]{rc: util.NewReplicationContext(util.Primary, "db", "db")}
 	hooks.rc.CNPGClusterName = "db"
 	r.Replication = hooks
 
@@ -464,13 +464,13 @@ func TestClusterReconcileReplicationHookResults(t *testing.T) {
 	stop := &ctrl.Result{RequeueAfter: 42 * time.Second}
 	tests := []struct {
 		name  string
-		hooks *fakeReplication[*dbpreview.DocumentDB]
+		hooks *fakeReplication[*dbv1.DocumentDB]
 		want  ctrl.Result
 	}{
-		{name: "add to spec fails", hooks: &fakeReplication[*dbpreview.DocumentDB]{addErr: errInjected}, want: ctrl.Result{RequeueAfter: RequeueAfterShort}},
-		{name: "sync requests a wait", hooks: &fakeReplication[*dbpreview.DocumentDB]{syncErr: errInjected, syncRequeue: 7 * time.Second}, want: ctrl.Result{RequeueAfter: 7 * time.Second}},
-		{name: "primary reconciliation stops", hooks: &fakeReplication[*dbpreview.DocumentDB]{primaryResult: stop}, want: *stop},
-		{name: "networking reconciliation stops", hooks: &fakeReplication[*dbpreview.DocumentDB]{netResult: stop}, want: *stop},
+		{name: "add to spec fails", hooks: &fakeReplication[*dbv1.DocumentDB]{addErr: errInjected}, want: ctrl.Result{RequeueAfter: RequeueAfterShort}},
+		{name: "sync requests a wait", hooks: &fakeReplication[*dbv1.DocumentDB]{syncErr: errInjected, syncRequeue: 7 * time.Second}, want: ctrl.Result{RequeueAfter: 7 * time.Second}},
+		{name: "primary reconciliation stops", hooks: &fakeReplication[*dbv1.DocumentDB]{primaryResult: stop}, want: *stop},
+		{name: "networking reconciliation stops", hooks: &fakeReplication[*dbv1.DocumentDB]{netResult: stop}, want: *stop},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -560,7 +560,7 @@ func TestClusterReconcileStageFailuresRequeue(t *testing.T) {
 			s := newTestScheme(t)
 			db := reconcilableCluster()
 			if tt.monitoring {
-				db.Spec.Monitoring = &dbpreview.MonitoringSpec{Enabled: true}
+				db.Spec.Monitoring = &dbv1.MonitoringSpec{Enabled: true}
 			}
 			var objs []client.Object
 			if tt.healthy {
@@ -599,10 +599,10 @@ func TestClusterReconcileStageFailuresRequeue(t *testing.T) {
 }
 
 func TestClusterReconcilePVRecovery(t *testing.T) {
-	recoveringCluster := func() *dbpreview.DocumentDB {
+	recoveringCluster := func() *dbv1.DocumentDB {
 		db := reconcilableCluster()
-		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{Recovery: &dbpreview.RecoveryConfiguration{
-			PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "old-pv"},
+		db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{Recovery: &dbv1.RecoveryConfiguration{
+			PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "old-pv"},
 		}}
 		return db
 	}

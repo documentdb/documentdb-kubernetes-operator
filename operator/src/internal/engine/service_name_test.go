@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -32,7 +32,7 @@ import (
 // the trailing "-east"/"-west", which plain truncation used to discard.
 var sharedPrefix = strings.Repeat("a", 44)
 
-func longCluster(suffix string, uid types.UID) *dbpreview.DocumentDB {
+func longCluster(suffix string, uid types.UID) *dbv1.DocumentDB {
 	db := reconcilableCluster()
 	db.Name = sharedPrefix + suffix
 	db.UID = uid
@@ -40,22 +40,22 @@ func longCluster(suffix string, uid types.UID) *dbpreview.DocumentDB {
 	return db
 }
 
-func ownedService(name, ip string, owner *dbpreview.DocumentDB) *corev1.Service {
+func ownedService(name, ip string, owner *dbv1.DocumentDB) *corev1.Service {
 	svc := gatewayService(ip)
 	svc.Name = name
 	svc.OwnerReferences = []metav1.OwnerReference{{
-		APIVersion: "documentdb.io/preview", Kind: "DocumentDB", Name: owner.Name, UID: owner.UID,
+		APIVersion: "documentdb.io/v1", Kind: "DocumentDB", Name: owner.Name, UID: owner.UID,
 		Controller: &[]bool{true}[0],
 	}}
 	return svc
 }
 
-func legacyCert(owner *dbpreview.DocumentDB, dnsNames ...string) *cmapi.Certificate {
+func legacyCert(owner *dbv1.DocumentDB, dnsNames ...string) *cmapi.Certificate {
 	return &cmapi.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: owner.Name + "-gateway-cert", Namespace: testNamespace,
 			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "documentdb.io/preview", Kind: "DocumentDB", Name: owner.Name, UID: owner.UID,
+				APIVersion: "documentdb.io/v1", Kind: "DocumentDB", Name: owner.Name, UID: owner.UID,
 				Controller: &[]bool{true}[0],
 			}},
 		},
@@ -104,7 +104,7 @@ func TestGatewayServiceNameChoosesOnceAndRecordsIt(t *testing.T) {
 			if err != nil || got != tt.want {
 				t.Fatalf("gatewayServiceName = %q, %v; want %q", got, err, tt.want)
 			}
-			stored := &dbpreview.DocumentDB{}
+			stored := &dbv1.DocumentDB{}
 			if err := c.Get(ctx, client.ObjectKeyFromObject(db), stored); err != nil {
 				t.Fatal(err)
 			}
@@ -130,7 +130,7 @@ func TestGatewayServiceNameChoosesOnceAndRecordsIt(t *testing.T) {
 
 	t.Run("cert-manager types need not be registered", func(t *testing.T) {
 		s := runtime.NewScheme()
-		for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, dbpreview.AddToScheme} {
+		for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, dbv1.AddToScheme} {
 			if err := add(s); err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +146,7 @@ func TestGatewayServiceNameChoosesOnceAndRecordsIt(t *testing.T) {
 		s := newTestScheme(t)
 		db := east.DeepCopy()
 		c := newFakeClient(t, s, nil, db)
-		stale := &dbpreview.DocumentDB{}
+		stale := &dbv1.DocumentDB{}
 		if err := c.Get(ctx, client.ObjectKeyFromObject(db), stale); err != nil {
 			t.Fatal(err)
 		}
@@ -240,7 +240,7 @@ func TestClusterReconcileLongNamesDoNotShareService(t *testing.T) {
 	r, _ := newClusterReconciler(c, s, &sqlRecorder{roleOut: "(1 row)"})
 
 	for _, tt := range []struct {
-		db *dbpreview.DocumentDB
+		db *dbv1.DocumentDB
 		ip string
 	}{{db: west, ip: "10.0.0.2"}, {db: east, ip: "10.0.0.1"}} {
 		key := ctrl.Request{NamespacedName: types.NamespacedName{Name: tt.db.Name, Namespace: testNamespace}}
@@ -262,7 +262,7 @@ func TestClusterReconcileLongNamesDoNotShareService(t *testing.T) {
 		if _, err := r.Reconcile(ctx, key); err != nil {
 			t.Fatalf("%s: converge reconcile: %v", tt.db.Name, err)
 		}
-		got := &dbpreview.DocumentDB{}
+		got := &dbv1.DocumentDB{}
 		if err := c.Get(ctx, key.NamespacedName, got); err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +282,7 @@ func TestCertificateNamesFollowResolvedService(t *testing.T) {
 	legacy, _ := naming.LegacyServiceName(east.Name)
 
 	for _, tt := range []struct {
-		db   *dbpreview.DocumentDB
+		db   *dbv1.DocumentDB
 		want string
 	}{{db: east, want: legacy}, {db: west, want: naming.ServiceName(west.Name)}} {
 		t.Run(tt.db.Name, func(t *testing.T) {
@@ -315,7 +315,7 @@ func TestCollidingUpgradedClusterMovesToItsOwnServiceAndCertificate(t *testing.T
 	hashed := naming.ServiceName(west.Name)
 	legacySANs := []string{legacy, legacy + "." + testNamespace, legacy + "." + testNamespace + ".svc"}
 
-	for _, mode := range []*dbpreview.GatewayTLS{nil, {Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{IssuerRef: dbpreview.IssuerRef{Name: "ca"}}}} {
+	for _, mode := range []*dbv1.GatewayTLS{nil, {Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{IssuerRef: dbv1.IssuerRef{Name: "ca"}}}} {
 		name := "self-signed"
 		if mode != nil {
 			name = "cert-manager"
@@ -325,7 +325,7 @@ func TestCollidingUpgradedClusterMovesToItsOwnServiceAndCertificate(t *testing.T
 			ctx := context.Background()
 			db := west.DeepCopy()
 			if mode != nil {
-				db.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: mode}
+				db.Spec.TLS = &dbv1.TLSConfiguration{Gateway: mode}
 			}
 			cert := legacyCert(db, legacySANs...)
 			cert.Status.Conditions = []cmapi.CertificateCondition{{Type: cmapi.CertificateConditionReady, Status: cmmeta.ConditionTrue}}
@@ -425,9 +425,9 @@ func TestCertificateReadyMustMatchCurrentGeneration(t *testing.T) {
 	}
 }
 
-func getDocumentDBByName(t *testing.T, c client.Client, name string) *dbpreview.DocumentDB {
+func getDocumentDBByName(t *testing.T, c client.Client, name string) *dbv1.DocumentDB {
 	t.Helper()
-	db := &dbpreview.DocumentDB{}
+	db := &dbv1.DocumentDB{}
 	if err := c.Get(context.Background(), types.NamespacedName{Name: name, Namespace: testNamespace}, db); err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func TestStatusRefreshKeepsConcurrentServiceNameChoice(t *testing.T) {
 	if err := c.Delete(ctx, foreign); err != nil {
 		t.Fatal(err)
 	}
-	if err := newCertReconciler(c, s).updateTLSStatus(ctx, stale, func(st *dbpreview.TLSStatus) { st.Ready = false }); err != nil {
+	if err := newCertReconciler(c, s).updateTLSStatus(ctx, stale, func(st *dbv1.TLSStatus) { st.Ready = false }); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := gatewayServiceName(ctx, c, naming, stale); err != nil || got != hashed {
@@ -532,7 +532,7 @@ func TestMigrationHoldsEndpointUntilCertificateIssued(t *testing.T) {
 	cert.Status.Conditions = []cmapi.CertificateCondition{{
 		Type: cmapi.CertificateConditionReady, Status: cmmeta.ConditionTrue, ObservedGeneration: 1,
 	}}
-	west.Status.TLS = &dbpreview.TLSStatus{Ready: true, SecretName: cert.Spec.SecretName}
+	west.Status.TLS = &dbv1.TLSStatus{Ready: true, SecretName: cert.Spec.SecretName}
 	c := newFakeClient(t, s, nil, east, west, cert,
 		ownedService(legacy, "10.0.0.1", east), ownedService(hashed, "10.0.0.2", west))
 	key := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(west)}

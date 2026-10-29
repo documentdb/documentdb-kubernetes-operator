@@ -6,7 +6,7 @@ package product
 import (
 	"os"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -70,7 +70,7 @@ func (DocumentDBAdapter) Profile() ProductProfile {
 // ExtensionImage resolves the extension image for a DocumentDB instance using the
 // product profile's repo and default. The resolution priority is shared across
 // products via util.ResolveComponentImage.
-func (a DocumentDBAdapter) ExtensionImage(db *dbpreview.DocumentDB) string {
+func (a DocumentDBAdapter) ExtensionImage(db *dbv1.DocumentDB) string {
 	p := a.Profile()
 	var explicit string
 	if db.Spec.Image != nil {
@@ -83,13 +83,13 @@ func (a DocumentDBAdapter) ExtensionImage(db *dbpreview.DocumentDB) string {
 		db.Spec.DocumentDBVersion,
 		os.Getenv(util.DOCUMENTDB_VERSION_ENV),
 		util.CHANGESTREAM_DOCUMENTDB_IMAGE,
-		dbpreview.IsFeatureGateEnabled(db, dbpreview.FeatureGateChangeStreams),
+		dbv1.IsFeatureGateEnabled(db, dbv1.FeatureGateChangeStreams),
 	)
 }
 
 // GatewayImage resolves the gateway image for a DocumentDB instance using the
 // product profile's repo and default.
-func (a DocumentDBAdapter) GatewayImage(db *dbpreview.DocumentDB) string {
+func (a DocumentDBAdapter) GatewayImage(db *dbv1.DocumentDB) string {
 	p := a.Profile()
 	var explicit string
 	if db.Spec.Image != nil {
@@ -102,13 +102,13 @@ func (a DocumentDBAdapter) GatewayImage(db *dbpreview.DocumentDB) string {
 		db.Spec.DocumentDBVersion,
 		os.Getenv(util.DOCUMENTDB_VERSION_ENV),
 		util.CHANGESTREAM_GATEWAY_IMAGE,
-		dbpreview.IsFeatureGateEnabled(db, dbpreview.FeatureGateChangeStreams),
+		dbv1.IsFeatureGateEnabled(db, dbv1.FeatureGateChangeStreams),
 	)
 }
 
 // DocumentDBResources maps spec.resource of a DocumentDB onto the neutral
 // resource model consumed by the resource split and validation.
-func DocumentDBResources(db *dbpreview.DocumentDB) Resources {
+func DocumentDBResources(db *dbv1.DocumentDB) Resources {
 	res := db.Spec.Resource
 	return Resources{
 		Memory:   res.Memory,
@@ -119,7 +119,7 @@ func DocumentDBResources(db *dbpreview.DocumentDB) Resources {
 	}
 }
 
-func toComponentResources(c *dbpreview.ComponentResources) *ComponentResources {
+func toComponentResources(c *dbv1.ComponentResources) *ComponentResources {
 	if c == nil {
 		return nil
 	}
@@ -129,7 +129,7 @@ func toComponentResources(c *dbpreview.ComponentResources) *ComponentResources {
 // ToClusterIntent maps a DocumentDB custom resource onto the product-neutral
 // ClusterIntent, resolving product-varying images, credential secret, and plugin
 // names via the product profile.
-func (a DocumentDBAdapter) ToClusterIntent(db *dbpreview.DocumentDB) ClusterIntent {
+func (a DocumentDBAdapter) ToClusterIntent(db *dbv1.DocumentDB) ClusterIntent {
 	p := a.Profile()
 
 	credentialSecret := db.Spec.DocumentDbCredentialSecret
@@ -209,8 +209,8 @@ func (a DocumentDBAdapter) ToClusterIntent(db *dbpreview.DocumentDB) ClusterInte
 		},
 		Postgres: pg,
 		FeatureGates: FeatureGates{
-			ChangeStreams: dbpreview.IsFeatureGateEnabled(db, dbpreview.FeatureGateChangeStreams),
-			IOUring:       dbpreview.IsFeatureGateEnabled(db, dbpreview.FeatureGateIOUring),
+			ChangeStreams: dbv1.IsFeatureGateEnabled(db, dbv1.FeatureGateChangeStreams),
+			IOUring:       dbv1.IsFeatureGateEnabled(db, dbv1.FeatureGateIOUring),
 		},
 		Bootstrap:             bootstrap,
 		CredentialSecret:      credentialSecret,
@@ -224,18 +224,18 @@ func (a DocumentDBAdapter) ToClusterIntent(db *dbpreview.DocumentDB) ClusterInte
 var _ Adapter = DocumentDBAdapter{}
 
 // DocumentDBAdapter implements the full shared-reconciler contract.
-var _ ClusterAdapter[*dbpreview.DocumentDB] = DocumentDBAdapter{}
+var _ ClusterAdapter[*dbv1.DocumentDB] = DocumentDBAdapter{}
 
 // New returns an empty DocumentDB custom resource.
-func (DocumentDBAdapter) New() *dbpreview.DocumentDB { return &dbpreview.DocumentDB{} }
+func (DocumentDBAdapter) New() *dbv1.DocumentDB { return &dbv1.DocumentDB{} }
 
 // Intent is ToClusterIntent under the ClusterAdapter contract.
-func (a DocumentDBAdapter) Intent(db *dbpreview.DocumentDB) ClusterIntent {
+func (a DocumentDBAdapter) Intent(db *dbv1.DocumentDB) ClusterIntent {
 	return a.ToClusterIntent(db)
 }
 
 // Spec returns the operational view of a DocumentDB custom resource.
-func (DocumentDBAdapter) Spec(db *dbpreview.DocumentDB) ClusterSpec {
+func (DocumentDBAdapter) Spec(db *dbv1.DocumentDB) ClusterSpec {
 	spec := ClusterSpec{
 		ServiceType:                   db.Spec.ExposeViaService.ServiceType,
 		Environment:                   db.Spec.Environment,
@@ -253,7 +253,7 @@ func (DocumentDBAdapter) Spec(db *dbpreview.DocumentDB) ClusterSpec {
 }
 
 // Status reads the neutral status fields from a DocumentDB custom resource.
-func (DocumentDBAdapter) Status(db *dbpreview.DocumentDB) ClusterStatus {
+func (DocumentDBAdapter) Status(db *dbv1.DocumentDB) ClusterStatus {
 	return ClusterStatus{
 		Phase:            db.Status.Status,
 		ConnectionString: db.Status.ConnectionString,
@@ -266,7 +266,7 @@ func (DocumentDBAdapter) Status(db *dbpreview.DocumentDB) ClusterStatus {
 
 // SetStatus writes the neutral status fields into a DocumentDB custom resource;
 // multi-region fields (TargetPrimary, LocalPrimary) are left untouched.
-func (DocumentDBAdapter) SetStatus(db *dbpreview.DocumentDB, s ClusterStatus) {
+func (DocumentDBAdapter) SetStatus(db *dbv1.DocumentDB, s ClusterStatus) {
 	db.Status.Status = s.Phase
 	db.Status.ConnectionString = s.ConnectionString
 	db.Status.SchemaVersion = s.SchemaVersion
@@ -277,7 +277,7 @@ func (DocumentDBAdapter) SetStatus(db *dbpreview.DocumentDB, s ClusterStatus) {
 
 // ConnectionString builds the MongoDB-protocol connection string for a
 // DocumentDB gateway.
-func (a DocumentDBAdapter) ConnectionString(db *dbpreview.DocumentDB, host string, port int32, trustTLS bool) string {
+func (a DocumentDBAdapter) ConnectionString(db *dbv1.DocumentDB, host string, port int32, trustTLS bool) string {
 	secretName := db.Spec.DocumentDbCredentialSecret
 	if secretName == "" {
 		secretName = a.Profile().DefaultCredentialSecret

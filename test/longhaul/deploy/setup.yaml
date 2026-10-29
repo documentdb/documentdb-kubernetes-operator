@@ -64,7 +64,7 @@ stringData:
 #   - pvcSize: 10Gi (sufficient for continuous writes over 72h)
 #   - LoadBalancer exposes the cluster for monitoring/debugging
 #
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-cluster

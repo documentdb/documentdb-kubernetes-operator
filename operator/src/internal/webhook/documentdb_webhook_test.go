@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -46,17 +46,17 @@ func (m *fakeWebhookManager) GetWebhookServer() webhook.Server {
 	return m.webhookServer
 }
 
-func newTestDocumentDB(version, schemaVersion, image string) *dbpreview.DocumentDB {
-	db := &dbpreview.DocumentDB{
+func newTestDocumentDB(version, schemaVersion, image string) *dbv1.DocumentDB {
+	db := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-db",
 			Namespace: "default",
 		},
-		Spec: dbpreview.DocumentDBSpec{
+		Spec: dbv1.DocumentDBSpec{
 			NodeCount:        1,
 			InstancesPerNode: 1,
-			Resource: dbpreview.Resource{
-				Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+			Resource: dbv1.Resource{
+				Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 			},
 		},
 	}
@@ -67,7 +67,7 @@ func newTestDocumentDB(version, schemaVersion, image string) *dbpreview.Document
 		db.Spec.SchemaVersion = schemaVersion
 	}
 	if image != "" {
-		db.Spec.Image = &dbpreview.ImageSpec{DocumentDB: image}
+		db.Spec.Image = &dbv1.ImageSpec{DocumentDB: image}
 	}
 	return db
 }
@@ -141,7 +141,7 @@ var _ = Describe("schema version validation", func() {
 var _ = Describe("SetupWebhookWithManager", func() {
 	It("wires client and registers webhook", func() {
 		scheme := runtime.NewScheme()
-		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+		Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 		mgr := &fakeWebhookManager{
@@ -404,7 +404,7 @@ var _ = Describe("resolveEffectiveBinaryVersion helper", func() {
 		// (warn), not silently compare against the default, to stay in step with the
 		// controller.
 		db := newTestDocumentDB("", "", "")
-		db.Spec.FeatureGates = map[string]bool{dbpreview.FeatureGateChangeStreams: true}
+		db.Spec.FeatureGates = map[string]bool{dbv1.FeatureGateChangeStreams: true}
 		Expect(resolveEffectiveBinaryVersion(db)).To(BeEmpty())
 	})
 })
@@ -472,14 +472,14 @@ var _ = Describe("validateImmutableFields", func() {
 
 	It("rejects bootstrap config change", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		oldDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		}
 		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		newDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "different-backup"},
 			},
 		}
@@ -499,14 +499,14 @@ var _ = Describe("validateImmutableFields", func() {
 
 	It("allows unchanged bootstrap configuration", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		oldDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		}
 		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		newDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		}
@@ -517,8 +517,8 @@ var _ = Describe("validateImmutableFields", func() {
 
 	It("allows bootstrap removal (set to nil is cleanup)", func() {
 		oldDB := newTestDocumentDB("", "", "")
-		oldDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		oldDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		}
@@ -533,8 +533,8 @@ var _ = Describe("validateImmutableFields", func() {
 		oldDB := newTestDocumentDB("", "", "")
 		oldDB.Spec.Bootstrap = nil
 		newDB := newTestDocumentDB("", "", "")
-		newDB.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
+		newDB.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
 				Backup: cnpgv1.LocalObjectReference{Name: "my-backup"},
 			},
 		}
@@ -608,7 +608,7 @@ var _ = Describe("resource envelope validation", func() {
 
 	BeforeEach(func() { v = &DocumentDBValidator{} })
 
-	newDB := func() *dbpreview.DocumentDB {
+	newDB := func() *dbv1.DocumentDB {
 		return newTestDocumentDB("", "", "")
 	}
 
@@ -620,14 +620,14 @@ var _ = Describe("resource envelope validation", func() {
 
 	It("allows omitting the envelope when gateway and database memory are both set", func() {
 		db := newDB()
-		db.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
-		db.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi"}
+		db.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "512Mi"}
+		db.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "4Gi"}
 		Expect(v.validateResources(db)).To(BeEmpty())
 	})
 
 	It("rejects a partially specified memory split with no envelope", func() {
 		db := newDB()
-		db.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+		db.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "512Mi"}
 		Expect(v.validateResources(db)).ToNot(BeEmpty())
 	})
 
@@ -638,49 +638,49 @@ var _ = Describe("resource envelope validation", func() {
 	It("rejects explicit database memory exceeding the envelope", func() {
 		db := newDB()
 		db.Spec.Resource.Memory = "4Gi"
-		db.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "8Gi"}
+		db.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "8Gi"}
 		Expect(v.validateResources(db)).ToNot(BeEmpty())
 	})
 
 	It("rejects a partially specified cpu split with no envelope", func() {
 		db := newDB()
-		db.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+		db.Spec.Resource.Database = &dbv1.ComponentResources{CPU: "2"}
 		Expect(v.validateResources(db)).ToNot(BeEmpty())
 	})
 })
 
-func newRestoreDocumentDB(name, version, backupName string) *dbpreview.DocumentDB {
+func newRestoreDocumentDB(name, version, backupName string) *dbv1.DocumentDB {
 	db := newTestDocumentDB(version, "", "")
 	db.Name = name
-	db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-		Recovery: &dbpreview.RecoveryConfiguration{
+	db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+		Recovery: &dbv1.RecoveryConfiguration{
 			Backup: cnpgv1.LocalObjectReference{Name: backupName},
 		},
 	}
 	return db
 }
 
-func newBackupWithSchema(name, schemaVersion string) *dbpreview.Backup {
-	return &dbpreview.Backup{
+func newBackupWithSchema(name, schemaVersion string) *dbv1.Backup {
+	return &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Status:     dbpreview.BackupStatus{SchemaVersion: schemaVersion},
+		Status:     dbv1.BackupStatus{SchemaVersion: schemaVersion},
 	}
 }
 
 func newValidatorWithObjects(objs ...ctrlclient.Object) *DocumentDBValidator {
 	scheme := runtime.NewScheme()
-	Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+	Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 	Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
 	return &DocumentDBValidator{Client: fakeClient}
 }
 
-func newPVRestoreDocumentDB(name, version, pvName string) *dbpreview.DocumentDB {
+func newPVRestoreDocumentDB(name, version, pvName string) *dbv1.DocumentDB {
 	db := newTestDocumentDB(version, "", "")
 	db.Name = name
-	db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-		Recovery: &dbpreview.RecoveryConfiguration{
-			PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: pvName},
+	db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+		Recovery: &dbv1.RecoveryConfiguration{
+			PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: pvName},
 		},
 	}
 	return db
@@ -798,7 +798,7 @@ var _ = Describe("restore schema compatibility validation", func() {
 		backup := newBackupWithSchema("bk", "0.112.0")
 		v := newValidatorWithObjects(backup)
 		db := newRestoreDocumentDB("restored", "", "bk")
-		db.Spec.Image = &dbpreview.ImageSpec{DocumentDB: "ghcr.io/documentdb/documentdb@sha256:abc123"}
+		db.Spec.Image = &dbv1.ImageSpec{DocumentDB: "ghcr.io/documentdb/documentdb@sha256:abc123"}
 		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
 		Expect(errs).To(BeEmpty())
 		Expect(warnings).To(HaveLen(1))
@@ -808,9 +808,9 @@ var _ = Describe("restore schema compatibility validation", func() {
 	It("warns when restoring from a PersistentVolume with an explicit version", func() {
 		v := newValidatorWithObjects()
 		db := newTestDocumentDB("0.112.0", "", "")
-		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
-				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+		db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
+				PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "pv-1"},
 			},
 		}
 		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
@@ -822,9 +822,9 @@ var _ = Describe("restore schema compatibility validation", func() {
 	It("warns (does not block) on a PersistentVolume restore that omits an explicit binary version", func() {
 		v := newValidatorWithObjects()
 		db := newTestDocumentDB("", "", "")
-		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
-				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+		db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
+				PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "pv-1"},
 			},
 		}
 		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)
@@ -836,9 +836,9 @@ var _ = Describe("restore schema compatibility validation", func() {
 	It("allows a PersistentVolume restore when only image.documentDB is set", func() {
 		v := newValidatorWithObjects()
 		db := newTestDocumentDB("", "", "ghcr.io/documentdb/documentdb:0.112.0")
-		db.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-			Recovery: &dbpreview.RecoveryConfiguration{
-				PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+		db.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+			Recovery: &dbv1.RecoveryConfiguration{
+				PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "pv-1"},
 			},
 		}
 		warnings, errs := v.validateRestoreSchemaCompatibility(ctx, db)

@@ -11,7 +11,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgclusterutils "github.com/cloudnative-pg/cloudnative-pg/tests/utils/clusterutils"
-	preview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -30,14 +30,14 @@ const runningStatus = shareddb.ReadyStatus
 // matches the DocumentDB name; replicated clusters use
 // `<documentdb>-<member>` but are out of scope here (see AssertPrimary*
 // variants that accept an explicit cluster name).
-func clusterNameFor(dd *preview.DocumentDB) string {
+func clusterNameFor(dd *dbv1.DocumentDB) string {
 	return dd.Name
 }
 
 // getDocumentDB is a small helper shared by assertions that need to
 // read a DocumentDB by key.
-func getDocumentDB(ctx context.Context, c client.Client, key client.ObjectKey) (*preview.DocumentDB, error) {
-	dd := &preview.DocumentDB{}
+func getDocumentDB(ctx context.Context, c client.Client, key client.ObjectKey) (*dbv1.DocumentDB, error) {
+	dd := &dbv1.DocumentDB{}
 	if err := c.Get(ctx, key, dd); err != nil {
 		return nil, fmt.Errorf("get DocumentDB %s: %w", key, err)
 	}

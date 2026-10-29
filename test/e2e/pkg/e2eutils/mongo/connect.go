@@ -19,11 +19,11 @@ import (
 	"time"
 
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/environment"
+	driver "go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	driver "go.mongodb.org/mongo-driver/v2/mongo"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/portforward"
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
@@ -152,7 +152,7 @@ func NewFromDocumentDB(
 		o(&cfg)
 	}
 
-	dd := &previewv1.DocumentDB{}
+	dd := &dbv1.DocumentDB{}
 	if err := env.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dd); err != nil {
 		return nil, fmt.Errorf("get DocumentDB %s/%s: %w", namespace, name, err)
 	}

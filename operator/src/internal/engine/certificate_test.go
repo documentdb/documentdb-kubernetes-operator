@@ -19,11 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
-type certReconciler = CertificateReconciler[*dbpreview.DocumentDB]
+type certReconciler = CertificateReconciler[*dbv1.DocumentDB]
 
 var certKey = ctrl.Request{NamespacedName: types.NamespacedName{Name: "db", Namespace: testNamespace}}
 
@@ -31,17 +31,17 @@ func newCertReconciler(c client.Client, s *runtime.Scheme) *certReconciler {
 	return &certReconciler{Client: c, Scheme: s, Adapter: product.DocumentDBAdapter{}}
 }
 
-func clusterWithTLS(gw *dbpreview.GatewayTLS) *dbpreview.DocumentDB {
+func clusterWithTLS(gw *dbv1.GatewayTLS) *dbv1.DocumentDB {
 	db := testCluster()
 	if gw != nil {
-		db.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: gw}
+		db.Spec.TLS = &dbv1.TLSConfiguration{Gateway: gw}
 	}
 	return db
 }
 
-func getTLSStatus(t *testing.T, c client.Client) *dbpreview.TLSStatus {
+func getTLSStatus(t *testing.T, c client.Client) *dbv1.TLSStatus {
 	t.Helper()
-	db := &dbpreview.DocumentDB{}
+	db := &dbv1.DocumentDB{}
 	if err := c.Get(context.Background(), certKey.NamespacedName, db); err != nil {
 		t.Fatal(err)
 	}
@@ -78,11 +78,11 @@ func TestCertificateReconcileNotFoundAndGetError(t *testing.T) {
 func TestCertificateSelfSignedLifecycle(t *testing.T) {
 	for _, tt := range []struct {
 		name string
-		gw   *dbpreview.GatewayTLS
+		gw   *dbv1.GatewayTLS
 	}{
 		{name: "tls unset defaults to self-signed"},
-		{name: "empty mode defaults to self-signed", gw: &dbpreview.GatewayTLS{}},
-		{name: "legacy mode falls back to self-signed", gw: &dbpreview.GatewayTLS{Mode: "Disabled"}},
+		{name: "empty mode defaults to self-signed", gw: &dbv1.GatewayTLS{}},
+		{name: "legacy mode falls back to self-signed", gw: &dbv1.GatewayTLS{Mode: "Disabled"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestScheme(t)
@@ -144,16 +144,16 @@ func TestCertificateProvidedSecret(t *testing.T) {
 	secret := func(data map[string][]byte) *corev1.Secret {
 		return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "my-tls", Namespace: testNamespace}, Data: data}
 	}
-	provided := &dbpreview.GatewayTLS{Mode: "Provided", Provided: &dbpreview.ProvidedTLS{SecretName: "my-tls"}}
+	provided := &dbv1.GatewayTLS{Mode: "Provided", Provided: &dbv1.ProvidedTLS{SecretName: "my-tls"}}
 	tests := []struct {
 		name        string
-		gw          *dbpreview.GatewayTLS
+		gw          *dbv1.GatewayTLS
 		secret      *corev1.Secret
 		wantRequeue bool
 		wantReady   bool
 		wantMessage string
 	}{
-		{name: "secret name missing", gw: &dbpreview.GatewayTLS{Mode: "Provided"}, wantMessage: "Provided TLS secret name missing"},
+		{name: "secret name missing", gw: &dbv1.GatewayTLS{Mode: "Provided"}, wantMessage: "Provided TLS secret name missing"},
 		{name: "secret absent", gw: provided, wantRequeue: true, wantMessage: "Waiting for provided TLS secret"},
 		{name: "missing tls.crt", gw: provided, secret: secret(map[string][]byte{"tls.key": []byte("k")}), wantRequeue: true, wantMessage: "Provided secret missing tls.crt"},
 		{name: "missing tls.key", gw: provided, secret: secret(map[string][]byte{"tls.crt": []byte("c")}), wantRequeue: true, wantMessage: "Provided secret missing tls.key"},
@@ -188,7 +188,7 @@ func TestCertificateProvidedSecret(t *testing.T) {
 func TestCertificateCertManagerMode(t *testing.T) {
 	t.Run("configuration missing", func(t *testing.T) {
 		s := newTestScheme(t)
-		c := newFakeClient(t, s, nil, clusterWithTLS(&dbpreview.GatewayTLS{Mode: "CertManager"}))
+		c := newFakeClient(t, s, nil, clusterWithTLS(&dbv1.GatewayTLS{Mode: "CertManager"}))
 		if res, err := newCertReconciler(c, s).Reconcile(context.Background(), certKey); err != nil || res != (ctrl.Result{}) {
 			t.Fatalf("expected no requeue, got %v, %v", res, err)
 		}
@@ -199,8 +199,8 @@ func TestCertificateCertManagerMode(t *testing.T) {
 
 	t.Run("defaults issuer kind, group and secret and merges DNS names", func(t *testing.T) {
 		s := newTestScheme(t)
-		gw := &dbpreview.GatewayTLS{Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{
-			IssuerRef: dbpreview.IssuerRef{Name: "ca"},
+		gw := &dbv1.GatewayTLS{Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{
+			IssuerRef: dbv1.IssuerRef{Name: "ca"},
 			DNSNames:  []string{"db.example.com", "", "db.example.com"},
 		}}
 		c := newFakeClient(t, s, nil, clusterWithTLS(gw))
@@ -231,8 +231,8 @@ func TestCertificateCertManagerMode(t *testing.T) {
 
 	t.Run("honors explicit issuer and reports readiness", func(t *testing.T) {
 		s := newTestScheme(t)
-		gw := &dbpreview.GatewayTLS{Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{
-			IssuerRef:  dbpreview.IssuerRef{Name: "ca", Kind: "ClusterIssuer", Group: "example.io"},
+		gw := &dbv1.GatewayTLS{Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{
+			IssuerRef:  dbv1.IssuerRef{Name: "ca", Kind: "ClusterIssuer", Group: "example.io"},
 			SecretName: "custom-tls",
 		}}
 		c := newFakeClient(t, s, nil, clusterWithTLS(gw))
@@ -291,14 +291,14 @@ func TestCertificateClientErrors(t *testing.T) {
 	statusErr := interceptor.Funcs{SubResourceUpdate: func(context.Context, client.Client, string, client.Object, ...client.SubResourceUpdateOption) error {
 		return errInjected
 	}}
-	certManager := &dbpreview.GatewayTLS{Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{IssuerRef: dbpreview.IssuerRef{Name: "ca"}}}
-	provided := &dbpreview.GatewayTLS{Mode: "Provided", Provided: &dbpreview.ProvidedTLS{SecretName: "my-tls"}}
-	initialized := &dbpreview.TLSStatus{}
+	certManager := &dbv1.GatewayTLS{Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{IssuerRef: dbv1.IssuerRef{Name: "ca"}}}
+	provided := &dbv1.GatewayTLS{Mode: "Provided", Provided: &dbv1.ProvidedTLS{SecretName: "my-tls"}}
+	initialized := &dbv1.TLSStatus{}
 
 	tests := []struct {
 		name   string
-		gw     *dbpreview.GatewayTLS
-		status *dbpreview.TLSStatus
+		gw     *dbv1.GatewayTLS
+		status *dbv1.TLSStatus
 		extra  []client.Object
 		funcs  interceptor.Funcs
 	}{
@@ -310,13 +310,13 @@ func TestCertificateClientErrors(t *testing.T) {
 		{name: "self-signed creating status", status: initialized, funcs: statusErr},
 		{name: "self-signed waiting status", status: initialized, funcs: statusErr, extra: []client.Object{&cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: "db-gateway-cert", Namespace: testNamespace}}}},
 		{name: "self-signed ready status", status: initialized, funcs: statusErr, extra: []client.Object{readyCert("db-gateway-cert", "s")}},
-		{name: "cert-manager missing config status", gw: &dbpreview.GatewayTLS{Mode: "CertManager"}, status: initialized, funcs: statusErr},
+		{name: "cert-manager missing config status", gw: &dbv1.GatewayTLS{Mode: "CertManager"}, status: initialized, funcs: statusErr},
 		{name: "cert-manager cert get", gw: certManager, funcs: getErr("cert")},
 		{name: "cert-manager cert create", gw: certManager, funcs: createErr("cert")},
 		{name: "cert-manager creating status", gw: certManager, status: initialized, funcs: statusErr},
 		{name: "cert-manager waiting status", gw: certManager, status: initialized, funcs: statusErr, extra: []client.Object{&cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: "db-gateway-cert", Namespace: testNamespace}}}},
 		{name: "cert-manager ready status", gw: certManager, status: initialized, funcs: statusErr, extra: []client.Object{readyCert("db-gateway-cert", "s")}},
-		{name: "provided missing name status", gw: &dbpreview.GatewayTLS{Mode: "Provided"}, status: initialized, funcs: statusErr},
+		{name: "provided missing name status", gw: &dbv1.GatewayTLS{Mode: "Provided"}, status: initialized, funcs: statusErr},
 		{name: "provided secret get", gw: provided, funcs: getErr("secret")},
 		{name: "provided secret absent status", gw: provided, status: initialized, funcs: statusErr},
 		{name: "provided missing crt status", gw: provided, status: initialized, funcs: statusErr, extra: []client.Object{&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "my-tls", Namespace: testNamespace}}}},
@@ -340,12 +340,12 @@ func TestCertificateClientErrors(t *testing.T) {
 func TestCertificateOwnerReferenceErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
-		gw    *dbpreview.GatewayTLS
+		gw    *dbv1.GatewayTLS
 		extra []client.Object
 	}{
 		{name: "self-signed issuer"},
 		{name: "self-signed certificate", extra: []client.Object{&cmapi.Issuer{ObjectMeta: metav1.ObjectMeta{Name: "db-gateway-selfsigned", Namespace: testNamespace}}}},
-		{name: "cert-manager certificate", gw: &dbpreview.GatewayTLS{Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{IssuerRef: dbpreview.IssuerRef{Name: "ca"}}}},
+		{name: "cert-manager certificate", gw: &dbv1.GatewayTLS{Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{IssuerRef: dbv1.IssuerRef{Name: "ca"}}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestScheme(t)

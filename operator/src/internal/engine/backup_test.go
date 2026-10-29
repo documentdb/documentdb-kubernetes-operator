@@ -20,12 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
-type backupReconciler = BackupReconciler[*dbpreview.DocumentDB, *dbpreview.Backup]
+type backupReconciler = BackupReconciler[*dbv1.DocumentDB, *dbv1.Backup]
 
 func newBackupReconciler(c client.Client, s *runtime.Scheme, rec record.EventRecorder) *backupReconciler {
 	return &backupReconciler{
@@ -39,7 +39,7 @@ func newBackupReconciler(c client.Client, s *runtime.Scheme, rec record.EventRec
 
 var backupKey = ctrl.Request{NamespacedName: types.NamespacedName{Name: "bk", Namespace: testNamespace}}
 
-func pendingBackup() *dbpreview.Backup {
+func pendingBackup() *dbv1.Backup {
 	return testBackupFor("bk", "", time.Now())
 }
 
@@ -54,9 +54,9 @@ func defaultSnapshotClass() *snapshotv1.VolumeSnapshotClass {
 	}
 }
 
-func getBackup(t *testing.T, c client.Client) *dbpreview.Backup {
+func getBackup(t *testing.T, c client.Client) *dbv1.Backup {
 	t.Helper()
-	b := &dbpreview.Backup{}
+	b := &dbv1.Backup{}
 	if err := c.Get(context.Background(), backupKey.NamespacedName, b); err != nil {
 		t.Fatalf("get backup: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestBackupReconcileDeletesExpiredBackup(t *testing.T) {
 	if _, err := r.Reconcile(context.Background(), backupKey); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
-	if err := c.Get(context.Background(), backupKey.NamespacedName, &dbpreview.Backup{}); !apierrors.IsNotFound(err) {
+	if err := c.Get(context.Background(), backupKey.NamespacedName, &dbv1.Backup{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("expected expired backup to be deleted, got %v", err)
 	}
 	if events := drainEvents(rec); !hasEvent(events, "BackupExpired") || !hasEvent(events, "BackupDeleted") {
@@ -154,7 +154,7 @@ func TestBackupReconcileFailsWithoutCluster(t *testing.T) {
 func TestBackupReconcileFailsWithoutSnapshotClass(t *testing.T) {
 	s := newTestScheme(t)
 	cluster := testCluster()
-	cluster.Spec.Backup = &dbpreview.BackupConfiguration{RetentionDays: 2}
+	cluster.Spec.Backup = &dbv1.BackupConfiguration{RetentionDays: 2}
 	c := newFakeClient(t, s, nil, pendingBackup(), cluster)
 	r := newBackupReconciler(c, s, record.NewFakeRecorder(10))
 	res, err := r.Reconcile(context.Background(), backupKey)
@@ -210,12 +210,12 @@ func TestBackupReconcileReplicationRoles(t *testing.T) {
 		s := newTestScheme(t)
 		c := newFakeClient(t, s, nil, pendingBackup(), testCluster(), defaultSnapshotClass())
 		r := newBackupReconciler(c, s, record.NewFakeRecorder(10))
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{rc: notPrimary}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{rc: notPrimary}
 		if _, err := r.Reconcile(context.Background(), backupKey); err != nil {
 			t.Fatal(err)
 		}
 		got := getBackup(t, c)
-		if got.Status.Phase != dbpreview.BackupPhaseSkipped || !strings.Contains(got.Status.Message, "primary cluster") {
+		if got.Status.Phase != dbv1.BackupPhaseSkipped || !strings.Contains(got.Status.Message, "primary cluster") {
 			t.Fatalf("expected skipped backup, got %+v", got.Status)
 		}
 	})
@@ -224,7 +224,7 @@ func TestBackupReconcileReplicationRoles(t *testing.T) {
 		s := newTestScheme(t)
 		c := newFakeClient(t, s, nil, pendingBackup(), testCluster(), defaultSnapshotClass())
 		r := newBackupReconciler(c, s, record.NewFakeRecorder(10))
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{rc: pendingPromotion}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{rc: pendingPromotion}
 		res, err := r.Reconcile(context.Background(), backupKey)
 		if err != nil || res.RequeueAfter != time.Minute {
 			t.Fatalf("expected one-minute deferral, got %v, %v", res, err)
@@ -238,7 +238,7 @@ func TestBackupReconcileReplicationRoles(t *testing.T) {
 		s := newTestScheme(t)
 		c := newFakeClient(t, s, nil, pendingBackup(), testCluster(), defaultSnapshotClass())
 		r := newBackupReconciler(c, s, record.NewFakeRecorder(10))
-		r.Replication = &fakeReplication[*dbpreview.DocumentDB]{contextErr: errInjected}
+		r.Replication = &fakeReplication[*dbv1.DocumentDB]{contextErr: errInjected}
 		if _, err := r.Reconcile(context.Background(), backupKey); err != errInjected {
 			t.Fatalf("expected injected error, got %v", err)
 		}

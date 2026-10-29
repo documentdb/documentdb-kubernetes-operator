@@ -212,7 +212,7 @@ The `test/e2e/` Ginkgo suite (added in PR #346) and this long-haul harness are *
 | Asserts | One behavior per spec, then exits | Continuous invariants over time |
 | Failure mode | `t.Fail` per spec | Journal entry + alert + auto-restart |
 | Cluster | Created + torn down per run | Long-lived dedicated AKS cluster |
-| Operator API | Typed (`previewv1.DocumentDB` via controller-runtime) | Typed (`previewv1.DocumentDB` via controller-runtime + `test/shared/documentdb` helpers) |
+| Operator API | Typed (`dbv1.DocumentDB` via controller-runtime) | Typed (`dbv1.DocumentDB` via controller-runtime + `test/shared/documentdb` helpers) |
 
 **Shared code today.** The harness consumes the `test/shared/` module (extracted in PR #401):
 

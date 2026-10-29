@@ -10,11 +10,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 func TestGenerateConfigMapDataWithOptions(t *testing.T) {
-	spec := &dbpreview.MonitoringSpec{Enabled: true}
+	spec := &dbv1.MonitoringSpec{Enabled: true}
 
 	def, err := GenerateConfigMapData("c", "ns", spec)
 	if err != nil {
@@ -40,7 +40,7 @@ func TestGenerateConfigMapDataWithOptions(t *testing.T) {
 }
 
 func TestGenerateConfigMapDataHealthMetricName(t *testing.T) {
-	spec := &dbpreview.MonitoringSpec{Enabled: true}
+	spec := &dbv1.MonitoringSpec{Enabled: true}
 
 	def, err := GenerateConfigMapData("c", "ns", spec)
 	if err != nil {
@@ -86,7 +86,7 @@ func TestGenerateConfigMapDataHealthMetricName(t *testing.T) {
 func TestHealthMetricNameYAMLScalar(t *testing.T) {
 	for _, name := range []string{"null", "true", "cosmos.postgres.up", defaultHealthMetricName} {
 		t.Run(name, func(t *testing.T) {
-			data, err := GenerateConfigMapDataWithOptions(Options{HealthMetricName: name}, "c", "ns", &dbpreview.MonitoringSpec{Enabled: true})
+			data, err := GenerateConfigMapDataWithOptions(Options{HealthMetricName: name}, "c", "ns", &dbv1.MonitoringSpec{Enabled: true})
 			if err != nil {
 				t.Fatal(err)
 			}

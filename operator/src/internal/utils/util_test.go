@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -101,7 +101,7 @@ func TestGenerateServiceName(t *testing.T) {
 func TestGenerateConnectionString(t *testing.T) {
 	tests := []struct {
 		name           string
-		documentdb     *dbpreview.DocumentDB
+		documentdb     *dbv1.DocumentDB
 		serviceIp      string
 		trustTLS       bool
 		expectedPrefix string
@@ -110,12 +110,12 @@ func TestGenerateConnectionString(t *testing.T) {
 	}{
 		{
 			name: "default secret with untrusted TLS",
-			documentdb: &dbpreview.DocumentDB{
+			documentdb: &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-db",
 					Namespace: "test-namespace",
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					DocumentDbCredentialSecret: "",
 				},
 			},
@@ -127,12 +127,12 @@ func TestGenerateConnectionString(t *testing.T) {
 		},
 		{
 			name: "custom secret with trusted TLS",
-			documentdb: &dbpreview.DocumentDB{
+			documentdb: &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-db",
 					Namespace: "test-namespace",
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					DocumentDbCredentialSecret: "custom-secret",
 				},
 			},
@@ -144,12 +144,12 @@ func TestGenerateConnectionString(t *testing.T) {
 		},
 		{
 			name: "hostname instead of IP with untrusted TLS",
-			documentdb: &dbpreview.DocumentDB{
+			documentdb: &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "prod-db",
 					Namespace: "production",
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					DocumentDbCredentialSecret: "prod-credentials",
 				},
 			},
@@ -161,12 +161,12 @@ func TestGenerateConnectionString(t *testing.T) {
 		},
 		{
 			name: "IPv6 address with trusted TLS",
-			documentdb: &dbpreview.DocumentDB{
+			documentdb: &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "ipv6-db",
 					Namespace: "default",
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					DocumentDbCredentialSecret: "ipv6-secret",
 				},
 			},
@@ -178,12 +178,12 @@ func TestGenerateConnectionString(t *testing.T) {
 		},
 		{
 			name: "different namespace with custom secret",
-			documentdb: &dbpreview.DocumentDB{
+			documentdb: &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "cross-ns-db",
 					Namespace: "app-namespace",
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					DocumentDbCredentialSecret: "app-secret",
 				},
 			},
@@ -312,9 +312,9 @@ func TestGetDocumentDBServiceDefinition_CNPGLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock DocumentDB instance
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "documentdb.io/preview",
+					APIVersion: "documentdb.io/v1",
 					Kind:       "DocumentDB",
 				},
 				ObjectMeta: metav1.ObjectMeta{
@@ -651,9 +651,9 @@ func TestGetDocumentDBServiceDefinition_LoadBalancerAnnotations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "documentdb.io/preview",
+					APIVersion: "documentdb.io/v1",
 					Kind:       "DocumentDB",
 				},
 				ObjectMeta: metav1.ObjectMeta{
@@ -709,9 +709,9 @@ func TestGetDocumentDBServiceDefinition_ServiceNameLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: "documentdb.io/preview",
+					APIVersion: "documentdb.io/v1",
 					Kind:       "DocumentDB",
 				},
 				ObjectMeta: metav1.ObjectMeta{

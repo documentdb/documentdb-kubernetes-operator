@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -26,11 +26,11 @@ func prodSplitConfig() SplitConfig {
 	}
 }
 
-func ddbWithMemory(mem string, monitoring bool) *dbpreview.DocumentDB {
-	d := &dbpreview.DocumentDB{}
+func ddbWithMemory(mem string, monitoring bool) *dbv1.DocumentDB {
+	d := &dbv1.DocumentDB{}
 	d.Spec.Resource.Memory = mem
 	if monitoring {
-		d.Spec.Monitoring = &dbpreview.MonitoringSpec{Enabled: true}
+		d.Spec.Monitoring = &dbv1.MonitoringSpec{Enabled: true}
 	}
 	return d
 }
@@ -98,9 +98,9 @@ func TestComputeResourceSplit_MonitoringCarvesOTel(t *testing.T) {
 func TestComputeResourceSplit_ExplicitOverridesWin(t *testing.T) {
 	cfg := prodSplitConfig()
 	d := ddbWithMemory("16Gi", true)
-	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "2Gi", CPU: "1"}
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "10Gi"}
-	d.Spec.Resource.OTel = &dbpreview.ComponentResources{Memory: "256Mi", CPU: "150m"}
+	d.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "2Gi", CPU: "1"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "10Gi"}
+	d.Spec.Resource.OTel = &dbv1.ComponentResources{Memory: "256Mi", CPU: "150m"}
 
 	s := ComputeResourceSplit(d, cfg)
 
@@ -160,8 +160,8 @@ func TestComputeResourceSplit_EnvelopeOmittedAllExplicit(t *testing.T) {
 	// No envelope; gateway + database fully specified for both dims.
 	d := ddbWithMemory("", false)
 	d.Spec.Resource.CPU = ""
-	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi", CPU: "500m"}
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi", CPU: "3"}
+	d.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "512Mi", CPU: "500m"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "4Gi", CPU: "3"}
 
 	s := ComputeResourceSplit(d, cfg)
 	if s.Gateway.MemoryLimit != "512Mi" || s.Gateway.CPULimit != "500m" {
@@ -195,7 +195,7 @@ func TestComputeResourceSplit_CPUCarvedWithMonitoring(t *testing.T) {
 
 func TestValidateResources(t *testing.T) {
 	cfg := prodSplitConfig()
-	mk := func(memEnv, cpuEnv string, monitoring bool) *dbpreview.DocumentDB {
+	mk := func(memEnv, cpuEnv string, monitoring bool) *dbv1.DocumentDB {
 		d := ddbWithMemory(memEnv, monitoring)
 		d.Spec.Resource.CPU = cpuEnv
 		return d
@@ -208,15 +208,15 @@ func TestValidateResources(t *testing.T) {
 
 	// 2. Envelope omitted, gateway+database memory set -> ok.
 	d := mk("", "", false)
-	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi"}
+	d.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "512Mi"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "4Gi"}
 	if errs := ValidateResources(d, cfg); len(errs) != 0 {
 		t.Errorf("omitted+fully-specified memory: unexpected errors %v", errs)
 	}
 
 	// 3. Envelope omitted, only gateway memory set -> error.
 	d = mk("", "", false)
-	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "512Mi"}
+	d.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "512Mi"}
 	if errs := ValidateResources(d, cfg); len(errs) == 0 {
 		t.Errorf("omitted+partial memory: expected an error")
 	}
@@ -228,7 +228,7 @@ func TestValidateResources(t *testing.T) {
 
 	// 5. Envelope set but explicit database memory exceeds it -> error.
 	d = mk("4Gi", "", false)
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "8Gi"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "8Gi"}
 	if errs := ValidateResources(d, cfg); len(errs) == 0 {
 		t.Errorf("oversubscribed memory: expected an error")
 	}
@@ -241,15 +241,15 @@ func TestValidateResources(t *testing.T) {
 
 	// 7. CPU omitted + only database.cpu set (gateway.cpu unset) -> error (symmetric rule).
 	d = mk("", "", false)
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{CPU: "2"}
 	if errs := ValidateResources(d, cfg); len(errs) == 0 {
 		t.Errorf("omitted+partial cpu: expected an error")
 	}
 
 	// 8. CPU omitted + gateway.cpu + database.cpu set -> ok.
 	d = mk("", "", false)
-	d.Spec.Resource.Gateway = &dbpreview.ComponentResources{CPU: "500m"}
-	d.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
+	d.Spec.Resource.Gateway = &dbv1.ComponentResources{CPU: "500m"}
+	d.Spec.Resource.Database = &dbv1.ComponentResources{CPU: "2"}
 	if errs := ValidateResources(d, cfg); len(errs) != 0 {
 		t.Errorf("omitted+fully-specified cpu: unexpected errors %v", errs)
 	}

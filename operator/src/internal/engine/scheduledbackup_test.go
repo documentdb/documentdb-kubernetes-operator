@@ -18,11 +18,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
-type scheduledReconciler = ScheduledBackupReconciler[*dbpreview.DocumentDB, *dbpreview.ScheduledBackup, *dbpreview.Backup]
+type scheduledReconciler = ScheduledBackupReconciler[*dbv1.DocumentDB, *dbv1.ScheduledBackup, *dbv1.Backup]
 
 func newScheduledReconciler(c client.Client, s *runtime.Scheme, rec record.EventRecorder) *scheduledReconciler {
 	return &scheduledReconciler{
@@ -35,28 +35,28 @@ func newScheduledReconciler(c client.Client, s *runtime.Scheme, rec record.Event
 	}
 }
 
-func testCluster() *dbpreview.DocumentDB {
-	return &dbpreview.DocumentDB{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "documentdb.io/preview", Kind: "DocumentDB"},
+func testCluster() *dbv1.DocumentDB {
+	return &dbv1.DocumentDB{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "documentdb.io/v1", Kind: "DocumentDB"},
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: testNamespace, UID: "db-uid"},
 	}
 }
 
-func testScheduledBackup(schedule string) *dbpreview.ScheduledBackup {
-	return &dbpreview.ScheduledBackup{
+func testScheduledBackup(schedule string) *dbv1.ScheduledBackup {
+	return &dbv1.ScheduledBackup{
 		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: testNamespace},
-		Spec: dbpreview.ScheduledBackupSpec{
+		Spec: dbv1.ScheduledBackupSpec{
 			Schedule: schedule,
 			Cluster:  cnpgv1.LocalObjectReference{Name: "db"},
 		},
 	}
 }
 
-func testBackupFor(name string, phase cnpgv1.BackupPhase, created time.Time) *dbpreview.Backup {
-	return &dbpreview.Backup{
+func testBackupFor(name string, phase cnpgv1.BackupPhase, created time.Time) *dbv1.Backup {
+	return &dbv1.Backup{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace, CreationTimestamp: metav1.NewTime(created)},
-		Spec:       dbpreview.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "db"}},
-		Status:     dbpreview.BackupStatus{Phase: phase},
+		Spec:       dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "db"}},
+		Status:     dbv1.BackupStatus{Phase: phase},
 	}
 }
 
@@ -114,7 +114,7 @@ func TestScheduledBackupReconcileCreatesDueBackup(t *testing.T) {
 		t.Fatalf("expected requeue within a minute for a per-minute schedule, got %v", res.RequeueAfter)
 	}
 
-	var backups dbpreview.BackupList
+	var backups dbv1.BackupList
 	if err := c.List(context.Background(), &backups); err != nil {
 		t.Fatal(err)
 	}
@@ -122,12 +122,12 @@ func TestScheduledBackupReconcileCreatesDueBackup(t *testing.T) {
 		t.Fatalf("expected one created backup, got %d", len(backups.Items))
 	}
 	b := backups.Items[0]
-	if b.Labels[dbpreview.ScheduledBackupLabel] != "nightly" || b.Spec.Cluster.Name != "db" ||
+	if b.Labels[dbv1.ScheduledBackupLabel] != "nightly" || b.Spec.Cluster.Name != "db" ||
 		b.Spec.RetentionDays == nil || *b.Spec.RetentionDays != 7 {
 		t.Fatalf("backup not derived from the scheduled backup: %+v", b)
 	}
 
-	var got dbpreview.ScheduledBackup
+	var got dbv1.ScheduledBackup
 	if err := c.Get(context.Background(), scheduledKey.NamespacedName, &got); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestScheduledBackupReconcileWaitsForRunningBackup(t *testing.T) {
 	if err != nil || res.RequeueAfter != time.Minute {
 		t.Fatalf("expected one-minute requeue while a backup runs, got %v, %v", res, err)
 	}
-	var backups dbpreview.BackupList
+	var backups dbv1.BackupList
 	if err := c.List(context.Background(), &backups); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestScheduledBackupReconcileSchedulesFromLatestBackup(t *testing.T) {
 	if res.RequeueAfter <= 22*time.Hour || res.RequeueAfter > 24*time.Hour {
 		t.Fatalf("expected requeue about 23h away, 24h after the latest backup, got %v", res.RequeueAfter)
 	}
-	var got dbpreview.ScheduledBackup
+	var got dbv1.ScheduledBackup
 	if err := c.Get(context.Background(), scheduledKey.NamespacedName, &got); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestScheduledBackupReconcileSchedulesFromLatestBackup(t *testing.T) {
 	if got.Status.NextScheduledTime == nil || !got.Status.NextScheduledTime.UTC().Equal(next) {
 		t.Fatalf("expected next run at %v, got %v", next, got.Status.NextScheduledTime)
 	}
-	var backups dbpreview.BackupList
+	var backups dbv1.BackupList
 	if err := c.List(context.Background(), &backups); err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestScheduledBackupReconcileSchedulesFromLatestBackup(t *testing.T) {
 }
 
 func TestScheduledBackupReconcileErrors(t *testing.T) {
-	isScheduled := func(obj client.Object) bool { _, ok := obj.(*dbpreview.ScheduledBackup); return ok }
+	isScheduled := func(obj client.Object) bool { _, ok := obj.(*dbv1.ScheduledBackup); return ok }
 	tests := []struct {
 		name      string
 		funcs     interceptor.Funcs

@@ -1,0 +1,578 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+package v1
+
+import (
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// Feature gate constants. PascalCase names following the Kubernetes feature gate convention.
+const (
+	// FeatureGateChangeStreams enables change stream support by setting wal_level=logical.
+	FeatureGateChangeStreams = "ChangeStreams"
+
+	// FeatureGateIOUring enables PostgreSQL 18 asynchronous I/O via io_method=io_uring
+	// and relaxes the postgres container seccomp profile so the io_uring_setup/enter/register
+	// syscalls (stripped from the container runtime's default profile) are allowed.
+	// Opt-in only: io_uring has been a recurring kernel-exploit surface, so it is disabled
+	// by default. See docs/operator-public-documentation/io-uring.md.
+	FeatureGateIOUring = "IOUring"
+)
+
+// DocumentDBSpec defines the desired state of DocumentDB.
+// +kubebuilder:validation:XValidation:rule="!has(self.clusterReplication) || ((has(self.clusterReplication.disableTLS) && self.clusterReplication.disableTLS) || (has(self.tls) && has(self.tls.postgres) && has(self.tls.postgres.replicationTLSSecret) && has(self.tls.postgres.clientCASecret)))",message="when spec.clusterReplication is set, either spec.clusterReplication.disableTLS must be true or spec.tls.postgres.replicationTLSSecret and spec.tls.postgres.clientCASecret must be provided"
+type DocumentDBSpec struct {
+	// NodeCount is the number of nodes in the DocumentDB cluster. Must be 1.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1
+	NodeCount int `json:"nodeCount"`
+
+	// InstancesPerNode is the number of DocumentDB instances per node. Range: 1-3.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=3
+	InstancesPerNode int `json:"instancesPerNode"`
+
+	// Resource specifies the storage resources for DocumentDB.
+	Resource Resource `json:"resource"`
+
+	// DocumentDBVersion specifies the version for all DocumentDB components (engine, gateway).
+	// When set, this overrides the default versions for image.documentDB and image.gateway.
+	// Individual image fields under spec.image take precedence over this version.
+	DocumentDBVersion string `json:"documentDBVersion,omitempty"`
+
+	// Image groups container image settings for the DocumentDB stack
+	// (extension image, gateway image, PostgreSQL image).
+	// All fields are optional; sensible defaults are applied when omitted.
+	// +optional
+	Image *ImageSpec `json:"image,omitempty"`
+
+	// ImagePullSecrets is an optional list of references to secrets in the same namespace
+	// to use for pulling any of the images used by this cluster. Passed through to the
+	// underlying CloudNative-PG cluster.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// DocumentDbCredentialSecret is the name of the Kubernetes Secret containing credentials
+	// for the DocumentDB gateway (expects keys `username` and `password`). If omitted,
+	// a default secret name `documentdb-credentials` is used.
+	//
+	// NOTE: Immutable today; will be relaxed in a future release to support credential rotation.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="credential secret cannot be changed after cluster creation"
+	DocumentDbCredentialSecret string `json:"documentDbCredentialSecret,omitempty"`
+
+	// ClusterReplication configures cross-cluster replication for DocumentDB.
+	ClusterReplication *ClusterReplication `json:"clusterReplication,omitempty"`
+
+	// Postgres groups PostgreSQL process-level tuning (UID/GID, custom post-init SQL).
+	// All fields are optional; defaults are preserved when omitted.
+	// +optional
+	Postgres *PostgresSpec `json:"postgres,omitempty"`
+
+	// Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
+	// All fields are optional; defaults are preserved when omitted.
+	// +optional
+	Plugins *PluginsSpec `json:"plugins,omitempty"`
+
+	// ExposeViaService configures how to expose DocumentDB via a Kubernetes service.
+	// This can be a LoadBalancer or ClusterIP service.
+	ExposeViaService ExposeViaService `json:"exposeViaService,omitempty"`
+
+	// Environment specifies the cloud environment for deployment
+	// This determines cloud-specific service annotations for LoadBalancer services
+	// +kubebuilder:validation:Enum=eks;aks;gke
+	Environment string `json:"environment,omitempty"`
+
+	Timeouts Timeouts `json:"timeouts,omitempty"`
+
+	// TLS configures certificate management for DocumentDB components.
+	TLS *TLSConfiguration `json:"tls,omitempty"`
+
+	// Overrides default log level for the DocumentDB cluster.
+	LogLevel string `json:"logLevel,omitempty"`
+
+	// Bootstrap configures the initialization of the DocumentDB cluster.
+	// +optional
+	Bootstrap *BootstrapConfiguration `json:"bootstrap,omitempty"`
+
+	// Backup configures backup settings for DocumentDB.
+	// +optional
+	Backup *BackupConfiguration `json:"backup,omitempty"`
+
+	// FeatureGates enables or disables optional DocumentDB features.
+	// Keys are PascalCase feature names following the Kubernetes feature gate convention.
+	// Example: {"ChangeStreams": true}
+	//
+	// IMPORTANT: When adding a new feature gate, update ALL of the following:
+	// 1. Add a new FeatureGate* constant in documentdb_types.go
+	// 2. Add the key name to the XValidation CEL rule's allowed list below
+	// 3. Add a default entry in the featureGateDefaults map in documentdb_types.go
+	//
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self.all(key, key in ['ChangeStreams', 'IOUring'])",message="unsupported feature gate key; allowed keys: ChangeStreams, IOUring"
+	FeatureGates map[string]bool `json:"featureGates,omitempty"`
+
+	// SchemaVersion controls the desired schema version for the DocumentDB extension.
+	//
+	// The operator never changes your database schema unless you ask:
+	//   - Set schemaVersion → updates the database schema (irreversible)
+	//   - Set schemaVersion: "auto" → schema auto-updates with binary
+	//
+	// Once the schema has been updated, the operator blocks image rollback below the
+	// installed schema version to prevent running an untested binary/schema combination.
+	//
+	// Values:
+	//   - "" (empty, default): Two-phase mode. Image upgrades happen automatically,
+	//     but ALTER EXTENSION UPDATE does NOT run. Users must explicitly set this
+	//     field to finalize the schema upgrade. This is the safest option for production
+	//     as it allows rollback by reverting the image before committing the schema change.
+	//   - "auto": Schema automatically updates to match the binary version whenever
+	//     the binary is upgraded. This is the simplest mode but provides no rollback
+	//     safety window. Only recommended for single-region clusters.
+	//   - "<version>" (e.g. "0.112.0"): Schema updates to exactly this version.
+	//     Must be <= the binary version.
+	//
+	// +kubebuilder:validation:Pattern=`^(auto|[0-9]+\.[0-9]+\.[0-9]+)?$`
+	// +optional
+	SchemaVersion string `json:"schemaVersion,omitempty"`
+
+	// Affinity/Anti-affinity rules for Pods (cnpg passthrough)
+	// +optional
+	Affinity cnpgv1.AffinityConfiguration `json:"affinity,omitempty"`
+
+	// Monitoring configures observability via an OTel Collector sidecar.
+	// +optional
+	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
+}
+
+// ImageSpec groups container image settings for the DocumentDB stack.
+// All fields are optional; the operator falls back to documentDBVersion,
+// environment variables, and built-in defaults in that order.
+type ImageSpec struct {
+	// DocumentDB is the container image for the DocumentDB extension layer.
+	// This image is mounted into the PostgreSQL container via CNPG's
+	// ImageVolumeSource so that the extension files are available alongside
+	// an upstream PostgreSQL image.
+	// +optional
+	DocumentDB string `json:"documentDB,omitempty"`
+
+	// Gateway is the container image for the DocumentDB Gateway sidecar.
+	// +optional
+	Gateway string `json:"gateway,omitempty"`
+
+	// Postgres is the container image for the PostgreSQL server.
+	// Must be an upstream CNPG-compatible PostgreSQL image (the operator
+	// adds the DocumentDB extension via an ImageVolume mount), and must
+	// use trixie (Debian 13) base to match the extension's GLIBC
+	// requirements.
+	//
+	// The default floats within PostgreSQL major 18 via CNPG's
+	// "18-minimal-trixie" tag, so deployments pick up new 18.x minors and
+	// Debian/PGDG security rebuilds automatically.
+	//
+	// The floating tag currently resolves to PG 18.6+, which is only safe
+	// for DocumentDB extension >= 0.116.0: older extensions segfault on
+	// insert under PG 18.6 (fixed upstream in documentdb/documentdb 3555c7d,
+	// first released in 0.116.0). Keep the default documentDbVersion, and any
+	// version pair exercised against this default, at >= 0.116.0.
+	// +kubebuilder:default="ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie"
+	// +optional
+	Postgres string `json:"postgres,omitempty"`
+}
+
+// PostgresSpec groups PostgreSQL process-level tuning.
+// All fields are optional.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.uid) == has(self.gid)",message="uid and gid must be set together"
+type PostgresSpec struct {
+	// UID is the numeric user ID under which the PostgreSQL server process runs.
+	// When set, GID must also be set.
+	// +optional
+	UID *int64 `json:"uid,omitempty"`
+
+	// GID is the numeric group ID under which the PostgreSQL server process runs.
+	// When set, UID must also be set.
+	// +optional
+	GID *int64 `json:"gid,omitempty"`
+
+	// PostInitSQL is an ordered list of SQL statements executed after the
+	// cluster is initialized. These statements run AFTER the operator's
+	// mandatory bootstrap (CREATE EXTENSION documentdb, CREATE ROLE
+	// documentdb, ALTER ROLE documentdb), so they can safely reference the
+	// documentdb extension and role.
+	// +optional
+	PostInitSQL []string `json:"postInitSQL,omitempty"`
+
+	// Parameters allows users to override PostgreSQL configuration parameters
+	// (postgresql.conf settings) passed through to the underlying CNPG Cluster.
+	// The operator applies memory-aware defaults (shared_buffers, effective_cache_size,
+	// work_mem, maintenance_work_mem) computed from the pod memory limit, plus static
+	// best-practice defaults for autovacuum, IO, WAL, and connection settings.
+	// Values specified here override computed and static defaults.
+	// Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,
+	// max_prepared_transactions) cannot be overridden.
+	// +optional
+	Parameters map[string]string `json:"parameters,omitempty"`
+}
+
+// PluginsSpec groups CNPG plugin configuration.
+type PluginsSpec struct {
+	// SidecarInjectorName is the name of the CNPG sidecar injector plugin
+	// to use for the gateway and other sidecars. Immutable.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="sidecar injector plugin name cannot be changed after cluster creation"
+	// +optional
+	SidecarInjectorName string `json:"sidecarInjectorName,omitempty"`
+
+	// WalReplicaName is the name of the WAL replica plugin to use for
+	// cross-cluster replication.
+	// +optional
+	WalReplicaName string `json:"walReplicaName,omitempty"`
+}
+
+// BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
+type BootstrapConfiguration struct {
+	// Recovery configures recovery from a backup.
+	// +optional
+	Recovery *RecoveryConfiguration `json:"recovery,omitempty"`
+}
+
+// RecoveryConfiguration defines recovery settings for bootstrapping a DocumentDB cluster.
+// +kubebuilder:validation:XValidation:rule="!(has(self.backup) && size(self.backup.name) > 0 && has(self.persistentVolume) && size(self.persistentVolume.name) > 0)",message="cannot specify both backup and persistentVolume recovery at the same time"
+type RecoveryConfiguration struct {
+	// Backup specifies the source backup to restore from.
+	// +optional
+	Backup cnpgv1.LocalObjectReference `json:"backup,omitempty"`
+
+	// PersistentVolume specifies the PV to restore from.
+	// The operator will create a temporary PVC bound to this PV, use it for CNPG recovery,
+	// and delete the temporary PVC after the cluster is healthy.
+	// Cannot be used together with Backup.
+	// +optional
+	PersistentVolume *PVRecoveryConfiguration `json:"persistentVolume,omitempty"`
+}
+
+// PVRecoveryConfiguration defines settings for recovering from a retained PersistentVolume.
+type PVRecoveryConfiguration struct {
+	// Name is the name of the PersistentVolume to recover from.
+	// The PV must exist and be in Available or Released state.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
+// BackupConfiguration defines backup settings for DocumentDB.
+type BackupConfiguration struct {
+	// RetentionDays specifies how many days backups should be retained.
+	// If not specified, the default retention period is 30 days.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=365
+	// +kubebuilder:default=30
+	// +optional
+	RetentionDays int `json:"retentionDays,omitempty"`
+}
+
+type Resource struct {
+	// Storage configuration for DocumentDB persistent volumes.
+	Storage StorageConfiguration `json:"storage"`
+
+	// Memory specifies the memory limit for each DocumentDB instance pod.
+	// This value is passed to the CNPG Cluster's spec.resources.limits.memory
+	// and spec.resources.requests.memory (Guaranteed QoS).
+	// Memory-aware PostgreSQL parameters (shared_buffers, effective_cache_size, etc.)
+	// are auto-computed from this value.
+	// If not specified or set to "0", no memory limit is applied and static
+	// defaults are used for memory-aware parameters.
+	// Examples: "2Gi", "4Gi", "8Gi"
+	// +optional
+	Memory string `json:"memory,omitempty"`
+
+	// CPU specifies the total CPU envelope for each DocumentDB instance pod.
+	// The operator divides this envelope across PostgreSQL, the documentdb-gateway
+	// sidecar, and, when monitoring is enabled, the OTel collector sidecar.
+	// PostgreSQL receives the remainder after gateway and OTel CPU reservations;
+	// an explicit per-container CPU override wins over the automatic carve-out.
+	// If not specified or set to "0", no CPU envelope is applied.
+	// Examples: "2", "4", "500m"
+	// +optional
+	CPU string `json:"cpu,omitempty"`
+
+	// Memory and CPU above describe the TOTAL pod envelope, but are OPTIONAL.
+	// When a sidecar (the gateway, and — with monitoring enabled — the OTel
+	// collector) shares the pod, the operator carves its memory and CPU out of
+	// the envelope and gives PostgreSQL the remainder, recomputing PostgreSQL's
+	// memory-aware parameters from that reduced value. The optional per-component
+	// overrides below let you size each container independently; an explicit
+	// override always wins over the automatic carve-out.
+	//
+	// The envelope (Memory/CPU above) may be omitted for a dimension when that
+	// dimension is set explicitly on BOTH the gateway and the database — the
+	// effective envelope is then the sum of the containers. If you omit the
+	// envelope without fully specifying the containers, the resource is rejected;
+	// if you omit both the envelope and all container values, that dimension is
+	// left unmanaged (no limits).
+
+	// Gateway optionally overrides the resources allocated to the
+	// documentdb-gateway sidecar container. When unset, the operator derives the
+	// gateway's memory as min(gatewayMemoryFraction × memory, gatewayMemoryCap)
+	// and carves it out of the pod memory envelope. The value is applied as both
+	// the request and the limit (Guaranteed-class) so a gateway leak is
+	// OOM-isolated and cannot crowd out PostgreSQL.
+	// +optional
+	Gateway *ComponentResources `json:"gateway,omitempty"`
+
+	// Database optionally overrides the resources allocated to the PostgreSQL
+	// container. When unset, PostgreSQL receives the pod memory and CPU envelopes
+	// minus the gateway and (when monitoring is enabled) OTel collector carve-outs.
+	// +optional
+	Database *ComponentResources `json:"database,omitempty"`
+
+	// OTel optionally overrides the resources allocated to the otel-collector
+	// sidecar container (only present when spec.monitoring.enabled is true).
+	// When unset, the operator applies built-in defaults: memory request 48Mi /
+	// limit 128Mi and CPU request 50m / limit 200m (Burstable — the requests are
+	// the reserved floor and the limits cap a telemetry burst). Setting otel.cpu
+	// or otel.memory pins that dimension to request == limit (Guaranteed).
+	// +optional
+	OTel *ComponentResources `json:"otel,omitempty"`
+}
+
+// ComponentResources overrides the CPU and/or memory allocated to an individual
+// container in the DocumentDB pod (PostgreSQL, the gateway, or the OTel
+// collector). Each field is a Kubernetes quantity string; when set it is applied
+// as both the request and the limit for that container (Guaranteed-class) and
+// overrides the automatic carve-out derived from spec.resource.memory.
+type ComponentResources struct {
+	// Memory is the memory request=limit for the container (e.g. "512Mi", "2Gi").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
+	// +optional
+	Memory string `json:"memory,omitempty"`
+
+	// CPU is the CPU request=limit for the container (e.g. "500m", "2").
+	// +kubebuilder:validation:Pattern=`^([0-9]+(\.[0-9]+)?(m|Ki|Mi|Gi|Ti|Pi|Ei|k|M|G|T|P|E)?)?$`
+	// +optional
+	CPU string `json:"cpu,omitempty"`
+}
+
+type StorageConfiguration struct {
+	// PvcSize is the size of the persistent volume claim for DocumentDB storage (e.g., "10Gi").
+	// +kubebuilder:validation:MinLength=1
+	PvcSize string `json:"pvcSize"`
+
+	// StorageClass specifies the storage class for DocumentDB persistent volumes.
+	// If not specified, the cluster's default storage class will be used.
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage class cannot be changed after cluster creation"
+	StorageClass string `json:"storageClass,omitempty"`
+
+	// PersistentVolumeReclaimPolicy controls what happens to the PersistentVolume when
+	// the DocumentDB cluster is deleted.
+	//
+	// When a DocumentDB cluster is deleted, the following chain of deletions occurs:
+	// DocumentDB deletion → CNPG Cluster deletion → PVC deletion → PV deletion (based on this policy)
+	//
+	// Options:
+	//   - Retain (default): The PV is preserved after cluster deletion, allowing manual
+	//     data recovery or forensic analysis. Use for production workloads where data
+	//     safety is critical. Orphaned PVs must be manually deleted when no longer needed.
+	//   - Delete: The PV is automatically deleted when the PVC is deleted. Use for development,
+	//     testing, or ephemeral environments where data persistence is not required.
+	//
+	// WARNING: Setting this to "Delete" means all data will be permanently lost when
+	// the DocumentDB cluster is deleted. This cannot be undone.
+	//
+	// +kubebuilder:validation:Enum=Retain;Delete
+	// +kubebuilder:default=Retain
+	// +optional
+	PersistentVolumeReclaimPolicy string `json:"persistentVolumeReclaimPolicy,omitempty"`
+}
+
+type ClusterReplication struct {
+	// CrossCloudNetworking determines which type of networking mechanics for the replication
+	// +kubebuilder:validation:Enum=AzureFleet;Istio;None
+	CrossCloudNetworkingStrategy string `json:"crossCloudNetworkingStrategy,omitempty"`
+	// Primary is the name of the primary cluster for replication.
+	Primary string `json:"primary"`
+	// ClusterList is the list of clusters participating in replication.
+	ClusterList []MemberCluster `json:"clusterList"`
+	// Whether or not to have replicas on the primary cluster.
+	HighAvailability bool `json:"highAvailability,omitempty"`
+	// Disables TLS for replication traffic between clusters.
+	// Only for use when an existing mesh is already providing TLS.
+	// +kubebuilder:default=false
+	DisableTLS bool `json:"disableTLS,omitempty"`
+}
+
+type MemberCluster struct {
+	// Name is the name of the member cluster.
+	Name string `json:"name"`
+	// EnvironmentOverride is the cloud environment of the member cluster.
+	// Will default to the global setting
+	// +kubebuilder:validation:Enum=eks;aks;gke
+	EnvironmentOverride string `json:"environment,omitempty"`
+	// StorageClassOverride specifies the storage class for DocumentDB persistent volumes in this member cluster.
+	StorageClassOverride string `json:"storageClass,omitempty"`
+}
+
+type ExposeViaService struct {
+	// ServiceType determines the type of service to expose for DocumentDB.
+	// +kubebuilder:validation:Enum=LoadBalancer;ClusterIP
+	ServiceType string `json:"serviceType"`
+}
+
+type Timeouts struct {
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=1800
+	StopDelay int32 `json:"stopDelay,omitempty"`
+}
+
+// TLSConfiguration aggregates TLS settings across DocumentDB components.
+// +kubebuilder:validation:XValidation:rule="!has(self.postgres) || (has(self.postgres.replicationTLSSecret) == has(self.postgres.clientCASecret) && has(self.postgres.serverTLSSecret) == has(self.postgres.serverCASecret) && (!has(self.postgres.serverTLSSecret) || has(self.postgres.replicationTLSSecret)))",message="spec.tls.postgres replicationTLSSecret and clientCASecret must be provided together; serverTLSSecret and serverCASecret must be provided together; serverTLSSecret requires replicationTLSSecret"
+type TLSConfiguration struct {
+	// Gateway configures TLS for the gateway sidecar (Phase 1: certificate provisioning only).
+	Gateway *GatewayTLS `json:"gateway,omitempty"`
+
+	// Postgres configures TLS for the Postgres server.
+	// If server side certs are provided alone, the operator will use sslMode=require for cross-regional replication connections.
+	// If replication certs are also provided, the operator will use verify-full, which requires the hostname to be correctly set.
+	// See the multi-region-deployment docs for how to do that.
+	Postgres *cnpgv1.CertificatesConfiguration `json:"postgres,omitempty"`
+
+	// GlobalEndpoints configures TLS for global endpoints (placeholder for future phases).
+	GlobalEndpoints *GlobalEndpointsTLS `json:"globalEndpoints,omitempty"`
+}
+
+// GatewayTLS defines TLS configuration for the gateway sidecar (Phase 1: certificate provisioning only)
+type GatewayTLS struct {
+	// Mode selects the TLS management strategy.
+	// Defaults to SelfSigned if not specified.
+	// +kubebuilder:validation:Enum=SelfSigned;CertManager;Provided
+	// +kubebuilder:default=SelfSigned
+	Mode string `json:"mode,omitempty"`
+
+	// CertManager config when Mode=CertManager.
+	CertManager *CertManagerTLS `json:"certManager,omitempty"`
+
+	// Provided secret reference when Mode=Provided.
+	Provided *ProvidedTLS `json:"provided,omitempty"`
+}
+
+// GlobalEndpointsTLS acts as a placeholder for future global endpoint TLS settings.
+type GlobalEndpointsTLS struct{}
+
+// CertManagerTLS holds parameters for cert-manager driven certificates.
+type CertManagerTLS struct {
+	IssuerRef IssuerRef `json:"issuerRef"`
+	// DNSNames for the certificate SANs. If empty, operator will add Service DNS names.
+	DNSNames []string `json:"dnsNames,omitempty"`
+	// SecretName optional explicit name for the target secret. If empty a default is chosen.
+	SecretName string `json:"secretName,omitempty"`
+}
+
+// ProvidedTLS references an existing secret that contains tls.crt/tls.key (and optional ca.crt).
+type ProvidedTLS struct {
+	SecretName string `json:"secretName"`
+}
+
+// IssuerRef references a cert-manager Issuer or ClusterIssuer.
+type IssuerRef struct {
+	Name string `json:"name"`
+	// Kind of issuer (Issuer or ClusterIssuer). Defaults to Issuer.
+	Kind string `json:"kind,omitempty"`
+	// Group defaults to cert-manager.io
+	Group string `json:"group,omitempty"`
+}
+
+// MonitoringSpec configures observability via an OTel Collector sidecar.
+type MonitoringSpec struct {
+	// Enabled turns on the OTel Collector sidecar for metrics collection.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Exporter configures where metrics are sent.
+	// +optional
+	Exporter *ExporterSpec `json:"exporter,omitempty"`
+}
+
+// ExporterSpec configures metric export destinations.
+type ExporterSpec struct {
+	// OTLP configures the OpenTelemetry Protocol exporter.
+	// +optional
+	OTLP *OTLPExporterSpec `json:"otlp,omitempty"`
+
+	// Prometheus configures a Prometheus scrape endpoint on the OTel Collector sidecar.
+	// +optional
+	Prometheus *PrometheusExporterSpec `json:"prometheus,omitempty"`
+}
+
+// OTLPExporterSpec configures the OTLP exporter.
+type OTLPExporterSpec struct {
+	// Endpoint is the OTLP gRPC endpoint (e.g., "otel-collector.monitoring:4317").
+	Endpoint string `json:"endpoint"`
+}
+
+// PrometheusExporterSpec configures the Prometheus scrape endpoint exporter.
+type PrometheusExporterSpec struct {
+	// Port for the Prometheus scrape endpoint. Defaults to 8888.
+	// +kubebuilder:validation:Minimum=1024
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=8888
+	// +optional
+	Port int32 `json:"port,omitempty"`
+}
+
+// DocumentDBStatus defines the observed state of DocumentDB.
+type DocumentDBStatus struct {
+	// Status reflects the status field from the underlying CNPG Cluster.
+	Status           string `json:"status,omitempty"`
+	ConnectionString string `json:"connectionString,omitempty"`
+	TargetPrimary    string `json:"targetPrimary,omitempty"`
+	LocalPrimary     string `json:"localPrimary,omitempty"`
+
+	// SchemaVersion is the currently installed schema version of the DocumentDB extension.
+	SchemaVersion string `json:"schemaVersion,omitempty"`
+
+	// DocumentDBImage is the extension image URI currently applied to the cluster.
+	DocumentDBImage string `json:"documentDBImage,omitempty"`
+
+	// GatewayImage is the gateway sidecar image URI currently applied to the cluster.
+	GatewayImage string `json:"gatewayImage,omitempty"`
+
+	// TLS reports gateway TLS provisioning status (Phase 1).
+	TLS *TLSStatus `json:"tls,omitempty"`
+}
+
+// TLSStatus captures readiness and secret information.
+type TLSStatus struct {
+	Ready      bool   `json:"ready,omitempty"`
+	SecretName string `json:"secretName,omitempty"`
+	Message    string `json:"message,omitempty"`
+}
+
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=".status.status",description="CNPG Cluster Status"
+// +kubebuilder:printcolumn:name="Connection String",type=string,JSONPath=".status.connectionString",description="DocumentDB Connection String"
+// +kubebuilder:resource:path=dbs,scope=Namespaced,singular=documentdb,shortName=documentdb
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:storageversion
+// +kubebuilder:metadata:labels=app=documentdb-operator
+
+// DocumentDB is the Schema for the dbs API.
+type DocumentDB struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   DocumentDBSpec   `json:"spec,omitempty"`
+	Status DocumentDBStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// DocumentDBList contains a list of DocumentDB.
+type DocumentDBList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []DocumentDB `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&DocumentDB{}, &DocumentDBList{})
+}

@@ -21,7 +21,7 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	sharedk8s "github.com/documentdb/documentdb-operator/test/shared/k8s"
 )
@@ -117,7 +117,7 @@ func (k *K8sClusterClient) Clientset() kubernetes.Interface { return k.clientset
 
 // getCR fetches the target DocumentDB CR via the shared typed helper. Wraps
 // the namespaced-name lookup that's otherwise repeated in every method below.
-func (k *K8sClusterClient) getCR(ctx context.Context) (*previewv1.DocumentDB, error) {
+func (k *K8sClusterClient) getCR(ctx context.Context) (*dbv1.DocumentDB, error) {
 	return shareddb.Get(ctx, k.crClient, types.NamespacedName{Namespace: k.namespace, Name: k.clusterName})
 }
 
@@ -167,7 +167,7 @@ func (k *K8sClusterClient) GetClusterHealth(ctx context.Context) (ClusterHealth,
 //
 // The previous unstructured-based implementation returned 1 when the
 // field was omitted from the CR (operator default). The typed
-// previewv1.DocumentDB gives a zero-value of 0 for omitted ints, so we
+// dbv1.DocumentDB gives a zero-value of 0 for omitted ints, so we
 // preserve the original semantics explicitly here.
 func (k *K8sClusterClient) GetInstancesPerNode(ctx context.Context) (int, error) {
 	dd, err := k.getCR(ctx)
@@ -220,7 +220,7 @@ func (k *K8sClusterClient) UpgradeDocumentDB(ctx context.Context, version string
 	if err != nil {
 		return fmt.Errorf("failed to get DocumentDB CR: %w", err)
 	}
-	if err := shareddb.PatchSpec(ctx, k.crClient, dd, func(spec *previewv1.DocumentDBSpec) {
+	if err := shareddb.PatchSpec(ctx, k.crClient, dd, func(spec *dbv1.DocumentDBSpec) {
 		spec.DocumentDBVersion = version
 		spec.SchemaVersion = "auto"
 	}); err != nil {
@@ -295,7 +295,7 @@ func (k *K8sClusterClient) MetricsAvailable() bool {
 
 // scheduledBackupLabel is the label the ScheduledBackup reconciler stamps
 // on every child Backup CR it creates (see
-// preview.ScheduledBackup.CreateBackup). Selecting on it isolates the
+// dbv1.ScheduledBackup.CreateBackup). Selecting on it isolates the
 // backups produced by our canary ScheduledBackup from any ad-hoc Backup
 // objects that might exist in the namespace.
 const scheduledBackupLabel = "scheduledbackup"
@@ -306,7 +306,7 @@ const scheduledBackupLabel = "scheduledbackup"
 // accumulated history are preserved — the CR is updated in place, never
 // recreated — so only backups created after the update pick up the new spec.
 func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, schedule string, retentionDays int) error {
-	existing := &previewv1.ScheduledBackup{}
+	existing := &dbv1.ScheduledBackup{}
 	err := k.crClient.Get(ctx, types.NamespacedName{Namespace: k.namespace, Name: name}, existing)
 	if err == nil {
 		return k.reconcileScheduledBackup(ctx, existing, schedule, retentionDays)
@@ -316,12 +316,12 @@ func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, sche
 	}
 
 	rd := retentionDays
-	sb := &previewv1.ScheduledBackup{
+	sb := &dbv1.ScheduledBackup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: k.namespace,
 		},
-		Spec: previewv1.ScheduledBackupSpec{
+		Spec: dbv1.ScheduledBackupSpec{
 			Cluster:       cnpgv1.LocalObjectReference{Name: k.clusterName},
 			Schedule:      schedule,
 			RetentionDays: &rd,
@@ -335,7 +335,7 @@ func (k *K8sClusterClient) EnsureScheduledBackup(ctx context.Context, name, sche
 
 // reconcileScheduledBackup updates an existing ScheduledBackup in place when
 // its schedule or retention differs from what this run requested.
-func (k *K8sClusterClient) reconcileScheduledBackup(ctx context.Context, existing *previewv1.ScheduledBackup, schedule string, retentionDays int) error {
+func (k *K8sClusterClient) reconcileScheduledBackup(ctx context.Context, existing *dbv1.ScheduledBackup, schedule string, retentionDays int) error {
 	curRetention := 0
 	if existing.Spec.RetentionDays != nil {
 		curRetention = *existing.Spec.RetentionDays
@@ -358,8 +358,8 @@ func (k *K8sClusterClient) reconcileScheduledBackup(ctx context.Context, existin
 
 // GetScheduledBackup fetches the ScheduledBackup CR by name in the target
 // namespace.
-func (k *K8sClusterClient) GetScheduledBackup(ctx context.Context, name string) (*previewv1.ScheduledBackup, error) {
-	sb := &previewv1.ScheduledBackup{}
+func (k *K8sClusterClient) GetScheduledBackup(ctx context.Context, name string) (*dbv1.ScheduledBackup, error) {
+	sb := &dbv1.ScheduledBackup{}
 	if err := k.crClient.Get(ctx, types.NamespacedName{Namespace: k.namespace, Name: name}, sb); err != nil {
 		return nil, fmt.Errorf("failed to get ScheduledBackup %s/%s: %w", k.namespace, name, err)
 	}
@@ -368,8 +368,8 @@ func (k *K8sClusterClient) GetScheduledBackup(ctx context.Context, name string) 
 
 // ListScheduledChildBackups returns every Backup CR that the named
 // ScheduledBackup produced, identified by the "scheduledbackup" label.
-func (k *K8sClusterClient) ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]previewv1.Backup, error) {
-	var list previewv1.BackupList
+func (k *K8sClusterClient) ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]dbv1.Backup, error) {
+	var list dbv1.BackupList
 	if err := k.crClient.List(ctx, &list,
 		ctrlclient.InNamespace(k.namespace),
 		ctrlclient.MatchingLabels{scheduledBackupLabel: scheduledBackupName},

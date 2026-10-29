@@ -9,7 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -23,12 +23,12 @@ var _ = Describe("GetCnpgClusterSpecFromIntent", func() {
 		return req
 	}
 
-	newDocumentDB := func() *dbpreview.DocumentDB {
-		return &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+	newDocumentDB := func() *dbv1.DocumentDB {
+		return &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}

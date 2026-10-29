@@ -18,12 +18,12 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 const (
 	documentDBGVRGroup    = "documentdb.io"
-	documentDBGVRVersion  = "preview"
+	documentDBGVRVersion  = "v1"
 	documentDBGVRResource = "dbs"
 )
 
@@ -164,7 +164,7 @@ func (o *promoteOptions) patchDocumentDB(ctx context.Context, dyn dynamic.Interf
 			return fmt.Errorf("failed to get DocumentDB %q: %w", o.documentDBName, err)
 		}
 
-		var doc preview.DocumentDB
+		var doc dbv1.DocumentDB
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredDoc.Object, &doc); err != nil {
 			return fmt.Errorf("failed to convert DocumentDB %q to typed object: %w", o.documentDBName, err)
 		}
@@ -175,7 +175,7 @@ func (o *promoteOptions) patchDocumentDB(ctx context.Context, dyn dynamic.Interf
 
 		oldPrimary := doc.Spec.ClusterReplication.Primary
 		if oldPrimary != "" && len(doc.Spec.ClusterReplication.ClusterList) > 0 {
-			var newClusterList []preview.MemberCluster
+			var newClusterList []dbv1.MemberCluster
 			for _, cluster := range doc.Spec.ClusterReplication.ClusterList {
 				if cluster.Name != oldPrimary {
 					newClusterList = append(newClusterList, cluster)

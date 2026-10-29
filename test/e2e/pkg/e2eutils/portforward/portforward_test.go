@@ -9,36 +9,36 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 func TestGatewayServiceName(t *testing.T) {
 	cases := []struct {
 		name string
-		dd   *previewv1.DocumentDB
+		dd   *dbv1.DocumentDB
 		want string
 	}{
 		{"nil", nil, ""},
 		{
 			"short",
-			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "my-dd"}},
+			&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "my-dd"}},
 			"documentdb-service-my-dd",
 		},
 		{
 			"exactly 63",
-			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("x", 44)}},
+			&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("x", 44)}},
 			// 19 (prefix) + 44 xs = 63: unchanged
 			"documentdb-service-" + strings.Repeat("x", 44),
 		},
 		{
 			// Same vector as the operator's TestGatewayServiceNameHashesOnlyLongNames.
 			"hashed",
-			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("a", 44) + "-east"}},
+			&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: strings.Repeat("a", 44) + "-east"}},
 			"documentdb-service-" + strings.Repeat("a", 35) + "-2f5a7991",
 		},
 		{
 			"recorded legacy name",
-			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
+			&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
 				Name:        strings.Repeat("a", 44) + "x-east",
 				Annotations: map[string]string{ServiceNameAnnotation: "documentdb-service-" + strings.Repeat("a", 44)},
 			}},
@@ -46,7 +46,7 @@ func TestGatewayServiceName(t *testing.T) {
 		},
 		{
 			"unrecognized recorded name is ignored",
-			&previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
+			&dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
 				Name:        strings.Repeat("a", 44) + "-east",
 				Annotations: map[string]string{ServiceNameAnnotation: "documentdb-service-other"},
 			}},
@@ -74,7 +74,7 @@ func TestGatewayPort(t *testing.T) {
 
 func TestOpenWithErr_NilEnv(t *testing.T) {
 	t.Parallel()
-	stop, err := OpenWithErr(nil, nil, &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "x"}}, 0) //nolint:staticcheck // testing nil-ctx/env guard
+	stop, err := OpenWithErr(nil, nil, &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "x"}}, 0) //nolint:staticcheck // testing nil-ctx/env guard
 	if err == nil {
 		t.Fatal("expected error for nil env")
 	}

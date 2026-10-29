@@ -19,7 +19,7 @@ stringData:
   username: demo
   password: "ChangeMe!ReplaceBeforeUsing"
 ---
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: iouring-demo
