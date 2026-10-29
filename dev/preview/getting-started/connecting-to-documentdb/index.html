@@ -1963,7 +1963,7 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>documentdb-service-my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.loadBalancer.ingress[0].ip}'</span>
 </code></pre></div>
-<p>The service name follows the pattern <code>documentdb-service-&lt;documentdb-name&gt;</code> (truncated to 63 characters).</p>
+<p>The service name follows the pattern <code>documentdb-service-&lt;documentdb-name&gt;</code>. If that exceeds the 63-character Kubernetes limit, the operator shortens it and appends a hash of the DocumentDB name so every cluster gets its own Service (for example <code>documentdb-service-&lt;first-35-characters&gt;-&lt;8-hex-digit-hash&gt;</code>). Clusters created by earlier releases keep their existing Service name. For long names, the operator records the chosen name in the <code>documentdb.io/gateway-service-name</code> annotation on the DocumentDB resource and keeps it even if the Service is recreated. Run <code>kubectl get svc -n &lt;namespace&gt;</code> to see the exact name.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Set <code>spec.environment</code> to <code>aks</code>, <code>eks</code>, or <code>gke</code> to apply cloud-specific load balancer annotations automatically. See <a href="../../configuration/networking/">Networking</a> for details.</p>
