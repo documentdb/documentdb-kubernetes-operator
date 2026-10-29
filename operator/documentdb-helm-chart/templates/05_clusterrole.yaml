@@ -38,12 +38,16 @@ rules:
 - apiGroups: ["postgresql.cnpg.io"]
   resources: ["clusters", "publications", "subscriptions", "clusters/status"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# cert-manager: certificate_controller only Get/Create namespaced Certificates
-# and Issuers, and Owns() them (which requires watch). It never Updates,
-# Patches, Deletes, or sets Finalizers on cert-manager objects. ClusterIssuer
-# is referenced by name in CR spec but resolved by cert-manager itself.
+# cert-manager: certificate_controller Gets/Creates namespaced Certificates
+# and Issuers and Owns() them (which requires watch). It patches only its own
+# gateway Certificates, to add gateway Service DNS names they lack. It never
+# Deletes or sets Finalizers on cert-manager objects. ClusterIssuer is
+# referenced by name in CR spec but resolved by cert-manager itself.
 - apiGroups: ["cert-manager.io"]
-  resources: ["certificates", "issuers"]
+  resources: ["certificates"]
+  verbs: ["get", "list", "watch", "create", "patch"]
+- apiGroups: ["cert-manager.io"]
+  resources: ["issuers"]
   verbs: ["get", "list", "watch", "create"]
 
 # Backup permissions

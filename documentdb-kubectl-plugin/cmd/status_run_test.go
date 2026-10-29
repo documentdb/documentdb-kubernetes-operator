@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -177,5 +178,58 @@ func TestStatusRunRendersClusterTable(t *testing.T) {
 		if !strings.Contains(output, check.substring) {
 			t.Fatalf("expected output to contain %s (%q), got: %s", check.description, check.substring, output)
 		}
+	}
+}
+
+func TestFindDocumentDBServiceEndpointMatchesOwnerNotSubstring(t *testing.T) {
+	const namespace = "ns"
+	controlled := func(name, owner string, uid types.UID, ip string) *corev1.Service {
+		return &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: namespace,
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "documentdb.io/preview", Kind: "DocumentDB", Name: owner,
+					UID: uid, Controller: &[]bool{true}[0],
+				}},
+			},
+			Spec: corev1.ServiceSpec{ClusterIP: ip},
+		}
+	}
+	long := strings.Repeat("a", 44) + "-east"
+	legacy := documentdbServicePrefix + strings.Repeat("a", 44)
+	client := kubefake.NewSimpleClientset(
+		// Another cluster whose name contains "db"; it must not be reported for "db".
+		controlled(documentdbServicePrefix+"db2", "db2", "uid-db2", "10.0.0.9"),
+		// The operator shortened this long name with a hash suffix.
+		controlled(documentdbServicePrefix+strings.Repeat("a", 35)+"-2f5a7991", long, "uid-long", "10.0.0.5"),
+		// A Service left by a deleted DocumentDB with the same name.
+		controlled(documentdbServicePrefix+"old", "old", "uid-deleted", "10.0.0.7"),
+		// An upgraded cluster that kept its legacy truncated name.
+		controlled(legacy, long+"-x", "uid-legacy", "10.0.0.6"),
+	)
+	ctx := context.Background()
+
+	for _, tt := range []struct {
+		name, doc, recorded string
+		uid                 types.UID
+		want                string
+	}{
+		{name: "hashed long name found by owner", doc: long, uid: "uid-long", want: "10.0.0.5"},
+		{name: "recorded legacy name", doc: long + "-x", uid: "uid-legacy", recorded: legacy, want: "10.0.0.6"},
+		{name: "substring match is not an owner", doc: "db", uid: "uid-db"},
+		{name: "stale Service of a deleted DocumentDB", doc: "old", uid: "uid-new"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := findDocumentDBServiceEndpoint(ctx, client, namespace, "member", tt.doc, tt.uid, tt.recorded)
+			if tt.want == "" {
+				if err == nil {
+					t.Fatalf("expected no endpoint, got %q", got)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tt.want)
+			}
+		})
 	}
 }

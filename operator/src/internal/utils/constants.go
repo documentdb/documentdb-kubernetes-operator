@@ -106,6 +106,17 @@ const (
 	// The operator passes the resolved per-container requests/limits to the
 	// sidecar-injector plugin via these CNPG plugin parameters; the plugin sets
 	// them on the gateway and otel-collector container Resources.
+	PLUGIN_PARAM_GATEWAY_IMAGE             = "gatewayImage"
+	PLUGIN_PARAM_GATEWAY_IMAGE_PULL_POLICY = "gatewayImagePullPolicy"
+	PLUGIN_PARAM_GATEWAY_TLS_SECRET        = "gatewayTLSSecret"
+	// PLUGIN_PARAM_CREDENTIAL_SECRET keeps its historical key: it is a wire
+	// contract with the sidecar injector and existing clusters.
+	PLUGIN_PARAM_CREDENTIAL_SECRET      = "documentDbCredentialSecret"
+	PLUGIN_PARAM_OTEL_COLLECTOR_IMAGE   = "otelCollectorImage"
+	PLUGIN_PARAM_OTEL_CONFIG_MAP_NAME   = "otelConfigMapName"
+	PLUGIN_PARAM_OTEL_CONFIG_HASH       = "otelConfigHash"
+	PLUGIN_PARAM_OTEL_PASSWORD_SECRET   = "otelPasswordSecret"
+	PLUGIN_PARAM_PROMETHEUS_PORT        = "prometheusPort"
 	PLUGIN_PARAM_GATEWAY_MEMORY_REQUEST = "gatewayMemoryRequest"
 	PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT   = "gatewayMemoryLimit"
 	PLUGIN_PARAM_GATEWAY_CPU_REQUEST    = "gatewayCpuRequest"
@@ -114,6 +125,19 @@ const (
 	PLUGIN_PARAM_OTEL_MEMORY_LIMIT      = "otelMemoryLimit"
 	PLUGIN_PARAM_OTEL_CPU_REQUEST       = "otelCpuRequest"
 	PLUGIN_PARAM_OTEL_CPU_LIMIT         = "otelCpuLimit"
+	// Optional gateway contract overrides; omitted for the DocumentDB gateway.
+	PLUGIN_PARAM_GATEWAY_CONTAINER_NAME = "gatewayContainerName"
+	PLUGIN_PARAM_GATEWAY_PORT           = "gatewayPort"
+	PLUGIN_PARAM_GATEWAY_ARGS           = "gatewayArgs"
+	PLUGIN_PARAM_GATEWAY_USERNAME_ENV   = "gatewayUsernameEnv"
+	PLUGIN_PARAM_GATEWAY_PASSWORD_ENV   = "gatewayPasswordEnv"
+	// The sidecar injector's gateway contract defaults; keep in sync with
+	// cnpg-plugins/sidecar-injector/internal/config. Its defaulting webhook
+	// drops parameters equal to these, so the operator omits them too.
+	PLUGIN_DEFAULT_GATEWAY_CONTAINER_NAME = "documentdb-gateway"
+	PLUGIN_DEFAULT_GATEWAY_PORT           = int32(10260)
+	PLUGIN_DEFAULT_GATEWAY_USERNAME_ENV   = "USERNAME"
+	PLUGIN_DEFAULT_GATEWAY_PASSWORD_ENV   = "PASSWORD"
 
 	// TODO: remove these constants once change stream support is included in the official images.
 	CHANGESTREAM_DOCUMENTDB_IMAGE_REPOSITORY = "ghcr.io/wentingwu666666/documentdb-kubernetes-operator"

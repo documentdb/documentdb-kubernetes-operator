@@ -4,6 +4,7 @@
 package util
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -11,6 +12,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestGenerateServiceName(t *testing.T) {
@@ -1000,5 +1004,111 @@ func TestSemverToExtensionVersion(t *testing.T) {
 				t.Errorf("SemverToExtensionVersion(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBuildGatewayService_ProductNeutral(t *testing.T) {
+	svc := BuildGatewayService(GatewayServiceOptions{
+		Name: "cosmos-svc-x", Namespace: "ns", ClusterName: "x",
+		OwnerAPIVersion: "cosmos.example/v1", OwnerKind: "CosmosCluster", OwnerUID: "uid",
+		Port: 8081, EndpointEnabled: true, Environment: "aks", ServiceType: corev1.ServiceTypeLoadBalancer,
+	})
+	if svc.Name != "cosmos-svc-x" || svc.Spec.Ports[0].Port != 8081 || svc.Spec.Ports[0].TargetPort.IntValue() != 8081 {
+		t.Fatalf("unexpected service: %+v", svc.Spec)
+	}
+	if svc.OwnerReferences[0].Kind != "CosmosCluster" || svc.Spec.Selector[LABEL_APP] != "x" ||
+		svc.Annotations["service.beta.kubernetes.io/azure-load-balancer-external"] != "true" {
+		t.Fatalf("unexpected owner/selector/annotations: %+v", svc.ObjectMeta)
+	}
+}
+
+// TestUpsertServiceConvergesPorts updates an existing gateway Service to a new
+// gateway port, keeping server-assigned and unrelated fields, and refuses a
+// Service controlled by another owner without rewriting it.
+func TestUpsertServiceConvergesPorts(t *testing.T) {
+	ctx := context.Background()
+	opts := GatewayServiceOptions{
+		Name: "svc", Namespace: "ns", ClusterName: "acct",
+		OwnerAPIVersion: "cosmos.example.com/v1", OwnerKind: "Account", OwnerUID: "uid-1",
+		Port: 10260, EndpointEnabled: true, ServiceType: corev1.ServiceTypeLoadBalancer,
+	}
+	existing := BuildGatewayService(opts)
+	existing.Labels = map[string]string{"team": "data"}
+	existing.Annotations = map[string]string{"example.com/keep": "true"}
+	existing.Spec.ClusterIP = "10.0.0.5"
+	existing.Spec.ClusterIPs = []string{"10.0.0.5"}
+	existing.Spec.Ports[0].NodePort = 31000
+	existing.Spec.SessionAffinity = corev1.ServiceAffinityNone
+
+	opts.Port = 8081
+	foreign := existing.DeepCopy()
+	foreign.Name = "foreign"
+	foreign.OwnerReferences[0].UID = "other-uid"
+
+	c := fake.NewClientBuilder().WithObjects(existing, foreign).Build()
+	got, err := UpsertService(ctx, c, BuildGatewayService(opts))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(existing), got); err != nil {
+		t.Fatal(err)
+	}
+	want := corev1.ServicePort{Name: "gateway", Protocol: corev1.ProtocolTCP, Port: 8081, TargetPort: intstr.FromInt(8081), NodePort: 31000}
+	if len(got.Spec.Ports) != 1 || got.Spec.Ports[0] != want {
+		t.Errorf("ports = %+v, want [%+v]", got.Spec.Ports, want)
+	}
+	if got.Spec.ClusterIP != "10.0.0.5" || len(got.Spec.ClusterIPs) != 1 || got.Spec.ClusterIPs[0] != "10.0.0.5" {
+		t.Errorf("cluster IPs not preserved: %q %v", got.Spec.ClusterIP, got.Spec.ClusterIPs)
+	}
+	if got.Labels["team"] != "data" || got.Annotations["example.com/keep"] != "true" || got.Spec.SessionAffinity != corev1.ServiceAffinityNone {
+		t.Errorf("unrelated fields not preserved: %+v", got)
+	}
+	for _, enabled := range []bool{false, true} {
+		opts.EndpointEnabled = enabled
+		if got, err = UpsertService(ctx, c, BuildGatewayService(opts)); err != nil {
+			t.Fatal(err)
+		}
+		if active := got.Spec.Selector[LABEL_APP] == opts.ClusterName; active != enabled {
+			t.Fatalf("endpoint enabled=%v, want %v; selector=%v", active, enabled, got.Spec.Selector)
+		}
+	}
+
+	foreignOpts := opts
+	foreignOpts.Name = "foreign"
+	if svc, err := UpsertService(ctx, c, BuildGatewayService(foreignOpts)); err == nil || svc != nil ||
+		!strings.Contains(err.Error(), "other-uid") {
+		t.Fatalf("expected a foreign-controller error and no Service, got %v, %v", svc, err)
+	}
+	if err := c.Get(ctx, client.ObjectKeyFromObject(foreign), got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.Ports[0].Port != 10260 {
+		t.Errorf("a Service controlled by another owner was rewritten: %+v", got.Spec.Ports)
+	}
+
+	unowned := existing.DeepCopy()
+	unowned.Name, unowned.OwnerReferences, unowned.ResourceVersion = "unowned", nil, ""
+	if err := c.Create(ctx, unowned); err != nil {
+		t.Fatal(err)
+	}
+	unownedOpts := opts
+	unownedOpts.Name = "unowned"
+	if _, err := UpsertService(ctx, c, BuildGatewayService(unownedOpts)); err != nil {
+		t.Fatalf("a pre-created Service without a controller must still be usable: %v", err)
+	}
+}
+
+func TestGatewayServiceNameHashesOnlyLongNames(t *testing.T) {
+	if got := GatewayServiceName(DOCUMENTDB_SERVICE_PREFIX, "db"); got != "documentdb-service-db" {
+		t.Fatalf("short name changed: %q", got)
+	}
+	long := strings.Repeat("a", 44)
+	east := GatewayServiceName(DOCUMENTDB_SERVICE_PREFIX, long+"-east")
+	// Pin the format: a stable hash must not drift between releases.
+	if want := DOCUMENTDB_SERVICE_PREFIX + strings.Repeat("a", 35) + "-2f5a7991"; east != want {
+		t.Fatalf("GatewayServiceName = %q, want %q", east, want)
+	}
+	if east == GatewayServiceName(DOCUMENTDB_SERVICE_PREFIX, long+"-west") {
+		t.Fatal("names differing past the cut must not share a Service")
 	}
 }

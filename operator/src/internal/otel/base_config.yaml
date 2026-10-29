@@ -15,9 +15,12 @@ receivers:
     queries:
       - sql: "SELECT 1 as up"
         metrics:
-          - metric_name: documentdb.postgres.up
+          - metric_name: {{ .HealthMetricName }}
             value_column: up
             data_type: gauge
+{{- /* The DocumentDB SQL metrics from here through the sqlquery/catalog
+       receiver are rendered only with Options.DocumentDBMetrics. */}}
+{{- if .DocumentDBMetrics }}
       # Resets when the postmaster restarts, including in-place restarts.
       - sql: "SELECT EXTRACT(EPOCH FROM now() - pg_postmaster_start_time())::float8 AS uptime_seconds"
         metrics:
@@ -135,6 +138,7 @@ receivers:
             data_type: gauge
             unit: "{database}"
             description: Number of user databases.
+{{- end }}
 
   # Pod-local filesystem and network metrics. The sidecar mounts the data
   # volume read-only on an empty subPath at /var/lib/otel/pgdata, so statfs

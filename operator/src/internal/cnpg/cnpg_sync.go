@@ -24,8 +24,10 @@ import (
 // for ALL CNPG spec mutations (images + plugin params + replication).
 //
 // Mutable plugin parameters synced: gatewayImage, gatewayTLSSecret, sidecar
-// resource params, and OTel sidecar params (otelCollectorImage,
-// otelConfigMapName, prometheusPort, otelConfigHash).
+// resource params, OTel sidecar params (otelCollectorImage,
+// otelConfigMapName, prometheusPort, otelConfigHash), and the gateway contract
+// (gatewayContainerName, gatewayPort, gatewayArgs, gatewayUsernameEnv,
+// gatewayPasswordEnv).
 // Other parameters (e.g., documentDbCredentialSecret) are set at cluster creation
 // and do not change during the lifecycle of a DocumentDB resource.
 //
@@ -43,12 +45,14 @@ func SyncCnpgCluster(
 	extensionUpdated := false
 	gatewayUpdated := false
 
-	// Extension image
-	currentExtIndex, currentExtImage := findExtensionImage(current)
-	_, desiredExtImage := findExtensionImage(desired)
+	// Extension image. The product extension is identified by name from the
+	// desired spec, so the sync works for any product's extension.
+	extensionName := productExtensionName(desired)
+	currentExtIndex, currentExtImage := findExtensionImage(current, extensionName)
+	_, desiredExtImage := findExtensionImage(desired, extensionName)
 	if currentExtImage != desiredExtImage {
 		if currentExtIndex == -1 {
-			return fmt.Errorf("documentdb extension not found in current CNPG cluster spec")
+			return fmt.Errorf("%s extension not found in current CNPG cluster spec", extensionName)
 		}
 		patchOps = append(patchOps, JSONPatch{
 			Op:    PatchOpReplace,
@@ -65,8 +69,8 @@ func SyncCnpgCluster(
 		pluginIdx, currentPlugin := findPlugin(current, desiredPlugin.Name)
 		if pluginIdx != -1 {
 			// Gateway image
-			desiredGwImage := getParam(desiredPlugin.Parameters, "gatewayImage")
-			currentGwImage := getParam(currentPlugin.Parameters, "gatewayImage")
+			desiredGwImage := getParam(desiredPlugin.Parameters, util.PLUGIN_PARAM_GATEWAY_IMAGE)
+			currentGwImage := getParam(currentPlugin.Parameters, util.PLUGIN_PARAM_GATEWAY_IMAGE)
 			if desiredGwImage != "" && currentGwImage != desiredGwImage {
 				patchOps = append(patchOps, JSONPatch{
 					Op:    PatchOpReplace,
@@ -87,12 +91,12 @@ func SyncCnpgCluster(
 			}
 
 			// TLS secret (only synced when BuildDesiredCnpgCluster sets it, i.e. TLS is ready)
-			desiredTLS := getParam(desiredPlugin.Parameters, "gatewayTLSSecret")
-			currentTLS := getParam(currentPlugin.Parameters, "gatewayTLSSecret")
+			desiredTLS := getParam(desiredPlugin.Parameters, util.PLUGIN_PARAM_GATEWAY_TLS_SECRET)
+			currentTLS := getParam(currentPlugin.Parameters, util.PLUGIN_PARAM_GATEWAY_TLS_SECRET)
 			if desiredTLS != "" && currentTLS != desiredTLS {
 				patchOps = append(patchOps, JSONPatch{
 					Op:    PatchOpReplace,
-					Path:  fmt.Sprintf("/spec/plugins/%d/parameters/gatewayTLSSecret", pluginIdx),
+					Path:  fmt.Sprintf(PatchPathPluginParamFmt, pluginIdx, util.PLUGIN_PARAM_GATEWAY_TLS_SECRET),
 					Value: desiredTLS,
 				})
 				pluginParamsChanged = true
@@ -112,14 +116,22 @@ func SyncCnpgCluster(
 				util.PLUGIN_PARAM_GATEWAY_MEMORY_LIMIT,
 				util.PLUGIN_PARAM_GATEWAY_CPU_REQUEST,
 				util.PLUGIN_PARAM_GATEWAY_CPU_LIMIT,
-				"otelCollectorImage",
-				"otelConfigMapName",
-				"prometheusPort",
-				"otelConfigHash",
+				util.PLUGIN_PARAM_OTEL_COLLECTOR_IMAGE,
+				util.PLUGIN_PARAM_OTEL_CONFIG_MAP_NAME,
+				util.PLUGIN_PARAM_PROMETHEUS_PORT,
+				util.PLUGIN_PARAM_OTEL_CONFIG_HASH,
+				util.PLUGIN_PARAM_OTEL_PASSWORD_SECRET,
 				util.PLUGIN_PARAM_OTEL_MEMORY_REQUEST,
 				util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT,
 				util.PLUGIN_PARAM_OTEL_CPU_REQUEST,
 				util.PLUGIN_PARAM_OTEL_CPU_LIMIT,
+				// Gateway contract: the injector renders the gateway
+				// container from these at pod creation.
+				util.PLUGIN_PARAM_GATEWAY_CONTAINER_NAME,
+				util.PLUGIN_PARAM_GATEWAY_PORT,
+				util.PLUGIN_PARAM_GATEWAY_ARGS,
+				util.PLUGIN_PARAM_GATEWAY_USERNAME_ENV,
+				util.PLUGIN_PARAM_GATEWAY_PASSWORD_ENV,
 			}
 			for _, key := range sidecarParamKeys {
 				desiredVal := getParam(desiredPlugin.Parameters, key)
@@ -313,10 +325,22 @@ func SyncCnpgCluster(
 	return nil
 }
 
-// findExtensionImage returns the index and image reference for the documentdb extension.
-func findExtensionImage(cluster *cnpgv1.Cluster) (int, string) {
+// productExtensionName returns the name of the product extension the renderer
+// declares on the desired cluster (always the first Extensions entry), or "".
+func productExtensionName(desired *cnpgv1.Cluster) string {
+	if desired == nil || len(desired.Spec.PostgresConfiguration.Extensions) == 0 {
+		return ""
+	}
+	return desired.Spec.PostgresConfiguration.Extensions[0].Name
+}
+
+// findExtensionImage returns the index and image reference for the named extension.
+func findExtensionImage(cluster *cnpgv1.Cluster, name string) (int, string) {
+	if name == "" {
+		return -1, ""
+	}
 	for i, ext := range cluster.Spec.PostgresConfiguration.Extensions {
-		if ext.Name == "documentdb" {
+		if ext.Name == name {
 			return i, ext.ImageVolumeSource.Reference
 		}
 	}

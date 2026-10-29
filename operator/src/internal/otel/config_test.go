@@ -40,10 +40,29 @@ func parseCfg(yamlStr string) collectorConfig {
 	return cfg
 }
 
+// defaultStaticYAML is base_config.yaml rendered with the DocumentDB names.
+func defaultStaticYAML() []byte {
+	out, err := renderStaticConfig(staticConfigData{HealthMetricName: defaultHealthMetricName})
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	return []byte(out)
+}
+
+// documentDBOptions enable the DocumentDB SQL metrics, as the DocumentDB
+// product profile does.
+var documentDBOptions = Options{DocumentDBMetrics: true}
+
+// documentDBStaticYAML is base_config.yaml rendered for DocumentDB: the
+// DocumentDB names plus the DocumentDB SQL metrics.
+func documentDBStaticYAML() []byte {
+	out, err := renderStaticConfig(staticConfigData{HealthMetricName: defaultHealthMetricName, DocumentDBMetrics: true})
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	return []byte(out)
+}
+
 var _ = Describe("base_config.yaml embed", func() {
 	It("can be parsed as valid YAML with expected static components", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 		Expect(cfg.Receivers).To(HaveKey("sqlquery"))
 		Expect(cfg.Receivers).To(HaveKey("otlp"))
 		Expect(cfg.Processors).To(HaveKey("memory_limiter"))
@@ -53,13 +72,13 @@ var _ = Describe("base_config.yaml embed", func() {
 	})
 
 	It("does not configure a password while PostgreSQL uses trust authentication", func() {
-		Expect(string(baseConfigYAML)).To(ContainSubstring("user=${env:PGUSER}"))
-		Expect(string(baseConfigYAML)).NotTo(ContainSubstring("PGPASSWORD"))
+		Expect(string(defaultStaticYAML())).To(ContainSubstring("user=${env:PGUSER}"))
+		Expect(string(defaultStaticYAML())).NotTo(ContainSubstring("PGPASSWORD"))
 	})
 
 	It("declares a cgroup-aware memory_limiter processor", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 
 		memLimiter, ok := cfg.Processors["memory_limiter"].(map[string]any)
 		Expect(ok).To(BeTrue(), "memory_limiter processor must be a map")
@@ -70,7 +89,7 @@ var _ = Describe("base_config.yaml embed", func() {
 
 	It("declares an OTLP gRPC receiver on port 4317", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 
 		otlp, ok := cfg.Receivers["otlp"].(map[string]any)
 		Expect(ok).To(BeTrue(), "otlp receiver must be a map")
@@ -81,25 +100,44 @@ var _ = Describe("base_config.yaml embed", func() {
 		Expect(grpc["endpoint"]).To(Equal("127.0.0.1:4317"))
 	})
 
-	It("wires every static receiver into the metrics pipeline", func() {
-		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+	DescribeTable("wires every static receiver into the metrics pipeline",
+		func(opts Options) {
+			spec := &dbpreview.MonitoringSpec{
+				Enabled: true,
+				Exporter: &dbpreview.ExporterSpec{
+					Prometheus: &dbpreview.PrometheusExporterSpec{},
+				},
+			}
+			data, err := GenerateConfigMapDataWithOptions(opts, "cluster", "ns", spec)
+			Expect(err).NotTo(HaveOccurred())
+			staticCfg := parseCfg(data["static.yaml"])
+			dynCfg := parseCfg(data["dynamic.yaml"])
 
-		spec := &dbpreview.MonitoringSpec{
-			Enabled: true,
-			Exporter: &dbpreview.ExporterSpec{
-				Prometheus: &dbpreview.PrometheusExporterSpec{},
-			},
-		}
-		data, err := GenerateConfigMapData("cluster", "ns", spec)
+			receivers := make([]string, 0, len(staticCfg.Receivers))
+			for name := range staticCfg.Receivers {
+				receivers = append(receivers, name)
+			}
+			Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf(receivers))
+		},
+		Entry("with the DocumentDB SQL metrics", documentDBOptions),
+		Entry("without the DocumentDB SQL metrics", Options{}),
+	)
+
+	It("renders the DocumentDB SQL metrics only when enabled", func() {
+		spec := &dbpreview.MonitoringSpec{Enabled: true}
+		without, err := GenerateConfigMapData("cluster", "ns", spec)
 		Expect(err).NotTo(HaveOccurred())
-		dynCfg := parseCfg(data["dynamic.yaml"])
+		staticCfg := parseCfg(without["static.yaml"])
+		Expect(staticCfg.Receivers).To(HaveKey("hostmetrics"))
+		Expect(staticCfg.Receivers).NotTo(HaveKey("sqlquery/catalog"))
+		sqlquery, ok := staticCfg.Receivers["sqlquery"].(map[string]any)
+		Expect(ok).To(BeTrue(), "sqlquery receiver must be a map")
+		Expect(sqlquery["queries"]).To(HaveLen(1), "only the health query")
 
-		receivers := make([]string, 0, len(cfg.Receivers))
-		for name := range cfg.Receivers {
-			receivers = append(receivers, name)
-		}
-		Expect(dynCfg.Service.Pipelines["metrics"].Receivers).To(ConsistOf(receivers))
+		with, err := GenerateConfigMapDataWithOptions(documentDBOptions, "cluster", "ns", spec)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parseCfg(with["static.yaml"]).Receivers).To(HaveKey("sqlquery/catalog"))
+		Expect(with["static.yaml"]).To(ContainSubstring("metric_name: documentdb.postgres.uptime\n"))
 	})
 
 	It("declares the per-instance PostgreSQL metrics with parseable value types", func() {
@@ -131,7 +169,7 @@ var _ = Describe("base_config.yaml embed", func() {
 
 	It("declares primary-only catalog metrics on a 5 minute interval", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(documentDBStaticYAML(), &cfg)).To(Succeed())
 		catalog, ok := cfg.Receivers["sqlquery/catalog"].(map[string]any)
 		Expect(ok).To(BeTrue(), "sqlquery/catalog receiver must be a map")
 		Expect(catalog["collection_interval"]).To(Equal("5m"))
@@ -159,7 +197,7 @@ var _ = Describe("base_config.yaml embed", func() {
 
 	It("scrapes only the data volume mount and non-loopback interfaces", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 		hostmetrics, ok := cfg.Receivers["hostmetrics"].(map[string]any)
 		Expect(ok).To(BeTrue(), "hostmetrics receiver must be a map")
 		scrapers, ok := hostmetrics["scrapers"].(map[string]any)
@@ -187,10 +225,11 @@ var _ = Describe("base_config.yaml embed", func() {
 	})
 })
 
-// receiverQueries returns the queries declared by a sqlquery receiver in base_config.yaml.
+// receiverQueries returns the queries declared by a sqlquery receiver in the
+// DocumentDB static config.
 func receiverQueries(receiver string) []map[string]any {
 	var cfg collectorConfig
-	ExpectWithOffset(1, yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+	ExpectWithOffset(1, yaml.Unmarshal(documentDBStaticYAML(), &cfg)).To(Succeed())
 	r, ok := cfg.Receivers[receiver].(map[string]any)
 	ExpectWithOffset(1, ok).To(BeTrue(), "%s receiver must be a map", receiver)
 	raw, ok := r["queries"].([]any)
@@ -260,7 +299,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 				Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
 			},
 		}
-		data, err := GenerateConfigMapData("test-cluster", "test-ns", spec)
+		data, err := GenerateConfigMapDataWithOptions(documentDBOptions, "test-cluster", "test-ns", spec)
 		Expect(err).NotTo(HaveOccurred())
 
 		dynCfg := parseCfg(data["dynamic.yaml"])
@@ -424,7 +463,7 @@ var _ = Describe("GenerateConfigMapData", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		var slowest time.Duration
-		for name, receiver := range parseCfg(string(baseConfigYAML)).Receivers {
+		for name, receiver := range parseCfg(string(documentDBStaticYAML())).Receivers {
 			cfg, _ := receiver.(map[string]any)
 			raw, ok := cfg["collection_interval"]
 			if !ok {

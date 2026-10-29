@@ -36,6 +36,12 @@ func TempPVCNameForPVRecovery(documentdbName string) string {
 // The PVC uses the PV's storage class, access modes, and capacity to ensure successful binding.
 // This temp PVC is used as a data source for CNPG to clone data during recovery.
 func BuildTempPVCForPVRecovery(documentdbName, namespace string, pv *corev1.PersistentVolume) *corev1.PersistentVolumeClaim {
+	return BuildTempPVCForPVRecoveryWithLabels(documentdbName, namespace, pv, LabelRecoveryTemp, LabelCluster)
+}
+
+// BuildTempPVCForPVRecoveryWithLabels is BuildTempPVCForPVRecovery with the
+// product's recovery-temp and cluster label keys.
+func BuildTempPVCForPVRecoveryWithLabels(documentdbName, namespace string, pv *corev1.PersistentVolume, recoveryTempLabel, clusterLabel string) *corev1.PersistentVolumeClaim {
 	// Use the PV's storage class directly. All PVs in DocumentDB are dynamically provisioned
 	// by a StorageClass, so we can safely assume the storage class is always set.
 	// Note: If PVs without a storage class need to be supported in the future,
@@ -57,8 +63,8 @@ func BuildTempPVCForPVRecovery(documentdbName, namespace string, pv *corev1.Pers
 			Name:      TempPVCNameForPVRecovery(documentdbName),
 			Namespace: namespace,
 			Labels: map[string]string{
-				LabelRecoveryTemp: "true",
-				LabelCluster:      documentdbName,
+				recoveryTempLabel: "true",
+				clusterLabel:      documentdbName,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{

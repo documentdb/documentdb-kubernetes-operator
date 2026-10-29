@@ -6,6 +6,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"strconv"
 	"strings"
@@ -30,51 +31,119 @@ import (
 
 // GetDocumentDBServiceDefinition returns the LoadBalancer Service definition for a given DocumentDB instance
 func GetDocumentDBServiceDefinition(documentdb *dbpreview.DocumentDB, replicationContext *ReplicationContext, namespace string, serviceType corev1.ServiceType) *corev1.Service {
+	return BuildGatewayService(GatewayServiceOptions{
+		Name:            GatewayServiceName(DOCUMENTDB_SERVICE_PREFIX, documentdb.Name),
+		Namespace:       namespace,
+		ClusterName:     documentdb.Name,
+		OwnerAPIVersion: documentdb.APIVersion,
+		OwnerKind:       documentdb.Kind,
+		OwnerUID:        documentdb.UID,
+		Port:            GetPortFor(GATEWAY_PORT),
+		EndpointEnabled: replicationContext.EndpointEnabled(),
+		Environment:     replicationContext.Environment,
+		ServiceType:     serviceType,
+	})
+}
+
+// maxServiceNameLength is the Kubernetes DNS-1035 label limit for Service names.
+const maxServiceNameLength = 63
+
+// GatewayServiceName returns prefix+clusterName when it fits the 63-character
+// Service name limit. A longer name keeps as much of that readable prefix as
+// fits and ends in a hash of clusterName, so cluster names that differ only
+// past the cut still get distinct Services.
+func GatewayServiceName(prefix, clusterName string) string {
+	name := prefix + clusterName
+	if len(name) <= maxServiceNameLength {
+		return name
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(clusterName))
+	suffix := fmt.Sprintf("-%08x", h.Sum32())
+	return strings.TrimRight(name[:maxServiceNameLength-len(suffix)], "-") + suffix
+}
+
+// LegacyGatewayServiceName returns the plainly truncated Service name that
+// releases before GatewayServiceName gave clusters whose prefixed name exceeded
+// 63 characters. It reports false when no such Service could exist: the name
+// fits, or truncation leaves an invalid trailing hyphen.
+func LegacyGatewayServiceName(prefix, clusterName string) (string, bool) {
+	name := prefix + clusterName
+	if len(name) <= maxServiceNameLength {
+		return "", false
+	}
+	name = name[:maxServiceNameLength]
+	if strings.HasSuffix(name, "-") {
+		return "", false
+	}
+	return name, true
+}
+
+// GatewayServiceOptions are the product-neutral inputs of the gateway Service.
+type GatewayServiceOptions struct {
+	// Name and Namespace of the Service.
+	Name      string
+	Namespace string
+	// ClusterName is the owning custom resource name; it is the owner
+	// reference name and the pod selector's app label value.
+	ClusterName string
+	// OwnerAPIVersion, OwnerKind, and OwnerUID identify the owning custom
+	// resource for the controller owner reference.
+	OwnerAPIVersion string
+	OwnerKind       string
+	OwnerUID        types.UID
+	// Port is the gateway port exposed by the Service and targeted on the pod.
+	Port int32
+	// EndpointEnabled selects the CNPG primary; when false the Service selects
+	// nothing (for example a multi-region replica cluster).
+	EndpointEnabled bool
+	// Environment selects cloud-specific LoadBalancer annotations.
+	Environment string
+	ServiceType corev1.ServiceType
+}
+
+// BuildGatewayService returns the gateway Service that forwards client traffic
+// to the CNPG primary instance.
+func BuildGatewayService(o GatewayServiceOptions) *corev1.Service {
 	// If no local HA, these two should be empty
 	selector := map[string]string{
 		"disabled": "true",
 	}
-	if replicationContext.EndpointEnabled() {
+	if o.EndpointEnabled {
 		selector = map[string]string{
-			LABEL_APP:              documentdb.Name,
+			LABEL_APP:              o.ClusterName,
 			"cnpg.io/instanceRole": "primary", // Service forwards traffic to CNPG primary instance
 		}
 	}
 
-	// Ensure service name doesn't exceed 63 characters (Kubernetes limit)
-	serviceName := DOCUMENTDB_SERVICE_PREFIX + documentdb.Name
-	if len(serviceName) > 63 {
-		serviceName = serviceName[:63]
-	}
-
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceName,
-			Namespace: namespace,
-			// CRITICAL: Set owner reference so service gets deleted when DocumentDB instance is deleted
+			Name:      o.Name,
+			Namespace: o.Namespace,
+			// CRITICAL: Set owner reference so service gets deleted when the owning instance is deleted
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         documentdb.APIVersion,
-					Kind:               documentdb.Kind,
-					Name:               documentdb.Name,
-					UID:                documentdb.UID,
-					Controller:         &[]bool{true}[0], // This service is controlled by the DocumentDB instance
-					BlockOwnerDeletion: &[]bool{true}[0], // Block DocumentDB deletion until service is deleted
+					APIVersion:         o.OwnerAPIVersion,
+					Kind:               o.OwnerKind,
+					Name:               o.ClusterName,
+					UID:                o.OwnerUID,
+					Controller:         &[]bool{true}[0], // This service is controlled by the owning instance
+					BlockOwnerDeletion: &[]bool{true}[0], // Block owner deletion until service is deleted
 				},
 			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: selector,
 			Ports: []corev1.ServicePort{
-				{Name: "gateway", Protocol: corev1.ProtocolTCP, Port: GetPortFor(GATEWAY_PORT), TargetPort: intstr.FromInt(int(GetPortFor(GATEWAY_PORT)))},
+				{Name: "gateway", Protocol: corev1.ProtocolTCP, Port: o.Port, TargetPort: intstr.FromInt(int(o.Port))},
 			},
-			Type: serviceType,
+			Type: o.ServiceType,
 		},
 	}
 
 	// Add environment-specific annotations for LoadBalancer services
-	if serviceType == corev1.ServiceTypeLoadBalancer {
-		service.ObjectMeta.Annotations = getEnvironmentSpecificAnnotations(replicationContext.Environment)
+	if o.ServiceType == corev1.ServiceTypeLoadBalancer {
+		service.ObjectMeta.Annotations = getEnvironmentSpecificAnnotations(o.Environment)
 	}
 
 	return service
@@ -145,6 +214,12 @@ func EnsureServiceIP(ctx context.Context, service *corev1.Service) (string, erro
 }
 
 // UpsertService checks if the Service already exists, and creates it if not.
+// An existing Service controlled by the desired Service's controller owner
+// has its ports and selector converged (for example after a gateway port
+// change or a pending promotion); server-assigned fields such as ClusterIP(s) and NodePorts and
+// all other spec and metadata fields are preserved. A same-named Service
+// controlled by a different owner is left untouched and reported as an error,
+// so a caller never adopts and publishes another cluster's endpoint.
 func UpsertService(ctx context.Context, c client.Client, service *corev1.Service) (*corev1.Service, error) {
 	log := log.FromContext(ctx)
 	foundService := &corev1.Service{}
@@ -160,15 +235,68 @@ func UpsertService(ctx context.Context, c client.Client, service *corev1.Service
 			if err := c.Get(ctx, types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, foundService); err != nil {
 				return nil, err
 			}
+			if err := checkServiceController(foundService, service); err != nil {
+				return nil, err
+			}
 		} else {
 			return nil, err
 		}
 	} else {
+		if err := checkServiceController(foundService, service); err != nil {
+			return nil, err
+		}
+		if sameController(foundService, service) {
+			foundService.Spec.Ports = convergeServicePorts(foundService.Spec.Ports, service.Spec.Ports)
+			foundService.Spec.Selector = service.Spec.Selector
+		}
 		if err := c.Update(ctx, foundService); err != nil {
 			return nil, err
 		}
 	}
 	return foundService, nil
+}
+
+// checkServiceController returns an error when found is controlled by an owner
+// other than desired's controller owner. A Service with no controller is
+// accepted, as before, so a pre-created Service keeps working.
+func checkServiceController(found, desired *corev1.Service) error {
+	owner := metav1.GetControllerOf(desired)
+	current := metav1.GetControllerOf(found)
+	if owner == nil || current == nil || current.UID == owner.UID {
+		return nil
+	}
+	return fmt.Errorf("service %s/%s is controlled by %s %q (uid %s), not %s %q (uid %s)",
+		found.Namespace, found.Name, current.Kind, current.Name, current.UID, owner.Kind, owner.Name, owner.UID)
+}
+
+// sameController reports whether found is controlled by desired's controller
+// owner, so UpsertService never rewrites a Service it does not own.
+func sameController(found, desired *corev1.Service) bool {
+	owner := metav1.GetControllerOf(desired)
+	if owner == nil {
+		return false
+	}
+	current := metav1.GetControllerOf(found)
+	return current != nil && current.UID == owner.UID
+}
+
+// convergeServicePorts returns the desired ports, keeping the NodePort the API
+// server allocated to a same-named current port when the desired port leaves
+// it unset.
+func convergeServicePorts(current, desired []corev1.ServicePort) []corev1.ServicePort {
+	ports := make([]corev1.ServicePort, len(desired))
+	for i, port := range desired {
+		if port.NodePort == 0 {
+			for _, cur := range current {
+				if cur.Name == port.Name && cur.Protocol == port.Protocol {
+					port.NodePort = cur.NodePort
+					break
+				}
+			}
+		}
+		ports[i] = port
+	}
+	return ports
 }
 
 func GetPortFor(name string) int32 {
@@ -414,7 +542,14 @@ func GenerateConnectionString(documentdb *dbpreview.DocumentDB, serviceIp string
 	if secretName == "" {
 		secretName = DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET
 	}
-	conn := fmt.Sprintf("mongodb://$(kubectl get secret %s -n %s -o jsonpath='{.data.username}' | base64 -d):$(kubectl get secret %s -n %s -o jsonpath='{.data.password}' | base64 -d)@%s:%d/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true", secretName, documentdb.Namespace, secretName, documentdb.Namespace, serviceIp, GetPortFor(GATEWAY_PORT))
+	return MongoConnectionString(secretName, documentdb.Namespace, serviceIp, GetPortFor(GATEWAY_PORT), trustTLS)
+}
+
+// MongoConnectionString builds the DocumentDB (MongoDB wire protocol) client
+// connection string for a gateway at host:port, reading credentials from
+// secretName in namespace.
+func MongoConnectionString(secretName, namespace, host string, port int32, trustTLS bool) string {
+	conn := fmt.Sprintf("mongodb://$(kubectl get secret %s -n %s -o jsonpath='{.data.username}' | base64 -d):$(kubectl get secret %s -n %s -o jsonpath='{.data.password}' | base64 -d)@%s:%d/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true", secretName, namespace, secretName, namespace, host, port)
 	if !trustTLS {
 		conn += "&tlsAllowInvalidCertificates=true"
 	}

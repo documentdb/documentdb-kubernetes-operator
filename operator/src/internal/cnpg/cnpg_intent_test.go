@@ -44,7 +44,7 @@ var _ = Describe("GetCnpgClusterSpecFromIntent", func() {
 			SidecarInjectorPlugin: "custom-injector.example.io",
 		}
 
-		result := GetCnpgClusterSpecFromIntent(newRequest(), newDocumentDB(), intent, "test-sa", "", true, log)
+		result := GetCnpgClusterSpecFromIntent(newRequest(), intent, "test-sa", "", true, log)
 
 		Expect(result.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference).To(Equal("reg/ext:test"))
 		Expect(result.Spec.Plugins[0].Name).To(Equal("custom-injector.example.io"))
@@ -56,7 +56,7 @@ var _ = Describe("GetCnpgClusterSpecFromIntent", func() {
 		documentdb := newDocumentDB()
 		intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
 
-		fromIntent := GetCnpgClusterSpecFromIntent(newRequest(), documentdb, intent, "test-sa", "", true, log)
+		fromIntent := GetCnpgClusterSpecFromIntent(newRequest(), intent, "test-sa", "", true, log)
 		fromWrapper := GetCnpgClusterSpec(newRequest(), documentdb, "", "test-sa", "", true, log)
 
 		Expect(fromIntent.Spec.PostgresConfiguration.Extensions[0].ImageVolumeSource.Reference).

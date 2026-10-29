@@ -39,7 +39,13 @@ tests:
           path: rules
           content:
             apiGroups: ["cert-manager.io"]
-            resources: ["certificates", "issuers"]
+            resources: ["certificates"]
+            verbs: ["get", "list", "watch", "create", "patch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["cert-manager.io"]
+            resources: ["issuers"]
             verbs: ["get", "list", "watch", "create"]
 
   - it: should include backup-related permissions

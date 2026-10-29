@@ -27,7 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -856,7 +855,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Verify both SQL calls were made
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version (default version as semver)
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1363,7 +1362,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Both version-check and ALTER EXTENSION should have been called
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version
 			updatedDB := &dbpreview.DocumentDB{}
@@ -1435,7 +1434,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			// Should run ALTER EXTENSION UPDATE TO specific version
 			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(Equal("ALTER EXTENSION documentdb UPDATE TO '0.110-0'"))
+			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'`))
 
 			// Status should reflect the explicit version
 			updatedDB := &dbpreview.DocumentDB{}
@@ -2769,39 +2768,6 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 	})
 
-	Describe("clusterInstanceStatusChangedPredicate", func() {
-		// absentOtelRoleCluster declares the OTel monitoring role absent, as a
-		// cluster restored with monitoring disabled does.
-		absentOtelRoleCluster := func() *cnpgv1.Cluster {
-			return &cnpgv1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{Name: clusterName, Namespace: clusterNamespace},
-				Spec: cnpgv1.ClusterSpec{
-					Managed: &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{{
-						Name:   "otel_monitor",
-						Ensure: cnpgv1.EnsureAbsent,
-					}}},
-				},
-			}
-		}
-
-		DescribeTable("triggers on CNPG managed role status only for the OTel monitoring role",
-			func(role string, want bool) {
-				oldCluster := absentOtelRoleCluster()
-				newCluster := oldCluster.DeepCopy()
-				newCluster.Status.ManagedRolesStatus.CannotReconcile = map[string][]string{
-					role: {"role cannot be dropped because some objects depend on it"},
-				}
-
-				Expect(clusterInstanceStatusChangedPredicate().Update(event.UpdateEvent{
-					ObjectOld: oldCluster,
-					ObjectNew: newCluster,
-				})).To(Equal(want))
-			},
-			Entry("when CNPG cannot drop the OTel monitoring role", "otel_monitor", true),
-			Entry("when CNPG cannot drop another role", "app_user", false),
-		)
-	})
-
 	Describe("SetupWithManager", func() {
 		It("should initialize SQLExecutor before manager registration", func() {
 			reconciler := &DocumentDBReconciler{
@@ -3134,8 +3100,8 @@ var _ = Describe("DocumentDB Controller", func() {
 
 		Context("OTel monitoring role schema grants", func() {
 			const (
-				grantSQL       = "GRANT USAGE ON SCHEMA documentdb_core, documentdb_api_internal, documentdb_api_catalog TO otel_monitor;"
-				revokeSQL      = "REVOKE USAGE ON SCHEMA documentdb_core, documentdb_api_internal, documentdb_api_catalog FROM otel_monitor;"
+				grantSQL       = `GRANT USAGE ON SCHEMA "documentdb_core", "documentdb_api_internal", "documentdb_api_catalog" TO otel_monitor;`
+				revokeSQL      = `REVOKE USAGE ON SCHEMA "documentdb_core", "documentdb_api_internal", "documentdb_api_catalog" FROM otel_monitor;`
 				clusterPatched = "patch CNPG Cluster"
 			)
 
@@ -3401,6 +3367,9 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(cm.Data).To(HaveKey("dynamic.yaml"))
 			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("otel-collector:4317"))
 			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring(documentDBName))
+			// The DocumentDB profile enables the DocumentDB SQL metrics.
+			Expect(cm.Data["static.yaml"]).To(ContainSubstring("sqlquery/catalog:"))
+			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("sqlquery/catalog"))
 		})
 
 		It("updates an existing OTel ConfigMap when monitoring spec changes", func() {

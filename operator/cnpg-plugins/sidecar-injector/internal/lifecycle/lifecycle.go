@@ -134,10 +134,10 @@ func (impl Implementation) reconcileMetadata(
 
 	// Add USERNAME and PASSWORD environment variables from secret defined in configuration
 	credentialSecretName := configuration.DocumentDbCredentialSecret
-	log.Printf("Adding USERNAME and PASSWORD environment variables from secret '%s'", credentialSecretName)
+	log.Printf("Adding %s and %s environment variables from secret '%s'", configuration.GatewayUsernameEnv, configuration.GatewayPasswordEnv, credentialSecretName)
 	envVars = append(envVars,
 		corev1.EnvVar{
-			Name: "USERNAME",
+			Name: configuration.GatewayUsernameEnv,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -148,7 +148,7 @@ func (impl Implementation) reconcileMetadata(
 			},
 		},
 		corev1.EnvVar{
-			Name: "PASSWORD",
+			Name: configuration.GatewayPasswordEnv,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -162,17 +162,17 @@ func (impl Implementation) reconcileMetadata(
 
 	// Initialize the sidecar container with configurable gateway image
 	sidecar := &corev1.Container{
-		Name:            "documentdb-gateway",
+		Name:            configuration.GatewayContainerName,
 		Image:           configuration.GatewayImage,
 		ImagePullPolicy: configuration.GatewayImagePullPolicy,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: gatewayPort,
+				ContainerPort: configuration.GatewayPort,
 			},
 		},
 		Env:             envVars,
 		SecurityContext: gatewaySecurityContext(),
-		LivenessProbe:   gatewayLivenessProbe(),
+		LivenessProbe:   gatewayLivenessProbe(configuration.GatewayPort),
 	}
 	if resources := buildResources(
 		configuration.GatewayCPURequest,
@@ -231,6 +231,11 @@ func (impl Implementation) reconcileMetadata(
 		// Pass cert and key via CLI args to align with emulator_entrypoint.sh interface
 		args = append(args, "--cert-path", "/tls/tls.crt", "--key-file", "/tls/tls.key")
 	}
+	if configuration.GatewayArgs != nil {
+		// A product-specific gateway supplies its own arguments; TLS material is
+		// still mounted and advertised through the env vars above.
+		args = configuration.GatewayArgs
+	}
 	sidecar.Args = args
 
 	// Inject the sidecar container
@@ -269,6 +274,7 @@ func (impl Implementation) reconcileMetadata(
 
 		otelSidecar := newOtelCollectorSidecar(
 			configuration.OtelCollectorImage,
+			configuration.OtelPasswordSecret,
 			podHasVolume(mutatedPod, dataVolumeName),
 		)
 		if resources := buildResources(
@@ -321,7 +327,7 @@ func (impl Implementation) reconcileMetadata(
 		// sidecar and so that every signal carries a per-pod service.instance.id
 		// resource attribute. Only set when the sidecar is present to avoid
 		// connection errors and resource-attribute drift.
-		injectGatewayOTelEnv(mutatedPod)
+		injectGatewayOTelEnv(mutatedPod, configuration.GatewayContainerName)
 
 		log.Printf("OTel Collector sidecar injected successfully")
 	}
@@ -345,10 +351,10 @@ func (impl Implementation) reconcileMetadata(
 	}, nil
 }
 
-// gatewayContainerName is the name of the documentdb gateway container that
+// gatewayContainerName is the default name of the gateway container that
 // pushes OTLP metrics and traces to the co-located OTel Collector sidecar.
 // Kept as a package-level constant so tests can reference it.
-const gatewayContainerName = "documentdb-gateway"
+const gatewayContainerName = config.DefaultGatewayContainerName
 
 func buildResources(cpuReq, cpuLim, memReq, memLim string) corev1.ResourceRequirements {
 	var requests corev1.ResourceList
@@ -466,10 +472,10 @@ func gatewayOTelEnvVars() []corev1.EnvVar {
 // Idempotency keeps pod construction stable if a caller passes an already
 // mutated pod. Container injection itself runs only for CREATE because
 // Kubernetes forbids adding or removing containers from an existing pod.
-func injectGatewayOTelEnv(pod *corev1.Pod) {
+func injectGatewayOTelEnv(pod *corev1.Pod, containerName string) {
 	envs := gatewayOTelEnvVars()
 	for i := range pod.Spec.Containers {
-		if pod.Spec.Containers[i].Name != gatewayContainerName {
+		if pod.Spec.Containers[i].Name != containerName {
 			continue
 		}
 		existing := make(map[string]bool, len(pod.Spec.Containers[i].Env))
@@ -490,9 +496,6 @@ func injectGatewayOTelEnv(pod *corev1.Pod) {
 const otelCollectorContainerName = "otel-collector"
 const otelMonitorRoleName = "otel_monitor"
 
-// gatewayPort is the port the documentdb-gateway container listens on.
-const gatewayPort = 10260
-
 // dataVolumeName is the CloudNativePG volume that holds PGDATA. CNPG mounts
 // it at /var/lib/postgresql/data and keeps PGDATA in its pgdata subdirectory.
 const dataVolumeName = "pgdata"
@@ -509,17 +512,17 @@ const otelDataVolumeMountPath = "/var/lib/otel/pgdata"
 const otelDataVolumeSubPath = "otel-statfs"
 
 // gatewayLivenessProbe restarts only the gateway container after it stops
-// accepting TCP connections for about a minute; PostgreSQL keeps running.
-// The first check waits 600 s because the gateway entrypoint waits up to that
-// long for PostgreSQL before it opens its port.
+// accepting TCP connections on port for about a minute; PostgreSQL keeps
+// running. The first check waits 600 s because the gateway entrypoint waits up
+// to that long for PostgreSQL before it opens its port.
 //
 // The gateway deliberately has no readiness or startup probe. Pod readiness
 // covers every container, and a container with a startup probe is not ready
 // until that probe succeeds, so either probe would remove PostgreSQL from the
 // CNPG Services while the gateway is not listening and break replication.
-func gatewayLivenessProbe() *corev1.Probe {
+func gatewayLivenessProbe(port int32) *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler:        gatewayTCPProbeHandler(),
+		ProbeHandler:        gatewayTCPProbeHandler(port),
 		InitialDelaySeconds: 600,
 		PeriodSeconds:       10,
 		TimeoutSeconds:      5,
@@ -527,12 +530,13 @@ func gatewayLivenessProbe() *corev1.Probe {
 	}
 }
 
-// gatewayTCPProbeHandler checks that the gateway accepts TCP connections. It
-// does not perform a TLS handshake, so it works with any gateway image.
-func gatewayTCPProbeHandler() corev1.ProbeHandler {
+// gatewayTCPProbeHandler checks that the gateway accepts TCP connections on
+// port. It does not perform a TLS handshake, so it works with any gateway
+// image.
+func gatewayTCPProbeHandler(port int32) corev1.ProbeHandler {
 	return corev1.ProbeHandler{
 		TCPSocket: &corev1.TCPSocketAction{
-			Port: intstr.FromInt32(gatewayPort),
+			Port: intstr.FromInt32(port),
 		},
 	}
 }
@@ -567,7 +571,7 @@ func gatewaySecurityContext() *corev1.SecurityContext {
 // When mountDataVolume is true, the container also mounts the data volume
 // read-only on an empty subPath so the hostmetrics filesystem scraper can
 // report the volume's usage.
-func newOtelCollectorSidecar(image string, mountDataVolume bool) *corev1.Container {
+func newOtelCollectorSidecar(image, passwordSecret string, mountDataVolume bool) *corev1.Container {
 	container := &corev1.Container{
 		Name:  otelCollectorContainerName,
 		Image: image,
@@ -575,9 +579,6 @@ func newOtelCollectorSidecar(image string, mountDataVolume bool) *corev1.Contain
 			"--config=file:/config/static.yaml",
 			"--config=file:/config/dynamic.yaml",
 		},
-		// PostgreSQL currently uses trust authentication, so injecting a password
-		// would not enforce access control. Use the dedicated password-disabled
-		// identity directly until database authentication is tightened.
 		Env: []corev1.EnvVar{
 			{
 				Name: "POD_NAME",
@@ -600,6 +601,17 @@ func newOtelCollectorSidecar(image string, mountDataVolume bool) *corev1.Contain
 			},
 		},
 		SecurityContext: hardenedSecurityContext(),
+	}
+	if passwordSecret != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name: "PGPASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: passwordSecret},
+					Key:                  "password",
+				},
+			},
+		})
 	}
 	if mountDataVolume {
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{

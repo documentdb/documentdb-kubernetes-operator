@@ -4,10 +4,13 @@
 package otel
 
 import (
+	"bytes"
 	"crypto/sha256"
 	_ "embed"
 	"fmt"
 	"sort"
+	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 
@@ -16,6 +19,33 @@ import (
 
 //go:embed base_config.yaml
 var baseConfigYAML []byte
+
+// baseConfigTemplate renders static.yaml: base_config.yaml is a text/template
+// over staticConfigData, so product-specific metric names stay structured.
+var baseConfigTemplate = template.Must(template.New("base_config.yaml").Option("missingkey=error").Parse(string(baseConfigYAML)))
+
+// staticConfigData holds the product-specific names and metrics
+// base_config.yaml uses.
+type staticConfigData struct {
+	// HealthMetricName is the PostgreSQL liveness gauge.
+	HealthMetricName string
+	// DocumentDBMetrics adds the DocumentDB SQL metrics; see Options.
+	DocumentDBMetrics bool
+}
+
+// renderStaticConfig renders static.yaml from base_config.yaml.
+func renderStaticConfig(data staticConfigData) (string, error) {
+	metricName, err := yaml.Marshal(data.HealthMetricName)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode health metric name: %w", err)
+	}
+	data.HealthMetricName = strings.TrimSuffix(string(metricName), "\n")
+	var out bytes.Buffer
+	if err := baseConfigTemplate.Execute(&out, data); err != nil {
+		return "", fmt.Errorf("failed to render static OTel config: %w", err)
+	}
+	return out.String(), nil
+}
 
 const defaultPrometheusPort = 8888
 
@@ -29,13 +59,6 @@ const prometheusMetricExpiration = "6m"
 // MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
 // sidecar uses for its SQL metric queries.
 const MonitorRoleName = "otel_monitor"
-
-// MonitorSchemas are the DocumentDB schemas on which the operator grants
-// USAGE to MonitorRoleName. The DocumentDB planner hook resolves objects in
-// documentdb_core and documentdb_api_internal for any query that calls a
-// function or operator, and the catalog metrics read documentdb_api_catalog.
-// Document data lives in documentdb_data, which is not granted.
-var MonitorSchemas = []string{"documentdb_core", "documentdb_api_internal", "documentdb_api_catalog"}
 
 // collectorConfig represents the OTel Collector configuration structure.
 type collectorConfig struct {
@@ -70,10 +93,12 @@ func ConfigMapName(clusterName string) string {
 	return fmt.Sprintf("%s-otel-config", clusterName)
 }
 
-// GenerateConfigMapData returns the ConfigMap data entries for the OTel Collector.
+// GenerateConfigMapData returns the ConfigMap data entries for the OTel Collector
+// with the default Options.
 // The config is split into two files that the collector merges at startup:
-//   - static.yaml: receivers and static processors from the embedded base_config.yaml.
-//     Add new SQL metric queries to base_config.yaml — no Go code changes needed.
+//   - static.yaml: receivers and static processors rendered from the embedded
+//     base_config.yaml template. Add new SQL metric queries to base_config.yaml —
+//     no Go code changes needed unless a query needs a new product-specific name.
 //   - dynamic.yaml: per-cluster resource attributes, exporters, and pipeline wiring.
 //
 // This function is only called when monitoring is enabled. When monitoring is
@@ -81,21 +106,67 @@ func ConfigMapName(clusterName string) string {
 // then triggers a rolling restart (via restart annotation) so that CNPG
 // recreates pods without the sidecar.
 func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (map[string]string, error) {
-	dynamicYAML, err := generateDynamicConfig(clusterName, namespace, spec)
+	return GenerateConfigMapDataWithOptions(Options{}, clusterName, namespace, spec)
+}
+
+// Options carries the product naming and metrics used in the generated
+// collector config. Empty naming fields fall back to the DocumentDB defaults.
+type Options struct {
+	// ClusterAttribute is the resource attribute key holding the cluster name.
+	ClusterAttribute string
+	// Generator is the operator name written in the generated-file header.
+	Generator string
+	// HealthMetricName is the gauge the sqlquery receiver reports PostgreSQL
+	// liveness as.
+	HealthMetricName string
+	// DocumentDBMetrics adds the DocumentDB PostgreSQL instance and catalog
+	// SQL metrics (documentdb.postgres.* and documentdb.database.*) and the
+	// sqlquery/catalog receiver. The queries need the monitoring role's USAGE
+	// on the DocumentDB schemas, so products enable it together with
+	// product.PostgresProfile.MonitoringSchemas.
+	DocumentDBMetrics bool
+}
+
+const (
+	defaultClusterAttribute = "documentdb.cluster"
+	defaultGenerator        = "documentdb-operator"
+	// defaultHealthMetricName is the DocumentDB PostgreSQL liveness gauge.
+	defaultHealthMetricName = "documentdb.postgres.up"
+)
+
+// GenerateConfigMapDataWithOptions is GenerateConfigMapData with product naming.
+func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (map[string]string, error) {
+	if opts.ClusterAttribute == "" {
+		opts.ClusterAttribute = defaultClusterAttribute
+	}
+	if opts.Generator == "" {
+		opts.Generator = defaultGenerator
+	}
+	if opts.HealthMetricName == "" {
+		opts.HealthMetricName = defaultHealthMetricName
+	}
+	staticYAML, err := renderStaticConfig(staticConfigData{
+		HealthMetricName:  opts.HealthMetricName,
+		DocumentDBMetrics: opts.DocumentDBMetrics,
+	})
+	if err != nil {
+		return nil, err
+	}
+	dynamicYAML, err := generateDynamicConfig(opts, clusterName, namespace, spec)
 	if err != nil {
 		return nil, err
 	}
 
 	return map[string]string{
-		"static.yaml":  string(baseConfigYAML),
-		"dynamic.yaml": "# Auto-generated by documentdb-operator. Do not edit.\n" + dynamicYAML,
+		"static.yaml":  staticYAML,
+		"dynamic.yaml": "# Auto-generated by " + opts.Generator + ". Do not edit.\n" + dynamicYAML,
 	}, nil
 }
 
 // generateDynamicConfig builds the per-cluster dynamic config (resource
 // processor, exporters, pipeline wiring) that the collector deep-merges
 // with the embedded base_config.yaml.
-func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
+func generateDynamicConfig(opts Options, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
 			// `insert` (not `upsert`) so receivers that already emit their
@@ -103,7 +174,7 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 			// gap for receivers that don't (e.g. sqlquery).
 			"resource": map[string]any{
 				"attributes": []map[string]any{
-					{"key": "documentdb.cluster", "value": clusterName, "action": "insert"},
+					{"key": opts.ClusterAttribute, "value": clusterName, "action": "insert"},
 					{"key": "k8s.namespace.name", "value": namespace, "action": "insert"},
 					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "insert"},
 				},
@@ -111,13 +182,17 @@ func generateDynamicConfig(clusterName, namespace string, spec *dbpreview.Monito
 		},
 	}
 
-	// sqlquery (Postgres health), sqlquery/catalog (DocumentDB catalog),
-	// hostmetrics (data volume usage and pod network I/O), and otlp
-	// (gateway-pushed metrics) come from base_config.yaml. The sidecar reads
-	// only its own pod: it has no kubelet access, so container CPU/memory and
-	// node metrics come from a platform collector such as the playground
-	// reference DaemonSet.
-	receiverNames := []string{"sqlquery", "sqlquery/catalog", "hostmetrics", "otlp"}
+	// sqlquery (Postgres health), sqlquery/catalog (DocumentDB catalog, only
+	// with DocumentDBMetrics), hostmetrics (data volume usage and pod network
+	// I/O), and otlp (gateway-pushed metrics) come from base_config.yaml. The
+	// sidecar reads only its own pod: it has no kubelet access, so container
+	// CPU/memory and node metrics come from a platform collector such as the
+	// playground reference DaemonSet.
+	receiverNames := []string{"sqlquery"}
+	if opts.DocumentDBMetrics {
+		receiverNames = append(receiverNames, "sqlquery/catalog")
+	}
+	receiverNames = append(receiverNames, "hostmetrics", "otlp")
 
 	exporterNames := []string{}
 
