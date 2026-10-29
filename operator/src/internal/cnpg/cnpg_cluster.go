@@ -361,6 +361,9 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, intent product.ClusterIntent)
 // applyOtelMonitorRole declares the PostgreSQL identity used by the OTel
 // Collector sidecar. When monitoring is disabled, the role remains declared
 // with ensure=absent so CNPG removes any role left by an earlier configuration.
+// The cluster reconciler grants the role USAGE on the product's
+// PostgresProfile.MonitoringSchemas and revokes it before the role becomes
+// absent, because the grants block DROP ROLE (see RetainOtelMonitorRole).
 //
 // Password authentication is an explicit product choice backed by an existing
 // Secret. Without one, retain the password-disabled DocumentDB default.
@@ -370,8 +373,8 @@ func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, monitoring *dbpreview.Monito
 	}
 	role := absentOtelMonitorRole()
 	if monitoringEnabled(monitoring) {
-		// The current health query is SELECT 1, so the role needs LOGIN only
-		// and is not granted broad monitoring memberships.
+		// The role needs LOGIN plus the schema grants the cluster reconciler
+		// applies. It gets no broad monitoring memberships such as pg_monitor.
 		role = cnpgv1.RoleConfiguration{
 			Name:            otelcfg.MonitorRoleName,
 			Comment:         "Dedicated role for the OTel Collector monitoring sidecar",
@@ -399,6 +402,49 @@ func absentOtelMonitorRole() cnpgv1.RoleConfiguration {
 		ConnectionLimit: -1,
 		Inherit:         pointer.Bool(true),
 	}
+}
+
+// OtelMonitorRoleMayExist reports whether the OTel monitoring role may still
+// exist in PostgreSQL: the cluster declares it present, or CNPG reports that
+// it could not reconcile the role, for example because a grant blocked
+// DROP ROLE.
+func OtelMonitorRoleMayExist(cluster *cnpgv1.Cluster) bool {
+	if cluster == nil {
+		return false
+	}
+	for _, role := range managedRoles(cluster) {
+		if role.Name == otelcfg.MonitorRoleName && role.Ensure != cnpgv1.EnsureAbsent {
+			return true
+		}
+	}
+	return len(cluster.Status.ManagedRolesStatus.CannotReconcile[otelcfg.MonitorRoleName]) > 0
+}
+
+// RetainOtelMonitorRole replaces the OTel monitoring role in desired with the
+// entry declared on current, so syncing desired leaves the role unchanged.
+// The cluster reconciler uses it while it cannot revoke the role's schema
+// grants, which would make CNPG's DROP ROLE fail.
+func RetainOtelMonitorRole(desired, current *cnpgv1.Cluster) {
+	var currentRole *cnpgv1.RoleConfiguration
+	for _, role := range managedRoles(current) {
+		if role.Name == otelcfg.MonitorRoleName {
+			currentRole = role.DeepCopy()
+			break
+		}
+	}
+	if desired == nil || currentRole == nil {
+		return
+	}
+	if desired.Spec.Managed == nil {
+		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{}
+	}
+	for i := range desired.Spec.Managed.Roles {
+		if desired.Spec.Managed.Roles[i].Name == otelcfg.MonitorRoleName {
+			desired.Spec.Managed.Roles[i] = *currentRole
+			return
+		}
+	}
+	desired.Spec.Managed.Roles = append(desired.Spec.Managed.Roles, *currentRole)
 }
 
 // buildPostgresConfiguration renders the PostgreSQL configuration for the
@@ -449,11 +495,12 @@ func addGatewayContractParams(params map[string]string, gw product.GatewayProfil
 	}
 }
 
-// OTelOptions maps the product naming onto the OTel collector config options.
+// OTelOptions maps the product naming and metrics onto the OTel collector config options.
 func OTelOptions(p product.ProductProfile) otelcfg.Options {
 	return otelcfg.Options{
-		ClusterAttribute: p.Naming.MetricClusterAttribute,
-		Generator:        p.Naming.OperatorName,
-		HealthMetricName: p.Naming.HealthMetricName,
+		ClusterAttribute:  p.Naming.MetricClusterAttribute,
+		Generator:         p.Naming.OperatorName,
+		HealthMetricName:  p.Naming.HealthMetricName,
+		DocumentDBMetrics: p.Postgres.DocumentDBMetrics,
 	}
 }

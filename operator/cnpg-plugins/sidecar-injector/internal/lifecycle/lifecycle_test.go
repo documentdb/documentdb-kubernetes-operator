@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	pluginconfig "github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
 	pluginmetadata "github.com/documentdb/cnpg-i-sidecar-injector/pkg/metadata"
@@ -260,6 +261,165 @@ func TestLifecycleHookInjectsContainerResourcesAndGoMemLimit(t *testing.T) {
 	assertEnvValue(t, otel.Env, "GOMEMLIMIT", "107374182")
 }
 
+// TestLifecycleHookMountsDataVolumeOnCollector checks that the collector
+// mounts the data volume read-only on an empty subPath, and only when the pod
+// has the CNPG pgdata volume. The mount path must stay equal to the hostmetrics
+// filesystem mount point in operator/src/internal/otel/base_config.yaml.
+func TestLifecycleHookMountsDataVolumeOnCollector(t *testing.T) {
+	wantMount := corev1.VolumeMount{
+		Name:      "pgdata",
+		MountPath: "/var/lib/otel/pgdata",
+		SubPath:   "otel-statfs",
+		ReadOnly:  true,
+	}
+	tests := []struct {
+		name      string
+		volumes   []corev1.Volume
+		wantMount bool
+	}{
+		{
+			name:      "pod with pgdata volume",
+			volumes:   []corev1.Volume{{Name: "pgdata"}, {Name: "scratch-data"}},
+			wantMount: true,
+		},
+		{
+			name:      "pod without pgdata volume",
+			volumes:   []corev1.Volume{{Name: "scratch-data"}},
+			wantMount: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			containers := runCreateHookForPod(t, map[string]string{
+				"otelCollectorImage": "otel:latest",
+				"otelConfigMapName":  "otel-config",
+			}, primaryPod(tt.volumes...))
+
+			otel, ok := containers[otelCollectorContainerName]
+			if !ok {
+				t.Fatalf("otel container missing from patch")
+			}
+			var dataMounts []corev1.VolumeMount
+			for _, mount := range otel.VolumeMounts {
+				if mount.Name == "pgdata" {
+					dataMounts = append(dataMounts, mount)
+				}
+			}
+			switch {
+			case !tt.wantMount && len(dataMounts) != 0:
+				t.Fatalf("collector mounts pgdata without a pgdata volume: %+v", dataMounts)
+			case tt.wantMount && (len(dataMounts) != 1 || dataMounts[0] != wantMount):
+				t.Fatalf("collector pgdata mounts = %+v, want [%+v]", dataMounts, wantMount)
+			}
+		})
+	}
+}
+
+// TestLifecycleHookAddsGatewayLivenessProbe checks the gateway liveness probe,
+// and that the gateway has no readiness or startup probe: either would keep the
+// pod unready, and so take PostgreSQL out of the CNPG Services, while the
+// gateway is not listening.
+func TestLifecycleHookAddsGatewayLivenessProbe(t *testing.T) {
+	containers := runCreateHook(t, map[string]string{})
+
+	gateway, ok := containers[gatewayContainerName]
+	if !ok {
+		t.Fatalf("gateway container missing from patch")
+	}
+	if gateway.ReadinessProbe != nil {
+		t.Errorf("gateway ReadinessProbe = %+v, want nil", gateway.ReadinessProbe)
+	}
+	if gateway.StartupProbe != nil {
+		t.Errorf("gateway StartupProbe = %+v, want nil", gateway.StartupProbe)
+	}
+
+	liveness := gateway.LivenessProbe
+	assertTCPProbe(t, "liveness", liveness, 10260)
+	if liveness != nil {
+		if liveness.PeriodSeconds != 10 || liveness.TimeoutSeconds != 5 || liveness.FailureThreshold != 6 {
+			t.Errorf("liveness period/timeout/failureThreshold = %d/%d/%d, want 10/5/6",
+				liveness.PeriodSeconds, liveness.TimeoutSeconds, liveness.FailureThreshold)
+		}
+		// The gateway entrypoint waits up to 600 s for PostgreSQL before it listens.
+		if liveness.InitialDelaySeconds < 600 {
+			t.Errorf("liveness initialDelaySeconds = %d, want at least 600", liveness.InitialDelaySeconds)
+		}
+	}
+}
+
+func assertTCPProbe(t *testing.T, name string, probe *corev1.Probe, port int32) {
+	t.Helper()
+	if probe == nil {
+		t.Errorf("gateway %s probe is nil", name)
+		return
+	}
+	if probe.TCPSocket == nil || probe.TCPSocket.Port != intstr.FromInt32(port) {
+		t.Errorf("gateway %s probe handler = %+v, want tcpSocket on %d", name, probe.ProbeHandler, port)
+	}
+}
+
+// primaryPod returns the CNPG pod for the cluster's target primary with the
+// given volumes.
+func primaryPod(volumes ...corev1.Volume) *corev1.Pod {
+	return &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "cluster-1",
+			Namespace:   "default",
+			Labels:      map[string]string{"cnpg.io/cluster": "cluster"},
+			Annotations: map[string]string{"cnpg.io/operatorVersion": "test"},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "postgres"}},
+			Volumes:    volumes,
+		},
+	}
+}
+
+// runCreateHookForPod runs the CREATE lifecycle hook for pod on a cluster whose
+// plugin has the given parameters and returns the containers the patch adds.
+func runCreateHookForPod(t *testing.T, parameters map[string]string, pod *corev1.Pod) map[string]corev1.Container {
+	t.Helper()
+	enabled := true
+	cluster := &apiv1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: apiv1.SchemeGroupVersion.String(),
+			Kind:       apiv1.ClusterKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster",
+			Namespace: "default",
+		},
+		Spec: apiv1.ClusterSpec{
+			Plugins: []apiv1.PluginConfiguration{
+				{
+					Name:       pluginmetadata.PluginName,
+					Enabled:    &enabled,
+					Parameters: parameters,
+				},
+			},
+		},
+		Status: apiv1.ClusterStatus{
+			TargetPrimary: pod.Name,
+		},
+	}
+
+	response, err := Implementation{}.LifecycleHook(context.Background(), &cnpglifecycle.OperatorLifecycleRequest{
+		OperationType: &cnpglifecycle.OperatorOperationType{
+			Type: cnpglifecycle.OperatorOperationType_TYPE_CREATE,
+		},
+		ClusterDefinition: mustMarshal(t, cluster),
+		ObjectDefinition:  mustMarshal(t, pod),
+	})
+	if err != nil {
+		t.Fatalf("LifecycleHook() error: %v", err)
+	}
+	return addedContainersFromPatch(t, response.JsonPatch)
+}
+
 func mustMarshal(t *testing.T, value any) []byte {
 	t.Helper()
 	data, err := json.Marshal(value)
@@ -405,7 +565,7 @@ func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
 // restricted and, unlike the gateway, does not force a UID so the collector
 // image keeps its own non-root user (UID 10001).
 func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "", false)
 
 	if c.Name != otelCollectorContainerName {
 		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
@@ -422,7 +582,7 @@ func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
 // TestNewOtelCollectorSidecar_MonitorUser asserts the sidecar connects using
 // the dedicated monitoring identity without injecting an unused password.
 func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "", false)
 
 	for _, env := range c.Env {
 		if env.Name == "PGPASSWORD" {
@@ -482,35 +642,11 @@ func TestLifecycleHookMonitoringPasswordSecret(t *testing.T) {
 	}
 }
 
+// runCreateHook runs the CREATE lifecycle hook for the target primary pod
+// without volumes.
 func runCreateHook(t *testing.T, params map[string]string) map[string]corev1.Container {
 	t.Helper()
-	enabled := true
-	cluster := &apiv1.Cluster{
-		TypeMeta:   metav1.TypeMeta{APIVersion: apiv1.SchemeGroupVersion.String(), Kind: apiv1.ClusterKind},
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "default"},
-		Spec: apiv1.ClusterSpec{Plugins: []apiv1.PluginConfiguration{
-			{Name: pluginmetadata.PluginName, Enabled: &enabled, Parameters: params},
-		}},
-		Status: apiv1.ClusterStatus{TargetPrimary: "cluster-1"},
-	}
-	pod := &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster-1", Namespace: "default",
-			Labels:      map[string]string{"cnpg.io/cluster": "cluster"},
-			Annotations: map[string]string{"cnpg.io/operatorVersion": "test"},
-		},
-		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres"}}},
-	}
-	response, err := Implementation{}.LifecycleHook(context.Background(), &cnpglifecycle.OperatorLifecycleRequest{
-		OperationType:     &cnpglifecycle.OperatorOperationType{Type: cnpglifecycle.OperatorOperationType_TYPE_CREATE},
-		ClusterDefinition: mustMarshal(t, cluster),
-		ObjectDefinition:  mustMarshal(t, pod),
-	})
-	if err != nil {
-		t.Fatalf("LifecycleHook() error: %v", err)
-	}
-	return addedContainersFromPatch(t, response.JsonPatch)
+	return runCreateHookForPod(t, params, primaryPod())
 }
 
 func TestLifecycleHookDefaultGatewayContract(t *testing.T) {
@@ -553,6 +689,7 @@ func TestLifecycleHookCustomGatewayContract(t *testing.T) {
 	if gateway.Ports[0].ContainerPort != 8081 {
 		t.Errorf("port = %d, want 8081", gateway.Ports[0].ContainerPort)
 	}
+	assertTCPProbe(t, "liveness", gateway.LivenessProbe, 8081)
 	if !reflect.DeepEqual(gateway.Args, []string{"--port", "8081"}) {
 		t.Errorf("args = %v", gateway.Args)
 	}

@@ -154,7 +154,7 @@
           "gatewayMemoryRequest": "3Gi",
           "gatewayTLSSecret": "gw-tls",
           "otelCollectorImage": "otel/opentelemetry-collector-contrib:0.149.0",
-          "otelConfigHash": "d60e2ff6f9bb55d4",
+          "otelConfigHash": "8c1e4abb88b35fc7",
           "otelConfigMapName": "golden-otel-config",
           "otelCpuLimit": "200m",
           "otelCpuRequest": "50m",

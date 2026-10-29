@@ -24,10 +24,13 @@ var baseConfigYAML []byte
 // over staticConfigData, so product-specific metric names stay structured.
 var baseConfigTemplate = template.Must(template.New("base_config.yaml").Option("missingkey=error").Parse(string(baseConfigYAML)))
 
-// staticConfigData holds the product-specific names base_config.yaml uses.
+// staticConfigData holds the product-specific names and metrics
+// base_config.yaml uses.
 type staticConfigData struct {
 	// HealthMetricName is the PostgreSQL liveness gauge.
 	HealthMetricName string
+	// DocumentDBMetrics adds the DocumentDB SQL metrics; see Options.
+	DocumentDBMetrics bool
 }
 
 // renderStaticConfig renders static.yaml from base_config.yaml.
@@ -46,8 +49,15 @@ func renderStaticConfig(data staticConfigData) (string, error) {
 
 const defaultPrometheusPort = 8888
 
+// prometheusMetricExpiration is how long the Prometheus exporter keeps serving
+// a series after its last update. It must exceed the longest receiver
+// collection_interval in base_config.yaml (sqlquery/catalog, 5m). With the
+// exporter's 5m default, a catalog update that arrives a moment late would
+// let the series expire, and scrapes in that window would miss it.
+const prometheusMetricExpiration = "6m"
+
 // MonitorRoleName is the dedicated PostgreSQL identity the OTel Collector
-// sidecar uses for its health-check query.
+// sidecar uses for its SQL metric queries.
 const MonitorRoleName = "otel_monitor"
 
 // collectorConfig represents the OTel Collector configuration structure.
@@ -83,7 +93,8 @@ func ConfigMapName(clusterName string) string {
 	return fmt.Sprintf("%s-otel-config", clusterName)
 }
 
-// GenerateConfigMapData returns the ConfigMap data entries for the OTel Collector.
+// GenerateConfigMapData returns the ConfigMap data entries for the OTel Collector
+// with the default Options.
 // The config is split into two files that the collector merges at startup:
 //   - static.yaml: receivers and static processors rendered from the embedded
 //     base_config.yaml template. Add new SQL metric queries to base_config.yaml —
@@ -98,8 +109,8 @@ func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.Monito
 	return GenerateConfigMapDataWithOptions(Options{}, clusterName, namespace, spec)
 }
 
-// Options carries the product naming used in the generated collector config.
-// Empty fields fall back to the DocumentDB defaults.
+// Options carries the product naming and metrics used in the generated
+// collector config. Empty naming fields fall back to the DocumentDB defaults.
 type Options struct {
 	// ClusterAttribute is the resource attribute key holding the cluster name.
 	ClusterAttribute string
@@ -108,6 +119,12 @@ type Options struct {
 	// HealthMetricName is the gauge the sqlquery receiver reports PostgreSQL
 	// liveness as.
 	HealthMetricName string
+	// DocumentDBMetrics adds the DocumentDB PostgreSQL instance and catalog
+	// SQL metrics (documentdb.postgres.* and documentdb.database.*) and the
+	// sqlquery/catalog receiver. The queries need the monitoring role's USAGE
+	// on the DocumentDB schemas, so products enable it together with
+	// product.PostgresProfile.MonitoringSchemas.
+	DocumentDBMetrics bool
 }
 
 const (
@@ -128,11 +145,14 @@ func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace strin
 	if opts.HealthMetricName == "" {
 		opts.HealthMetricName = defaultHealthMetricName
 	}
-	staticYAML, err := renderStaticConfig(staticConfigData{HealthMetricName: opts.HealthMetricName})
+	staticYAML, err := renderStaticConfig(staticConfigData{
+		HealthMetricName:  opts.HealthMetricName,
+		DocumentDBMetrics: opts.DocumentDBMetrics,
+	})
 	if err != nil {
 		return nil, err
 	}
-	dynamicYAML, err := generateDynamicConfig(opts.ClusterAttribute, clusterName, namespace, spec)
+	dynamicYAML, err := generateDynamicConfig(opts, clusterName, namespace, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +166,7 @@ func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace strin
 // generateDynamicConfig builds the per-cluster dynamic config (resource
 // processor, exporters, pipeline wiring) that the collector deep-merges
 // with the embedded base_config.yaml.
-func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
+func generateDynamicConfig(opts Options, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
 			// `insert` (not `upsert`) so receivers that already emit their
@@ -154,7 +174,7 @@ func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec
 			// gap for receivers that don't (e.g. sqlquery).
 			"resource": map[string]any{
 				"attributes": []map[string]any{
-					{"key": clusterAttribute, "value": clusterName, "action": "insert"},
+					{"key": opts.ClusterAttribute, "value": clusterName, "action": "insert"},
 					{"key": "k8s.namespace.name", "value": namespace, "action": "insert"},
 					{"key": "k8s.pod.name", "value": "${POD_NAME}", "action": "insert"},
 				},
@@ -162,11 +182,17 @@ func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec
 		},
 	}
 
-	// sqlquery (Postgres health) + otlp (gateway-pushed metrics) come from
-	// base_config.yaml. Container/node resource metrics are served by a
-	// node-level collector such as the playground reference DaemonSet, not
-	// this sidecar.
-	receiverNames := []string{"sqlquery", "otlp"}
+	// sqlquery (Postgres health), sqlquery/catalog (DocumentDB catalog, only
+	// with DocumentDBMetrics), hostmetrics (data volume usage and pod network
+	// I/O), and otlp (gateway-pushed metrics) come from base_config.yaml. The
+	// sidecar reads only its own pod: it has no kubelet access, so container
+	// CPU/memory and node metrics come from a platform collector such as the
+	// playground reference DaemonSet.
+	receiverNames := []string{"sqlquery"}
+	if opts.DocumentDBMetrics {
+		receiverNames = append(receiverNames, "sqlquery/catalog")
+	}
+	receiverNames = append(receiverNames, "hostmetrics", "otlp")
 
 	exporterNames := []string{}
 
@@ -203,6 +229,7 @@ func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec
 				"resource_to_telemetry_conversion": map[string]any{
 					"enabled": true,
 				},
+				"metric_expiration": prometheusMetricExpiration,
 			}
 			exporterNames = append(exporterNames, "prometheus")
 		}

@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -2878,6 +2879,9 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			// Mock SQLExecutor: permissions already granted, extension versions match
 			sqlExecutor := func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+				if strings.Contains(cmd, "has_schema_privilege") {
+					return " otel_monitor_grants\n---------------------\n granted\n(1 row)", nil
+				}
 				if strings.Contains(cmd, "pg_roles") {
 					return "(1 row)", nil
 				}
@@ -3093,6 +3097,232 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(updatedCluster.Spec.Plugins[0].Parameters["gatewayTLSSecret"]).To(Equal("new-tls-secret"))
 			Expect(updatedCluster.Annotations).To(HaveKey("kubectl.kubernetes.io/restartedAt"))
 		})
+
+		Context("OTel monitoring role schema grants", func() {
+			const (
+				grantSQL       = `GRANT USAGE ON SCHEMA "documentdb_core", "documentdb_api_internal", "documentdb_api_catalog" TO otel_monitor;`
+				revokeSQL      = `REVOKE USAGE ON SCHEMA "documentdb_core", "documentdb_api_internal", "documentdb_api_catalog" FROM otel_monitor;`
+				clusterPatched = "patch CNPG Cluster"
+			)
+
+			var (
+				// events records SQL commands and CNPG Cluster patches in order.
+				events        []string
+				grantState    string
+				grantStateErr error
+				grantErr      error
+				revokeErr     error
+			)
+
+			BeforeEach(func() {
+				Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
+				events = nil
+				grantState = "granted"
+				grantStateErr = nil
+				grantErr = nil
+				revokeErr = nil
+			})
+
+			otelRole := func(ensure cnpgv1.EnsureOption) cnpgv1.RoleConfiguration {
+				return cnpgv1.RoleConfiguration{
+					Name:            "otel_monitor",
+					Ensure:          ensure,
+					Login:           ensure == cnpgv1.EnsurePresent,
+					DisablePassword: ensure == cnpgv1.EnsurePresent,
+					ConnectionLimit: -1,
+					Inherit:         ptr.To(true),
+				}
+			}
+
+			newCluster := func(primaryHealthy bool, roles ...cnpgv1.RoleConfiguration) *cnpgv1.Cluster {
+				cluster := &cnpgv1.Cluster{
+					ObjectMeta: metav1.ObjectMeta{Name: documentDBName, Namespace: documentDBNamespace},
+					Spec: cnpgv1.ClusterSpec{
+						Instances: 1,
+						PostgresConfiguration: cnpgv1.PostgresConfiguration{
+							Extensions: []cnpgv1.ExtensionConfiguration{{
+								Name:              "documentdb",
+								ImageVolumeSource: corev1.ImageVolumeSource{Reference: util.DEFAULT_DOCUMENTDB_IMAGE},
+							}},
+						},
+						Plugins: []cnpgv1.PluginConfiguration{{
+							Name:    util.DEFAULT_SIDECAR_INJECTOR_PLUGIN,
+							Enabled: ptr.To(true),
+							Parameters: map[string]string{
+								"gatewayImage":               util.DEFAULT_GATEWAY_IMAGE,
+								"documentDbCredentialSecret": util.DEFAULT_DOCUMENTDB_CREDENTIALS_SECRET,
+								"otelCollectorImage":         util.DEFAULT_OTEL_COLLECTOR_IMAGE,
+								"otelConfigMapName":          documentDBName + "-otel-config",
+							},
+						}},
+						Managed: &cnpgv1.ManagedConfiguration{Roles: roles},
+					},
+					Status: cnpgv1.ClusterStatus{
+						CurrentPrimary: documentDBName + "-1",
+						TargetPrimary:  documentDBName + "-1",
+					},
+				}
+				if primaryHealthy {
+					cluster.Status.InstancesStatus = map[cnpgv1.PodStatus][]string{
+						cnpgv1.PodHealthy: {documentDBName + "-1"},
+					}
+				}
+				return cluster
+			}
+
+			reconcile := func(monitoringEnabled bool, cluster *cnpgv1.Cluster) (ctrl.Result, *cnpgv1.Cluster) {
+				documentdb := &dbpreview.DocumentDB{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       documentDBName,
+						Namespace:  documentDBNamespace,
+						Finalizers: []string{documentDBFinalizer},
+					},
+					Spec: dbpreview.DocumentDBSpec{
+						InstancesPerNode: 1,
+						Resource: dbpreview.Resource{
+							Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"},
+						},
+						Monitoring: &dbpreview.MonitoringSpec{Enabled: monitoringEnabled},
+					},
+				}
+				fakeClient := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(documentdb, cluster).
+					WithStatusSubresource(&dbpreview.DocumentDB{}).
+					WithInterceptorFuncs(interceptor.Funcs{
+						Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+							if _, ok := obj.(*cnpgv1.Cluster); ok {
+								events = append(events, clusterPatched)
+							}
+							return c.Patch(ctx, obj, patch, opts...)
+						},
+					}).
+					Build()
+				reconciler := &DocumentDBReconciler{
+					Client:   fakeClient,
+					Scheme:   scheme,
+					Recorder: recorder,
+					SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, cmd string) (string, error) {
+						events = append(events, cmd)
+						switch {
+						case strings.Contains(cmd, "has_schema_privilege"):
+							return " otel_monitor_grants\n---------------------\n " + grantState + "\n(1 row)", grantStateErr
+						case cmd == grantSQL:
+							return "", grantErr
+						case strings.Contains(cmd, "REVOKE"):
+							return "DO", revokeErr
+						case strings.Contains(cmd, "pg_roles"):
+							return "(1 row)", nil
+						case strings.Contains(cmd, "pg_available_extensions"):
+							return " default_version | installed_version\n" +
+								"-----------------+-------------------\n" +
+								" 0.110-0         | 0.110-0\n(1 row)", nil
+						}
+						return "", nil
+					},
+				}
+
+				result, err := reconciler.Reconcile(ctx, ctrl.Request{
+					NamespacedName: types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				updated := &cnpgv1.Cluster{}
+				Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
+				return result, updated
+			}
+
+			otelRoleEnsure := func(cluster *cnpgv1.Cluster) cnpgv1.EnsureOption {
+				Expect(cluster.Spec.Managed).NotTo(BeNil())
+				for _, role := range cluster.Spec.Managed.Roles {
+					if role.Name == "otel_monitor" {
+						return role.Ensure
+					}
+				}
+				Fail("the CNPG Cluster does not declare the otel_monitor role")
+				return ""
+			}
+
+			revokeIndex := func() int {
+				return slices.IndexFunc(events, func(event string) bool { return strings.Contains(event, revokeSQL) })
+			}
+
+			DescribeTable("on a healthy primary with monitoring enabled",
+				func(state string, stateErr, execErr error, wantGrants int, wantRequeue bool) {
+					grantState = state
+					grantStateErr = stateErr
+					grantErr = execErr
+					result, _ := reconcile(true, newCluster(true, otelRole(cnpgv1.EnsurePresent)))
+
+					grants := 0
+					for _, event := range events {
+						if event == grantSQL {
+							grants++
+						}
+					}
+					Expect(grants).To(Equal(wantGrants))
+					Expect(events).To(ContainElement(ContainSubstring("pg_available_extensions")))
+					if wantRequeue {
+						Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+					} else {
+						Expect(result.RequeueAfter).To(BeZero())
+					}
+				},
+				Entry("grants schema usage once when the role lacks it", "pending", nil, nil, 1, false),
+				Entry("skips the grant when the role already holds it", "granted", nil, nil, 0, false),
+				Entry("requeues until CNPG creates the role", "missing", nil, nil, 0, true),
+				Entry("requeues when the grant state is empty", "", nil, nil, 0, true),
+				Entry("requeues when the grant state is unexpected", "unexpected", nil, nil, 0, true),
+				Entry("requeues without granting when the grant-state query fails", "pending", fmt.Errorf("simulated grant-state query failure"), nil, 0, true),
+				Entry("requeues when granting schema usage fails", "pending", nil, fmt.Errorf("simulated grant failure"), 1, true),
+			)
+
+			It("does not query or grant schema usage until the primary is healthy", func() {
+				grantState = "pending"
+				result, _ := reconcile(true, newCluster(false, otelRole(cnpgv1.EnsurePresent)))
+
+				Expect(events).NotTo(ContainElement(ContainSubstring("otel_monitor")))
+				Expect(result.RequeueAfter).To(BeZero())
+			})
+
+			It("revokes the grants before declaring the role absent when monitoring is disabled", func() {
+				result, updated := reconcile(false, newCluster(true, otelRole(cnpgv1.EnsurePresent)))
+
+				Expect(revokeIndex()).To(BeNumerically(">=", 0))
+				Expect(revokeIndex()).To(BeNumerically("<", slices.Index(events, clusterPatched)))
+				Expect(otelRoleEnsure(updated)).To(Equal(cnpgv1.EnsureAbsent))
+				Expect(result.RequeueAfter).To(BeZero())
+			})
+
+			It("revokes the grants while CNPG cannot drop the role, for example after a restore", func() {
+				cluster := newCluster(true, otelRole(cnpgv1.EnsureAbsent))
+				cluster.Status.ManagedRolesStatus.CannotReconcile = map[string][]string{
+					"otel_monitor": {"role cannot be dropped because some objects depend on it"},
+				}
+				reconcile(false, cluster)
+
+				Expect(revokeIndex()).To(BeNumerically(">=", 0))
+			})
+
+			It("does not revoke anything once CNPG has dropped the role", func() {
+				reconcile(false, newCluster(true, otelRole(cnpgv1.EnsureAbsent)))
+
+				Expect(revokeIndex()).To(Equal(-1))
+			})
+
+			DescribeTable("keeps the role declared and removes the sidecar until its grants are revoked",
+				func(primaryHealthy bool, err error) {
+					revokeErr = err
+					result, updated := reconcile(false, newCluster(primaryHealthy, otelRole(cnpgv1.EnsurePresent)))
+
+					Expect(otelRoleEnsure(updated)).To(Equal(cnpgv1.EnsurePresent))
+					Expect(updated.Spec.Plugins[0].Parameters).NotTo(HaveKey("otelCollectorImage"))
+					Expect(result.RequeueAfter).To(Equal(RequeueAfterShort))
+				},
+				Entry("when the revoke fails", true, fmt.Errorf("simulated revoke failure")),
+				Entry("when the primary is not healthy", false, nil),
+			)
+		})
 	})
 
 	Describe("reconcileOtelConfigMap", func() {
@@ -3137,6 +3367,9 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(cm.Data).To(HaveKey("dynamic.yaml"))
 			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("otel-collector:4317"))
 			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring(documentDBName))
+			// The DocumentDB profile enables the DocumentDB SQL metrics.
+			Expect(cm.Data["static.yaml"]).To(ContainSubstring("sqlquery/catalog:"))
+			Expect(cm.Data["dynamic.yaml"]).To(ContainSubstring("sqlquery/catalog"))
 		})
 
 		It("updates an existing OTel ConfigMap when monitoring spec changes", func() {

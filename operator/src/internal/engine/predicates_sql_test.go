@@ -27,6 +27,22 @@ func TestClusterInstanceStatusChangedPredicate(t *testing.T) {
 			InstancesStatus: map[cnpgv1.PodStatus][]string{cnpgv1.PodHealthy: healthy},
 		}}
 	}
+	// absentOtelRole declares the OTel monitoring role absent, as a cluster
+	// restored with monitoring disabled does, and reports when CNPG cannot drop
+	// the cannotDrop role.
+	absentOtelRole := func(cannotDrop string) *cnpgv1.Cluster {
+		c := cluster("ok", "a")
+		c.Spec.Managed = &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{{
+			Name:   "otel_monitor",
+			Ensure: cnpgv1.EnsureAbsent,
+		}}}
+		if cannotDrop != "" {
+			c.Status.ManagedRolesStatus.CannotReconcile = map[string][]string{
+				cannotDrop: {"role cannot be dropped because some objects depend on it"},
+			}
+		}
+		return c
+	}
 	tests := []struct {
 		name     string
 		old, new client.Object
@@ -35,6 +51,8 @@ func TestClusterInstanceStatusChangedPredicate(t *testing.T) {
 		{name: "unchanged", old: cluster("ok", "a"), new: cluster("ok", "a"), want: false},
 		{name: "healthy instances changed", old: cluster("ok", "a"), new: cluster("ok", "a", "b"), want: true},
 		{name: "phase changed", old: cluster("ok", "a"), new: cluster("failover", "a"), want: true},
+		{name: "CNPG cannot drop the OTel monitoring role", old: absentOtelRole(""), new: absentOtelRole("otel_monitor"), want: true},
+		{name: "CNPG cannot drop another role", old: absentOtelRole(""), new: absentOtelRole("app_user"), want: false},
 		{name: "old is not a CNPG cluster", old: &corev1.Pod{}, new: cluster("ok"), want: true},
 		{name: "new is not a CNPG cluster", old: cluster("ok"), new: &corev1.Pod{}, want: true},
 	}

@@ -12,7 +12,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -282,6 +281,22 @@ func (r *ClusterReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
+	// otelMonitorPending requeues the reconcile while the OTel monitoring
+	// role's schema grants are not settled, without blocking the steps below.
+	otelMonitorPending := false
+	monitoringSchemas := intent.Product.Postgres.MonitoringSchemas
+
+	// Schema grants block CNPG's DROP ROLE, so revoke them before the role is
+	// declared absent. Until they are revoked, keep the role as declared.
+	// Replica clusters skip this: CNPG manages roles only on the primary
+	// cluster, which revokes the grants and replicates the change.
+	if !monitoringEnabled && len(monitoringSchemas) > 0 && replicationContext.IsPrimary() && cnpg.OtelMonitorRoleMayExist(currentCnpgCluster) {
+		if !r.revokeOtelMonitorGrants(ctx, currentCnpgCluster, monitoringSchemas) {
+			cnpg.RetainOtelMonitorRole(desiredCnpgCluster, currentCnpgCluster)
+			otelMonitorPending = true
+		}
+	}
+
 	// Sync all CNPG Cluster changes in one atomic patch (images + plugins + replication)
 	if err := cnpg.SyncCnpgCluster(ctx, r.Client, currentCnpgCluster, desiredCnpgCluster, replicationOps); err != nil {
 		logger.Error(err, "Failed to sync CNPG Cluster spec")
@@ -298,7 +313,7 @@ func (r *ClusterReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if slices.Contains(currentCnpgCluster.Status.InstancesStatus[cnpgv1.PodHealthy], currentCnpgCluster.Status.CurrentPrimary) && replicationContext.IsPrimary() {
+	if isPrimaryHealthy(currentCnpgCluster) && replicationContext.IsPrimary() {
 		if role := intent.Product.Postgres.ReplicationAdminRole; role != "" {
 			// Check if permissions have already been granted
 			output, err := r.SQLExecutor(ctx, currentCnpgCluster, cnpg.ReplicationRoleCheckSQL(role))
@@ -313,6 +328,15 @@ func (r *ClusterReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) 
 					return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 				}
 			}
+		}
+
+		// The grants replicate to standbys and replica clusters.
+		if monitoringEnabled && len(monitoringSchemas) > 0 {
+			roleMissing, err := r.grantOtelMonitorSchemas(ctx, currentCnpgCluster, monitoringSchemas)
+			if err != nil {
+				logger.Error(err, "Failed to grant schema usage to the OTel monitoring role")
+			}
+			otelMonitorPending = otelMonitorPending || roleMissing || err != nil
 		}
 	}
 
@@ -360,6 +384,10 @@ func (r *ClusterReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Check if the extension needs ALTER EXTENSION UPDATE
 	if err := r.HandleExtensionUpgrade(ctx, currentCnpgCluster, obj); err != nil {
 		logger.Error(err, "Failed to handle "+p.Name+" extension upgrade")
+		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	if otelMonitorPending {
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 	}
 

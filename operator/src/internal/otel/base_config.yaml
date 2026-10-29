@@ -5,6 +5,9 @@
 receivers:
   # SQL-driven Postgres health metrics. Add new SQL metric queries here —
   # no Go code changes needed.
+  # Every instance runs these queries; the k8s.pod.name resource attribute
+  # tells instances apart. Queries other than the health check rely on the
+  # DocumentDB schema USAGE that the operator grants to the monitoring role.
   sqlquery:
     driver: postgres
     datasource: "host=localhost port=5432 user=${env:PGUSER} dbname=postgres sslmode=disable"
@@ -15,6 +18,157 @@ receivers:
           - metric_name: {{ .HealthMetricName }}
             value_column: up
             data_type: gauge
+{{- /* The DocumentDB SQL metrics from here through the sqlquery/catalog
+       receiver are rendered only with Options.DocumentDBMetrics. */}}
+{{- if .DocumentDBMetrics }}
+      # Resets when the postmaster restarts, including in-place restarts.
+      - sql: "SELECT EXTRACT(EPOCH FROM now() - pg_postmaster_start_time())::float8 AS uptime_seconds"
+        metrics:
+          - metric_name: documentdb.postgres.uptime
+            value_column: uptime_seconds
+            value_type: double
+            data_type: gauge
+            unit: s
+            description: Time since the local PostgreSQL server started.
+      # Standbys only; the primary returns no rows. Lag reads 0 once every
+      # received WAL record has been replayed, so an idle primary does not
+      # look like growing lag. A disconnected standby also reads 0, which is
+      # why the query pairs lag with the WAL receiver state.
+      - sql: |
+          SELECT CASE WHEN pg_last_wal_receive_lsn() = pg_last_wal_replay_lsn() THEN 0
+                      ELSE GREATEST(COALESCE(EXTRACT(EPOCH FROM now() - pg_last_xact_replay_timestamp()), 0), 0)
+                 END::float8 AS lag_seconds,
+                 (SELECT count(*) FROM pg_stat_wal_receiver) AS wal_receiver_up
+          WHERE pg_is_in_recovery()
+        metrics:
+          - metric_name: documentdb.postgres.replication.lag
+            value_column: lag_seconds
+            value_type: double
+            data_type: gauge
+            unit: s
+            description: Time since the last replayed transaction on a standby, or 0 when replay has caught up with received WAL.
+          - metric_name: documentdb.postgres.replication.receiver.up
+            value_column: wal_receiver_up
+            data_type: gauge
+            description: 1 when the standby's WAL receiver process is running, otherwise 0.
+      # Shared-buffer cache counters for the DocumentDB database. Compute the
+      # hit ratio in the backend as rate(hit) / (rate(hit) + rate(read)).
+      - sql: "SELECT blks_hit, blks_read FROM pg_stat_database WHERE datname = current_database()"
+        metrics:
+          - metric_name: documentdb.postgres.blocks.hit
+            value_column: blks_hit
+            data_type: sum
+            monotonic: true
+            aggregation: cumulative
+            unit: "{block}"
+            description: Disk blocks found in PostgreSQL shared buffers.
+          - metric_name: documentdb.postgres.blocks.read
+            value_column: blks_read
+            data_type: sum
+            monotonic: true
+            aggregation: cumulative
+            unit: "{block}"
+            description: Disk blocks read outside PostgreSQL shared buffers, including reads served by the OS page cache.
+
+  # DocumentDB catalog metrics. Runs less often than the health queries
+  # because it reads the collection catalog and relation sizes. Standbys
+  # return no rows, so only the primary reports. Internal databases (admin,
+  # config, local) and system.* collections are excluded.
+  sqlquery/catalog:
+    driver: postgres
+    datasource: "host=localhost port=5432 user=${env:PGUSER} dbname=postgres sslmode=disable"
+    collection_interval: "5m"
+    queries:
+      # One row per database. Sizes are looked up by pg_class OID so the
+      # monitoring role needs no access to the documentdb_data schema.
+      - sql: |
+          SELECT c.database_name AS "db.namespace",
+                 count(*) FILTER (WHERE c.view_definition IS NULL)     AS collections,
+                 count(*) FILTER (WHERE c.view_definition IS NOT NULL) AS views,
+                 COALESCE(sum(ix.n), 0)::bigint                        AS indexes,
+                 COALESCE(sum(pg_table_size(r.oid)), 0)::bigint        AS storage_bytes
+          FROM documentdb_api_catalog.collections c
+          LEFT JOIN LATERAL (
+              SELECT count(*) AS n
+              FROM documentdb_api_catalog.collection_indexes i
+              WHERE i.collection_id = c.collection_id AND i.index_is_valid) ix ON true
+          LEFT JOIN pg_class r
+                 ON r.relname = 'documents_' || c.collection_id
+                AND r.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'documentdb_data')
+          WHERE NOT pg_is_in_recovery()
+            AND c.database_name NOT IN ('admin', 'config', 'local')
+            AND c.collection_name NOT LIKE 'system.%'
+          GROUP BY c.database_name
+        metrics:
+          - metric_name: documentdb.database.storage.size
+            value_column: storage_bytes
+            attribute_columns: ["db.namespace"]
+            data_type: gauge
+            unit: By
+            description: On-disk size of the database's collections, excluding indexes. Matches dbStats storageSize.
+          - metric_name: documentdb.database.collection.count
+            value_column: collections
+            attribute_columns: ["db.namespace"]
+            data_type: gauge
+            unit: "{collection}"
+            description: Number of collections in the database, excluding views and system collections.
+          - metric_name: documentdb.database.view.count
+            value_column: views
+            attribute_columns: ["db.namespace"]
+            data_type: gauge
+            unit: "{view}"
+            description: Number of views in the database.
+          - metric_name: documentdb.database.index.count
+            value_column: indexes
+            attribute_columns: ["db.namespace"]
+            data_type: gauge
+            unit: "{index}"
+            description: Number of ready indexes in the database, including _id indexes.
+      # HAVING keeps standbys silent: an aggregate without GROUP BY would
+      # otherwise return a row even when no collection qualifies.
+      - sql: |
+          SELECT count(DISTINCT database_name) AS databases
+          FROM documentdb_api_catalog.collections
+          WHERE database_name NOT IN ('admin', 'config', 'local')
+            AND collection_name NOT LIKE 'system.%'
+          HAVING NOT pg_is_in_recovery()
+        metrics:
+          - metric_name: documentdb.database.count
+            value_column: databases
+            data_type: gauge
+            unit: "{database}"
+            description: Number of user databases.
+{{- end }}
+
+  # Pod-local filesystem and network metrics. The sidecar mounts the data
+  # volume read-only on an empty subPath at /var/lib/otel/pgdata, so statfs
+  # reports the volume's capacity without exposing data files. The network
+  # scraper reads the pod's network namespace; loopback carries
+  # gateway-to-PostgreSQL and OTLP traffic and is excluded.
+  hostmetrics:
+    collection_interval: "30s"
+    scrapers:
+      filesystem:
+        # A subPath volume mount is a bind mount, which the scraper skips
+        # unless virtual filesystems are included. include_mount_points
+        # still limits the output to the data volume.
+        include_virtual_filesystems: true
+        include_mount_points:
+          # Keep equal to otelDataVolumeMountPath in the sidecar-injector plugin.
+          mount_points: ["/var/lib/otel/pgdata"]
+          match_type: strict
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+        exclude:
+          interfaces: ["lo"]
+          match_type: strict
+        metrics:
+          # Would count the gateway's client connections; not part of the
+          # monitoring contract.
+          system.network.connections:
+            enabled: false
 
   # OTLP receiver for telemetry pushed by co-located pod containers
   # (e.g. the documentdb-gateway pushes metrics to localhost:4317).

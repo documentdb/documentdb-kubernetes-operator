@@ -43,6 +43,12 @@ func DocumentDBProfile() ProductProfile {
 				"cron.database_name": "postgres",
 			},
 			ReplicationAdminRole: "documentdb_admin_role",
+			// The DocumentDB planner hook resolves objects in documentdb_core
+			// and documentdb_api_internal for any query that calls a function
+			// or operator, and the catalog metrics read documentdb_api_catalog.
+			// Document data lives in documentdb_data, which is not granted.
+			MonitoringSchemas: []string{"documentdb_core", "documentdb_api_internal", "documentdb_api_catalog"},
+			DocumentDBMetrics: true,
 		},
 		Naming: NamingProfile{
 			Domain:                 "documentdb.io",

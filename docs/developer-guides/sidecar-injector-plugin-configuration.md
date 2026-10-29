@@ -87,7 +87,7 @@ defaults below apply.
 | Parameter | Default | Description |
 | --- | --- | --- |
 | `gatewayContainerName` | `documentdb-gateway` | Name of the injected gateway container |
-| `gatewayPort` | `10260` | Gateway container port |
+| `gatewayPort` | `10260` | Gateway container port, also checked by the gateway's TCP liveness probe |
 | `gatewayArgs` | DocumentDB gateway args | JSON array that replaces `--create-user <bool> --start-pg false --pg-port 5432` and the TLS `--cert-path`/`--key-file` flags verbatim |
 | `gatewayUsernameEnv` | `USERNAME` | Env var that receives the credential secret's `username` key |
 | `gatewayPasswordEnv` | `PASSWORD` | Env var that receives the credential secret's `password` key |
