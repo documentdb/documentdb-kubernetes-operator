@@ -1717,7 +1717,7 @@
 <tbody>
 <tr>
 <td><strong>Kubernetes cluster</strong></td>
-<td>1.35+ (or 1.33/1.34 with the ImageVolume gate enabled)</td>
+<td>1.32+ (1.35+ recommended; CloudNativePG officially supports 1.33+)</td>
 <td>Container orchestration platform</td>
 <td>See <a href="#kubernetes-cluster-options">Cluster Options</a></td>
 </tr>
@@ -1741,9 +1741,9 @@
 </tr>
 </tbody>
 </table>
-<div class="admonition warning">
-<p class="admonition-title">The ImageVolume feature and a containerd or CRI-O runtime are required</p>
-<p>The operator mounts the DocumentDB extension into PostgreSQL pods via the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature, so it <strong>must be available on your cluster</strong>, running on a <strong>containerd</strong> or <strong>CRI-O</strong> runtime (Docker is not supported). ImageVolume is GA (on by default) in <strong>Kubernetes 1.35+</strong>; on <strong>1.33/1.34</strong> it is beta and works only if you enable the <code>ImageVolume</code> feature gate on the apiserver and kubelets (self-managed clusters; containerd ≥ 2.1 or CRI-O ≥ 1.33). If the feature is unavailable, the operator's admission webhook rejects <code>DocumentDB</code> creation with an actionable error instead of leaving pods stuck.</p>
+<div class="admonition note">
+<p class="admonition-title">ImageVolume is preferred; older clusters use a combined image</p>
+<p>By default (<code>imageMode: auto</code>) the operator mounts the DocumentDB extension into PostgreSQL pods via the <a href="https://kubernetes.io/docs/concepts/storage/volumes/#image">ImageVolume</a> feature when the cluster supports it: <strong>Kubernetes 1.35+</strong> (or <strong>1.33/1.34</strong> with the <code>ImageVolume</code> feature gate enabled) on <strong>containerd ≥ 2.1</strong> or <strong>CRI-O ≥ 1.33</strong>. When a <code>DocumentDB</code> is created on a cluster that does not meet these requirements (for example, nodes still running containerd 1.7), the operator falls back to a <strong>combined image</strong> (<code>documentdb-combined:18-&lt;version&gt;</code>) that ships PostgreSQL 18 and the DocumentDB extension together. The selected layout is recorded in the <code>documentdb.io/image-mode</code> annotation on the CloudNative-PG <code>Cluster</code> and never changes for the life of the cluster. Set the Helm value <code>imageMode</code> to <code>imageVolume</code> to require ImageVolume (the webhook then rejects creation when it is unavailable) or to <code>combined</code> to always use the combined image. In combined mode, <code>spec.image.postgres</code> and change-stream image overrides are ignored, and only the release tag of <code>spec.image.documentDB</code> is used (not when the reference includes a digest); to mirror the combined image to a private registry, set <code>image.documentdbCombined.repository</code>.</p>
 </div>
 <h3 id="optional-components">Optional components<a class="headerlink" href="#optional-components" title="Permanent link">&para;</a></h3>
 <table>
@@ -1778,7 +1778,7 @@
 </tbody>
 </table>
 <h3 id="kubernetes-cluster-options">Kubernetes cluster options<a class="headerlink" href="#kubernetes-cluster-options" title="Permanent link">&para;</a></h3>
-<p>The operator runs on any conformant Kubernetes distribution (1.35+, or 1.33/1.34 with the ImageVolume feature gate enabled). Choose based on your environment:</p>
+<p>The operator runs on any conformant Kubernetes distribution (1.32+; 1.35+ with containerd ≥ 2.1 is recommended so the ImageVolume layout is used). Choose based on your environment:</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Local Development</label><label for="__tabbed_1_2">Cloud Production</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
