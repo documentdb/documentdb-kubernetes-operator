@@ -64,7 +64,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:1.0.0"
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:1.1.0"
 
   - it: should use a custom sidecar image tag when set
     set:

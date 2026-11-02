@@ -7,7 +7,7 @@ DocumentDB is the engine powering vCore-based Azure Cosmos DB for MongoDB. Built
 When you deploy a DocumentDB cluster, the operator creates and manages PostgreSQL instances, the [DocumentDB Gateway](https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw), and supporting Kubernetes resources. The gateway enables you to connect with MongoDB-compatible drivers, APIs, and tools, while PostgreSQL serves as the underlying storage engine.
 
 !!! note
-    Operator `1.0.0` is generally available for DocumentDB 1.0. The `preview` in the API version (`documentdb.io/preview`) and in these docs' URLs is a name kept for compatibility. We welcome your feedback and contributions!
+    Operator `1.1.0` is generally available for DocumentDB 1.0. The `preview` in the API version (`documentdb.io/preview`) and in these docs' URLs is a name kept for compatibility. We welcome your feedback and contributions!
 
 ## Quickstart
 
