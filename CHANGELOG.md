@@ -6,8 +6,6 @@
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar and Helm chart change. Clusters on Kubernetes or container runtimes without image volume support (for example containerd 1.7, or Kubernetes 1.32) now run with a combined PostgreSQL + DocumentDB image instead of being rejected. Apply the 1.1.0 CRDs before `helm upgrade`; existing clusters keep their image layout and are not restarted.
 
-### Known limitations
-- **Azure Local (AKS enabled by Azure Arc):** `Backup`, `ScheduledBackup` and restore need a CSI driver with volume snapshot and clone support. The default AKS Arc disk driver (`disk.csi.akshci.com`) does not support them yet, so these features are unavailable with the default storage class. Use a snapshot-capable CSI driver, or `mongodump`/`mongorestore` through the gateway for logical backups.
 
 ### Security
 - Require Go 1.26.10 across all six modules and pin Go builder images to that patch release to address [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`. Unit-test workflows now resolve Go from the operator module instead of an older hard-coded version.
