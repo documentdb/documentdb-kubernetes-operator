@@ -2,12 +2,13 @@ apiVersion: v2
 name: documentdb-operator
 version: 1.0.0
 description: A Helm chart for deploying the DocumentDB operator
-# The operator requires the Kubernetes ImageVolume feature (GA in 1.35, beta and
-# opt-in via feature gate in 1.33/1.34). The operator's validating webhook performs
-# a capability probe at DocumentDB creation time rather than gating on version, so
-# the chart only requires 1.33+ (on 1.31/1.32 ImageVolume was alpha and not usable
-# with these operator images).
-kubeVersion: ">= 1.33.0-0"
+# The operator prefers the Kubernetes ImageVolume feature (GA in 1.35, beta and
+# opt-in via feature gate in 1.33/1.34, and needs containerd >= 2.1 or
+# CRI-O >= 1.33). Where it is unavailable the operator falls back to a combined
+# PostgreSQL + DocumentDB image (see the imageMode value). 1.32 is the oldest
+# version tested with the combined image; CloudNativePG tests 1.31/1.32 but
+# officially supports only 1.33+.
+kubeVersion: ">= 1.32.0-0"
 # appVersion controls the default image tag for operator, sidecar, and wal-replica images.
 # Database image versions (documentdb extension + gateway) are controlled by documentDbVersion in values.yaml.
 appVersion: "1.0.0"

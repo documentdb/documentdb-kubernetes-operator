@@ -376,8 +376,11 @@ jobs:
   # No Ginkgo specs run here on purpose: the composite action already deploys a
   # DocumentDB and waits for Healthy as part of setup, so a green setup IS the
   # end-to-end assertion. If the gate were off or the runtime too old, setup
-  # would fail. The gate-OFF / blocked path is covered by the webhook unit
-  # tests (operator/src/internal/webhook), not by CI.
+  # would fail. In the default imageMode=auto the operator also selects the
+  # ImageVolume layout here (containerd >= 2.1 + successful API probe). The
+  # gate-OFF path is covered by imagevolume-block below (forced imageVolume
+  # mode) and by the imagemode/webhook unit tests (auto mode falls back to the
+  # combined image instead of rejecting).
   # ---------------------------------------------------------------------------
   imagevolume-preflight:
     name: ImageVolume preflight (k8s ${{ matrix.kubernetes_version }})
@@ -436,6 +439,21 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
 
+      - name: Assert the ImageVolume layout was selected
+        shell: bash
+        run: |
+          # A healthy cluster alone is not enough: auto mode could have fallen
+          # back to the combined image. Require the ImageVolume layout.
+          MODE=$(kubectl get clusters.postgresql.cnpg.io ${{ env.DB_NAME }} -n ${{ env.DB_NS }} \
+            -o jsonpath='{.metadata.annotations.documentdb\.io/image-mode}')
+          EXT=$(kubectl get clusters.postgresql.cnpg.io ${{ env.DB_NAME }} -n ${{ env.DB_NS }} \
+            -o jsonpath='{.spec.postgresql.extensions[?(@.name=="documentdb")].name}')
+          echo "image-mode=${MODE} extension=${EXT}"
+          if [[ "${MODE}" != "imageVolume" || "${EXT}" != "documentdb" ]]; then
+            echo "❌ Expected the ImageVolume layout on a cluster with the ImageVolume gate enabled."
+            exit 1
+          fi
+
       - name: Collect cluster diagnostics
         if: failure()
         uses: ./.github/actions/collect-logs
@@ -462,7 +480,9 @@ jobs:
   # the ImageVolume gate EXPLICITLY DISABLED (kind-feature-gates:
   # 'ImageVolume=false'). We force it off rather than relying on the version
   # default because ImageVolume's real-world default in 1.33/1.34 is
-  # inconsistent across node images. Here the operator's admission webhook must
+  # inconsistent across node images. With imageMode forced to imageVolume (the
+  # default 'auto' mode would fall back to the combined image instead), the
+  # operator's admission webhook must
   # REJECT DocumentDB creation with an actionable ImageVolume error instead of
   # letting pods hang. The composite action provisions the cluster + operator
   # only (deploy-documentdb: false); the workflow then applies a DocumentDB and
@@ -521,6 +541,17 @@ jobs:
           deploy-documentdb: 'false'
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository-owner: ${{ github.repository_owner }}
+
+      - name: Force imageMode=imageVolume on the operator
+        shell: bash
+        run: |
+          # The default 'auto' mode would admit the DocumentDB and fall back to
+          # the combined image; strict mode restores the fail-fast rejection.
+          kubectl set env deployment/documentdb-operator -n ${{ env.OPERATOR_NS }} \
+            -c documentdb-operator DOCUMENTDB_IMAGE_MODE=imageVolume
+          kubectl rollout status deployment/documentdb-operator -n ${{ env.OPERATOR_NS }} --timeout=300s
+          # Give the webhook endpoint a moment to register the new pod.
+          sleep 10
 
       - name: Assert DocumentDB creation is blocked (ImageVolume unavailable)
         shell: bash

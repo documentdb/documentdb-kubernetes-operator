@@ -9,9 +9,6 @@ package validation
 import (
 	"context"
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,49 +33,16 @@ type Terms struct {
 	SchemaWithoutBinaryFields string
 }
 
-var rcImageTagPattern = regexp.MustCompile(`^[vV]?([0-9]+)\.([0-9]+)-[rR][cC][1-9][0-9]*(?:$|[-+])`)
-
 // ExtractSemver returns the leading "X.Y.Z" portion from a tag string,
 // normalizing "X.Y-RC<n>" tags to the extension version "X.Y.0".
-// It returns "" when neither version format is recognized.
-func ExtractSemver(tag string) string {
-	if matches := rcImageTagPattern.FindStringSubmatch(tag); matches != nil {
-		return matches[1] + "." + matches[2] + ".0"
-	}
-	// Match digits.digits.digits at start of string
-	parts := strings.SplitN(tag, ".", 3)
-	if len(parts) < 3 {
-		return ""
-	}
-	// Validate major and minor are numeric
-	if _, err := strconv.Atoi(parts[0]); err != nil {
-		return ""
-	}
-	if _, err := strconv.Atoi(parts[1]); err != nil {
-		return ""
-	}
-	// Third part may have a suffix (e.g., "0-amd64"), take only leading digits
-	thirdPart := parts[2]
-	i := 0
-	for i < len(thirdPart) && thirdPart[i] >= '0' && thirdPart[i] <= '9' {
-		i++
-	}
-	if i == 0 {
-		return ""
-	}
-	return parts[0] + "." + parts[1] + "." + thirdPart[:i]
-}
+// It returns "" when neither version format is recognized. See
+// util.ExtractSemver.
+func ExtractSemver(tag string) string { return util.ExtractSemver(tag) }
 
 // ImageTagSemver returns the semver of an image reference's tag, or "" for
 // digest references and unparseable tags.
 func ImageTagSemver(ref string) string {
-	if ref == "" || strings.Contains(ref, "@sha256:") {
-		return ""
-	}
-	if tagIdx := strings.LastIndex(ref, ":"); tagIdx >= 0 {
-		return ExtractSemver(ref[tagIdx+1:])
-	}
-	return ""
+	return ExtractSemver(util.ReleaseVersionTag(ref))
 }
 
 // ResolveBinaryVersion extracts the binary version pinned by a spec.

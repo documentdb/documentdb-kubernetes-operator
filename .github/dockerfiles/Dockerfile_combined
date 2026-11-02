@@ -1,0 +1,48 @@
+# DocumentDB combined image: PostgreSQL + DocumentDB extension in one image.
+#
+# Used by the operator's combined-image fallback on clusters that cannot use
+# CNPG ImageVolume extensions (ImageVolume feature gate off, or a container
+# runtime older than containerd 2.1 / CRI-O 1.33). See
+# docs/designs/combined-image-fallback.md.
+#
+# Built from the same CNPG base and the same DocumentDB .deb as
+# Dockerfile_extension, so both modes run identical extension bits. The image
+# keeps the CNPG postgres user (UID 26).
+#
+# The image tag MUST start with the PostgreSQL major (e.g. 18-1.0.0) because
+# CloudNativePG derives the PostgreSQL version from the tag.
+#
+# Usage:
+#   docker build \
+#     --build-arg PG_MAJOR=18 \
+#     --build-arg DEB_PACKAGE_REL_PATH=packages/documentdb_1.0-0_arm64.deb \
+#     -t documentdb-combined:18-1.0.0 \
+#     -f Dockerfile_combined .
+
+ARG BASE=ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie
+FROM ${BASE}
+
+ARG PG_MAJOR=18
+ARG DEB_PACKAGE_REL_PATH
+
+USER 0
+
+# Install via apt (not dpkg -i) so the extension's dependencies (pg_cron,
+# pgvector, postgis, rum) resolve, then verify the installed version.
+COPY ${DEB_PACKAGE_REL_PATH} /tmp/documentdb.deb
+RUN set -eux && \
+    DEB_VERSION=$(dpkg-deb -f /tmp/documentdb.deb Version) && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        postgresql-${PG_MAJOR}-cron \
+        postgresql-${PG_MAJOR}-pgvector \
+        postgresql-${PG_MAJOR}-postgis-3 \
+        /tmp/documentdb.deb && \
+    INSTALLED_VERSION=$(dpkg-query -W -f='${Version}' "postgresql-${PG_MAJOR}-documentdb") && \
+    test "$INSTALLED_VERSION" = "$DEB_VERSION" && \
+    test -f "/usr/share/postgresql/${PG_MAJOR}/extension/documentdb.control" && \
+    rm -f /tmp/documentdb.deb && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+USER 26

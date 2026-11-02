@@ -25,6 +25,9 @@ type Images struct {
 	GatewayPullPolicy string
 	// Postgres is the base PostgreSQL image.
 	Postgres string
+	// Combined is the PostgreSQL + DocumentDB image used instead of Postgres and
+	// PostgresExtension when the cluster runs in combined image mode.
+	Combined string
 	// PullSecrets are the image pull secrets shared by all cluster containers.
 	PullSecrets []corev1.LocalObjectReference
 }

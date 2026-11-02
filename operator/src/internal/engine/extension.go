@@ -313,6 +313,11 @@ func (r *ClusterReconciler[T]) DetermineSchemaTarget(
 func (r *ClusterReconciler[T]) UpdateImageStatus(ctx context.Context, obj T, cluster *cnpgv1.Cluster) error {
 	name := r.profile().Name
 	currentExtImage := cnpg.ExtensionImage(cluster, r.extensionName())
+	// In combined image mode the extension ships inside the PostgreSQL image,
+	// so report that image instead.
+	if currentExtImage == "" && cnpg.IsCombinedImageMode(cluster) {
+		currentExtImage = cluster.Spec.ImageName
+	}
 	currentGwImage := cnpg.GatewayImage(cluster)
 
 	// Only update if something changed

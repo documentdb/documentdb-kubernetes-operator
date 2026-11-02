@@ -93,6 +93,17 @@ func (a DocumentDBAdapter) ExtensionImage(db *dbpreview.DocumentDB) string {
 	)
 }
 
+// CombinedImage resolves the combined PostgreSQL + DocumentDB image used when
+// the cluster runs in combined image mode. Change-stream images have no
+// combined counterpart, so the change-stream feature gate does not affect it.
+func (a DocumentDBAdapter) CombinedImage(db *dbpreview.DocumentDB) string {
+	var explicit string
+	if db.Spec.Image != nil {
+		explicit = db.Spec.Image.DocumentDB
+	}
+	return util.CombinedImage(explicit, db.Spec.DocumentDBVersion, os.Getenv(util.DOCUMENTDB_VERSION_ENV))
+}
+
 // GatewayImage resolves the gateway image for a DocumentDB instance using the
 // product profile's repo and default.
 func (a DocumentDBAdapter) GatewayImage(db *dbpreview.DocumentDB) string {
@@ -192,6 +203,7 @@ func (a DocumentDBAdapter) ToClusterIntent(db *dbpreview.DocumentDB) ClusterInte
 		Images: Images{
 			PostgresExtension:           a.ExtensionImage(db),
 			PostgresExtensionPullPolicy: ParsePullPolicy(os.Getenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV)),
+			Combined:                    a.CombinedImage(db),
 			Gateway:                     a.GatewayImage(db),
 			GatewayPullPolicy:           os.Getenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV),
 			Postgres:                    postgresImage,

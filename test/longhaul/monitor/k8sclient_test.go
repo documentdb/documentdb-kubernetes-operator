@@ -153,6 +153,8 @@ var _ = Describe("K8sClusterClient", func() {
 		Entry("registry without tag", "ghcr.io/foo/documentdb", ""),
 		Entry("trailing colon (malformed)", "ghcr.io/foo/documentdb:", ""),
 		Entry("semver tag with port-like host", "host:5000/foo/documentdb:0.110.0-rc1", "0.110.0-rc1"),
+		Entry("combined image strips the PostgreSQL major", "ghcr.io/foo/documentdb-combined:18-1.0.0", "1.0.0"),
+		Entry("combined RC image", "ghcr.io/foo/documentdb-combined:18-1.0-RC2", "1.0-RC2"),
 	)
 
 	It("UpgradeDocumentDB patches version fields", func() {

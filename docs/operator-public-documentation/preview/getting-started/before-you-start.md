@@ -19,13 +19,13 @@ Before installing the DocumentDB Kubernetes Operator, ensure you have the follow
 
 | Component | Minimum Version | Purpose | Installation Guide |
 |-----------|-----------------|---------|-------------------|
-| **Kubernetes cluster** | 1.35+ (or 1.33/1.34 with the ImageVolume gate enabled) | Container orchestration platform | See [Cluster Options](#kubernetes-cluster-options) |
+| **Kubernetes cluster** | 1.32+ (1.35+ recommended; CloudNativePG officially supports 1.33+) | Container orchestration platform | See [Cluster Options](#kubernetes-cluster-options) |
 | **kubectl** | 1.34+ | Kubernetes command-line tool (supported within ±1 minor of the cluster; 1.34+ covers the 1.35 baseline) | [Install kubectl](https://kubernetes.io/docs/tasks/tools/) |
 | **Helm** | 3.x | Package manager for Kubernetes | [Install Helm](https://helm.sh/docs/intro/install/) |
 | **cert-manager** | 1.19+ | TLS certificate management | [Install cert-manager](https://cert-manager.io/docs/installation/) |
 
-!!! warning "The ImageVolume feature and a containerd or CRI-O runtime are required"
-    The operator mounts the DocumentDB extension into PostgreSQL pods via the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature, so it **must be available on your cluster**, running on a **containerd** or **CRI-O** runtime (Docker is not supported). ImageVolume is GA (on by default) in **Kubernetes 1.35+**; on **1.33/1.34** it is beta and works only if you enable the `ImageVolume` feature gate on the apiserver and kubelets (self-managed clusters; containerd ≥ 2.1 or CRI-O ≥ 1.33). If the feature is unavailable, the operator's admission webhook rejects `DocumentDB` creation with an actionable error instead of leaving pods stuck.
+!!! note "ImageVolume is preferred; older clusters use a combined image"
+    By default (`imageMode: auto`) the operator mounts the DocumentDB extension into PostgreSQL pods via the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature when the cluster supports it: **Kubernetes 1.35+** (or **1.33/1.34** with the `ImageVolume` feature gate enabled) on **containerd ≥ 2.1** or **CRI-O ≥ 1.33**. When a `DocumentDB` is created on a cluster that does not meet these requirements (for example, nodes still running containerd 1.7), the operator falls back to a **combined image** (`documentdb-combined:18-<version>`) that ships PostgreSQL 18 and the DocumentDB extension together. The selected layout is recorded in the `documentdb.io/image-mode` annotation on the CloudNative-PG `Cluster` and never changes for the life of the cluster. Set the Helm value `imageMode` to `imageVolume` to require ImageVolume (the webhook then rejects creation when it is unavailable) or to `combined` to always use the combined image. In combined mode, `spec.image.postgres` and change-stream image overrides are ignored, and only the release tag of `spec.image.documentDB` is used (not when the reference includes a digest); to mirror the combined image to a private registry, set `image.documentdbCombined.repository`.
 
 ### Optional components
 
@@ -38,7 +38,7 @@ Before installing the DocumentDB Kubernetes Operator, ensure you have the follow
 
 ### Kubernetes cluster options
 
-The operator runs on any conformant Kubernetes distribution (1.35+, or 1.33/1.34 with the ImageVolume feature gate enabled). Choose based on your environment:
+The operator runs on any conformant Kubernetes distribution (1.32+; 1.35+ with containerd ≥ 2.1 is recommended so the ImageVolume layout is used). Choose based on your environment:
 
 === "Local Development"
 

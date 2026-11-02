@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/imagemode"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -1640,6 +1641,34 @@ var _ = Describe("DocumentDB Controller", func() {
 	})
 
 	Describe("updateImageStatus", func() {
+		It("should report the combined PostgreSQL image when no extension image is mounted", func() {
+			cluster := &cnpgv1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{imagemode.AnnotationKey: string(imagemode.Combined)}},
+				Spec: cnpgv1.ClusterSpec{
+					ImageName: "documentdb/documentdb-combined:18-1.0.0",
+					Plugins: []cnpgv1.PluginConfiguration{{
+						Name:       "documentdb-sidecar",
+						Parameters: map[string]string{"gatewayImage": "documentdb/gateway:1.0.0"},
+					}},
+				},
+			}
+			documentdb := &dbpreview.DocumentDB{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-documentdb", Namespace: clusterNamespace},
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(documentdb).
+				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				Build()
+			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
+
+			Expect(reconciler.updateImageStatus(ctx, documentdb, cluster)).To(Succeed())
+
+			updatedDB := &dbpreview.DocumentDB{}
+			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
+			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb-combined:18-1.0.0"))
+		})
+
 		It("should set DocumentDBImage and GatewayImage from cluster spec", func() {
 			cluster := &cnpgv1.Cluster{
 				Spec: cnpgv1.ClusterSpec{

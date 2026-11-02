@@ -46,6 +46,7 @@ All images are published to **GitHub Container Registry (GHCR)** under `ghcr.io/
 |-------|-----------|--------|------------|---------|
 | **documentdb** | `.../documentdb` | `postgresql-18-documentdb` from the PGDG APT repository (`trixie-pgdg`) | `.github/dockerfiles/Dockerfile_extension` | DocumentDB PostgreSQL extension files for CNPG ImageVolume mode |
 | **gateway** | `.../gateway` | Public gateway payload copied from `ghcr.io/documentdb/documentdb/documentdb-local:pg17-<version>` | `.github/dockerfiles/Dockerfile_gateway_public_image` | MongoDB wire-protocol gateway binary (Rust) |
+| **documentdb-combined** | `.../documentdb-combined` (tag `18-<version>`) | `ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie` + the same `postgresql-18-documentdb` package | `.github/dockerfiles/Dockerfile_combined` | Full PostgreSQL 18 + DocumentDB image used when ImageVolume is unavailable (see [combined-image-fallback.md](combined-image-fallback.md)) |
 
 ### External Image (Not Built Here)
 
@@ -61,7 +62,7 @@ The two version tracks are **independent** — they follow different release cad
 
 | Aspect | Operator Track | Database Track |
 |--------|---------------|----------------|
-| **Images** | operator, sidecar, wal-replica | documentdb, gateway |
+| **Images** | operator, sidecar, wal-replica | documentdb, gateway, documentdb-combined |
 | **Source repo** | This repo (Go) | `documentdb/documentdb` (C + Rust) |
 | **Version source** | `Chart.appVersion` in `Chart.yaml` | `documentDbVersion` in `values.yaml` |
 | **Current version** | `0.2.0` | `0.117.0` |

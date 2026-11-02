@@ -171,6 +171,12 @@ tests:
             name: GATEWAY_IMAGE_REPO
             value: "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
 
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_COMBINED_IMAGE_REPO
+            value: "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb-combined"
+
   - it: should re-home data-plane repo env via image.registry
     set:
       image.registry: mcr.microsoft.com
@@ -180,6 +186,58 @@ tests:
           content:
             name: DOCUMENTDB_EXTENSION_IMAGE_REPO
             value: "mcr.microsoft.com/documentdb/documentdb-kubernetes-operator/documentdb"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_COMBINED_IMAGE_REPO
+            value: "mcr.microsoft.com/documentdb/documentdb-kubernetes-operator/documentdb-combined"
+
+  # -------------------------------------------------------------------
+  # Image mode (ImageVolume vs combined image fallback)
+  # -------------------------------------------------------------------
+  - it: should set DOCUMENTDB_IMAGE_MODE to auto by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IMAGE_MODE
+            value: "auto"
+
+  - it: should pass a forced image mode through
+    set:
+      imageMode: combined
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IMAGE_MODE
+            value: "combined"
+
+  # `helm upgrade --reuse-values` from a chart released before imageMode keeps
+  # the old values, which have neither key; the operator then defaults to auto.
+  - it: should render values from a release without imageMode or image.documentdbCombined
+    set:
+      imageMode: null
+      image.documentdbCombined: null
+    asserts:
+      - notFailedTemplate: {}
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_COMBINED_IMAGE_REPO
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCUMENTDB_IMAGE_MODE
+          any: true
+
+  - it: should reject an invalid image mode
+    set:
+      imageMode: bogus
+    asserts:
+      - failedTemplate:
+          errorPattern: imageMode must be one of auto, imageVolume, combined
 
   - it: should omit otel/postgres env by default
     asserts:

@@ -45,6 +45,44 @@ func TestDocumentDBAdapterExtensionImage(t *testing.T) {
 	}
 }
 
+// TestDocumentDBAdapterCombinedImage covers combined-image resolution: the
+// change-stream gate and non-release explicit tags must not leak into the tag.
+func TestDocumentDBAdapterCombinedImage(t *testing.T) {
+	t.Setenv(util.DOCUMENTDB_VERSION_ENV, "")
+	a := DocumentDBAdapter{}
+	repo := util.DOCUMENTDB_COMBINED_IMAGE_REPO + ":18-"
+	tests := []struct {
+		name string
+		spec dbpreview.DocumentDBSpec
+		want string
+	}{
+		{"changestream gate ignored", dbpreview.DocumentDBSpec{
+			DocumentDBVersion: "0.117.0",
+			FeatureGates:      map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		}, repo + "0.117.0"},
+		{"explicit release tag", dbpreview.DocumentDBSpec{
+			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb:1.0.0"},
+			DocumentDBVersion: "0.117.0",
+		}, repo + "1.0.0"},
+		{"explicit digest falls back to documentDBVersion", dbpreview.DocumentDBSpec{
+			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb@sha256:abc"},
+			DocumentDBVersion: "0.117.0",
+		}, repo + "0.117.0"},
+		{"default", dbpreview.DocumentDBSpec{}, repo + util.DEFAULT_DOCUMENTDB_TAG},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := &dbpreview.DocumentDB{Spec: tt.spec}
+			if got := a.CombinedImage(db); got != tt.want {
+				t.Errorf("CombinedImage() = %q, want %q", got, tt.want)
+			}
+			if got := a.ToClusterIntent(db).Images.Combined; got != tt.want {
+				t.Errorf("ToClusterIntent().Images.Combined = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDocumentDBAdapterGatewayImage covers the gateway-image resolution priority.
 func TestDocumentDBAdapterGatewayImage(t *testing.T) {
 	a := DocumentDBAdapter{}
