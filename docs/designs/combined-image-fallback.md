@@ -210,7 +210,18 @@ combined image.
   verified the rolling update and `ALTER EXTENSION`.
 - CI: the `imagevolume-block` job forces `imageMode=imageVolume` so it keeps
   covering the rejection path, and `imagevolume-preflight` asserts that the
-  ImageVolume layout (annotation and extension entry) was selected.
+  ImageVolume layout (annotation and extension entry) was selected. The
+  `combined-image` job runs `imageMode=auto` where ImageVolume is unusable
+  (Kubernetes 1.33.7 with the gate off, and `kindest/node:v1.32.0` with
+  containerd 1.7) with two image sources: the **published** multi-arch
+  `documentdb-combined:18-<chart documentDbVersion>` (amd64 and arm64), and the
+  image **built from the PR's** `Dockerfile_combined` by the `build-combined`
+  job in `test-build-and-package.yml` (opt-in through its `build_combined`
+  input; in registry mode it downloads the pinned PGDG package). Through
+  `.github/scripts/assert-combined-image.sh` it asserts that the cluster runs
+  the expected combined image with no image volumes, that the node pulled the
+  variant for its own architecture, that the extension is at the expected
+  version, and that Mongo wire-protocol reads and writes work.
 
 ## Limitations and follow-ups
 
@@ -237,5 +248,3 @@ combined image.
 - Cross-region replication between a combined cluster and an ImageVolume
   cluster should work (same PostgreSQL major and extension version) but is not
   yet tested.
-- Add a CI e2e job for combined mode once the combined image is built in the
-  e2e build stage.
