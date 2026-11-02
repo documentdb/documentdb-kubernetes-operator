@@ -147,16 +147,20 @@ runs:
         OPERATOR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/operator:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         SIDECAR_IMAGE="ghcr.io/${{ inputs.repository-owner }}/documentdb-kubernetes-operator/sidecar:${{ inputs.image-tag }}-${{ inputs.architecture }}"
         
+        # docker image inspect, not `docker images | grep -q`: under the
+        # runner's `bash -eo pipefail`, grep -q exits on the first match and
+        # docker images can then fail with SIGPIPE, reporting a loaded image
+        # as missing.
         echo "Checking for required images for $ARCH architecture:"
         echo "  Operator: $OPERATOR_IMAGE"
         echo "  Sidecar: $SIDECAR_IMAGE"
         
-        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$OPERATOR_IMAGE"; then
+        if ! docker image inspect "$OPERATOR_IMAGE" >/dev/null 2>&1; then
           echo "❌ Required operator image not found: $OPERATOR_IMAGE"
           exit 1
         fi
         
-        if ! docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "$SIDECAR_IMAGE"; then
+        if ! docker image inspect "$SIDECAR_IMAGE" >/dev/null 2>&1; then
           echo "❌ Required sidecar image not found: $SIDECAR_IMAGE"
           exit 1
         fi
