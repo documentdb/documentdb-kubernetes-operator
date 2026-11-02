@@ -25,6 +25,9 @@ on:
       - '.github/workflows/test-e2e.yml'
       - '.github/workflows/test-build-and-package.yml'
       - '.github/actions/**'
+      - '.github/dockerfiles/Dockerfile_combined'
+      - '.github/scripts/assert-combined-image.sh'
+      - '.github/scripts/resolve-documentdb-version.sh'
   workflow_dispatch:
     inputs:
       label:
@@ -761,11 +764,15 @@ jobs:
             SPEC_IMAGES="image: {documentDB: \"${DOCUMENTDB_IMAGE_RESOLVED}\", gateway: \"${GATEWAY_IMAGE_RESOLVED}\"}"
           fi
           echo "Expected combined image: ${IMAGE} (linux/${ARCH})"
+          # The pg_extension version is the resolver's documentdb_version_dash
+          # (1.0.0 -> 1.0-0, RCs such as 1.0-RC2 -> 1.0-0). Strip the CI run
+          # suffix from per-run tags first.
+          EXT_VERSION=$(RAW_VERSION="${VERSION%-test-*}" DOCUMENTDB_GATEWAY_IMAGE_REPO=unused \
+            bash .github/scripts/resolve-documentdb-version.sh | sed -n 's/^documentdb_version_dash=//p')
           {
             echo "EXPECTED_IMAGE=${IMAGE}"
             echo "SPEC_IMAGES=${SPEC_IMAGES}"
-            # X.Y.Z[-suffix] -> X.Y-Z (pg_extension version)
-            echo "EXPECTED_EXT_VERSION=$(echo "${VERSION}" | sed -E 's/^([0-9]+\.[0-9]+)\.([0-9]+).*/\1-\2/')"
+            echo "EXPECTED_EXT_VERSION=${EXT_VERSION}"
           } >> "$GITHUB_ENV"
 
       - name: Deploy DocumentDB (imageMode=auto)

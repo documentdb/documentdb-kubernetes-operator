@@ -51,6 +51,7 @@ jobs:
       version: ${{ steps.probe.outputs.version }}
       documentdb_ref: ${{ steps.probe.outputs.documentdb_ref }}
       ext_image_tag: ${{ steps.probe.outputs.ext_image_tag }}
+      package_source: ${{ steps.probe.outputs.package_source }}
     steps:
     - uses: actions/checkout@v4
     - name: Probe documentdb + gateway images
@@ -73,6 +74,7 @@ jobs:
           echo "version=$REGISTRY_VERSION"
           echo "documentdb_ref=${SOURCE_RELEASE_TAG:-v${VERSION_DASH}}"
           echo "ext_image_tag=$EXT_TAG"
+          echo "package_source=$PACKAGE_SOURCE"
         } >> "$GITHUB_OUTPUT"
 
         if [[ -n "$INPUT_REF" ]]; then
@@ -262,7 +264,12 @@ jobs:
   build-packages:
     name: Build DocumentDB Packages (${{ matrix.arch }})
     needs: [probe-images]
-    if: needs.probe-images.outputs.mode == 'build'
+    # Also runs in registry mode when the combined image is requested for a
+    # version PGDG does not package (RCs resolve to package_source=source), so
+    # build-combined uses the matching source-built package.
+    if: |
+      needs.probe-images.outputs.mode == 'build' ||
+      (inputs.build_combined && needs.probe-images.outputs.package_source == 'source')
     timeout-minutes: 60
     strategy:
       matrix:
@@ -539,8 +546,9 @@ jobs:
 
   # Builds the combined PostgreSQL + DocumentDB image from this checkout's
   # Dockerfile_combined so changes to it are tested before release. Uses the
-  # extension .deb from build-packages in build mode; in registry mode (no
-  # source build) it downloads the same pinned package from PGDG. The image is
+  # extension .deb from build-packages in build mode and for RCs (which have no
+  # PGDG package); for stable releases in registry mode it downloads the same
+  # pinned package from PGDG. The image is
   # tagged with the name the operator resolves for a DocumentDB whose
   # spec.image.documentDB is the CI documentdb image (<ext tag>-<arch>), and is
   # uploaded separately so only the combined-image E2E job downloads it.
@@ -560,6 +568,7 @@ jobs:
       EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
       MODE: ${{ needs.probe-images.outputs.mode }}
       DOC_VERSION: ${{ needs.probe-images.outputs.version }}
+      PACKAGE_SOURCE: ${{ needs.probe-images.outputs.package_source }}
     strategy:
       matrix:
         arch: [amd64, arm64]
@@ -573,15 +582,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Download packages (build mode)
-      if: env.MODE == 'build'
+    - name: Download source-built packages
+      if: env.MODE == 'build' || env.PACKAGE_SOURCE == 'source'
       uses: actions/download-artifact@v4
       with:
         name: build-packages-${{ matrix.arch }}
         path: packages/
 
-    - name: Download pinned extension package from PGDG (registry mode)
-      if: env.MODE == 'registry'
+    - name: Download pinned extension package from PGDG (registry mode, stable release)
+      if: env.MODE == 'registry' && env.PACKAGE_SOURCE != 'source'
       env:
         DOCUMENTDB_GATEWAY_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
       run: |
