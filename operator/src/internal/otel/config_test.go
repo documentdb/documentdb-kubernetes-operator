@@ -38,10 +38,17 @@ func parseCfg(yamlStr string) collectorConfig {
 	return cfg
 }
 
+// defaultStaticYAML is base_config.yaml rendered with the DocumentDB names.
+func defaultStaticYAML() []byte {
+	out, err := renderStaticConfig(staticConfigData{HealthMetricName: defaultHealthMetricName})
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	return []byte(out)
+}
+
 var _ = Describe("base_config.yaml embed", func() {
 	It("can be parsed as valid YAML with expected static components", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 		Expect(cfg.Receivers).To(HaveKey("sqlquery"))
 		Expect(cfg.Receivers).To(HaveKey("otlp"))
 		Expect(cfg.Processors).To(HaveKey("memory_limiter"))
@@ -51,13 +58,13 @@ var _ = Describe("base_config.yaml embed", func() {
 	})
 
 	It("does not configure a password while PostgreSQL uses trust authentication", func() {
-		Expect(string(baseConfigYAML)).To(ContainSubstring("user=${env:PGUSER}"))
-		Expect(string(baseConfigYAML)).NotTo(ContainSubstring("PGPASSWORD"))
+		Expect(string(defaultStaticYAML())).To(ContainSubstring("user=${env:PGUSER}"))
+		Expect(string(defaultStaticYAML())).NotTo(ContainSubstring("PGPASSWORD"))
 	})
 
 	It("declares a cgroup-aware memory_limiter processor", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 
 		memLimiter, ok := cfg.Processors["memory_limiter"].(map[string]any)
 		Expect(ok).To(BeTrue(), "memory_limiter processor must be a map")
@@ -68,7 +75,7 @@ var _ = Describe("base_config.yaml embed", func() {
 
 	It("declares an OTLP gRPC receiver on port 4317", func() {
 		var cfg collectorConfig
-		Expect(yaml.Unmarshal(baseConfigYAML, &cfg)).To(Succeed())
+		Expect(yaml.Unmarshal(defaultStaticYAML(), &cfg)).To(Succeed())
 
 		otlp, ok := cfg.Receivers["otlp"].(map[string]any)
 		Expect(ok).To(BeTrue(), "otlp receiver must be a map")

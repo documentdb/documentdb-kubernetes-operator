@@ -11,12 +11,13 @@ import (
 	"testing"
 
 	apiv1 "github.com/cloudnative-pg/api/pkg/api/v1"
+	"github.com/cloudnative-pg/cnpg-i-machinery/pkg/pluginhelper/common"
 	cnpglifecycle "github.com/cloudnative-pg/cnpg-i/pkg/lifecycle"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
+	pluginconfig "github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
 	pluginmetadata "github.com/documentdb/cnpg-i-sidecar-injector/pkg/metadata"
 )
 
@@ -99,7 +100,7 @@ func TestLifecycleHookPatchDoesNotMutatePod(t *testing.T) {
 // so we don't need POD_NAME / OTEL_RESOURCE_ATTRIBUTES on the gateway.
 func TestInjectGatewayOTelEnv_AllAppended(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 
 	got := envNames(pod.Spec.Containers[1].Env)
 	want := []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_METRICS_ENABLED"}
@@ -113,7 +114,7 @@ func TestInjectGatewayOTelEnv_AllAppended(t *testing.T) {
 // silently disables OTLP metrics export.
 func TestInjectGatewayOTelEnv_MetricsEnabledPresent(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 	for _, e := range pod.Spec.Containers[1].Env {
 		if e.Name == "OTEL_METRICS_ENABLED" {
 			if e.Value != "true" {
@@ -130,7 +131,7 @@ func TestInjectGatewayOTelEnv_MetricsEnabledPresent(t *testing.T) {
 // untouched (we don't overwrite), and the others are still appended.
 func TestInjectGatewayOTelEnv_PreservesExisting(t *testing.T) {
 	pod := gatewayContainer(corev1.EnvVar{Name: "OTEL_EXPORTER_OTLP_ENDPOINT", Value: "http://custom:4317"})
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 
 	env := pod.Spec.Containers[1].Env
 	if len(env) != 2 {
@@ -148,10 +149,10 @@ func TestInjectGatewayOTelEnv_PreservesExisting(t *testing.T) {
 // not duplicate environment variables on an already-mutated pod.
 func TestInjectGatewayOTelEnv_Idempotent(t *testing.T) {
 	pod := gatewayContainer()
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 	first := append([]corev1.EnvVar(nil), pod.Spec.Containers[1].Env...)
 
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 	second := pod.Spec.Containers[1].Env
 
 	if !reflect.DeepEqual(first, second) {
@@ -166,7 +167,7 @@ func TestInjectGatewayOTelEnv_NoGatewayContainer(t *testing.T) {
 			Containers: []corev1.Container{{Name: "postgres"}},
 		},
 	}
-	injectGatewayOTelEnv(pod)
+	injectGatewayOTelEnv(pod, gatewayContainerName)
 	if len(pod.Spec.Containers[0].Env) != 0 {
 		t.Errorf("expected no envs on non-gateway container, got %v", envNames(pod.Spec.Containers[0].Env))
 	}
@@ -404,7 +405,7 @@ func TestGatewaySecurityContext_PSARestrictedAsUID1000(t *testing.T) {
 // restricted and, unlike the gateway, does not force a UID so the collector
 // image keeps its own non-root user (UID 10001).
 func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "")
 
 	if c.Name != otelCollectorContainerName {
 		t.Fatalf("container name = %q, want %q", c.Name, otelCollectorContainerName)
@@ -421,7 +422,7 @@ func TestNewOtelCollectorSidecar_Hardened(t *testing.T) {
 // TestNewOtelCollectorSidecar_MonitorUser asserts the sidecar connects using
 // the dedicated monitoring identity without injecting an unused password.
 func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
-	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test")
+	c := newOtelCollectorSidecar("otel/opentelemetry-collector-contrib:test", "")
 
 	for _, env := range c.Env {
 		if env.Name == "PGPASSWORD" {
@@ -441,12 +442,12 @@ func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
 // routing env vars (both UPPER and lowercase spellings) only when the operator
 // forwards them, and nothing when the operator is not proxy-configured.
 func TestProxyEnvVars(t *testing.T) {
-	empty := proxyEnvVars(&config.Configuration{})
+	empty := proxyEnvVars(&pluginconfig.Configuration{})
 	if len(empty) != 0 {
 		t.Fatalf("expected no proxy env when unconfigured, got %v", empty)
 	}
 
-	cfg := &config.Configuration{
+	cfg := &pluginconfig.Configuration{
 		HTTPProxy:  "http://proxy.example.com:3128",
 		HTTPSProxy: "http://proxy.example.com:3128",
 		NoProxy:    "localhost,.svc.cluster.local",
@@ -473,7 +474,7 @@ func TestProxyEnvVars(t *testing.T) {
 	}
 
 	// Only HTTPS set → only the HTTPS pair is emitted.
-	partial := proxyEnvVars(&config.Configuration{HTTPSProxy: "http://p:3128"})
+	partial := proxyEnvVars(&pluginconfig.Configuration{HTTPSProxy: "http://p:3128"})
 	if len(partial) != 2 {
 		t.Fatalf("expected 2 env vars for HTTPS-only, got %d (%v)", len(partial), partial)
 	}
@@ -481,7 +482,7 @@ func TestProxyEnvVars(t *testing.T) {
 	// HTTP only → HTTPS_PROXY falls back to it, because the gRPC exporter
 	// consults only HTTPS_PROXY.
 	httpOnly := map[string]string{}
-	for _, e := range proxyEnvVars(&config.Configuration{HTTPProxy: "http://p:3128"}) {
+	for _, e := range proxyEnvVars(&pluginconfig.Configuration{HTTPProxy: "http://p:3128"}) {
 		httpOnly[e.Name] = e.Value
 	}
 	for _, name := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"} {
@@ -492,10 +493,148 @@ func TestProxyEnvVars(t *testing.T) {
 
 	// An explicit HTTPS proxy is never overridden by the HTTP fallback.
 	both := map[string]string{}
-	for _, e := range proxyEnvVars(&config.Configuration{HTTPProxy: "http://h:1", HTTPSProxy: "http://s:2"}) {
+	for _, e := range proxyEnvVars(&pluginconfig.Configuration{HTTPProxy: "http://h:1", HTTPSProxy: "http://s:2"}) {
 		both[e.Name] = e.Value
 	}
 	if both["HTTPS_PROXY"] != "http://s:2" || both["HTTP_PROXY"] != "http://h:1" {
 		t.Errorf("explicit values changed: %v", both)
 	}
+}
+
+func TestLifecycleHookMonitoringPasswordSecret(t *testing.T) {
+	for _, secret := range []string{"", "monitor-password"} {
+		t.Run("secret="+secret, func(t *testing.T) {
+			configuration, errs := pluginconfig.FromParameters(&common.Plugin{Parameters: map[string]string{
+				"otelCollectorImage": "otel/opentelemetry-collector-contrib:test",
+				"otelConfigMapName":  "demo-otel-config",
+				"otelPasswordSecret": secret,
+			}})
+			if len(errs) != 0 {
+				t.Fatalf("FromParameters() validation errors: %v", errs)
+			}
+			params, err := configuration.ToParameters()
+			if err != nil {
+				t.Fatalf("ToParameters() error: %v", err)
+			}
+			containers := runCreateHook(t, params)
+			collector, ok := containers[otelCollectorContainerName]
+			if !ok {
+				t.Fatal("collector was not injected")
+			}
+			var password *corev1.EnvVar
+			for i := range collector.Env {
+				env := &collector.Env[i]
+				if env.Name == "PGPASSWORD" {
+					password = env
+				}
+			}
+			if secret == "" {
+				if password != nil {
+					t.Fatal("default collector must not receive PGPASSWORD")
+				}
+				return
+			}
+			if password == nil || password.Value != "" || password.ValueFrom == nil || password.ValueFrom.SecretKeyRef == nil {
+				t.Fatalf("PGPASSWORD must use a SecretKeyRef, got %+v", password)
+			}
+			ref := password.ValueFrom.SecretKeyRef
+			if ref.Name != secret || ref.Key != "password" || (ref.Optional != nil && *ref.Optional) {
+				t.Fatalf("PGPASSWORD secret selector = %+v", ref)
+			}
+		})
+	}
+}
+
+func runCreateHook(t *testing.T, params map[string]string) map[string]corev1.Container {
+	t.Helper()
+	enabled := true
+	cluster := &apiv1.Cluster{
+		TypeMeta:   metav1.TypeMeta{APIVersion: apiv1.SchemeGroupVersion.String(), Kind: apiv1.ClusterKind},
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster", Namespace: "default"},
+		Spec: apiv1.ClusterSpec{Plugins: []apiv1.PluginConfiguration{
+			{Name: pluginmetadata.PluginName, Enabled: &enabled, Parameters: params},
+		}},
+		Status: apiv1.ClusterStatus{TargetPrimary: "cluster-1"},
+	}
+	pod := &corev1.Pod{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-1", Namespace: "default",
+			Labels:      map[string]string{"cnpg.io/cluster": "cluster"},
+			Annotations: map[string]string{"cnpg.io/operatorVersion": "test"},
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "postgres"}}},
+	}
+	response, err := Implementation{}.LifecycleHook(context.Background(), &cnpglifecycle.OperatorLifecycleRequest{
+		OperationType:     &cnpglifecycle.OperatorOperationType{Type: cnpglifecycle.OperatorOperationType_TYPE_CREATE},
+		ClusterDefinition: mustMarshal(t, cluster),
+		ObjectDefinition:  mustMarshal(t, pod),
+	})
+	if err != nil {
+		t.Fatalf("LifecycleHook() error: %v", err)
+	}
+	return addedContainersFromPatch(t, response.JsonPatch)
+}
+
+func TestLifecycleHookDefaultGatewayContract(t *testing.T) {
+	gateway, ok := runCreateHook(t, map[string]string{"gatewayImage": "gw:1"})[gatewayContainerName]
+	if !ok {
+		t.Fatal("documentdb-gateway container missing")
+	}
+	if len(gateway.Ports) != 1 || gateway.Ports[0].ContainerPort != 10260 {
+		t.Errorf("ports = %+v, want 10260", gateway.Ports)
+	}
+	if got := envNames(gateway.Env); len(got) < 2 || got[0] != "USERNAME" || got[1] != "PASSWORD" {
+		t.Errorf("env = %v, want USERNAME/PASSWORD first", got)
+	}
+	want := []string{"--create-user", "true", "--start-pg", "false", "--pg-port", "5432"}
+	if !reflect.DeepEqual(gateway.Args, want) {
+		t.Errorf("args = %v, want %v", gateway.Args, want)
+	}
+}
+
+func TestLifecycleHookCustomGatewayContract(t *testing.T) {
+	containers := runCreateHook(t, map[string]string{
+		"gatewayImage":               "cosmos-gw:1",
+		"gatewayContainerName":       "pgcosmos-gateway",
+		"gatewayPort":                "8081",
+		"gatewayArgs":                `["--port","8081"]`,
+		"gatewayUsernameEnv":         "COSMOS_USER",
+		"gatewayPasswordEnv":         "COSMOS_KEY",
+		"documentDbCredentialSecret": "cosmos-credentials",
+		"gatewayTLSSecret":           "cosmos-gateway-tls",
+		"otelCollectorImage":         "otel:1",
+		"otelConfigMapName":          "otel-config",
+	})
+	if _, ok := containers[gatewayContainerName]; ok {
+		t.Fatal("default gateway container name leaked")
+	}
+	gateway, ok := containers["pgcosmos-gateway"]
+	if !ok {
+		t.Fatalf("pgcosmos-gateway missing; got %v", containers)
+	}
+	if gateway.Ports[0].ContainerPort != 8081 {
+		t.Errorf("port = %d, want 8081", gateway.Ports[0].ContainerPort)
+	}
+	if !reflect.DeepEqual(gateway.Args, []string{"--port", "8081"}) {
+		t.Errorf("args = %v", gateway.Args)
+	}
+	names := envNames(gateway.Env)
+	if names[0] != "COSMOS_USER" || names[1] != "COSMOS_KEY" {
+		t.Errorf("env = %v", names)
+	}
+	for i, key := range []string{"username", "password"} {
+		source := gateway.Env[i].ValueFrom
+		if source == nil || source.SecretKeyRef == nil || source.SecretKeyRef.Name != "cosmos-credentials" ||
+			source.SecretKeyRef.Key != key {
+			t.Errorf("%s does not reference the product credential Secret key %s", gateway.Env[i].Name, key)
+		}
+	}
+	if len(gateway.VolumeMounts) != 1 || gateway.VolumeMounts[0].Name != "gateway-tls" ||
+		gateway.VolumeMounts[0].MountPath != "/tls" || !gateway.VolumeMounts[0].ReadOnly {
+		t.Errorf("gateway TLS mount = %+v", gateway.VolumeMounts)
+	}
+	assertEnvValue(t, gateway.Env, "CERT_PATH", "/tls/tls.crt")
+	assertEnvValue(t, gateway.Env, "KEY_FILE", "/tls/tls.key")
+	assertEnvValue(t, gateway.Env, "OTEL_METRICS_ENABLED", "true")
 }

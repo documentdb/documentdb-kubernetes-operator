@@ -786,6 +786,38 @@ var _ = Describe("SyncCnpgCluster - managed roles", func() {
 		Expect(updated.Annotations).ToNot(HaveKey("kubectl.kubernetes.io/restartedAt"))
 	})
 
+	It("patches the image of a non-documentdb product extension", func() {
+		current := baseCluster("test-cluster", namespace)
+		current.Spec.PostgresConfiguration.Extensions = []cnpgv1.ExtensionConfiguration{
+			{Name: "pg_cron"},
+			{Name: "pgcosmos", ImageVolumeSource: corev1.ImageVolumeSource{Reference: "reg/pgcosmos:1"}},
+		}
+		desired := current.DeepCopy()
+		desired.Spec.PostgresConfiguration.Extensions = []cnpgv1.ExtensionConfiguration{
+			{Name: "pgcosmos", ImageVolumeSource: corev1.ImageVolumeSource{Reference: "reg/pgcosmos:2"}},
+		}
+		desired.Spec.Managed = &cnpgv1.ManagedConfiguration{Roles: []cnpgv1.RoleConfiguration{absentOtelMonitorRole()}}
+		current.Spec.Managed = desired.Spec.Managed.DeepCopy()
+		c := buildFakeClient(current).Build()
+
+		Expect(SyncCnpgCluster(context.Background(), c, current, desired, nil)).To(Succeed())
+
+		updated := &cnpgv1.Cluster{}
+		Expect(c.Get(context.Background(), types.NamespacedName{Name: "test-cluster", Namespace: namespace}, updated)).To(Succeed())
+		Expect(updated.Spec.PostgresConfiguration.Extensions[0].Name).To(Equal("pg_cron"))
+		Expect(updated.Spec.PostgresConfiguration.Extensions[1].ImageVolumeSource.Reference).To(Equal("reg/pgcosmos:2"))
+	})
+
+	It("fails when the desired product extension is missing from the current cluster", func() {
+		current := baseCluster("test-cluster", namespace)
+		desired := current.DeepCopy()
+		desired.Spec.PostgresConfiguration.Extensions[0].Name = "pgcosmos"
+		c := buildFakeClient(current).Build()
+
+		err := SyncCnpgCluster(context.Background(), c, current, desired, nil)
+		Expect(err).To(MatchError(ContainSubstring("pgcosmos extension not found")))
+	})
+
 	It("defaults a missing desired monitor role to absent", func() {
 		current := baseCluster("test-cluster", namespace)
 		desired := current.DeepCopy()
@@ -803,9 +835,27 @@ var _ = Describe("Helper functions", func() {
 				PostgresConfiguration: cnpgv1.PostgresConfiguration{},
 			},
 		}
-		idx, img := findExtensionImage(cluster)
+		idx, img := findExtensionImage(cluster, "documentdb")
 		Expect(idx).To(Equal(-1))
 		Expect(img).To(BeEmpty())
+	})
+
+	It("findExtensionImage matches the requested extension name", func() {
+		cluster := &cnpgv1.Cluster{
+			Spec: cnpgv1.ClusterSpec{
+				PostgresConfiguration: cnpgv1.PostgresConfiguration{
+					Extensions: []cnpgv1.ExtensionConfiguration{
+						{Name: "other", ImageVolumeSource: corev1.ImageVolumeSource{Reference: "other:1"}},
+						{Name: "pgcosmos", ImageVolumeSource: corev1.ImageVolumeSource{Reference: "pgcosmos:1"}},
+					},
+				},
+			},
+		}
+		idx, img := findExtensionImage(cluster, "pgcosmos")
+		Expect(idx).To(Equal(1))
+		Expect(img).To(Equal("pgcosmos:1"))
+		idx, _ = findExtensionImage(cluster, "")
+		Expect(idx).To(Equal(-1))
 	})
 
 	It("findPlugin returns -1 when plugin not found", func() {

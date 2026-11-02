@@ -1,0 +1,176 @@
+{
+  "metadata": {
+    "name": "golden",
+    "namespace": "golden-ns",
+    "ownerReferences": [
+      {
+        "apiVersion": "documentdb.io/preview",
+        "kind": "DocumentDB",
+        "name": "golden",
+        "uid": "00000000-0000-0000-0000-000000000001",
+        "controller": true,
+        "blockOwnerDeletion": true
+      }
+    ]
+  },
+  "spec": {
+    "inheritedMetadata": {
+      "labels": {
+        "app": "golden",
+        "replica_type": "primary"
+      }
+    },
+    "imageName": "reg.example/pg:18",
+    "postgresUID": 26,
+    "postgresGID": 26,
+    "instances": 3,
+    "postgresql": {
+      "parameters": {
+        "autovacuum_analyze_scale_factor": "0.05",
+        "autovacuum_max_workers": "4",
+        "autovacuum_vacuum_cost_delay": "2ms",
+        "autovacuum_vacuum_scale_factor": "0.1",
+        "checkpoint_completion_target": "0.9",
+        "cron.database_name": "postgres",
+        "effective_cache_size": "9888MB",
+        "effective_io_concurrency": "200",
+        "io_method": "io_uring",
+        "maintenance_work_mem": "1318MB",
+        "max_connections": "300",
+        "max_prepared_transactions": "100",
+        "max_replication_slots": "10",
+        "max_wal_senders": "10",
+        "max_wal_size": "2GB",
+        "min_wal_size": "256MB",
+        "random_page_cost": "1.1",
+        "shared_buffers": "3296MB",
+        "wal_buffers": "16MB",
+        "wal_level": "logical",
+        "work_mem": "64MB"
+      },
+      "pg_hba": [
+        "host all all localhost trust",
+        "hostssl replication streaming_replica all cert"
+      ],
+      "syncReplicaElectionConstraint": {
+        "enabled": false
+      },
+      "shared_preload_libraries": [
+        "pg_cron",
+        "pg_documentdb_core",
+        "pg_documentdb"
+      ],
+      "extensions": [
+        {
+          "name": "documentdb",
+          "image": {
+            "reference": "reg.example/ext:9.9.9"
+          },
+          "extension_control_path": [
+            "share"
+          ],
+          "dynamic_library_path": [
+            "lib"
+          ],
+          "ld_library_path": [
+            "lib",
+            "system"
+          ]
+        }
+      ]
+    },
+    "bootstrap": {
+      "initdb": {
+        "postInitSQL": [
+          "CREATE EXTENSION documentdb CASCADE",
+          "CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'",
+          "ALTER ROLE documentdb WITH SUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS",
+          "SELECT 1"
+        ]
+      }
+    },
+    "certificates": {
+      "serverCASecret": "pg-ca",
+      "serverTLSSecret": "pg-server-tls"
+    },
+    "imagePullSecrets": [
+      {
+        "name": "pull"
+      }
+    ],
+    "storage": {
+      "storageClass": "premium",
+      "size": "10Gi"
+    },
+    "stopDelay": 120,
+    "affinity": {
+      "enablePodAntiAffinity": true,
+      "topologyKey": "kubernetes.io/hostname"
+    },
+    "resources": {
+      "limits": {
+        "cpu": "3950m",
+        "memory": "13184Mi"
+      },
+      "requests": {
+        "cpu": "3950m",
+        "memory": "13184Mi"
+      }
+    },
+    "primaryUpdateMethod": "switchover",
+    "backup": {
+      "volumeSnapshot": {
+        "snapshotOwnerReference": "backup",
+        "onlineConfiguration": {}
+      },
+      "target": "primary"
+    },
+    "logLevel": "debug",
+    "managed": {
+      "roles": [
+        {
+          "name": "otel_monitor",
+          "comment": "Dedicated role for the OTel Collector monitoring sidecar",
+          "ensure": "present",
+          "connectionLimit": -1,
+          "inherit": true,
+          "disablePassword": true,
+          "login": true
+        }
+      ]
+    },
+    "seccompProfile": {
+      "type": "Localhost",
+      "localhostProfile": "profiles/documentdb-iouring.json"
+    },
+    "plugins": [
+      {
+        "name": "custom.injector.io",
+        "enabled": true,
+        "parameters": {
+          "documentDbCredentialSecret": "creds",
+          "gatewayImage": "reg.example/gw:9.9.9",
+          "gatewayMemoryLimit": "3Gi",
+          "gatewayMemoryRequest": "3Gi",
+          "gatewayTLSSecret": "gw-tls",
+          "otelCollectorImage": "otel/opentelemetry-collector-contrib:0.149.0",
+          "otelConfigHash": "d60e2ff6f9bb55d4",
+          "otelConfigMapName": "golden-otel-config",
+          "otelCpuLimit": "200m",
+          "otelCpuRequest": "50m",
+          "otelMemoryLimit": "128Mi",
+          "otelMemoryRequest": "48Mi",
+          "prometheusPort": "9187"
+        }
+      }
+    ]
+  },
+  "status": {
+    "managedRolesStatus": {},
+    "topology": {},
+    "secretsResourceVersion": {},
+    "configMapResourceVersion": {},
+    "certificates": {},
+    "switchReplicaClusterStatus": {}
+  }
+}

@@ -54,8 +54,8 @@ const (
 	// on each DocumentDB release (old <- previous default, new <- released
 	// version). Do not duplicate it into workflow env; test-e2e.yml only
 	// passes an optional workflow_dispatch override.
-	defaultOldDocumentDBVersion = "0.116.0"
-	defaultNewDocumentDBVersion = "0.117.0"
+	defaultOldDocumentDBVersion = "0.117.0"
+	defaultNewDocumentDBVersion = "1.0.0"
 
 	// Optional gateway image overrides for the image-upgrade spec.
 	// When unset the spec patches only spec.image.documentDB and leaves
@@ -275,4 +275,11 @@ func podInstalledSchemaVersion(
 		raw = raw[:i] + "." + raw[i+1:]
 	}
 	return raw, nil
+}
+
+// unpullableVersionAbove returns "<major>.999.0" for a semver, which no release
+// publishes and which stays above v so the image-rollback webhook admits it.
+func unpullableVersionAbove(v string) string {
+	major, _, _ := strings.Cut(v, ".")
+	return fmt.Sprintf("%s.999.0", major)
 }

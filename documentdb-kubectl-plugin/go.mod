@@ -1,6 +1,6 @@
 module github.com/documentdb/documentdb-operator/documentdb-kubectl-plugin
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/documentdb/documentdb-operator v0.0.0

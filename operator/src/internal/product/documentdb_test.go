@@ -6,6 +6,8 @@ package product
 import (
 	"testing"
 
+	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -38,6 +40,44 @@ func TestDocumentDBAdapterExtensionImage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := a.ExtensionImage(&dbpreview.DocumentDB{Spec: tt.spec}); got != tt.want {
 				t.Errorf("ExtensionImage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDocumentDBAdapterCombinedImage covers combined-image resolution: the
+// change-stream gate and non-release explicit tags must not leak into the tag.
+func TestDocumentDBAdapterCombinedImage(t *testing.T) {
+	t.Setenv(util.DOCUMENTDB_VERSION_ENV, "")
+	a := DocumentDBAdapter{}
+	repo := util.DOCUMENTDB_COMBINED_IMAGE_REPO + ":18-"
+	tests := []struct {
+		name string
+		spec dbpreview.DocumentDBSpec
+		want string
+	}{
+		{"changestream gate ignored", dbpreview.DocumentDBSpec{
+			DocumentDBVersion: "0.117.0",
+			FeatureGates:      map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		}, repo + "0.117.0"},
+		{"explicit release tag", dbpreview.DocumentDBSpec{
+			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb:1.0.0"},
+			DocumentDBVersion: "0.117.0",
+		}, repo + "1.0.0"},
+		{"explicit digest falls back to documentDBVersion", dbpreview.DocumentDBSpec{
+			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb@sha256:abc"},
+			DocumentDBVersion: "0.117.0",
+		}, repo + "0.117.0"},
+		{"default", dbpreview.DocumentDBSpec{}, repo + util.DEFAULT_DOCUMENTDB_TAG},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := &dbpreview.DocumentDB{Spec: tt.spec}
+			if got := a.CombinedImage(db); got != tt.want {
+				t.Errorf("CombinedImage() = %q, want %q", got, tt.want)
+			}
+			if got := a.ToClusterIntent(db).Images.Combined; got != tt.want {
+				t.Errorf("ToClusterIntent().Images.Combined = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -136,4 +176,56 @@ func TestDocumentDBAdapterPostgresImage(t *testing.T) {
 			t.Errorf("Postgres = %q, want %q", got, want)
 		}
 	})
+}
+
+// TestDocumentDBAdapterRendererInputs covers the per-instance renderer inputs the
+// adapter maps from the custom resource onto the intent.
+func TestDocumentDBAdapterRendererInputs(t *testing.T) {
+	t.Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, "bogus")
+	t.Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
+	certs := &cnpgv1.CertificatesConfiguration{ServerTLSSecret: "pg-tls"}
+	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
+		Resource: dbpreview.Resource{
+			Memory:  "8Gi",
+			CPU:     "2",
+			Gateway: &dbpreview.ComponentResources{Memory: "1Gi"},
+		},
+		Monitoring:   &dbpreview.MonitoringSpec{Enabled: true},
+		LogLevel:     "debug",
+		Timeouts:     dbpreview.Timeouts{StopDelay: 90},
+		Postgres:     &dbpreview.PostgresSpec{Parameters: map[string]string{"work_mem": "8MB"}},
+		FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		TLS:          &dbpreview.TLSConfiguration{Postgres: certs},
+	}}
+	db.Status.TLS = &dbpreview.TLSStatus{Ready: false, SecretName: "gw-tls"}
+
+	intent := DocumentDBAdapter{}.ToClusterIntent(db)
+
+	if intent.Resources.Memory != "8Gi" || intent.Resources.CPU != "2" ||
+		intent.Resources.Gateway == nil || intent.Resources.Gateway.Memory != "1Gi" || intent.Resources.Database != nil {
+		t.Errorf("Resources = %+v", intent.Resources)
+	}
+	if intent.Monitoring != db.Spec.Monitoring {
+		t.Errorf("Monitoring not passed through")
+	}
+	if intent.Postgres.LogLevel != "debug" || intent.Postgres.StopDelay != 90 || intent.Postgres.Parameters["work_mem"] != "8MB" {
+		t.Errorf("Postgres = %+v", intent.Postgres)
+	}
+	if !intent.FeatureGates.ChangeStreams || intent.FeatureGates.IOUring {
+		t.Errorf("FeatureGates = %+v", intent.FeatureGates)
+	}
+	if intent.TLS.GatewaySecret != "" {
+		t.Errorf("gateway TLS secret must stay empty until TLS is ready, got %q", intent.TLS.GatewaySecret)
+	}
+	if intent.TLS.Postgres != certs {
+		t.Errorf("Postgres certificates not passed through")
+	}
+	if intent.Images.PostgresExtensionPullPolicy != "" || intent.Images.GatewayPullPolicy != "Never" {
+		t.Errorf("pull policies = %q/%q", intent.Images.PostgresExtensionPullPolicy, intent.Images.GatewayPullPolicy)
+	}
+
+	db.Status.TLS.Ready = true
+	if got := (DocumentDBAdapter{}).ToClusterIntent(db).TLS.GatewaySecret; got != "gw-tls" {
+		t.Errorf("ready gateway TLS secret = %q, want gw-tls", got)
+	}
 }

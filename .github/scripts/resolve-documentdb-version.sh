@@ -4,6 +4,14 @@ set -euo pipefail
 RAW_VERSION="${RAW_VERSION:?DocumentDB version is required}"
 PACKAGE_SOURCE=apt
 SOURCE_RELEASE_TAG=""
+REQUESTED_SOURCE="${DOCUMENTDB_PACKAGE_SOURCE:-auto}"
+case "$REQUESTED_SOURCE" in
+  auto|apt|source) ;;
+  *)
+    echo "DOCUMENTDB_PACKAGE_SOURCE must be auto, apt or source, got: $REQUESTED_SOURCE" >&2
+    exit 1
+    ;;
+esac
 
 if [[ "$RAW_VERSION" =~ ^[vV]?([0-9]+)\.([0-9]+)(\.([0-9]+))?[-~][rR][cC]([1-9][0-9]*)$ ]]; then
   RELEASE_BASE="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
@@ -17,6 +25,10 @@ if [[ "$RAW_VERSION" =~ ^[vV]?([0-9]+)\.([0-9]+)(\.([0-9]+))?[-~][rR][cC]([1-9][
   EXPECTED_DEB_VERSION="${RELEASE_BASE}~rc${RC_NUMBER}"
   SOURCE_RELEASE_TAG="v${RELEASE_BASE}-RC${RC_NUMBER}"
   PACKAGE_SOURCE=source
+  if [[ "$REQUESTED_SOURCE" == apt ]]; then
+    echo "Release candidates build from source; DOCUMENTDB_PACKAGE_SOURCE=apt is not supported for $RAW_VERSION" >&2
+    exit 1
+  fi
 else
   VERSION="$RAW_VERSION"
   if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+-[0-9]+$ ]]; then
@@ -28,6 +40,12 @@ else
   fi
   VERSION_DASH="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
   EXPECTED_DEB_VERSION="$VERSION_DASH"
+  # Stable releases come from PGDG unless forced to source, e.g. when PGDG
+  # has not yet packaged a release that is already tagged upstream.
+  if [[ "$REQUESTED_SOURCE" == source ]]; then
+    PACKAGE_SOURCE=source
+    SOURCE_RELEASE_TAG="v${VERSION_DASH}"
+  fi
 fi
 
 SHORT_SHA="${GITHUB_SHA:0:7}"

@@ -13,11 +13,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
 
 const documentdbServicePrefix = "documentdb-service-"
+
+// gatewayServiceNameAnnotation records the gateway Service name the operator
+// chose for a DocumentDB whose prefixed name exceeds 63 characters.
+const gatewayServiceNameAnnotation = "documentdb.io/gateway-service-name"
 
 type statusOptions struct {
 	documentDBName  string
@@ -221,7 +226,8 @@ func (o *statusOptions) populateClusterStatus(ctx context.Context, st *clusterSt
 		}
 	}
 
-	serviceIP, err := findDocumentDBServiceEndpoint(ctx, clientset, o.namespace, st.Cluster, o.documentDBName)
+	serviceIP, err := findDocumentDBServiceEndpoint(ctx, clientset, o.namespace, st.Cluster, o.documentDBName,
+		document.GetUID(), document.GetAnnotations()[gatewayServiceNameAnnotation])
 	if err == nil {
 		st.ServiceIP = serviceIP
 	}
@@ -229,10 +235,28 @@ func (o *statusOptions) populateClusterStatus(ctx context.Context, st *clusterSt
 	return nil
 }
 
-func findDocumentDBServiceEndpoint(ctx context.Context, clientset kubernetes.Interface, namespace, clusterName, documentName string) (string, error) {
+// findDocumentDBServiceEndpoint returns the endpoint of the gateway Service
+// controlled by the DocumentDB with uid. It tries the operator-recorded Service
+// name, then prefix+cluster/document name, then any prefixed Service the
+// DocumentDB controls (long names are shortened with a hash suffix). A Service
+// controlled by another resource, such as one left by a deleted DocumentDB of
+// the same name, is never reported.
+func findDocumentDBServiceEndpoint(ctx context.Context, clientset kubernetes.Interface, namespace, clusterName, documentName string, uid types.UID, recordedName string) (string, error) {
+	controlledByDocument := func(svc *corev1.Service) bool {
+		owner := metav1.GetControllerOf(svc)
+		if owner == nil {
+			// Services from releases that predate owner references.
+			return uid == ""
+		}
+		return owner.Kind == "DocumentDB" && owner.Name == documentName && (uid == "" || owner.UID == uid)
+	}
+
 	candidateNames := []string{
 		documentdbServicePrefix + clusterName,
 		documentdbServicePrefix + documentName,
+	}
+	if recordedName != "" {
+		candidateNames = append([]string{recordedName}, candidateNames...)
 	}
 	for _, name := range candidateNames {
 		svc, err := clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -242,6 +266,9 @@ func findDocumentDBServiceEndpoint(ctx context.Context, clientset kubernetes.Int
 			}
 			return "", fmt.Errorf("get service %s: %w", name, err)
 		}
+		if metav1.GetControllerOf(svc) != nil && !controlledByDocument(svc) {
+			continue
+		}
 		return renderServiceEndpoint(svc), nil
 	}
 
@@ -249,9 +276,10 @@ func findDocumentDBServiceEndpoint(ctx context.Context, clientset kubernetes.Int
 	if err != nil {
 		return "", fmt.Errorf("list services: %w", err)
 	}
-	for _, svc := range services.Items {
-		if strings.HasPrefix(svc.Name, documentdbServicePrefix) && (strings.Contains(svc.Name, clusterName) || strings.Contains(svc.Name, documentName)) {
-			return renderServiceEndpoint(&svc), nil
+	for idx := range services.Items {
+		svc := &services.Items[idx]
+		if strings.HasPrefix(svc.Name, documentdbServicePrefix) && metav1.GetControllerOf(svc) != nil && controlledByDocument(svc) {
+			return renderServiceEndpoint(svc), nil
 		}
 	}
 

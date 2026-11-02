@@ -80,7 +80,7 @@ kubectl get svc documentdb-service-my-documentdb -n documentdb-ns \
   -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
 
-The service name follows the pattern `documentdb-service-<documentdb-name>` (truncated to 63 characters).
+The service name follows the pattern `documentdb-service-<documentdb-name>`. If that exceeds the 63-character Kubernetes limit, the operator shortens it and appends a hash of the DocumentDB name so every cluster gets its own Service (for example `documentdb-service-<first-35-characters>-<8-hex-digit-hash>`). Clusters created by earlier releases keep their existing Service name. For long names, the operator records the chosen name in the `documentdb.io/gateway-service-name` annotation on the DocumentDB resource and keeps it even if the Service is recreated. Run `kubectl get svc -n <namespace>` to see the exact name.
 
 !!! note
     Set `spec.environment` to `aks`, `eks`, or `gke` to apply cloud-specific load balancer annotations automatically. See [Networking](../configuration/networking.md) for details.

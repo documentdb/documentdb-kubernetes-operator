@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
 // formatMB formats a megabyte value as a PostgreSQL size string.
@@ -79,29 +80,43 @@ func StaticDefaults() map[string]string {
 }
 
 // ProtectedParameters returns parameters that are always force-set by the
-// operator and cannot be overridden by users.
+// operator for a DocumentDB instance and cannot be overridden by users.
 func ProtectedParameters(documentdb *dbpreview.DocumentDB) map[string]string {
+	return ProtectedParametersFor(product.DocumentDBAdapter{}.ToClusterIntent(documentdb))
+}
+
+// ProtectedParametersFor returns the core protected parameters, overlaid with
+// the product's protected parameters and the feature-gate driven GUCs.
+func ProtectedParametersFor(intent product.ClusterIntent) map[string]string {
 	params := map[string]string{
-		"cron.database_name":        "postgres",
 		"max_replication_slots":     "10",
 		"max_wal_senders":           "10",
 		"max_prepared_transactions": "100",
 	}
-	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateChangeStreams) {
+	for k, v := range intent.Product.Postgres.ProtectedParameters {
+		params[k] = v
+	}
+	if intent.FeatureGates.ChangeStreams {
 		params["wal_level"] = "logical"
 	}
-	if dbpreview.IsFeatureGateEnabled(documentdb, dbpreview.FeatureGateIOUring) {
+	if intent.FeatureGates.IOUring {
 		params["io_method"] = "io_uring"
 	}
 	return params
 }
 
-// MergeParameters merges all parameter sources in priority order (last write wins):
+// MergeParameters merges all parameter sources for a DocumentDB instance; see
+// MergeParametersFor.
+func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) map[string]string {
+	return MergeParametersFor(product.DocumentDBAdapter{}.ToClusterIntent(documentdb), memoryLimitBytes)
+}
+
+// MergeParametersFor merges all parameter sources in priority order (last write wins):
 // 1. StaticDefaults
 // 2. ComputeMemoryAwareDefaults
-// 3. User overrides (documentdb.Spec.Postgres.Parameters)
-// 4. ProtectedParameters (always wins)
-func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) map[string]string {
+// 3. User overrides (intent.Postgres.Parameters)
+// 4. ProtectedParametersFor (always wins)
+func MergeParametersFor(intent product.ClusterIntent, memoryLimitBytes int64) map[string]string {
 	result := make(map[string]string)
 
 	for k, v := range StaticDefaults() {
@@ -110,12 +125,10 @@ func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) m
 	for k, v := range ComputeMemoryAwareDefaults(memoryLimitBytes) {
 		result[k] = v
 	}
-	if documentdb.Spec.Postgres != nil {
-		for k, v := range documentdb.Spec.Postgres.Parameters {
-			result[k] = v
-		}
+	for k, v := range intent.Postgres.Parameters {
+		result[k] = v
 	}
-	for k, v := range ProtectedParameters(documentdb) {
+	for k, v := range ProtectedParametersFor(intent) {
 		result[k] = v
 	}
 

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -103,9 +104,13 @@ func DefaultSplitConfig() SplitConfig {
 // Legacy behavior is preserved: when neither the envelope nor any per-container
 // value is set for a dimension, that dimension is left unmanaged (no limits).
 func ComputeResourceSplit(documentdb *dbpreview.DocumentDB, cfg SplitConfig) ResourceSplit {
-	res := documentdb.Spec.Resource
-	monitoring := documentdb.Spec.Monitoring != nil && documentdb.Spec.Monitoring.Enabled
+	return ComputeResourceSplitFor(product.DocumentDBResources(documentdb), monitoringEnabled(documentdb.Spec.Monitoring), cfg)
+}
 
+// ComputeResourceSplitFor is the product-neutral form of ComputeResourceSplit:
+// it splits the given resource model, carving the OTel collector only when
+// monitoring is enabled.
+func ComputeResourceSplitFor(res product.Resources, monitoring bool, cfg SplitConfig) ResourceSplit {
 	envelopeBytes := parseMemoryToBytes(res.Memory)
 	split := ResourceSplit{MonitoringEnabled: monitoring}
 
@@ -219,8 +224,13 @@ func subtractCPU(envelope string, reserved ...string) string {
 
 // --- helpers ---
 
+// monitoringEnabled reports whether the monitoring sidecar is requested.
+func monitoringEnabled(m *dbpreview.MonitoringSpec) bool {
+	return m != nil && m.Enabled
+}
+
 // componentCPU returns the component's CPU override, or "" when unset/zero.
-func componentCPU(c *dbpreview.ComponentResources) string {
+func componentCPU(c *product.ComponentResources) string {
 	if c == nil {
 		return ""
 	}

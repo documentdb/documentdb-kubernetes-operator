@@ -72,13 +72,14 @@ The operator Helm chart automatically installs the [CloudNativePG operator](http
 
 ```bash
 helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+  --version <release-version> \
   --namespace documentdb-operator \
   --create-namespace \
   --wait
 ```
 
-!!! tip "Pin production installs"
-    Quickstarts install the latest stable chart. For production or repeatable installs, choose a release from [GitHub Releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases) and add `--version <release-version>`.
+!!! tip "Chart version"
+    `--version` pins the chart these docs were published for. The chart version is the operator's version, not the DocumentDB engine's; see [version compatibility](before-you-start.md#version-compatibility).
 
 Verify:
 

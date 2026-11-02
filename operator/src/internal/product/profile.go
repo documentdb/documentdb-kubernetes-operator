@@ -35,6 +35,88 @@ type ProductProfile struct {
 	// operator wires onto the rendered Cluster.
 	SidecarInjectorPlugin string
 	WALReplicaPlugin      string
+
+	// Postgres is the product's PostgreSQL contract: extension, libraries,
+	// bootstrap SQL, host-based auth, and operator-forced GUCs.
+	Postgres PostgresProfile
+
+	// Gateway is the product's gateway sidecar contract. Zero values keep the
+	// sidecar injector's DocumentDB gateway defaults.
+	Gateway GatewayProfile
+
+	// Naming is the product's label/annotation/finalizer domain and resource
+	// naming conventions used by the shared reconcilers.
+	Naming NamingProfile
+}
+
+// GatewayProfile describes how the sidecar injector runs the product gateway.
+// Every field is optional; an empty value is not sent to the plugin so the
+// injector falls back to its DocumentDB gateway defaults.
+type GatewayProfile struct {
+	// ContainerName is the injected gateway container name.
+	ContainerName string
+	// Port is the gateway container port.
+	Port int32
+	// Args, when non-nil, replaces the DocumentDB gateway arguments verbatim.
+	Args []string
+	// UsernameEnv and PasswordEnv are the env var names the credential
+	// secret's username/password keys are exposed as.
+	UsernameEnv string
+	PasswordEnv string
+}
+
+// ExtensionSpec describes the product's PostgreSQL extension, mounted from the
+// extension image through CNPG's ImageVolume extension support.
+type ExtensionSpec struct {
+	// Name is the CNPG extension entry name and the PostgreSQL extension name
+	// used for CREATE/ALTER EXTENSION and version discovery. It must satisfy
+	// CNPG's extension-name constraints (1-59 characters, lowercase letters,
+	// digits, internal hyphens/underscores, and alphanumeric ends).
+	Name string
+	// DynamicLibraryPath, ExtensionControlPath, and LdLibraryPath are the
+	// image-relative paths CNPG adds to the PostgreSQL search paths.
+	DynamicLibraryPath   []string
+	ExtensionControlPath []string
+	LdLibraryPath        []string
+}
+
+// ExtensionVersionFormat selects the PostgreSQL extension version convention.
+type ExtensionVersionFormat uint8
+
+const (
+	// ExtensionVersionDocumentDB uses Major.Minor-Patch in PostgreSQL and
+	// Major.Minor.Patch in the resource spec/status. It is the default.
+	ExtensionVersionDocumentDB ExtensionVersionFormat = iota
+	// ExtensionVersionSemver uses dotted semantic versions in PostgreSQL and
+	// the resource spec/status, without rewriting prerelease identifiers.
+	ExtensionVersionSemver
+)
+
+// PostgresProfile captures the product-wide PostgreSQL contract.
+type PostgresProfile struct {
+	// Extension is the product extension mounted from the extension image.
+	Extension ExtensionSpec
+	// ExtensionVersionFormat controls extension comparison and spec/status
+	// conversion. Its zero value preserves DocumentDB's version convention.
+	ExtensionVersionFormat ExtensionVersionFormat
+	// AdditionalLibraries are added to shared_preload_libraries.
+	AdditionalLibraries []string
+	// BootstrapSQL runs once at initdb, before any user PostInitSQL.
+	BootstrapSQL []string
+	// PgHBA is the host-based authentication configuration.
+	PgHBA []string
+	// MonitoringPasswordSecret optionally names an existing kubernetes.io/basic-auth
+	// Secret in the cluster namespace with username "otel_monitor" and a
+	// "password" key, as required by CNPG managed roles. Products using password
+	// authentication must configure it explicitly; the core never adds trust
+	// rules to PgHBA. Empty preserves the password-disabled default.
+	MonitoringPasswordSecret string
+	// ProtectedParameters are product GUCs the operator always forces, on top
+	// of the core protected set.
+	ProtectedParameters map[string]string
+	// ReplicationAdminRole, when set, is granted to CNPG's streaming_replica
+	// user so physical replicas can read product-owned objects.
+	ReplicationAdminRole string
 }
 
 // Adapter is the product-neutral contract shared by every product integration:

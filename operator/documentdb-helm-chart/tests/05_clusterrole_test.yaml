@@ -39,7 +39,13 @@ tests:
           path: rules
           content:
             apiGroups: ["cert-manager.io"]
-            resources: ["certificates", "issuers"]
+            resources: ["certificates"]
+            verbs: ["get", "list", "watch", "create", "patch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["cert-manager.io"]
+            resources: ["issuers"]
             verbs: ["get", "list", "watch", "create"]
 
   - it: should include backup-related permissions
@@ -65,6 +71,15 @@ tests:
             apiGroups: [""]
             resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims"]
             verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  - it: should allow reading nodes for image mode detection
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["nodes"]
+            verbs: ["get", "list"]
 
   - it: should include pods/exec permission (create only)
     asserts:

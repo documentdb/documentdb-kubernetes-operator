@@ -1,6 +1,6 @@
 module github.com/documentdb/documentdb-operator/test/e2e
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/cloudnative-pg/cloudnative-pg v1.29.2

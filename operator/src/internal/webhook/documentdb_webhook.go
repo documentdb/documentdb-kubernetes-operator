@@ -5,15 +5,9 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -25,11 +19,18 @@ import (
 	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
+	"github.com/documentdb/documentdb-operator/internal/validation"
 )
 
 var documentdbLog = logf.Log.WithName("documentdb-webhook")
 
-var rcImageTagPattern = regexp.MustCompile(`^[vV]?([0-9]+)\.([0-9]+)-[rR][cC][1-9][0-9]*(?:$|[-+])`)
+// documentDBTerms names DocumentDB's version fields in validation messages.
+var documentDBTerms = validation.Terms{
+	Product:                   "DocumentDB",
+	VersionField:              "spec.documentDBVersion",
+	ImageField:                "spec.image.documentDB",
+	SchemaWithoutBinaryFields: "spec.documentDBVersion or spec.documentDBImage",
+}
 
 // DocumentDBValidator validates DocumentDB resources on create and update.
 type DocumentDBValidator struct {
@@ -129,40 +130,7 @@ func (v *DocumentDBValidator) validateResources(db *dbpreview.DocumentDB) field.
 
 // validateSchemaVersionNotExceedsBinary ensures spec.schemaVersion <= binary version.
 func (v *DocumentDBValidator) validateSchemaVersionNotExceedsBinary(db *dbpreview.DocumentDB) field.ErrorList {
-	if db.Spec.SchemaVersion == "" || db.Spec.SchemaVersion == "auto" {
-		return nil
-	}
-
-	binaryVersion := resolveBinaryVersion(db)
-	if binaryVersion == "" {
-		return field.ErrorList{field.Invalid(
-			field.NewPath("spec", "schemaVersion"),
-			db.Spec.SchemaVersion,
-			"cannot set an explicit schemaVersion without also setting spec.documentDBVersion or spec.documentDBImage; "+
-				"the webhook needs a binary version to validate against",
-		)}
-	}
-
-	schemaExtensionVersion := util.SemverToExtensionVersion(db.Spec.SchemaVersion)
-	binaryExtensionVersion := util.SemverToExtensionVersion(binaryVersion)
-
-	cmp, err := util.CompareExtensionVersions(schemaExtensionVersion, binaryExtensionVersion)
-	if err != nil {
-		return field.ErrorList{field.Invalid(
-			field.NewPath("spec", "schemaVersion"),
-			db.Spec.SchemaVersion,
-			fmt.Sprintf("cannot validate schemaVersion: version comparison failed: %v", err),
-		)}
-	}
-	if cmp > 0 {
-		return field.ErrorList{field.Invalid(
-			field.NewPath("spec", "schemaVersion"),
-			db.Spec.SchemaVersion,
-			fmt.Sprintf("schemaVersion %s exceeds the binary version %s; schema version must be <= binary version",
-				db.Spec.SchemaVersion, binaryVersion),
-		)}
-	}
-	return nil
+	return validation.SchemaVersionNotExceedsBinary(db.Spec.SchemaVersion, resolveBinaryVersion(db), documentDBTerms)
 }
 
 // ---------------------------------------------------------------------------
@@ -201,32 +169,7 @@ func (v *DocumentDBValidator) validateImageRollback(newDB, oldDB *dbpreview.Docu
 		return nil
 	}
 
-	newBinaryVersion := resolveBinaryVersion(newDB)
-	if newBinaryVersion == "" {
-		return nil
-	}
-
-	newBinaryExtensionVersion := util.SemverToExtensionVersion(newBinaryVersion)
-	schemaExtensionVersion := util.SemverToExtensionVersion(installedSchemaVersion)
-
-	cmp, err := util.CompareExtensionVersions(newBinaryExtensionVersion, schemaExtensionVersion)
-	if err != nil {
-		return field.ErrorList{field.Forbidden(
-			field.NewPath("spec"),
-			fmt.Sprintf("cannot validate image rollback: version comparison failed: %v", err),
-		)}
-	}
-	if cmp < 0 {
-		return field.ErrorList{field.Forbidden(
-			field.NewPath("spec"),
-			fmt.Sprintf(
-				"image rollback blocked: requested version %s is older than installed schema version %s. "+
-					"ALTER EXTENSION has no downgrade path — running an older binary with a newer schema may cause data corruption. "+
-					"To recover, restore from backup or update to a version >= %s.",
-				newBinaryVersion, installedSchemaVersion, installedSchemaVersion),
-		)}
-	}
-	return nil
+	return validation.ImageRollback(installedSchemaVersion, resolveBinaryVersion(newDB))
 }
 
 // ---------------------------------------------------------------------------
@@ -275,124 +218,32 @@ func (v *DocumentDBValidator) validateRestoreSchemaCompatibility(ctx context.Con
 		return warnings, nil
 	}
 
-	return compareBinaryToSchema(resolveEffectiveBinaryVersion(newDB), schemaVersion, src)
+	return validation.CompareBinaryToSchema(resolveEffectiveBinaryVersion(newDB), schemaVersion, src, documentDBTerms)
 }
-
-// restoreSource identifies where a restore draws its data — and thus its schema
-// version — from, carrying the diagnostics and the spec field to flag on error.
-type restoreSource struct {
-	kind      string // sourceKindBackup or sourceKindPV
-	name      string
-	fieldPath *field.Path
-}
-
-const (
-	sourceKindBackup = "backup"
-	sourceKindPV     = "PersistentVolume"
-)
 
 // restoreSourceFor identifies the restore source from a recovery configuration,
 // returning false when neither a backup nor a PersistentVolume source is set.
-func restoreSourceFor(recovery *dbpreview.RecoveryConfiguration) (restoreSource, bool) {
+func restoreSourceFor(recovery *dbpreview.RecoveryConfiguration) (validation.RestoreSource, bool) {
+	base := field.NewPath("spec", "bootstrap", "recovery")
 	if recovery.Backup.Name != "" {
-		return restoreSource{
-			kind:      sourceKindBackup,
-			name:      recovery.Backup.Name,
-			fieldPath: field.NewPath("spec", "bootstrap", "recovery", "backup"),
-		}, true
+		return validation.BackupSource(base, recovery.Backup.Name), true
 	}
 	if recovery.PersistentVolume != nil && recovery.PersistentVolume.Name != "" {
-		return restoreSource{
-			kind:      sourceKindPV,
-			name:      recovery.PersistentVolume.Name,
-			fieldPath: field.NewPath("spec", "bootstrap", "recovery", "persistentVolume"),
-		}, true
+		return validation.PVSource(base, recovery.PersistentVolume.Name), true
 	}
-	return restoreSource{}, false
+	return validation.RestoreSource{}, false
 }
 
 // resolveSourceSchemaVersion reads the restore source and returns its recorded
-// schema version. It only reports warnings for I/O failures (source not found or
-// unreadable); a successfully read source with no schema version returns ("",
-// nil), leaving the "unknown schema" policy to compareBinaryToSchema so that both
-// empty-input cases are decided in one place. Backup and PV are handled
-// identically.
-func (v *DocumentDBValidator) resolveSourceSchemaVersion(ctx context.Context, namespace string, src restoreSource) (string, admission.Warnings) {
-	var schemaVersion string
-	var readErr error
-
-	switch src.kind {
-	case sourceKindBackup:
+// schema version. See validation.SourceSchemaVersion.
+func (v *DocumentDBValidator) resolveSourceSchemaVersion(ctx context.Context, namespace string, src validation.RestoreSource) (string, admission.Warnings) {
+	return validation.SourceSchemaVersion(ctx, v.Client, src, util.AnnotationSchemaVersion, func() (string, error) {
 		backup := &dbpreview.Backup{}
-		if err := v.Get(ctx, client.ObjectKey{Name: src.name, Namespace: namespace}, backup); err != nil {
-			readErr = err
-		} else {
-			schemaVersion = backup.Status.SchemaVersion
+		if err := v.Get(ctx, client.ObjectKey{Name: src.Name, Namespace: namespace}, backup); err != nil {
+			return "", err
 		}
-	case sourceKindPV:
-		pv := &corev1.PersistentVolume{}
-		if err := v.Get(ctx, client.ObjectKey{Name: src.name}, pv); err != nil {
-			readErr = err
-		} else {
-			schemaVersion = pv.Annotations[util.AnnotationSchemaVersion]
-		}
-	}
-
-	if readErr != nil {
-		if apierrors.IsNotFound(readErr) {
-			return "", admission.Warnings{
-				fmt.Sprintf("%s %q not found: schema-version compatibility cannot be verified", src.kind, src.name),
-			}
-		}
-		// Transient/API error: don't hard-block the restore, but warn.
-		return "", admission.Warnings{
-			fmt.Sprintf("failed to read %s %q: schema-version compatibility cannot be verified: %v", src.kind, src.name, readErr),
-		}
-	}
-	return schemaVersion, nil
-}
-
-// compareBinaryToSchema is the single authority on the restore decision. It warns
-// (and allows) when either the source schema version or the target DocumentDB
-// version is unknown, and rejects only a known target version that is older than a
-// known schema.
-func compareBinaryToSchema(binaryVersion, schemaVersion string, src restoreSource) (admission.Warnings, field.ErrorList) {
-	if schemaVersion == "" {
-		return admission.Warnings{
-			fmt.Sprintf("%s %q has no recorded schema version: schema-version compatibility cannot be verified; "+
-				"ensure the target DocumentDB version (spec.documentDBVersion or spec.image.documentDB) is >= the source's "+
-				"schema version to avoid data corruption", src.kind, src.name),
-		}, nil
-	}
-	if binaryVersion == "" {
-		return admission.Warnings{
-			fmt.Sprintf("cannot determine the target DocumentDB version for restore from %s %q "+
-				"(set spec.documentDBVersion or spec.image.documentDB): compatibility with the %s's schema version %s cannot be verified",
-				src.kind, src.name, src.kind, schemaVersion),
-		}, nil
-	}
-
-	binaryExtensionVersion := util.SemverToExtensionVersion(binaryVersion)
-	schemaExtensionVersion := util.SemverToExtensionVersion(schemaVersion)
-
-	cmp, err := util.CompareExtensionVersions(binaryExtensionVersion, schemaExtensionVersion)
-	if err != nil {
-		return admission.Warnings{
-			fmt.Sprintf("cannot compare the target DocumentDB version %s with the %s's schema version %s: %v; compatibility not verified",
-				binaryVersion, src.kind, schemaVersion, err),
-		}, nil
-	}
-	if cmp < 0 {
-		return nil, field.ErrorList{field.Forbidden(
-			src.fieldPath,
-			fmt.Sprintf(
-				"restore blocked: the target DocumentDB version %s is older than the %s's schema version %s. "+
-					"Restoring onto an older DocumentDB version runs it against a newer, irreversible schema and may cause data corruption. "+
-					"Set spec.documentDBVersion (or spec.image.documentDB) to %s or newer.",
-				binaryVersion, src.kind, schemaVersion, schemaVersion),
-		)}
-	}
-	return nil, nil
+		return backup.Status.SchemaVersion, nil
+	})
 }
 
 // validateImmutableFields rejects updates to fields that cannot be changed after creation.
@@ -418,44 +269,8 @@ func (v *DocumentDBValidator) validateImmutableFields(newDB, oldDB *dbpreview.Do
 
 // validateStorageResize ensures PVC size can only grow, never shrink.
 func (v *DocumentDBValidator) validateStorageResize(newDB, oldDB *dbpreview.DocumentDB) field.ErrorList {
-	oldSize := oldDB.Spec.Resource.Storage.PvcSize
-	newSize := newDB.Spec.Resource.Storage.PvcSize
-	if oldSize == newSize {
-		return nil
-	}
-
-	pvcSizePath := field.NewPath("spec", "resource", "storage", "pvcSize")
-	var allErrs field.ErrorList
-
-	oldQty, errOld := resource.ParseQuantity(oldSize)
-	if errOld != nil {
-		allErrs = append(allErrs, field.Invalid(
-			pvcSizePath,
-			oldSize,
-			fmt.Sprintf("existing pvcSize is not a valid resource quantity: %v", errOld),
-		))
-	}
-
-	newQty, errNew := resource.ParseQuantity(newSize)
-	if errNew != nil {
-		allErrs = append(allErrs, field.Invalid(
-			pvcSizePath,
-			newSize,
-			fmt.Sprintf("pvcSize must be a valid resource quantity: %v", errNew),
-		))
-	}
-
-	if len(allErrs) > 0 {
-		return allErrs
-	}
-
-	if newQty.Cmp(oldQty) < 0 {
-		return field.ErrorList{field.Forbidden(
-			pvcSizePath,
-			fmt.Sprintf("storage size can only be increased; attempted shrink from %s to %s", oldSize, newSize),
-		)}
-	}
-	return nil
+	return validation.StorageResize(field.NewPath("spec", "resource", "storage", "pvcSize"),
+		oldDB.Spec.Resource.Storage.PvcSize, newDB.Spec.Resource.Storage.PvcSize)
 }
 
 // isBootstrapEqual compares two BootstrapConfiguration pointers for equality.
@@ -478,19 +293,7 @@ func isBootstrapEqual(a, b *dbpreview.BootstrapConfiguration) bool {
 // Digest-only references (e.g., "image@sha256:...") are not parseable as versions
 // and return "".
 func resolveBinaryVersion(db *dbpreview.DocumentDB) string {
-	if ref := specImageDocumentDB(db); ref != "" && !strings.Contains(ref, "@sha256:") {
-		if tagIdx := strings.LastIndex(ref, ":"); tagIdx >= 0 {
-			tag := ref[tagIdx+1:]
-			// Extract leading semver (X.Y.Z) from tags like "0.112.0-amd64"
-			if semver := extractSemver(tag); semver != "" {
-				return semver
-			}
-		}
-	}
-	if version := extractSemver(db.Spec.DocumentDBVersion); version != "" {
-		return version
-	}
-	return db.Spec.DocumentDBVersion
+	return validation.ResolveBinaryVersion(specImageDocumentDB(db), db.Spec.DocumentDBVersion)
 }
 
 // resolveEffectiveBinaryVersion returns the binary version the operator will
@@ -508,13 +311,7 @@ func resolveEffectiveBinaryVersion(db *dbpreview.DocumentDB) string {
 	// helper, and read its semver tag. Anything without a parseable semver tag
 	// (a digest, or the changestream image) stays unknown so the restore is warned,
 	// not falsely blocked — keeping the webhook in step with the controller.
-	image := product.DocumentDBAdapter{}.ExtensionImage(db)
-	if tagIdx := strings.LastIndex(image, ":"); tagIdx >= 0 {
-		if semver := extractSemver(image[tagIdx+1:]); semver != "" {
-			return semver
-		}
-	}
-	return ""
+	return validation.ImageTagSemver(product.DocumentDBAdapter{}.ExtensionImage(db))
 }
 
 func specImageDocumentDB(db *dbpreview.DocumentDB) string {
@@ -524,33 +321,6 @@ func specImageDocumentDB(db *dbpreview.DocumentDB) string {
 	return db.Spec.Image.DocumentDB
 }
 
-// extractSemver returns the leading "X.Y.Z" portion from a tag string,
-// normalizing "X.Y-RC<n>" tags to the extension version "X.Y.0".
-// It returns "" when neither version format is recognized.
-func extractSemver(tag string) string {
-	if matches := rcImageTagPattern.FindStringSubmatch(tag); matches != nil {
-		return matches[1] + "." + matches[2] + ".0"
-	}
-	// Match digits.digits.digits at start of string
-	parts := strings.SplitN(tag, ".", 3)
-	if len(parts) < 3 {
-		return ""
-	}
-	// Validate major and minor are numeric
-	if _, err := strconv.Atoi(parts[0]); err != nil {
-		return ""
-	}
-	if _, err := strconv.Atoi(parts[1]); err != nil {
-		return ""
-	}
-	// Third part may have a suffix (e.g., "0-amd64"), take only leading digits
-	thirdPart := parts[2]
-	i := 0
-	for i < len(thirdPart) && thirdPart[i] >= '0' && thirdPart[i] <= '9' {
-		i++
-	}
-	if i == 0 {
-		return ""
-	}
-	return parts[0] + "." + parts[1] + "." + thirdPart[:i]
-}
+// extractSemver returns the leading "X.Y.Z" portion from a tag string.
+// See validation.ExtractSemver.
+func extractSemver(tag string) string { return validation.ExtractSemver(tag) }

@@ -64,7 +64,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:0.3.0"
+          value: "ghcr.io/documentdb/documentdb-kubernetes-operator/sidecar:1.0.0"
 
   - it: should use a custom sidecar image tag when set
     set:
@@ -82,7 +82,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: DOCUMENTDB_VERSION
-            value: "1.0-RC2"
+            value: "1.0.0"
 
   - it: should have empty env when documentDbVersion is empty
     set:

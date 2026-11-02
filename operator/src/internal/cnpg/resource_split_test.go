@@ -4,9 +4,13 @@
 package cnpg
 
 import (
+	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/util/validation/field"
+
 	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
 // prodSplitConfig mirrors the documented production defaults (18.75%, cap 32Gi,
@@ -248,5 +252,19 @@ func TestValidateResources(t *testing.T) {
 	d.Spec.Resource.Database = &dbpreview.ComponentResources{CPU: "2"}
 	if errs := ValidateResources(d, cfg); len(errs) != 0 {
 		t.Errorf("omitted+fully-specified cpu: unexpected errors %v", errs)
+	}
+}
+
+func TestValidateResourcesFor_UsesProductFieldPath(t *testing.T) {
+	res := product.Resources{Gateway: &product.ComponentResources{Memory: "512Mi"}}
+	errs := ValidateResourcesFor(res, false, field.NewPath("spec", "compute"), prodSplitConfig())
+	if len(errs) != 1 {
+		t.Fatalf("expected one error, got %v", errs)
+	}
+	if errs[0].Field != "spec.compute.memory" {
+		t.Errorf("field = %q, want spec.compute.memory", errs[0].Field)
+	}
+	if !strings.Contains(errs[0].Detail, "spec.compute.gateway and spec.compute.database") {
+		t.Errorf("detail %q does not reference the product field path", errs[0].Detail)
 	}
 }

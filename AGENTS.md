@@ -20,6 +20,11 @@ The DocumentDB Kubernetes Operator is a Kubernetes operator that manages Documen
   - CLI plugin for managing DocumentDB resources
   - Provides commands for status, health checks, and operations
 
+- **Product-neutral core** (in `operator/src/internal/product`, `operator/src/internal/cnpg`, public facade `operator/src/pkg/core`)
+  - The CNPG renderer, sync, PostgreSQL parameters, resource split and extension lifecycle are driven by a `ProductProfile` + `ClusterIntent`; DocumentDB is the first product adapter
+  - Keep DocumentDB-specific values in `internal/product/documentdb.go`; golden tests in `internal/cnpg/testdata/golden` must stay byte-identical
+  - See [docs/designs/product-neutral-core.md](docs/designs/product-neutral-core.md)
+
 - **Helm Chart** (in `operator/documentdb-helm-chart/`)
   - Packages operator deployment configuration
   - Manages CRDs and RBAC resources
