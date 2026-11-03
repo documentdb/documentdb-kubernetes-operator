@@ -80,11 +80,12 @@ The operator and the DocumentDB engine have separate version numbers. The Helm c
 
 | Operator (Helm chart) | Default DocumentDB engine | Status |
 |-----------------------|---------------------------|--------|
+| `1.1.0` | `1.0.0` (extension schema `1.0-0`) | Generally available; adds the combined-image fallback for clusters without image volume support |
 | `1.0.0` | `1.0.0` (extension schema `1.0-0`) | Generally available |
 | `1.0.0-rc1` | `1.0-RC2` | Release candidate |
 | `0.3.0` | `0.110.0` | Preview |
 
-Use operator `1.0.0` for DocumentDB 1.0. To move existing clusters to 1.0, see [Upgrading to DocumentDB 1.0](../operations/upgrades.md#upgrading-to-documentdb-10).
+Use operator `1.1.0` for DocumentDB 1.0. To move existing clusters to 1.0, see [Upgrading to DocumentDB 1.0](../operations/upgrades.md#upgrading-to-documentdb-10).
 
 ## Terminology
 

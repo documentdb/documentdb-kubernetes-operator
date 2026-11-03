@@ -125,6 +125,7 @@ v0.1.0 released -----> v0.2.0 released -----> v0.1.x EOL (3 months later)
 
 | Version | Release Date | End of Life | Status |
 |---------|--------------|-------------|--------|
+| v1.1.x | Nov 2026 | Per release policy | Supported |
 | v1.0.x | Oct 2026 | Per release policy | Supported |
 | v0.1.x | Dec 2025 | 3 months after v0.2.0 | End of life |
 | main | N/A | N/A | Development only |
@@ -171,6 +172,7 @@ We follow a **roll forward** strategy rather than backporting:
 
 | Operator Version | Minimum K8s | Maximum K8s | Tested Versions |
 |------------------|-------------|-------------|-----------------|
+| v1.1.x | 1.32 (combined image below 1.35 without ImageVolume) | 1.35 | 1.32, 1.33, 1.34, 1.35 |
 | v1.0.x | 1.33 (ImageVolume gate enabled) | 1.35 | 1.33, 1.34, 1.35 |
 | v0.1.x | 1.28 | 1.32 | 1.30, 1.31, 1.32 |
 
@@ -180,6 +182,7 @@ We follow a **roll forward** strategy rather than backporting:
 
 | Operator Version | CloudNative-PG | cert-manager | Helm |
 |------------------|----------------|--------------|------|
+| v1.1.x | 1.29.x (chart 0.28.3) | 1.19+ | 3.x |
 | v1.0.x | 1.29.x (chart 0.28.3) | 1.19+ | 3.x |
 | v0.1.x | 1.28.0 | 1.19.2+ | 3.x |
 
