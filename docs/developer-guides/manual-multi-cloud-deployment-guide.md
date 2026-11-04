@@ -103,9 +103,9 @@ helm install cert-manager jetstack/cert-manager --namespace cert-manager --creat
 kubectl config use-context $ON_PREM_MEMBER
 helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
 
-# Install on the hub too: the operator chart's webhook certificate needs the controllers, not just the CRDs
+# Install just the CRDs on the hub for propagation
 kubectl config use-context hub
-helm install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.crds.yaml
 ```
 
 Verify that `cert-manager` is installed correctly on each cluster:
