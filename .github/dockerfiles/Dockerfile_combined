@@ -25,6 +25,16 @@ FROM ${BASE}
 ARG PG_MAJOR=18
 ARG DEB_PACKAGE_REL_PATH
 
+# Replace the labels inherited from the CNPG base so the image isn't
+# published as CloudNativePG's under its Apache-2.0 license.
+LABEL org.opencontainers.image.title="DocumentDB PostgreSQL ${PG_MAJOR}" \
+      org.opencontainers.image.description="PostgreSQL ${PG_MAJOR} with the DocumentDB extension for the DocumentDB Kubernetes Operator" \
+      org.opencontainers.image.vendor="DocumentDB" \
+      org.opencontainers.image.authors="DocumentDB maintainers" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.url="https://documentdb.io" \
+      org.opencontainers.image.documentation="https://documentdb.io/documentdb-kubernetes-operator/latest/preview/"
+
 USER 0
 
 # Install via apt (not dpkg -i) so the extension's dependencies (pg_cron,
