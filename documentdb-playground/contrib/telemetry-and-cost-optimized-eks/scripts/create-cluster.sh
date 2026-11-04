@@ -23,7 +23,9 @@ CLUSTER_TAGS="${CLUSTER_TAGS:-project=documentdb-playground,environment=dev,mana
 # DocumentDB Operator Configuration
 # For production: use documentdb/documentdb-operator (official)
 OPERATOR_GITHUB_ORG="documentdb"
-OPERATOR_CHART_VERSION="1.1.0"
+# Chart version to install. Empty = latest stable (recommended, stays current
+# across releases). Set to a release from the GitHub Releases page to pin.
+OPERATOR_CHART_VERSION="${OPERATOR_CHART_VERSION:-}"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -678,15 +680,23 @@ install_documentdb_operator() {
         return 0
     fi
     
+    if [ -n "$OPERATOR_CHART_VERSION" ]; then
+        VERSION_FLAG="--version $OPERATOR_CHART_VERSION"
+        VERSION_LABEL="$OPERATOR_CHART_VERSION"
+    else
+        VERSION_FLAG=""
+        VERSION_LABEL="latest stable"
+    fi
+
     # Try an anonymous OCI install first (the chart is public)
-    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+    log "Installing DocumentDB operator from oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})..."
     if helm install documentdb-operator oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
+        $VERSION_FLAG \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
         --timeout 10m 2>/dev/null; then
-        success "DocumentDB operator installed successfully from OCI registry"
+        success "DocumentDB operator installed successfully from OCI registry (${VERSION_LABEL})"
     else
         # Fallback to OCI registry with GitHub authentication
         warn "Anonymous OCI installation failed. Retrying with GitHub authentication..."
@@ -717,19 +727,19 @@ Then run the script again with --install-operator"
         log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
         helm install documentdb-operator \
             oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-            --version ${OPERATOR_CHART_VERSION} \
+            $VERSION_FLAG \
             --namespace documentdb-operator \
             --create-namespace \
             --wait \
             --timeout 10m
 
         if [ $? -eq 0 ]; then
-            success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+            success "DocumentDB operator installed successfully from OCI registry: ${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})"
         else
             error "Failed to install DocumentDB operator. Please verify:
 - Your GitHub token has 'read:packages' scope
 - You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
+- The chart version (${VERSION_LABEL}) exists"
         fi
     fi
     
