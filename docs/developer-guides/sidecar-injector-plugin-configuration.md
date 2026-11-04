@@ -49,10 +49,7 @@ spec:
 ```
 
 **Built-in Fallback:**
-If no explicit spec configuration is set, the system falls back to:
-```
-ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0
-```
+If `spec.image.gateway` isn't set, the operator uses `ghcr.io/documentdb/documentdb-kubernetes-operator/gateway` tagged with `spec.documentDBVersion`, or the chart's `documentDbVersion` when that isn't set either.
 
 ### 2. Pod Labels Configuration
 

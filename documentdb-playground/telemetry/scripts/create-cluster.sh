@@ -376,37 +376,14 @@ install_documentdb_operator() {
         error "Cannot reach ghcr.io. Please check your internet connection and firewall settings."
     fi
     
-    # Install DocumentDB operator using enhanced fork with Azure support
-    log "Installing DocumentDB operator from GitHub Container Registry (enhanced fork with Azure support)..."
-    
-    # Check for GitHub authentication
-    if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-GitHub credentials can be provided via:
-1. Environment variables (recommended):
-   export GITHUB_USERNAME='your-github-username'
-   export GITHUB_TOKEN='your-github-token'
-
-2. Command line arguments:
-   --github-username <username> --github-token <token>
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Set the environment variables as shown above
-
-Then run the script again with --install-operator"
+    # The chart is public; log in only when the environment needs it.
+    if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_USERNAME:-}" ]; then
+        log "Authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            error "Failed to authenticate with GitHub Container Registry. Please verify GITHUB_TOKEN and GITHUB_USERNAME."
+        fi
     fi
-    
-    # Authenticate with GitHub Container Registry
-    log "Authenticating with GitHub Container Registry..."
-    if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-        error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
-    fi
-    
-    # Install DocumentDB operator from OCI registry
-    log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
+
     if [ -n "$OPERATOR_CHART_VERSION" ]; then
         VERSION_FLAG="--version $OPERATOR_CHART_VERSION"
         VERSION_LABEL="$OPERATOR_CHART_VERSION"
@@ -414,21 +391,19 @@ Then run the script again with --install-operator"
         VERSION_FLAG=""
         VERSION_LABEL="latest stable"
     fi
-    helm install documentdb-operator \
+    log "Installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})..."
+    if helm install documentdb-operator \
         oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
         $VERSION_FLAG \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
-        --timeout 10m
-
-    if [ $? -eq 0 ]; then
+        --timeout 10m; then
         success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})"
     else
-        error "Failed to install DocumentDB operator from OCI registry. Please verify:
-- Your GitHub token has 'read:packages' scope
-- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version (${VERSION_LABEL}) exists"
+        error "Failed to install DocumentDB operator. Please verify:
+- The chart version (${VERSION_LABEL}) exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
+- If your network requires authentication, set GITHUB_USERNAME and GITHUB_TOKEN (read:packages scope) and re-run"
     fi
     
     # Wait for operator to be ready
@@ -627,28 +602,6 @@ main() {
         log "  GitHub Token: ${GITHUB_TOKEN:+***provided***}"
     fi
     echo ""
-    
-    # Validate GitHub credentials if operator installation is requested
-    if [ "$INSTALL_OPERATOR" == "true" ] && ([ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]); then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-GitHub credentials can be provided via:
-
-1. Environment variables (recommended):
-   export GITHUB_USERNAME=<your-username>
-   export GITHUB_TOKEN=<your-token>
-
-2. Command line arguments:
-   --github-username <your-username> --github-token <your-token>
-
-Example with command line:
-  $0 --install-operator --github-username myuser --github-token ghp_xxxxxxxxxxxx
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Set via environment variables or command line arguments"
-    fi
     
     check_prerequisites
     
