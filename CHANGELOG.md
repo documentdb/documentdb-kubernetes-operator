@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Bug Fixes
+- The Helm chart now refuses `walReplica: true`. The WAL replica plugin doesn't work yet, so enabling it only produced a broken deployment.
+
 ## [1.1.0] - 2026-11-17
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar and Helm chart change. Clusters on Kubernetes or container runtimes without image volume support (for example containerd 1.7, or Kubernetes 1.32) now run with a combined PostgreSQL + DocumentDB image instead of being rejected. Apply the 1.1.0 CRDs before `helm upgrade`; existing clusters keep their image layout and are not restarted.
