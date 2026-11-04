@@ -29,3 +29,14 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # -----------------------------------------------------------------------
+  # walReplica (not supported yet)
+  # -----------------------------------------------------------------------
+  - it: should fail when walReplica is enabled
+    set:
+      certManager.preflightCheck: false
+      walReplica: true
+    asserts:
+      - failedTemplate:
+          errorPattern: walReplica is not supported yet

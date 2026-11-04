@@ -26,7 +26,7 @@ serviceAccount:
   name: "documentdb-operator"
   
 # WAL Replica feature flag
-walReplica: false  # Set to true to deploy the WAL replica plugin
+walReplica: false  # Not supported yet; the chart refuses true
 
 # Image pull secrets used by all operator components (operator, sidecar injector, wal-replica).
 # Each entry must be a Kubernetes Secret reference: [{ name: my-registry-secret }, ...]
