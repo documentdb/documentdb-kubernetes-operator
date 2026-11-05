@@ -11,7 +11,7 @@ metadata:
     cnpg.io/pluginServerSecret: walreplica-server-tls
     cnpg.io/pluginPort: "9090"
   name: wal-replica
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
 spec:
   ports:
   - port: 9090
@@ -26,7 +26,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: walreplica-client
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
 spec:
   secretName: walreplica-client-tls
   commonName: "walreplica-client"
@@ -48,7 +48,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: walreplica-server
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
 spec:
   secretName: walreplica-server-tls
   commonName: "wal-replica"
@@ -75,7 +75,7 @@ metadata:
   labels:
     app: wal-replica
   name: wal-replica
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
 spec:
   replicas: 1
   selector:
@@ -164,7 +164,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: wal-replica-manager
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
 
 ---
 
@@ -207,7 +207,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: wal-replica-manager
-  namespace: {{- (index .Values "cloudnative-pg").namespaceOverride }}
+  namespace: {{ (index .Values "cloudnative-pg").namespaceOverride }}
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
     app.kubernetes.io/managed-by: "Helm"
