@@ -14,10 +14,11 @@ NODE_SIZE="Standard_D4s_v5"
 KUBERNETES_VERSION="1.35.0"
 
 # DocumentDB Operator Configuration
-# For testing: use hossain-rayhan/documentdb-operator (fork with Azure enhancements)
-# For production: use microsoft/documentdb-operator (official)
-OPERATOR_GITHUB_ORG="hossain-rayhan"
-OPERATOR_CHART_VERSION="0.1.112"
+# For testing: update with your account/org if using a fork
+OPERATOR_GITHUB_ORG="documentdb"
+# Chart version to install. Empty = latest stable (recommended, stays current
+# across releases). Set to a release from the GitHub Releases page to pin.
+OPERATOR_CHART_VERSION="${OPERATOR_CHART_VERSION:-}"
 
 # Feature flags - set to "true" to enable, "false" to skip
 INSTALL_OPERATOR="${INSTALL_OPERATOR:-false}"
@@ -375,52 +376,34 @@ install_documentdb_operator() {
         error "Cannot reach ghcr.io. Please check your internet connection and firewall settings."
     fi
     
-    # Install DocumentDB operator using enhanced fork with Azure support
-    log "Installing DocumentDB operator from GitHub Container Registry (enhanced fork with Azure support)..."
-    
-    # Check for GitHub authentication
-    if [ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]; then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-GitHub credentials can be provided via:
-1. Environment variables (recommended):
-   export GITHUB_USERNAME='your-github-username'
-   export GITHUB_TOKEN='your-github-token'
-
-2. Command line arguments:
-   --github-username <username> --github-token <token>
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Set the environment variables as shown above
-
-Then run the script again with --install-operator"
+    # The chart is public; log in only when the environment needs it.
+    if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_USERNAME:-}" ]; then
+        log "Authenticating with GitHub Container Registry..."
+        if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
+            error "Failed to authenticate with GitHub Container Registry. Please verify GITHUB_TOKEN and GITHUB_USERNAME."
+        fi
     fi
-    
-    # Authenticate with GitHub Container Registry
-    log "Authenticating with GitHub Container Registry..."
-    if ! echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_USERNAME" --password-stdin; then
-        error "Failed to authenticate with GitHub Container Registry. Please verify your GITHUB_TOKEN and GITHUB_USERNAME."
+
+    if [ -n "$OPERATOR_CHART_VERSION" ]; then
+        VERSION_FLAG="--version $OPERATOR_CHART_VERSION"
+        VERSION_LABEL="$OPERATOR_CHART_VERSION"
+    else
+        VERSION_FLAG=""
+        VERSION_LABEL="latest stable"
     fi
-    
-    # Install DocumentDB operator from OCI registry
-    log "Pulling and installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator..."
-    helm install documentdb-operator \
+    log "Installing DocumentDB operator from ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})..."
+    if helm install documentdb-operator \
         oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator \
-        --version ${OPERATOR_CHART_VERSION} \
+        $VERSION_FLAG \
         --namespace documentdb-operator \
         --create-namespace \
         --wait \
-        --timeout 10m
-
-    if [ $? -eq 0 ]; then
-        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator:${OPERATOR_CHART_VERSION}"
+        --timeout 10m; then
+        success "DocumentDB operator installed successfully from ${OPERATOR_GITHUB_ORG}/documentdb-operator (${VERSION_LABEL})"
     else
-        error "Failed to install DocumentDB operator from OCI registry. Please verify:
-- Your GitHub token has 'read:packages' scope
-- You have access to ${OPERATOR_GITHUB_ORG}/documentdb-operator repository  
-- The chart version ${OPERATOR_CHART_VERSION} exists"
+        error "Failed to install DocumentDB operator. Please verify:
+- The chart version (${VERSION_LABEL}) exists at oci://ghcr.io/${OPERATOR_GITHUB_ORG}/documentdb-operator (see https://github.com/${OPERATOR_GITHUB_ORG}/documentdb-kubernetes-operator/releases)
+- If your network requires authentication, set GITHUB_USERNAME and GITHUB_TOKEN (read:packages scope) and re-run"
     fi
     
     # Wait for operator to be ready
@@ -619,28 +602,6 @@ main() {
         log "  GitHub Token: ${GITHUB_TOKEN:+***provided***}"
     fi
     echo ""
-    
-    # Validate GitHub credentials if operator installation is requested
-    if [ "$INSTALL_OPERATOR" == "true" ] && ([ -z "$GITHUB_TOKEN" ] || [ -z "$GITHUB_USERNAME" ]); then
-        error "DocumentDB operator installation requires GitHub authentication.
-
-GitHub credentials can be provided via:
-
-1. Environment variables (recommended):
-   export GITHUB_USERNAME=<your-username>
-   export GITHUB_TOKEN=<your-token>
-
-2. Command line arguments:
-   --github-username <your-username> --github-token <your-token>
-
-Example with command line:
-  $0 --install-operator --github-username myuser --github-token ghp_xxxxxxxxxxxx
-
-To create a GitHub token:
-1. Go to https://github.com/settings/tokens
-2. Generate a new token with 'read:packages' scope
-3. Set via environment variables or command line arguments"
-    fi
     
     check_prerequisites
     
