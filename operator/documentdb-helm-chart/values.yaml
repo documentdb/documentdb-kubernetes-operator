@@ -225,7 +225,8 @@ walReplicaPlugin:
   priorityClassName: ""
 
 cloudnative-pg:
-  # whether cloudnative-pg should be installed automatically or not
+  # Deploy the bundled CloudNativePG operator.  
+  # Set false when using an existing CloudNativePG installation. 
   enabled: true
   namespaceOverride: cnpg-system
   additionalEnv:
