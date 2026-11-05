@@ -77,6 +77,19 @@ helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --wait
 ```
 
+!!! warning "Pinned image tags are kept"
+    When you pass no new values, `helm upgrade` reuses the values from your previous install. If you set `image.documentdbk8soperator.tag` or `image.sidecarinjector.tag` (or other image overrides) at install time, the new chart deploys but the operator keeps running the old images. Add `--reset-values` to use the new chart's defaults, and pass again any settings you still need (for example `--set image.registry=...`):
+
+    ```bash
+    helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version ${TARGET_VERSION} \
+      --namespace documentdb-operator \
+      --reset-values \
+      --wait
+    ```
+
+    Run `helm get values documentdb-operator -n documentdb-operator` to see which values your release currently overrides.
+
 !!! tip
     Add `--atomic` to automatically roll back the release if the upgrade fails:
 
@@ -92,6 +105,12 @@ helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
 ```bash
 # Check operator deployment
 kubectl get deployment -n documentdb-operator
+
+# Check the operator and sidecar run the new version's images
+kubectl get deployment documentdb-operator -n documentdb-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl get deployment sidecar-injector -n cnpg-system \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 
 # Check operator logs for errors
 kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=50
