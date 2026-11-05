@@ -1,4 +1,4 @@
-{{- if (index .Values "cloudnative-pg").enabled }}
+{{- if and (index .Values "cloudnative-pg").enabled (index .Values "cloudnative-pg").namespaceOverride }}
 apiVersion: v1
 kind: Namespace
 metadata:
