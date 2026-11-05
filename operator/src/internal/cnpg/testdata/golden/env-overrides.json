@@ -138,7 +138,7 @@
           "gatewayMemoryLimit": "1536Mi",
           "gatewayMemoryRequest": "1536Mi",
           "otelCollectorImage": "env/otel:1",
-          "otelConfigHash": "fbb647d6c740ff44",
+          "otelConfigHash": "41623ecfc00ea82d",
           "otelConfigMapName": "golden-otel-config",
           "otelCpuLimit": "200m",
           "otelCpuRequest": "50m",

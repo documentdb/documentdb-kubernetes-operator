@@ -111,6 +111,19 @@ type PostgresProfile struct {
 	// authentication must configure it explicitly; the core never adds trust
 	// rules to PgHBA. Empty preserves the password-disabled default.
 	MonitoringPasswordSecret string
+	// MonitoringSchemas are the schemas on which the operator grants the
+	// monitoring role USAGE once the primary is healthy, so the collector's SQL
+	// metric queries can resolve product objects. The grants would block CNPG's
+	// DROP ROLE, so the operator revokes them before the role is removed.
+	// Empty skips both.
+	MonitoringSchemas []string
+	// DocumentDBMetrics adds the DocumentDB PostgreSQL instance
+	// (documentdb.postgres.*) and catalog (documentdb.database.*) SQL metrics
+	// to the monitoring sidecar. The catalog queries read
+	// documentdb_api_catalog, so only products built on the DocumentDB
+	// extension can enable them, with MonitoringSchemas granting the DocumentDB
+	// schemas the queries need.
+	DocumentDBMetrics bool
 	// ProtectedParameters are product GUCs the operator always forces, on top
 	// of the core protected set.
 	ProtectedParameters map[string]string
