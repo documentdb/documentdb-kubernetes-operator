@@ -227,6 +227,8 @@ walReplicaPlugin:
 cloudnative-pg:
   # Deploy the bundled CloudNativePG operator.  
   # Set false when using an existing CloudNativePG installation. 
+  # If set to false make sure your existing CloudNativePG is installed to "cnpg-system" 
+  # or set the "cloudnative-pg.namespaceOverride" value to the appropriate namespace
   enabled: true
   namespaceOverride: cnpg-system
   additionalEnv:
