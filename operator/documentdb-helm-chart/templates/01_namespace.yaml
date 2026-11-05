@@ -1,4 +1,4 @@
-{{- if .Values.cloudnative-pg.enabled }}
+{{- if (index .Values "cloudnative-pg").enabled }}
 apiVersion: v1
 kind: Namespace
 metadata:
