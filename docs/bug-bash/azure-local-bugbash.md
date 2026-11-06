@@ -65,7 +65,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 | Multi-document transactions | DATA-10 |
 | Authentication and TLS | AUTH-01 … AUTH-07 |
 | Admission validation (invalid specs rejected) | VAL-01, VAL-02 |
-| High availability: scale out, replication, failover, scale in | HA-01 … HA-05 |
+| **Local high availability and failover** (one cluster, 3 instances): scale out, replication, failover after the primary is deleted or crashes, switchover during planned node maintenance (drain), scale in, no lost writes | HA-01 … HA-07 |
 | Resilience: pod and operator restarts with data intact | RES-01, RES-02 |
 | Logical backup and restore (`mongodump`/`mongorestore`) | BAK-01 … BAK-03 |
 | Monitoring (OpenTelemetry sidecar, Prometheus metric) | MON-01, MON-02 |
@@ -79,7 +79,8 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 | Restore from a `Backup` | Depends on the snapshot backups above. |
 | **Deleted-cluster recovery** (`bootstrap.recovery.persistentVolume`) | Recovering from a retained volume needs CSI **volume cloning**, which the AKS Arc disk driver doesn't support. LIFE-01 only checks that the volume is *retained*. |
 | `LoadBalancer` service exposure / external client access | These clusters have no load-balancer provider, so `LoadBalancer` services get no external IP. Use port-forward (CON-02). |
-| Multi-region / cross-cluster replication and promotion | Needs multiple connected clusters and fleet networking; not part of this bash. |
+| Unplanned loss of a whole node (VM power-off, host failure) | Needs Azure Local infrastructure access that bug bash testers don't have. HA-05 (crash) and HA-06 (node drain) cover the database side of failover. A cluster owner with Azure Local admin rights may try it as an exploratory test. |
+| Multi-region / cross-cluster replication and promotion | Not applicable: DocumentDB on Azure Local is a **single-region, single-node** setup only (`nodeCount: 1`). Local high availability inside that node, with up to 3 instances, is covered by HA-01 … HA-07. |
 | Operator upgrade from 1.0.0 | Operator 1.0.0 can't run DocumentDB on containerd 1.7, so no 1.0.0 cluster can exist on Azure Local. |
 | DocumentDB engine upgrade (`spec.documentDBVersion`) | No engine version newer than 1.0.0 has been released. |
 | ImageVolume mode | Not available on containerd 1.7 (expected; see DEP-03). |
@@ -93,7 +94,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 ## 2. Rules for everyone (humans and AI agents)
 
 1. **Work only in your own namespaces:** `bb-<alias>` (DocumentDB) and `bb-<alias>-client` if needed. Replace `<alias>` with your short name, in lowercase letters and digits only.
-2. **Don't modify platform components:** `kube-system`, `azure-arc`, `mdc`, `gatekeeper-system`, the `default` StorageClass, the CSI driver, node settings, or Azure extensions.
+2. **Don't modify platform components:** `kube-system`, `azure-arc`, `mdc`, `gatekeeper-system`, the `default` StorageClass, the CSI driver, node settings, or Azure extensions. The only exception is the coordinated node drain in HA-06, which the cluster owner schedules and which is always undone with `kubectl uncordon`.
 3. **Install the operator only once per cluster.** One person (the *cluster owner*, see [section 3](#3-cluster-assignments)) runs SETUP-03 … SETUP-05. Everyone else checks SETUP-05 and continues from DEP-01.
 4. **Never put real secrets in bug reports.** The passwords in this guide are throwaway examples.
 5. **Run commands one at a time** and compare against the *Expected* result before moving on. If a step fails, collect diagnostics ([section 8](#8-collecting-diagnostics)), file the bug, and continue with the next independent test where possible.
@@ -443,10 +444,12 @@ H="documentdb-service-${DB}:10260"; Q="tls=true&tlsAllowInvalidCertificates=true
 | VAL-01 | `kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"nodeCount":0}}' --dry-run=server` | Rejected: `spec.nodeCount … should be greater than or equal to 1` |
 | VAL-02 | `kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"schemaVersion":"9.9.9"}}' --dry-run=server` | Rejected by the webhook: `cannot set an explicit schemaVersion without also setting spec.documentDBVersion or spec.documentDBImage…` |
 
-### 6.6 High availability (HA)
+### 6.6 Local high availability and failover (HA)
+
+These tests run one DocumentDB cluster with **3 instances** (1 primary, 2 replicas) spread across the worker nodes, and check that it survives losing the primary while a client keeps writing.
 
 #### HA-01: Start a continuous writer
-It writes one document every 0.5 s for 20 minutes, and records any failure. Keep it running during HA-02 … HA-04 and RES-02.
+It writes one document every 0.5 s for 30 minutes, and records any failure. Keep it running during HA-02 … HA-06 and RES-02. Like a well-behaved application, it opens a new connection after a failed write.
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -457,13 +460,19 @@ spec:
   containers:
   - name: writer
     image: mongo:8.0
-    command: ["mongosh","--quiet","mongodb://${DB_USER}:${DB_PASS}@documentdb-service-${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=5000","--eval"]
+    env:
+    - name: URI
+      value: "mongodb://${DB_USER}:${DB_PASS}@documentdb-service-${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=5000"
+    command: ["mongosh","--quiet","--nodb","--eval"]
     args:
     - |
-      const c=db.getSiblingDB("ha").ticks; c.drop();
-      const end=Date.now()+20*60*1000; let seq=0, ok=0, fail=0;
+      let conn, c;
+      function connect() { try { if (conn) conn.close(); } catch (e) {} conn = new Mongo(process.env.URI); c = conn.getDB("ha").ticks; }
+      connect(); c.drop();
+      const end=Date.now()+30*60*1000; let seq=0, ok=0, fail=0;
       while (Date.now()<end) { seq++;
-        try { c.insertOne({_id:seq, t:new Date()}); ok++; } catch(e) { fail++; print("FAIL seq="+seq+" "+new Date().toISOString()+" "+e.message); }
+        try { c.insertOne({_id:seq, t:new Date()}); ok++; }
+        catch(e) { fail++; print("FAIL seq="+seq+" "+new Date().toISOString()+" "+e.message); try { connect(); } catch (e2) {} }
         if (seq%120==0) print(new Date().toISOString()+" seq="+seq+" ok="+ok+" fail="+fail);
         sleep(500); }
       print("DONE seq="+seq+" ok="+ok+" fail="+fail+" stored="+c.countDocuments());
@@ -487,7 +496,7 @@ kubectl -n "$NS" exec "$P" -c postgres -- psql -U postgres -tAc "select applicat
 ```
 **Expected:** 2 rows in state `streaming` with sub-second `replay_lag`.
 
-#### HA-04: Failover (delete the primary)
+#### HA-04: Failover after the primary pod is deleted
 ```bash
 OLD=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}'); date -u; echo "old primary: $OLD"
 kubectl -n "$NS" delete pod "$OLD" --wait=false
@@ -503,13 +512,56 @@ kubectl -n "$NS" logs writer | tail -5
 
 **Record** the failover time and any `FAIL` lines; a few seconds to tens of seconds of failed or paused writes during failover is normal.
 
-#### HA-05: Scale back in and check data
+#### HA-05: Failover after the primary crashes
+A force delete with no grace period simulates the primary's PostgreSQL disappearing without a clean shutdown.
 ```bash
+OLD=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}'); date -u +"crash %H:%M:%S"
+kubectl -n "$NS" delete pod "$OLD" --grace-period=0 --force
+until P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}'); [ -n "$P" ] && [ "$P" != "$OLD" ]; do sleep 2; done; date -u +"new primary $P %H:%M:%S"
+sleep 15
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=3 --timeout=10m
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | tail -3
+```
+**Expected:**
+- events `FailingOver` ("Current primary isn't healthy, initiating a failover…") and `FailoverTarget`;
+- a new primary within about **15 s** (validation runs: 7 s);
+- all 3 instances ready again within a few minutes, with the crashed instance rejoining as a replica;
+- the writer pauses for seconds (validation runs: 8–15 s) and resumes on its own. One or two `FAIL` lines (for example `ECONNRESET`) are normal: those writes were in flight on the crashed primary and were never acknowledged.
+
+**Record** the time to the new primary.
+
+#### HA-06: Planned node maintenance (drain the primary's node)
+This cordons a node, so the **cluster owner coordinates it** with everyone on the cluster, and it's run on one tester's cluster at a time. The `--pod-selector` evicts only *your* database pods; other workloads on the node keep running.
+```bash
+N=$(kubectl -n "$NS" get pod "$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')" -o jsonpath='{.spec.nodeName}'); echo "primary is on $N"
+date -u +"drain start %H:%M:%S"
+kubectl drain "$N" --pod-selector="cnpg.io/cluster=${DB}" --ignore-daemonsets --delete-emptydir-data --timeout=15m
+date -u +"drain end %H:%M:%S"
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | tail -3
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=3 --timeout=15m
+kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,NODE:.spec.nodeName'
+kubectl uncordon "$N"
+```
+**Expected:**
+- event `SwitchingOver`: "Current primary is running on unschedulable node …, switching over from … to …". This is a *controlled* switchover, because the primary's PodDisruptionBudget blocks a plain eviction;
+- `Cannot evict pod as it would violate the pod's disruption budget` retries while the switchover runs. These are expected;
+- the drain completes within a few minutes (validation runs: 34–67 s);
+- the evicted instance restarts on another node with its data volume and rejoins as a replica (`readyInstances=3`);
+- the writer pauses (validation runs: 31–33 s) **without failed writes**.
+
+**Always run `kubectl uncordon`**, even if a step fails.
+
+#### HA-07: Check for lost writes, then scale back in
+```bash
+kubectl -n "$NS" logs writer | grep FAIL
+m 'const d=db.getSiblingDB("ha").ticks.find({},{t:1}).sort({_id:1}).toArray(); const ids=new Set(d.map(x=>x._id)); const max=d[d.length-1]._id; const miss=[]; for (let i=1;i<=max;i++) if (!ids.has(i)) miss.push(i); const gaps=[]; for (let i=1;i<d.length;i++){ const g=(d[i].t-d[i-1].t)/1000; if (g>2) gaps.push(d[i].t.toISOString().slice(11,19)+" "+g.toFixed(1)+"s"); } print("stored="+d.length+" maxSeq="+max+" missingIds=["+miss.join(",")+"] pauses>2s: "+(gaps.join(", ")||"none"))'
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"instancesPerNode":1}}'
 kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=1 --timeout=15m
-m 'const c=db.getSiblingDB("ha").ticks; const n=c.countDocuments(), max=c.find().sort({_id:-1}).limit(1).toArray()[0]._id; print("stored="+n+" maxSeq="+max+" missing="+(max-n))'
 ```
-**Expected:** 1 instance, and `missing=0`. Every acknowledged write is still there; IDs that the writer logged as `FAIL` were never acknowledged, so they don't count.
+**Expected:**
+- every ID in `missingIds` also appears in a `FAIL seq=<id>` line. Those writes were never acknowledged. **Any missing ID without a matching `FAIL` line is a lost acknowledged write: file it as a Sev 1 bug;**
+- the pauses listed match the failover and switchover times above (record them);
+- after scaling in, 1 instance is ready.
 
 ### 6.7 Resilience (RES)
 
@@ -612,16 +664,18 @@ Copy this into the shared tracker, one row per test per cluster.
 | DEP-01 | | | | time to healthy: | | |
 | HA-02 | | | | time to 3 ready: | | |
 | HA-04 | | | | failover time: / failed writes: | | |
+| HA-05 | | | | time to new primary: / write pause: | | |
+| HA-06 | | | | drain time: / write pause: / failed writes: | | |
 | … | | | | | | |
 
 ### Metrics we collect
 | Metric | Where it comes from | Target |
 |---|---|---|
 | Pass rate per area | Results table | 100% of in-scope tests pass, or have a filed bug |
-| Data integrity | DATA-01…10, HA-05 `missing=0`, RES-01, BAK-03 `IDENTICAL` | No lost or corrupted acknowledged writes |
+| Data integrity | DATA-01…10, HA-07 (every missing ID has a `FAIL` line), RES-01, BAK-03 `IDENTICAL` | No lost or corrupted acknowledged writes |
 | Time to healthy (new cluster) | DEP-01 | Recorded; typically 1–3 min after the image is cached |
 | Scale-out time (1 → 3) | HA-02 | Recorded |
-| Failover time and write impact | HA-04 writer log | New primary within ~1 min; writes resume without manual action |
+| Failover and switchover time, write impact | HA-04 … HA-07 writer log and pauses | Crash: new primary within ~15 s. Node drain: controlled switchover, no failed writes. Writes always resume without manual action. |
 | Database disruption from operator restarts | RES-02 | None (same pod UID, no restarts) |
 | Bugs by severity | Bug tracker | No open Sev 1 / Sev 2 at exit |
 
