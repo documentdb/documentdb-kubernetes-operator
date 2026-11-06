@@ -105,15 +105,34 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 
 ## 3. Cluster assignments
 
-The organizer fills in this table. Each cluster has one **cluster owner**, who installs the operator. Everyone runs the **core path** (SETUP-05, DEP, CON, DATA, AUTH, VAL), plus their cluster's **deep-dive** areas.
+### Minimal path: everyone, about 45 minutes
+Every tester runs these, in this order, on their own DocumentDB cluster:
 
-| Cluster | Azure Local location | Cluster owner | Engineers | Deep-dive areas |
+| Step | Tests | About |
+|---|---|---|
+| Connect and check | SETUP-02, SETUP-05 (the cluster owner first runs SETUP-03 and SETUP-04) | 5 min |
+| Deploy | DEP-01 … DEP-03 | 5 min |
+| Connect a client | CON-01 | 1 min |
+| Database features | [Appendix A](#appendix-a-full-data-validation-script) (all ten DATA checks in one script) | 2 min |
+| Authentication and validation | AUTH-01, AUTH-02, AUTH-05, VAL-01 | 3 min |
+| High availability | HA-01 (writer), HA-02 (scale to 3), HA-05 (crash failover) | 10 min |
+| Engine update under load | UPG-02 (update only) | 6 min |
+| Lost-write check | HA-07 | 3 min |
+| Logical backup and restore | BAK-01 … BAK-03 | 6 min |
+| Volume retention and cleanup | LIFE-01, section 9 | 3 min |
+
+### Optional extras: one cluster each, run by the cluster owner
+Tests marked **(optional)** in section 6 aren't part of the minimal path. Each cluster owner runs the extras assigned to their cluster, adding 10–15 minutes. Run the HA extras while the cluster still has 3 instances (between HA-05 and HA-07).
+
+The organizer fills in this table. Each cluster has one **cluster owner**, who installs the operator.
+
+| Cluster | Azure Local location | Cluster owner | Engineers | Optional extras (cluster owner) |
 |---|---|---|---|---|
-| `<CLUSTER_1>` | `<LOCATION>` | `<name>` | `<names>` | HA, RES |
-| `<CLUSTER_2>` | `<LOCATION>` | `<name>` | `<names>` | BAK, LIFE, UPG-01 (operator upgrade) |
-| `<CLUSTER_3>` | `<LOCATION>` | `<name>` | `<names>` | MON, AUTH (extended), UPG-03 |
-| `<CLUSTER_4>` | `<LOCATION>` | `<name>` | `<names>` | HA (3 instances), UPG-02, DATA (larger data sets) |
-| `<CLUSTER_5>` | `<LOCATION>` | `<name>` | `<names>` | Exploratory (your own scenarios) |
+| `<CLUSTER_1>` | `<LOCATION>` | `<name>` | `<names>` | HA-03, HA-04, HA-06 (node drain) |
+| `<CLUSTER_2>` | `<LOCATION>` | `<name>` | `<names>` | UPG-01 (operator upgrade), RES-02 |
+| `<CLUSTER_3>` | `<LOCATION>` | `<name>` | `<names>` | UPG-03 (schema upgrade) |
+| `<CLUSTER_4>` | `<LOCATION>` | `<name>` | `<names>` | UPG-02 revert, RES-01, MON-01, MON-02 |
+| `<CLUSTER_5>` | `<LOCATION>` | `<name>` | `<names>` | DEP-04, DEP-05, CON-02, DATA-01 … DATA-10, AUTH-03, AUTH-04, AUTH-06, AUTH-07, VAL-02, exploratory |
 
 ---
 
@@ -346,7 +365,7 @@ kubectl -n "$NS" get pod "${DB}-1" -o jsonpath='postgres={.spec.containers[?(@.n
 
 > If your cluster's nodes run containerd 2.1 or later, the operator selects `imageVolume` instead. That's correct behavior, but note it in your results, because some expected values differ.
 
-#### DEP-04: Status, versions and extension
+#### DEP-04: Status, versions and extension (optional)
 ```bash
 kubectl -n "$NS" get documentdb "$DB" -o jsonpath='status={.status.status}{"\n"}schemaVersion={.status.schemaVersion}{"\n"}documentDBImage={.status.documentDBImage}{"\n"}gatewayImage={.status.gatewayImage}{"\n"}'
 kubectl -n "$NS" exec "${DB}-1" -c postgres -- psql -U postgres -tAc "select version()"
@@ -354,7 +373,7 @@ kubectl -n "$NS" exec "${DB}-1" -c postgres -- psql -U postgres -tAc "select ext
 ```
 **Expected:** `schemaVersion=1.0.0`, `documentDBImage=…documentdb-combined:18-1.0.0`, `gatewayImage=…/gateway:1.0.0`, `PostgreSQL 18.x`, extension `1.0-0`.
 
-#### DEP-05: Connection string in status
+#### DEP-05: Connection string in status (optional)
 ```bash
 kubectl -n "$NS" get documentdb "$DB" -o jsonpath='{.status.connectionString}{"\n"}'
 ```
@@ -385,7 +404,7 @@ mongosh "mongodb://${DB_USER}:${DB_PASS}@127.0.0.1:10260/?tls=true&tlsAllowInval
 
 ### 6.3 Database functionality (DATA)
 
-Run each snippet with `m '<snippet>'`, or run all of them at once with the script in [Appendix A](#appendix-a-full-data-validation-script). Each snippet prints its own result.
+**Minimal path:** run the script in [Appendix A](#appendix-a-full-data-validation-script), which checks all ten areas below in one go (database `bugbash_auto`). Running the snippets individually with `m '<snippet>'` is **optional**; each prints its own result.
 
 #### DATA-01: CRUD
 ```javascript
@@ -504,11 +523,11 @@ H="documentdb-service-${DB}:10260"; Q="tls=true&tlsAllowInvalidCertificates=true
 |---|---|---|
 | AUTH-01 Valid credentials | `tryuri "mongodb://${DB_USER}:${DB_PASS}@${H}/?${Q}"` | `1` |
 | AUTH-02 Wrong password | `tryuri "mongodb://${DB_USER}:WrongPass999@${H}/?${Q}"` | `MongoServerError: Invalid key` (rejected) |
-| AUTH-03 Unknown user | `tryuri "mongodb://nobody:Whatever123@${H}/?${Q}"` | `MongoServerError: Invalid account: User details not found in the database` |
-| AUTH-04 No credentials | `tryuri "mongodb://${H}/?tls=true&tlsAllowInvalidCertificates=true&serverSelectionTimeoutMS=8000" 'db.getSiblingDB("bugbash").crud.findOne()'` | `MongoServerError: Command find is not allowed as the connection is not authenticated yet.` |
+| AUTH-03 Unknown user (optional) | `tryuri "mongodb://nobody:Whatever123@${H}/?${Q}"` | `MongoServerError: Invalid account: User details not found in the database` |
+| AUTH-04 No credentials (optional) | `tryuri "mongodb://${H}/?tls=true&tlsAllowInvalidCertificates=true&serverSelectionTimeoutMS=8000" 'db.getSiblingDB("bugbash_auto").crud.findOne()'` | `MongoServerError: Command find is not allowed as the connection is not authenticated yet.` |
 | AUTH-05 TLS is required | `tryuri "mongodb://${DB_USER}:${DB_PASS}@${H}/?tls=false&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=8000"` | Connection fails (for example `ECONNRESET`); plaintext isn't accepted |
-| AUTH-06 Self-signed certificate | `tryuri "mongodb://${DB_USER}:${DB_PASS}@${H}/?tls=true&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=8000"` | `MongoNetworkError: self-signed certificate…` (expected with the default certificate) |
-| AUTH-07 Roles of the operator-managed user | `m 'printjson(db.runCommand({connectionStatus:1}).authInfo.authenticatedUserRoles)'` | `readWriteAnyDatabase` and `clusterAdmin` on `admin` |
+| AUTH-06 Self-signed certificate (optional) | `tryuri "mongodb://${DB_USER}:${DB_PASS}@${H}/?tls=true&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=8000"` | `MongoNetworkError: self-signed certificate…` (expected with the default certificate) |
+| AUTH-07 Roles of the operator-managed user (optional) | `m 'printjson(db.runCommand({connectionStatus:1}).authInfo.authenticatedUserRoles)'` | `readWriteAnyDatabase` and `clusterAdmin` on `admin` |
 
 > **Known behavior (not a bug):** `db.getSiblingDB("admin").runCommand({createUser:…})` returns `Unauthorized` with the operator-managed user. Extra users can't be created this way in this release.
 
@@ -517,14 +536,14 @@ H="documentdb-service-${DB}:10260"; Q="tls=true&tlsAllowInvalidCertificates=true
 | ID | Command | Expected |
 |---|---|---|
 | VAL-01 | `kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"nodeCount":0}}' --dry-run=server` | Rejected: `spec.nodeCount … should be greater than or equal to 1` |
-| VAL-02 | `kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"schemaVersion":"9.9.9"}}' --dry-run=server` | Rejected by the webhook: `cannot set an explicit schemaVersion without also setting spec.documentDBVersion or spec.documentDBImage…` |
+| VAL-02 (optional) | `kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"schemaVersion":"9.9.9"}}' --dry-run=server` | Rejected by the webhook: `cannot set an explicit schemaVersion without also setting spec.documentDBVersion or spec.documentDBImage…` |
 
 ### 6.6 Local high availability and failover (HA)
 
 These tests run one DocumentDB cluster with **3 instances** (1 primary, 2 replicas) spread across the worker nodes, and check that it survives losing the primary while a client keeps writing.
 
 #### HA-01: Start a continuous writer
-It writes one document every 0.5 s for 2 hours, and records any failure. Keep it running during HA-02 … HA-06, UPG-02 and HA-07. Like a well-behaved application, it opens a new connection after a failed write.
+It writes one document every 0.5 s for 60 minutes, and records any failure. Keep it running during HA-02 … HA-07, including UPG-02. Like a well-behaved application, it opens a new connection after a failed write.
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -544,7 +563,7 @@ spec:
       let conn, c;
       function connect() { try { if (conn) conn.close(); } catch (e) {} conn = new Mongo(process.env.URI); c = conn.getDB("ha").ticks; }
       connect(); c.drop();
-      const end=Date.now()+120*60*1000; let seq=0, ok=0, fail=0;
+      const end=Date.now()+60*60*1000; let seq=0, ok=0, fail=0;
       while (Date.now()<end) { seq++;
         try { c.insertOne({_id:seq, t:new Date()}); ok++; }
         catch(e) { fail++; print("FAIL seq="+seq+" "+new Date().toISOString()+" "+e.message); try { connect(); } catch (e2) {} }
@@ -564,14 +583,14 @@ kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.me
 ```
 **Expected:** 3 pods, 1 `primary` and 2 `replica`, ideally on different nodes, all using the combined image. **Record the time to 3 ready instances.**
 
-#### HA-03: Replication is healthy
+#### HA-03: Replication is healthy (optional)
 ```bash
 P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
 kubectl -n "$NS" exec "$P" -c postgres -- psql -U postgres -tAc "select application_name, state, replay_lag from pg_stat_replication"
 ```
 **Expected:** 2 rows in state `streaming` with sub-second `replay_lag`.
 
-#### HA-04: Failover after the primary pod is deleted
+#### HA-04: Failover after the primary pod is deleted (optional)
 ```bash
 OLD=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}'); date -u; echo "old primary: $OLD"
 kubectl -n "$NS" delete pod "$OLD" --wait=false
@@ -605,7 +624,7 @@ kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-
 
 **Record** the time to the new primary.
 
-#### HA-06: Planned node maintenance (drain the primary's node)
+#### HA-06: Planned node maintenance (drain the primary's node) (optional)
 This cordons a node, so the **cluster owner coordinates it** with everyone on the cluster, and it's run on one tester's cluster at a time. The `--pod-selector` evicts only *your* database pods; other workloads on the node keep running.
 ```bash
 N=$(kubectl -n "$NS" get pod "$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')" -o jsonpath='{.spec.nodeName}'); echo "primary is on $N"
@@ -640,19 +659,19 @@ waitfor 900 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '1'
 
 ### 6.7 Resilience (RES)
 
-#### RES-01: PostgreSQL pod restart keeps data
+#### RES-01: PostgreSQL pod restart keeps data (optional)
 ```bash
-m 'print(db.getSiblingDB("bugbash").orders.countDocuments())'
+m 'print(db.getSiblingDB("bugbash_auto").ord.countDocuments())'
 P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
 kubectl -n "$NS" delete pod "$P"
 sleep 20
 waitfor 600 "pod/$P" '{.status.conditions[?(@.type=="Ready")].status}' True
 waitfor 600 "documentdb/${DB}" '{.status.status}' 'Cluster in healthy state'
-m 'print(db.getSiblingDB("bugbash").orders.countDocuments())'
+m 'print(db.getSiblingDB("bugbash_auto").ord.countDocuments())'
 ```
 **Expected:** the same count before and after (`1000`), and the cluster healthy again.
 
-#### RES-02: Operator restart doesn't disturb the database (cluster owner coordinates)
+#### RES-02: Operator restart doesn't disturb the database (optional, cluster owner coordinates)
 ```bash
 P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
 kubectl -n "$NS" get pod "$P" -o jsonpath='uid={.metadata.uid} restarts={.status.containerStatuses[*].restartCount}{"\n"}'
@@ -695,14 +714,14 @@ kubectl -n "$NS" exec mongosh -- mongorestore --uri="$URI2" --tlsInsecure --gzip
 
 #### BAK-03: Compare source and restored data
 ```bash
-SUM='const o={}; for (const d of ["bugbash","ha"]) { const s=db.getSiblingDB(d); for (const c of s.getCollectionNames().sort()) { const col=s.getCollection(c); o[d+"."+c]=col.countDocuments()+" idx="+col.getIndexes().map(i=>i.name).sort().join("|"); } } print(JSON.stringify(o));'
+SUM='const o={}; for (const d of ["bugbash","bugbash_auto","ha"]) { const s=db.getSiblingDB(d); for (const c of s.getCollectionNames().sort()) { const col=s.getCollection(c); o[d+"."+c]=col.countDocuments()+" idx="+col.getIndexes().map(i=>i.name).sort().join("|"); } } print(JSON.stringify(o));'
 diff <(m "$SUM") <(kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI2" --eval "$SUM") && echo IDENTICAL
 ```
 **Expected:** `IDENTICAL`. Document counts and index names match for every collection, including the vector, 2dsphere, unique and text indexes. If the writer was still running during BAK-01, `ha.ticks` may differ; compare after it finishes.
 
 ### 6.9 Monitoring (MON)
 
-#### MON-01: Enable the OpenTelemetry sidecar with a Prometheus endpoint
+#### MON-01: Enable the OpenTelemetry sidecar with a Prometheus endpoint (optional)
 ```bash
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"monitoring":{"enabled":true,"exporter":{"prometheus":{"port":9188}}}}}'
 sleep 60
@@ -712,7 +731,7 @@ kubectl -n "$NS" get pod "$P" -o jsonpath='{range .spec.containers[*]}{.name}{" 
 ```
 **Expected:** containers `postgres documentdb-gateway otel-collector`; annotations `true 9188`. The pod restarts once to add the sidecar; that's expected.
 
-#### MON-02: Scrape the metric
+#### MON-02: Scrape the metric (optional)
 ```bash
 P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
 kubectl -n "$NS" port-forward "pod/$P" 19188:9188 >/dev/null 2>&1 & PF=$!
@@ -740,7 +759,7 @@ No operator or engine release newer than what's installed exists yet, so these t
 | Operator and sidecar | `0.2.0-test` | Built automatically from the `main` branch; a different image from `1.1.0` |
 | DocumentDB engine and gateway | `1.0.0-build-42099757352-1-f6af3d1` | A rebuild of engine 1.0.0 (same extension schema `1.0-0`), as an engine patch release would ship |
 
-#### UPG-01: Operator upgrade and rollback (cluster owner, one cluster only)
+#### UPG-01: Operator upgrade and rollback (optional, cluster owner, one cluster only)
 This replaces the operator for **everyone** on the cluster, so the cluster owner announces it first. Run it on the cluster assigned UPG-01 in section 3, while other testers' DocumentDB clusters and, ideally, an HA writer (HA-01) are running.
 ```bash
 snap() { kubectl get pods -A -l cnpg.io/cluster -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,RESTARTS:.status.containerStatuses[*].restartCount,IMAGES:.spec.containers[*].image,DELETING:.metadata.deletionTimestamp' --sort-by=.metadata.name | awk 'NR==1 || $NF=="<none>"'; }   # skips pods that are shutting down
@@ -796,7 +815,7 @@ kubectl -n "$NS" logs writer | grep FAIL
 - `schema=1.0.0` (unchanged: same extension version);
 - the update finishes within about 5 minutes (validation runs: 4 min 12 s). Writes pause during the switchover for up to about a minute (validation runs: 50 s); a few seconds of `FAIL` lines can also appear while the new primary starts accepting connections (validation runs: 0 and 13 failures, about 7 s). That's acceptable as long as HA-07's check shows every missing ID has a `FAIL` line.
 
-Revert to the release images by removing the overrides:
+**Revert (optional).** Revert to the release images by removing the overrides:
 ```bash
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"image":null}}'
 sleep 60
@@ -805,7 +824,7 @@ kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.me
 ```
 **Expected:** all pods are back on `…/documentdb-combined:18-1.0.0` and `…/gateway:1.0.0` (validation run: 2 min 44 s). Then run HA-07's lost-write check: every missing ID must have a `FAIL` line.
 
-#### UPG-03: Engine upgrade with schema migration, 0.117.0 → 1.0.0
+#### UPG-03: Engine upgrade with schema migration, 0.117.0 → 1.0.0 (optional)
 This is a real extension upgrade (`ALTER EXTENSION … UPDATE` from `0.117-0` to `1.0-0`) in combined mode. It uses the default **two-phase** flow: first the binary is updated while the schema stays on 0.117, then you finalize the schema, after which rolling back the image is blocked. It creates its own 2-instance cluster, `${DB}-old`, from a 0.117.0 test build.
 ```bash
 R=ghcr.io/documentdb/documentdb-kubernetes-operator; OLD=0.117.0-build-42184844433-1-f6af3d1
@@ -910,7 +929,7 @@ Copy this into the shared tracker, one row per test per cluster.
 | Bugs by severity | Bug tracker | No open Sev 1 / Sev 2 at exit |
 
 ### Exit criteria
-- Every in-scope test was run on at least **two** clusters.
+- The minimal path passed on every cluster, and each optional extra was run on at least one cluster.
 - There are no open Sev 1 or Sev 2 bugs.
 - There's no data loss in any scenario.
 
@@ -1023,7 +1042,7 @@ An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this
    export KUBECONFIG="\$HOME/.kube/<CLUSTER_NAME>.yaml"
    export OPERATOR_VERSION="1.1.0"
    export ROLE="tester"            # "owner" only for the cluster owner (section 3)
-   export AREAS="core"             # "core", or core plus your deep-dive areas, e.g. "core HA RES", or "all"
+   export AREAS="minimal"          # "minimal", or minimal plus optional test IDs from section 3, e.g. "minimal HA-03 HA-04 HA-06", or "all"
    export URI="mongodb://\${DB_USER}:\${DB_PASS}@documentdb-service-\${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
    m() { kubectl -n "\$NS" exec mongosh -- mongosh --quiet "\$URI" --eval "\$1"; }
    start_proxy() {
@@ -1047,13 +1066,13 @@ An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this
 ### C.2 Rules for the agent
 - Start **every** shell command with `source ~/bugbash.env;`.
 - Use `start_proxy` instead of SETUP-02's "separate terminal". If a command fails with `Unknown proxy error`, `No proxy found`, `status code 490`, `connection refused` on `127.0.0.1:47011`, `localhost:8080`, or `the server has asked for the client to provide credentials` (the proxy's credential expires after a few hours), run `stop_proxy; start_proxy` and retry. Retry only the commands that failed: if part of a block already succeeded (for example a `patch`), don't run that part again. Never start a second proxy.
-- Run the tests in section 6 in this order: SETUP-02 → SETUP-03, SETUP-04 (owner only) → SETUP-05 → DEP → CON-01 → DATA-01 … DATA-10 (individually; later tests use their `bugbash` database) → Appendix A → AUTH → VAL → HA-01 … HA-06 → UPG-02 → HA-07 → RES → BAK → MON → LIFE → UPG-03 → UPG-01 (owner only) → section 9 cleanup of your own namespace.
+- Run the **minimal path** from section 3, in its order: SETUP-02 → SETUP-03, SETUP-04 (owner only) → SETUP-05 → DEP-01 … DEP-03 → CON-01 → Appendix A → AUTH-01, AUTH-02, AUTH-05 → VAL-01 → HA-01 → HA-02 → HA-05 → UPG-02 (update) → HA-07 → BAK-01 … BAK-03 → LIFE-01 → section 9 cleanup of your own namespace.
+- Run an **optional** test only if its ID is in `AREAS` (or `AREAS=all`), and record every other optional test as `SKIPPED (optional)`. Run each where it fits: DEP-04, DEP-05 after DEP-03; CON-02 after CON-01; DATA-01 … DATA-10 before Appendix A; AUTH-03/04/06/07 and VAL-02 with the other AUTH and VAL tests; HA-03, HA-04, HA-06 between HA-05 and UPG-02; the UPG-02 revert right after the update; RES-01, MON-01, MON-02 after BAK-03; RES-02, UPG-03 and UPG-01 after LIFE-01, before cleanup.
 - `ROLE=tester`: record SETUP-03, SETUP-04, RES-02, HA-06 and UPG-01 as `SKIPPED (owner only)`. Never run `kubectl drain`, `helm install/upgrade/rollback`, or anything outside `$NS` other than read-only `get`/`describe`/`logs`.
-- `AREAS`: always run the core path (SETUP-05, DEP, CON-01, DATA, AUTH, VAL). Run HA, UPG, RES, BAK, MON and LIFE only if listed (or `all`); record the others as `SKIPPED (not assigned)`. UPG-02 needs HA-01 … HA-06.
-- Skip CON-02 if `mongosh` isn't installed locally (`SKIPPED (no local mongosh)`).
+- If CON-02 is selected but `mongosh` isn't installed locally, record `SKIPPED (no local mongosh)`.
 - Copy commands exactly, substituting only variables. If you have to change a command to make it work, record the change under *Deviations*. Never change the product, the cluster's platform components, or other testers' namespaces.
 - Compare each result with the guide's **Expected**. If it doesn't match, collect diagnostics (section 8), record `FAIL` with the evidence, and continue with the next independent test. Use `BLOCKED` when an earlier failure prevents a test from running.
-- Long steps are normal: HA-01's writer runs for 2 hours in the background, and some waits are 15–20 minutes. Don't abort them early.
+- Long steps are normal: HA-01's writer runs for 60 minutes in the background, and some waits are several minutes. Don't abort them early. The minimal path takes about 45 minutes.
 - Never print or write `DB_PASS` or other secrets into the results; replace them with `***`.
 - Stop and ask the human only for: an expired Azure sign-in (`az account get-access-token` fails), `kubectl auth can-i` saying `no`, or a proxy that won't start after 3 attempts.
 
