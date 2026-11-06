@@ -99,7 +99,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 3. **Install the operator only once per cluster.** One person (the *cluster owner*, see [section 3](#3-cluster-assignments)) runs SETUP-03 … SETUP-05. Everyone else checks SETUP-05 and continues from DEP-01.
 4. **Never put real secrets in bug reports.** The passwords in this guide are throwaway examples.
 5. **Run commands one at a time** and compare against the *Expected* result before moving on. If a step fails, collect diagnostics ([section 8](#8-collecting-diagnostics)), file the bug, and continue with the next independent test where possible.
-6. **AI agents:** treat each test ID as a separate task. Substitute the variables from [section 4](#4-variables), run the commands, compare the output with *Expected*, and record PASS/FAIL with the evidence (the command output). Don't skip *Expected* checks or invent results.
+6. **AI agents:** follow [Appendix C](#appendix-c-running-the-bug-bash-with-an-ai-agent). Treat each test ID as a separate task. Substitute the variables from [section 4](#4-variables), run the commands, compare the output with *Expected*, and record PASS/FAIL with the evidence (the command output). Don't skip *Expected* checks or invent results.
 
 ---
 
@@ -989,3 +989,89 @@ kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI" /tmp/bugbash-data.js
 | SQL shell (diagnostics only) | `kubectl -n "$NS" exec -it "${DB}-1" -c postgres -- psql -U postgres` |
 | Operator logs | `kubectl -n documentdb-operator logs deploy/documentdb-operator -f` |
 | Re-open the Arc tunnel | `az connectedk8s proxy -n "$CLUSTER" -g "$RESOURCE_GROUP" --file "$HOME/.kube/${CLUSTER}.yaml" --port 47011` |
+
+## Appendix C: Running the bug bash with an AI agent
+
+An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this guide for you and write a results file. Three steps need you: installing tools (they need `sudo`), signing in to Azure, and deciding whether the agent may run the cluster-wide steps.
+
+### C.1 What you do first
+1. Finish **SETUP-01** (tools) yourself.
+2. Sign in: `az login --tenant "<TENANT>" --use-device-code` (sign-in is interactive; agents can't do it). If the sign-in expires during the run (`the server has asked for the client to provide credentials`), the agent stops and asks you to sign in again.
+3. Create the variables file. Agents often start a fresh shell for every command, so variables and helper functions must come from a file rather than `export`:
+   ```bash
+   cat > ~/bugbash.env <<EOF
+   export TENANT="<TENANT_DOMAIN_OR_ID>"
+   export SUBSCRIPTION="<SUBSCRIPTION_ID>"
+   export RESOURCE_GROUP="<RESOURCE_GROUP>"
+   export CLUSTER="<CLUSTER_NAME>"
+   export ALIAS="<alias>"
+   export NS="bb-<alias>"
+   export DB="ddb-<alias>"
+   export DB_USER="bb_user"
+   export DB_PASS="BugBash-$(openssl rand -hex 6)"
+   export KUBECONFIG="\$HOME/.kube/<CLUSTER_NAME>.yaml"
+   export OPERATOR_VERSION="1.1.0"
+   export ROLE="tester"            # "owner" only for the cluster owner (section 3)
+   export AREAS="core"             # "core", or core plus your deep-dive areas, e.g. "core HA RES", or "all"
+   export URI="mongodb://\${DB_USER}:\${DB_PASS}@documentdb-service-\${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+   m() { kubectl -n "\$NS" exec mongosh -- mongosh --quiet "\$URI" --eval "\$1"; }
+   start_proxy() {
+     kubectl get --raw /version --request-timeout=5s >/dev/null 2>&1 && { echo "proxy already up"; return 0; }
+     [ -f "\$HOME/arc-proxy.pid" ] && kill "\$(cat "\$HOME/arc-proxy.pid")" 2>/dev/null; sleep 2
+     nohup az connectedk8s proxy -n "\$CLUSTER" -g "\$RESOURCE_GROUP" --subscription "\$SUBSCRIPTION" \\
+       --file "\$KUBECONFIG" --port 47011 > "\$HOME/arc-proxy.log" 2>&1 &
+     echo \$! > "\$HOME/arc-proxy.pid"
+     for i in \$(seq 1 36); do kubectl get --raw /version --request-timeout=5s >/dev/null 2>&1 && { echo "proxy ready"; return 0; }; sleep 5; done
+     echo "proxy NOT ready, see \$HOME/arc-proxy.log"; return 1
+   }
+   stop_proxy() { [ -f "\$HOME/arc-proxy.pid" ] && kill "\$(cat "\$HOME/arc-proxy.pid")" 2>/dev/null; rm -f "\$HOME/arc-proxy.pid"; }
+   EOF
+   ```
+   Replace every `<…>` value. In the command above, `\$` is intentional (it's expanded later); only `DB_PASS` is generated now and stays the same for the whole run.
+4. **Cluster owners only:** announce the cluster-wide steps (SETUP-03, SETUP-04, RES-02, HA-06, UPG-01) to the other testers on the cluster, then set `export ROLE="owner"` in `~/bugbash.env`.
+5. Start the agent in an empty working folder and paste the prompt in C.4.
+
+### C.2 Rules for the agent
+- Start **every** shell command with `source ~/bugbash.env;`.
+- Use `start_proxy` instead of SETUP-02's "separate terminal". If a command fails with `Unknown proxy error`, `No proxy found`, `status code 490`, `connection refused` on `127.0.0.1:47011`, or `localhost:8080`, run `start_proxy` and retry the command **once**. Never start a second proxy.
+- Run the tests in section 6 in this order: SETUP-02 → SETUP-03, SETUP-04 (owner only) → SETUP-05 → DEP → CON-01 → DATA (Appendix A, plus DATA-01 … DATA-10 individually if any fail) → AUTH → VAL → HA-01 … HA-06 → UPG-02 → HA-07 → RES → BAK → MON → LIFE → UPG-03 → UPG-01 (owner only) → section 9 cleanup of your own namespace.
+- `ROLE=tester`: record SETUP-03, SETUP-04, RES-02, HA-06 and UPG-01 as `SKIPPED (owner only)`. Never run `kubectl drain`, `helm install/upgrade/rollback`, or anything outside `$NS` other than read-only `get`/`describe`/`logs`.
+- `AREAS`: always run the core path (SETUP-05, DEP, CON-01, DATA, AUTH, VAL). Run HA, UPG, RES, BAK, MON and LIFE only if listed (or `all`); record the others as `SKIPPED (not assigned)`. UPG-02 needs HA-01 … HA-06.
+- Skip CON-02 if `mongosh` isn't installed locally (`SKIPPED (no local mongosh)`).
+- Copy commands exactly, substituting only variables. If you have to change a command to make it work, record the change under *Deviations*. Never change the product, the cluster's platform components, or other testers' namespaces.
+- Compare each result with the guide's **Expected**. If it doesn't match, collect diagnostics (section 8), record `FAIL` with the evidence, and continue with the next independent test. Use `BLOCKED` when an earlier failure prevents a test from running.
+- Long steps are normal: HA-01's writer runs 30 minutes, and some waits are 15–20 minutes. Don't abort them early.
+- Never print or write `DB_PASS` or other secrets into the results; replace them with `***`.
+- Stop and ask the human only for: an expired Azure sign-in, `kubectl auth can-i` saying `no`, or a proxy that won't start after 3 attempts.
+
+### C.3 Results file
+Write `results-<CLUSTER>-<ALIAS>.md` in the working folder, updating it after every test:
+```markdown
+# DocumentDB Azure Local bug bash results
+Cluster: <CLUSTER> | Tester: <ALIAS> | Role: <ROLE> | Areas: <AREAS> | Agent: <agent name/model>
+Kubernetes: <version> | Node runtime: <containerd version> | Operator chart: <version> | Start/end (UTC): <…>
+
+| Test ID | Result | Measurement | Evidence (short output) | Notes |
+|---|---|---|---|---|
+| SETUP-02 | PASS | 4 nodes, v1.33.7 | `…containerd://1.7.13…` | |
+
+## Bugs
+<one bug report per failure, using the template in section 7>
+
+## Deviations from the guide
+<command changes, and why>
+
+## Summary
+<pass/fail/blocked/skipped counts; the metrics from section 7>
+```
+Give the file and any diagnostics bundles (`diag-*.tgz`) to the organizer.
+
+### C.4 Prompt to paste into the agent
+```text
+You are a tester in the DocumentDB on Azure Local bug bash. Follow this guide exactly:
+https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/bug-bash/azure-local-bugbash.md
+Read the whole guide first, especially section 2 (rules) and Appendix C (rules for AI agents). My variables, role
+and areas are in ~/bugbash.env, and I'm already signed in to Azure. Run the tests in the order given in C.2,
+compare every result with its "Expected", and keep results-<CLUSTER>-<ALIAS>.md up to date in this folder as
+described in C.3. Don't ask me anything unless C.2 says to. When you're done, print the summary.
+```
