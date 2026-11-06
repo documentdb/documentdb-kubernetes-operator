@@ -2,12 +2,16 @@
 
 This guide is a step-by-step test plan for running DocumentDB on **AKS enabled by Azure Arc on Azure Local** with the DocumentDB Kubernetes Operator. It's written so that an engineer, or an AI agent working on their behalf, can follow it without prior knowledge of the project.
 
-Every command shows its expected result. Record **PASS**, **FAIL** or **BLOCKED** for each test case ID in the [results table](#7-results-and-reporting).
+Every command shows its expected result. Record **PASS**, **FAIL**, **BLOCKED** or **SKIPPED** for each test case ID, and finish with the [report card](#report-card).
+
+> [!TIP]
+> **Default: run the minimal path (about 25 minutes).** Every tester, and every AI agent, runs the **[minimal path](#minimal-path-everyone-about-25-minutes)** in section 3 and nothing else. Tests marked **(optional)** run only if section 3 assigns them to your cluster and you're its cluster owner. A timed run of the minimal path, including installing cert-manager and the operator, took 21 minutes.
 
 **How this bug bash works:**
 1. **You start with an AKS cluster on Azure Local.** This guide doesn't create clusters. If you don't have one, set it up first with the official documentation ([section 0](#0-before-you-start-an-aks-cluster-on-azure-local)).
-2. **Install the DocumentDB operator** on that cluster ([section 5](#5-setup)).
-3. **Run the test cases** ([section 6](#6-test-cases)) and report the results ([section 7](#7-results-and-reporting)).
+2. **Install the DocumentDB operator** on that cluster ([section 5](#5-setup)); only the cluster owner does this.
+3. **Run the minimal path** ([section 3](#3-cluster-assignments)), using the test cases in [section 6](#6-test-cases).
+4. **Report your results** as a report card ([section 7](#7-results-and-reporting)).
 
 ---
 
@@ -901,8 +905,65 @@ Clean up: `kubectl -n "$NS" delete documentdb "${DB}-old"`.
 
 ## 7. Results and reporting
 
+### Report card
+When you finish, write a report card: one line per test, grouped by area, with a status icon. AI agents print it as their final output (Appendix C). The tester shares it in the shared tracker, together with any bug reports.
+
+| Icon | Meaning |
+|---|---|
+| ✅ | PASS: the result matched *Expected* |
+| ❌ | FAIL: the result didn't match; a bug report follows |
+| ⚠️ | BLOCKED: couldn't run because an earlier step failed |
+| ⏭️ | SKIPPED: optional, or not assigned to you |
+
+Use this format (example from a real minimal-path run):
+```text
+DocumentDB on Azure Local bug bash: report card
+Cluster: acx-cluster-2 | Tester: jdoe | Role: owner | Path: minimal
+Started 17:14 UTC, finished 17:35 UTC (21 min)
+
+RESULT: ✅ 22 passed   ❌ 0 failed   ⚠️ 0 blocked   ⏭️ 27 skipped (optional)
+
+Setup                          4/4  ✅
+  ✅ SETUP-02  Connect to the cluster           4 nodes, v1.33.5, containerd 1.7.13, cluster-admin
+  ✅ SETUP-03  Install cert-manager             62 s
+  ✅ SETUP-04  Install the operator             57 s
+  ✅ SETUP-05  Verify the operator
+Deployment                     3/3  ✅
+  ✅ DEP-01    Create a DocumentDB cluster      healthy in 2 min 7 s
+  ✅ DEP-02    Pods, services and storage
+  ✅ DEP-03    Combined image mode selected
+Connectivity                   1/1  ✅
+  ✅ CON-01    In-cluster MongoDB shell
+Database features              1/1  ✅
+  ✅ Appendix A  All 10 DATA checks             CRUD, BSON, regex, Decimal128, geo, vector, aggregation, unique, text, transactions
+Authentication and validation  4/4  ✅
+  ✅ AUTH-01   Valid credentials
+  ✅ AUTH-02   Wrong password rejected
+  ✅ AUTH-05   TLS required
+  ✅ VAL-01    Invalid spec rejected
+High availability              4/4  ✅
+  ✅ HA-01     Continuous writer started
+  ✅ HA-02     Scale out to 3 instances         3 ready in 2 min 37 s, on 3 nodes
+  ✅ HA-05     Crash failover                   new primary in 7 s, write pause 34.6 s, 0 failed writes
+  ✅ HA-07     No lost acknowledged writes      1 unacknowledged write (has a FAIL line), 0 lost
+Upgrades                       1/1  ✅
+  ✅ UPG-02    Engine update under load         3 min 25 s, write pause 54.7 s, 1 failed write
+Backup and restore             3/3  ✅
+  ✅ BAK-01    Dump
+  ✅ BAK-02    Restore into a new cluster       2142 documents restored, 0 failed
+  ✅ BAK-03    Source and restore identical
+Lifecycle and cleanup          1/1  ✅
+  ✅ LIFE-01   Deleted cluster keeps its volume Released / Retain
+  ✅ Cleanup   Namespace and volumes deleted     (section 9; not counted as a test)
+
+Failures: none
+Bugs filed: none
+Optional tests skipped: DEP-04, DEP-05, CON-02, DATA-01 … DATA-10, AUTH-03, AUTH-04, AUTH-06, AUTH-07, VAL-02, HA-03, HA-04, HA-06, RES-01, RES-02, MON-01, MON-02, UPG-01, UPG-03
+```
+For every ❌ or ⚠️, add the reason on the same line, for example `❌ HA-05  Crash failover  no new primary after 5 min (bug #123)`, and list the bugs under *Failures*.
+
 ### Results table
-Copy this into the shared tracker, one row per test per cluster.
+For measurements across clusters, the organizer also collects these rows in the shared tracker, one row per test per cluster.
 
 | Test ID | Cluster | Tester | Result (PASS/FAIL/BLOCKED) | Time / measurement | Bug link | Notes |
 |---|---|---|---|---|---|---|
@@ -1096,18 +1157,19 @@ Kubernetes: <version> | Node runtime: <containerd version> | Operator chart: <ve
 ## Deviations from the guide
 <command changes, and why>
 
-## Summary
-<pass/fail/blocked/skipped counts; the metrics from section 7>
+## Report card
+<the report card from section 7>
 ```
-Give the file and any diagnostics bundles (`diag-*.tgz`) to the organizer.
+When you finish, **print the report card** (section 7 format) as your final output, exactly as written in the results file. Give the file and any diagnostics bundles (`diag-*.tgz`) to the organizer.
 
 ### C.4 Prompt to paste into the agent
 ```text
 You are a tester in the DocumentDB on Azure Local bug bash. Follow this guide exactly (it's in draft PR
 https://github.com/documentdb/documentdb-kubernetes-operator/pull/500; read the file from the PR branch):
 https://github.com/hossain-rayhan/documentdb-kubernetes-operator/blob/rayhan/azure-local-bugbash/docs/bug-bash/azure-local-bugbash.md
-Read the whole guide first, especially section 2 (rules) and Appendix C (rules for AI agents). My variables, role
-and areas are in ~/bugbash.env, and I'm already signed in to Azure. Run the tests in the order given in C.2,
-compare every result with its "Expected", and keep results-<CLUSTER>-<ALIAS>.md up to date in this folder as
-described in C.3. Don't ask me anything unless C.2 says to. When you're done, print the summary.
+Read the whole guide first, especially section 2 (rules), section 3 (minimal path) and Appendix C (rules for AI
+agents). My variables, role and areas are in ~/bugbash.env, and I'm already signed in to Azure. Run the minimal
+path, plus only the optional tests listed in AREAS, in the order given in C.2. Compare every result with its
+"Expected", and keep results-<CLUSTER>-<ALIAS>.md up to date in this folder as described in C.3. Don't ask me
+anything unless C.2 says to. When you're done, print the report card from section 7 as your final output.
 ```
