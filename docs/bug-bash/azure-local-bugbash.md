@@ -367,12 +367,14 @@ print(c.countDocuments({loc:{$geoWithin:{$centerSphere:[[-122.3321,47.6062],50/6
 #### DATA-06: Vector search
 ```javascript
 const d=db.getSiblingDB("bugbash"); d.vectors.drop();
-d.vectors.insertMany([{_id:"a",v:[1.0,0.0,0.0]},{_id:"b",v:[0.9,0.1,0.0]},{_id:"c",v:[0.0,1.0,0.0]},{_id:"d",v:[0.0,0.0,1.0]}]);
+d.vectors.insertMany([{_id:"a",v:[0.0,0.0,1.0]},{_id:"b",v:[0.0,1.0,0.0]},{_id:"c",v:[1.0,0.0,0.0]},{_id:"d",v:[0.9,0.1,0.0]}]);
 printjson(d.runCommand({createIndexes:"vectors",indexes:[{name:"v_hnsw",key:{v:"cosmosSearch"},
-  cosmosSearchOptions:{kind:"vector-hnsw",m:16,efConstruction:64,similarity:"COS",dimensions:3}}]}));
-printjson(d.vectors.aggregate([{$search:{cosmosSearch:{vector:[1.0,0.05,0.0],path:"v",k:2}}},{$project:{_id:1}}]).toArray());
+  cosmosSearchOptions:{kind:"vector-hnsw",m:16,efConstruction:64,similarity:"COS",dimensions:3}}]}).ok);
+printjson(d.vectors.aggregate([{$search:{cosmosSearch:{vector:[1.0,0.05,0.0],path:"v",k:2}}},{$project:{_id:1,score:{$meta:"searchScore"}}}]).toArray());
 ```
-**Expected:** `createIndexes` returns `ok: 1`, and the search returns `a` and `b`, the two vectors closest to the query.
+**Expected:** `1`, then `c` (score ≈ `0.99875`) followed by `d` (score ≈ `0.99816`). Those are the two vectors with the highest cosine similarity to the query, even though they were inserted last. `a` and `b` must not appear.
+
+> Optional stricter check: generate a few thousand random vectors, run several queries, and compare the top-k results and `searchScore` values with a brute-force cosine calculation in the client. On Azure Local with operator 1.1.0 this gave recall@10 = 1.0 and score error below 1e-7.
 
 #### DATA-07: Aggregation and secondary index
 ```javascript
@@ -380,9 +382,10 @@ const c=db.getSiblingDB("bugbash").orders; c.drop();
 c.insertMany([...Array(1000).keys()].map(i=>({cust:"c"+(i%10),qty:i%7,when:new Date(1700000000000+i*60000)})));
 c.createIndex({cust:1,when:-1});
 printjson(c.aggregate([{$group:{_id:"$cust",total:{$sum:"$qty"}}},{$sort:{total:-1,_id:1}},{$limit:3}]).toArray());
-print("uses index: "+/cust_1_when_-1/.test(JSON.stringify(c.find({cust:"c1"}).sort({when:-1}).explain())));
+const p=JSON.stringify(c.find({cust:"c1"}).sort({when:-1}).explain());
+print("IXSCAN on cust_1_when_-1: "+(/IXSCAN/.test(p) && /cust_1_when_-1/.test(p)));
 ```
-**Expected:** top 3 are `c3:303`, `c6:302`, `c2:301`; `uses index: true`.
+**Expected:** top 3 are `c3:303`, `c6:302`, `c2:301` (exact totals), and `IXSCAN on cust_1_when_-1: true`, meaning the query plan scans the index rather than the whole collection.
 
 #### DATA-08: Unique index
 ```javascript
@@ -394,10 +397,13 @@ try { c.insertOne({email:"a@x.com"}); print("UNEXPECTED: duplicate accepted"); }
 #### DATA-09: Text index
 ```javascript
 const c=db.getSiblingDB("bugbash").articles; c.drop();
-c.insertMany([{t:"fast database on kubernetes"},{t:"slow cooking recipes"}]); c.createIndex({t:"text"});
-print(c.countDocuments({$text:{$search:"kubernetes"}}));
+c.insertMany([{_id:1,t:"fast databases on kubernetes"},{_id:2,t:"database tuning guide"},{_id:3,t:"slow cooking recipes"},{_id:4,t:"kubernetes networking and kubernetes storage"}]);
+c.createIndex({t:"text"});
+print("database:", JSON.stringify(c.find({$text:{$search:"database"}}).toArray().map(x=>x._id).sort()));
+print("phrase:", JSON.stringify(c.find({$text:{$search:"\"cooking recipes\""}}).toArray().map(x=>x._id)));
+print("ranked:", JSON.stringify(c.find({$text:{$search:"kubernetes"}},{score:{$meta:"textScore"}}).sort({score:{$meta:"textScore"}}).toArray().map(x=>x._id)));
 ```
-**Expected:** `1`.
+**Expected:** `database: [1,2]` (stemming matches "databases"), `phrase: [3]`, `ranked: [4,1]` (the document mentioning "kubernetes" twice ranks first).
 
 #### DATA-10: Multi-document transaction
 ```javascript
@@ -687,10 +693,10 @@ check("DATA-02 bson",()=>{const c=d.types,o=new ObjectId(),w=new Date("2026-01-0
 check("DATA-03 regex",()=>{const c=d.re;c.insertMany([{s:"Apple pie"},{s:"apple tart"},{s:"Banana"},{s:"pineapple"}]);const r=[c.countDocuments({s:/^apple/i}),c.countDocuments({s:{$regex:"apple$"}}),c.countDocuments({s:{$not:/apple/i}})].join(",");if(r!=="2,1,1")throw new Error(r);});
 check("DATA-04 decimal128",()=>{const c=d.dec;c.insertMany([{a:NumberDecimal("0.1")},{a:NumberDecimal("0.2")}]);const t=c.aggregate([{$group:{_id:null,t:{$sum:"$a"}}}]).toArray()[0].t.toString();if(t!=="0.3")throw new Error(t);});
 check("DATA-05 geo",()=>{const c=d.geo;c.insertMany([{n:"Seattle",l:{type:"Point",coordinates:[-122.3321,47.6062]}},{n:"Redmond",l:{type:"Point",coordinates:[-122.1215,47.674]}},{n:"Portland",l:{type:"Point",coordinates:[-122.6765,45.5231]}}]);c.createIndex({l:"2dsphere"});const r=c.find({l:{$near:{$geometry:{type:"Point",coordinates:[-122.3321,47.6062]},$maxDistance:25000}}}).toArray().map(x=>x.n).join(",");if(r!=="Seattle,Redmond")throw new Error(r);});
-check("DATA-06 vector",()=>{d.vec.insertMany([{_id:"a",v:[1,0,0]},{_id:"b",v:[0.9,0.1,0]},{_id:"c",v:[0,1,0]},{_id:"d",v:[0,0,1]}]);d.runCommand({createIndexes:"vec",indexes:[{name:"v_hnsw",key:{v:"cosmosSearch"},cosmosSearchOptions:{kind:"vector-hnsw",m:16,efConstruction:64,similarity:"COS",dimensions:3}}]});const r=d.vec.aggregate([{$search:{cosmosSearch:{vector:[1,0.05,0],path:"v",k:2}}}]).toArray().map(x=>x._id).sort().join(",");if(r!=="a,b")throw new Error(r);});
-check("DATA-07 aggregation+index",()=>{const c=d.ord;c.insertMany([...Array(1000).keys()].map(i=>({c:"c"+(i%10),q:i%7})));c.createIndex({c:1});const t=c.aggregate([{$group:{_id:"$c",t:{$sum:"$q"}}},{$sort:{t:-1,_id:1}},{$limit:1}]).toArray()[0];if(t._id!=="c3"||t.t!==303)throw new Error(JSON.stringify(t));});
+check("DATA-06 vector",()=>{d.vec.insertMany([{_id:"a",v:[0,0,1]},{_id:"b",v:[0,1,0]},{_id:"c",v:[1,0,0]},{_id:"d",v:[0.9,0.1,0]}]);d.runCommand({createIndexes:"vec",indexes:[{name:"v_hnsw",key:{v:"cosmosSearch"},cosmosSearchOptions:{kind:"vector-hnsw",m:16,efConstruction:64,similarity:"COS",dimensions:3}}]});const r=d.vec.aggregate([{$search:{cosmosSearch:{vector:[1,0.05,0],path:"v",k:2}}},{$project:{s:{$meta:"searchScore"}}}]).toArray();if(r.map(x=>x._id).join(",")!=="c,d"||Math.abs(r[0].s-0.998752)>1e-4||Math.abs(r[1].s-0.998158)>1e-4)throw new Error(JSON.stringify(r));});
+check("DATA-07 aggregation+index",()=>{const c=d.ord;c.insertMany([...Array(1000).keys()].map(i=>({c:"c"+(i%10),q:i%7})));c.createIndex({c:1});const t=c.aggregate([{$group:{_id:"$c",t:{$sum:"$q"}}},{$sort:{t:-1,_id:1}},{$limit:1}]).toArray()[0];if(t._id!=="c3"||t.t!==303)throw new Error(JSON.stringify(t));const p=JSON.stringify(c.find({c:"c1"}).explain());if(!/IXSCAN/.test(p)||!/c_1/.test(p))throw new Error("index not used");});
 check("DATA-08 unique",()=>{const c=d.u;c.createIndex({e:1},{unique:true});c.insertOne({e:"a"});try{c.insertOne({e:"a"})}catch(e){if(e.code===11000)return;throw e}throw new Error("duplicate accepted");});
-check("DATA-09 text",()=>{const c=d.txt;c.insertMany([{t:"fast database on kubernetes"},{t:"slow cooking"}]);c.createIndex({t:"text"});const n=c.countDocuments({$text:{$search:"kubernetes"}});if(n!==1)throw new Error(n);});
+check("DATA-09 text",()=>{const c=d.txt;c.insertMany([{_id:1,t:"fast databases on kubernetes"},{_id:2,t:"database tuning guide"},{_id:3,t:"slow cooking recipes"},{_id:4,t:"kubernetes networking and kubernetes storage"}]);c.createIndex({t:"text"});const a=c.find({$text:{$search:"database"}}).toArray().map(x=>x._id).sort().join(","),b=c.find({$text:{$search:"kubernetes"}},{s:{$meta:"textScore"}}).sort({s:{$meta:"textScore"}}).toArray().map(x=>x._id).join(",");if(a!=="1,2"||b!=="4,1")throw new Error(a+" | "+b);});
 check("DATA-10 transaction",()=>{d.tx.insertOne({_id:1,b:100});const s=db.getMongo().startSession(),c=s.getDatabase("bugbash_auto").tx;s.startTransaction();c.updateOne({_id:1},{$inc:{b:-30}});s.abortTransaction();if(d.tx.findOne({_id:1}).b!==100)throw new Error("abort");s.startTransaction();c.updateOne({_id:1},{$inc:{b:-30}});s.commitTransaction();if(d.tx.findOne({_id:1}).b!==70)throw new Error("commit");});
 print(results.join("\n"));
 EOF
