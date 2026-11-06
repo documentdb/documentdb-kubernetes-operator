@@ -438,6 +438,69 @@ func TestNewOtelCollectorSidecar_MonitorUser(t *testing.T) {
 	t.Fatal("missing PGUSER env var")
 }
 
+// TestProxyEnvVars asserts the OTel collector receives the outbound proxy
+// routing env vars (both UPPER and lowercase spellings) only when the operator
+// forwards them, and nothing when the operator is not proxy-configured.
+func TestProxyEnvVars(t *testing.T) {
+	empty := proxyEnvVars(&pluginconfig.Configuration{})
+	if len(empty) != 0 {
+		t.Fatalf("expected no proxy env when unconfigured, got %v", empty)
+	}
+
+	cfg := &pluginconfig.Configuration{
+		HTTPProxy:  "http://proxy.example.com:3128",
+		HTTPSProxy: "http://proxy.example.com:3128",
+		NoProxy:    "localhost,.svc.cluster.local",
+	}
+	got := map[string]string{}
+	for _, e := range proxyEnvVars(cfg) {
+		got[e.Name] = e.Value
+	}
+	want := map[string]string{
+		"HTTP_PROXY":  cfg.HTTPProxy,
+		"http_proxy":  cfg.HTTPProxy,
+		"HTTPS_PROXY": cfg.HTTPSProxy,
+		"https_proxy": cfg.HTTPSProxy,
+		"NO_PROXY":    cfg.NoProxy,
+		"no_proxy":    cfg.NoProxy,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("proxy env count = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Errorf("proxy env %q = %q, want %q", name, got[name], value)
+		}
+	}
+
+	// Only HTTPS set → only the HTTPS pair is emitted.
+	partial := proxyEnvVars(&pluginconfig.Configuration{HTTPSProxy: "http://p:3128"})
+	if len(partial) != 2 {
+		t.Fatalf("expected 2 env vars for HTTPS-only, got %d (%v)", len(partial), partial)
+	}
+
+	// HTTP only → HTTPS_PROXY falls back to it, because the gRPC exporter
+	// consults only HTTPS_PROXY.
+	httpOnly := map[string]string{}
+	for _, e := range proxyEnvVars(&pluginconfig.Configuration{HTTPProxy: "http://p:3128"}) {
+		httpOnly[e.Name] = e.Value
+	}
+	for _, name := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"} {
+		if httpOnly[name] != "http://p:3128" {
+			t.Errorf("HTTP-only: %s = %q, want the HTTP proxy", name, httpOnly[name])
+		}
+	}
+
+	// An explicit HTTPS proxy is never overridden by the HTTP fallback.
+	both := map[string]string{}
+	for _, e := range proxyEnvVars(&pluginconfig.Configuration{HTTPProxy: "http://h:1", HTTPSProxy: "http://s:2"}) {
+		both[e.Name] = e.Value
+	}
+	if both["HTTPS_PROXY"] != "http://s:2" || both["HTTP_PROXY"] != "http://h:1" {
+		t.Errorf("explicit values changed: %v", both)
+	}
+}
+
 func TestLifecycleHookMonitoringPasswordSecret(t *testing.T) {
 	for _, secret := range []string{"", "monitor-password"} {
 		t.Run("secret="+secret, func(t *testing.T) {

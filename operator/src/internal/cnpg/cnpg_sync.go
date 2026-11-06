@@ -125,6 +125,9 @@ func SyncCnpgCluster(
 				util.PLUGIN_PARAM_OTEL_MEMORY_LIMIT,
 				util.PLUGIN_PARAM_OTEL_CPU_REQUEST,
 				util.PLUGIN_PARAM_OTEL_CPU_LIMIT,
+				util.PLUGIN_PARAM_HTTP_PROXY,
+				util.PLUGIN_PARAM_HTTPS_PROXY,
+				util.PLUGIN_PARAM_NO_PROXY,
 				// Gateway contract: the injector renders the gateway
 				// container from these at pod creation.
 				util.PLUGIN_PARAM_GATEWAY_CONTAINER_NAME,

@@ -16,6 +16,12 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
+      {{- if (include "documentdb.proxy" . | fromJson).isProxyEnabled }}
+      annotations:
+        # Roll the operator when the proxy configuration changes so the new
+        # DOCUMENTDB_OTEL_* proxy values take effect.
+        checksum/proxy-config: {{ printf "%s|%s|%s" ((include "documentdb.proxy" . | fromJson).httpProxy) ((include "documentdb.proxy" . | fromJson).httpsProxy) (include "documentdb.noProxy" .) | sha256sum }}
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- with .Values.imagePullSecrets }}
@@ -90,6 +96,14 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: webhook-cert
           readOnly: true
+        {{- if (include "documentdb.proxy" . | fromJson).isProxyEnabled }}
+        # Provide the proxy values the operator forwards to the OTel Collector
+        # sidecar. The keys are DOCUMENTDB_OTEL_* (not the standard HTTP_PROXY
+        # names) so the operator's own Kubernetes API client is never proxied.
+        envFrom:
+        - secretRef:
+            name: {{ include "documentdb.proxySecretName" . }}
+        {{- end }}
         env:
         - name: GATEWAY_PORT
           value: "10260"
