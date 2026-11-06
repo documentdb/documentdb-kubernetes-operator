@@ -979,7 +979,8 @@ Cluster owner, after everyone has finished. The DocumentDB clusters use `Retain`
 kubectl get pv -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,CLAIM_NS:.spec.claimRef.namespace' | grep -E 'bb-' \
   | awk '$2=="Released"{print $1}' \
   | xargs -r -I{} kubectl patch pv {} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
-sleep 30; kubectl get pv | grep -E 'bb-' || echo "all bug bash volumes deleted"
+for i in $(seq 1 36); do kubectl get pv | grep -qE 'bb-' || break; sleep 5; done   # the disk driver takes about a minute
+kubectl get pv | grep -E 'bb-' || echo "all bug bash volumes deleted"
 # Optional, only if the clusters will be reused for something else:
 # helm uninstall documentdb-operator -n documentdb-operator
 ```
