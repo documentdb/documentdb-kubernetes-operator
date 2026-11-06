@@ -134,9 +134,14 @@ export DB_PASS="BugBash-$(openssl rand -hex 6)"  # throwaway; letters, digits an
 export KUBECONFIG="$HOME/.kube/${CLUSTER}.yaml"  # written by the Arc proxy in SETUP-02
 export OPERATOR_VERSION="1.1.0"
 echo "Your DocumentDB password for this session: ${DB_PASS}"
+
+# waitfor <seconds> <resource> '<jsonpath>' '<value>': polls every 5 s until the value matches.
+# The guide uses it instead of `kubectl wait`, whose watch can stall for many minutes through the Arc proxy.
+waitfor() { local end=$((SECONDS+$1)) v; until v=$(kubectl -n "$NS" get "$2" -o jsonpath="$3" 2>/dev/null) && [ "$v" = "$4" ]; do
+  [ "$SECONDS" -ge "$end" ] && { echo "TIMEOUT after $1 s: $2 $3 is '$v', expected '$4'"; return 1; }; sleep 5; done; echo "OK: $2 $3=$4"; }
 ```
 
-Keep `DB_PASS` for the whole session. If you open a new terminal, set it to the same value.
+Keep `DB_PASS` for the whole session. If you open a new terminal, set it to the same value and define `waitfor` again (or `source` a file that has both; see Appendix C).
 
 ---
 
@@ -227,7 +232,7 @@ In a **separate terminal**, start the proxy and leave it running:
 az connectedk8s proxy -n "$CLUSTER" -g "$RESOURCE_GROUP" \
   --file "$HOME/.kube/${CLUSTER}.yaml" --port 47011
 ```
-Wait until it prints `Proxy is listening on port 47011`. Run **only one proxy per machine**: a second `az connectedk8s proxy`, even for another cluster or port, fails with `Failed to fetch public key info from client proxy`. Stop the first one (Ctrl+C) before switching clusters.
+Wait until it prints `Proxy is listening on port 47011`. Run **only one proxy per machine**. `az connectedk8s proxy` starts a helper process (`arcProxy`) that keeps local ports 47010–47011; while it's running, a second proxy, even for another cluster or port, fails with `Failed to fetch public key info from client proxy`. Stop the proxy with Ctrl+C before switching clusters. If that error appears anyway, a helper from an earlier proxy is still running: stop it with `kill $(pgrep -f 'clientproxy/arcProxy')` and start the proxy again.
 
 Back in your working terminal (with the variables from section 4 set):
 ```bash
@@ -235,7 +240,7 @@ kubectl get nodes -o custom-columns='NAME:.metadata.name,K8S:.status.nodeInfo.ku
 kubectl auth can-i '*' '*' --all-namespaces
 ```
 **Expected:**
-- 4 nodes, Kubernetes `v1.33.x`, runtime `containerd://1.7.x`, architecture `amd64`;
+- at least 4 nodes (1 control plane and 3 or more workers), Kubernetes `v1.33.x`, runtime `containerd://1.7.x`, architecture `amd64`;
 - `yes` from `auth can-i`. If it says `no`, you don't have cluster-admin: stop and ask the organizer to add you to the cluster's admin group.
 
 > If kubectl later fails with `Unknown proxy error occurred` or connection errors, restart the proxy command. Arc cluster connect drops occasionally, and its credential refresh can fail on long sessions. That's not a DocumentDB bug.
@@ -244,7 +249,7 @@ kubectl auth can-i '*' '*' --all-namespaces
 ```bash
 kubectl get crd certificates.cert-manager.io >/dev/null 2>&1 && echo "cert-manager already installed" || {
   helm repo add jetstack https://charts.jetstack.io --force-update
-  helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace \
+  helm install cert-manager jetstack/cert-manager --version v1.21.3 -n cert-manager --create-namespace \
     --set crds.enabled=true --wait --timeout 10m
 }
 kubectl get pods -n cert-manager
@@ -314,8 +319,7 @@ spec:
     serviceType: ClusterIP
 EOF
 
-time kubectl -n "$NS" wait "documentdb/${DB}" \
-  --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=15m
+time waitfor 900 "documentdb/${DB}" '{.status.status}' 'Cluster in healthy state'
 ```
 **Expected:** `condition met`, usually within **1–3 minutes** (longer the first time a node pulls the ~700 MB image). **Record the time.**
 
@@ -362,7 +366,7 @@ kubectl -n "$NS" get documentdb "$DB" -o jsonpath='{.status.connectionString}{"\
 Most tests below use this client pod, so they don't depend on your laptop's network.
 ```bash
 kubectl -n "$NS" run mongosh --image=mongo:8.0 --restart=Never --command -- sleep 28800
-kubectl -n "$NS" wait --for=condition=Ready pod/mongosh --timeout=5m
+waitfor 300 pod/mongosh '{.status.conditions[?(@.type=="Ready")].status}' True
 export URI="mongodb://${DB_USER}:${DB_PASS}@documentdb-service-${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 m() { kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI" --eval "$1"; }
 m 'db.runCommand({ping:1})'
@@ -491,7 +495,8 @@ print("after commit: docs="+d.tx.countDocuments()+" bal1="+d.tx.findOne({_id:"ac
 
 Use `tryuri '<uri>'`, which attempts a connection with any URI and prints the first line of the result:
 ```bash
-tryuri() { kubectl -n "$NS" exec mongosh -- mongosh --quiet "$1" --eval "${2:-db.runCommand({ping:1}).ok}" 2>&1 | grep -v '^\s*at ' | head -1; }
+PING='db.runCommand({ping:1}).ok'
+tryuri() { local js="$PING"; [ -n "$2" ] && js="$2"; kubectl -n "$NS" exec mongosh -- mongosh --quiet "$1" --eval "$js" 2>&1 | grep -v '^\s*at ' | head -1; }
 H="documentdb-service-${DB}:10260"; Q="tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256&serverSelectionTimeoutMS=8000"
 ```
 
@@ -519,7 +524,7 @@ H="documentdb-service-${DB}:10260"; Q="tls=true&tlsAllowInvalidCertificates=true
 These tests run one DocumentDB cluster with **3 instances** (1 primary, 2 replicas) spread across the worker nodes, and check that it survives losing the primary while a client keeps writing.
 
 #### HA-01: Start a continuous writer
-It writes one document every 0.5 s for 30 minutes, and records any failure. Keep it running during HA-02 … HA-06 and RES-02. Like a well-behaved application, it opens a new connection after a failed write.
+It writes one document every 0.5 s for 2 hours, and records any failure. Keep it running during HA-02 … HA-06, UPG-02 and HA-07. Like a well-behaved application, it opens a new connection after a failed write.
 ```bash
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -539,7 +544,7 @@ spec:
       let conn, c;
       function connect() { try { if (conn) conn.close(); } catch (e) {} conn = new Mongo(process.env.URI); c = conn.getDB("ha").ticks; }
       connect(); c.drop();
-      const end=Date.now()+30*60*1000; let seq=0, ok=0, fail=0;
+      const end=Date.now()+120*60*1000; let seq=0, ok=0, fail=0;
       while (Date.now()<end) { seq++;
         try { c.insertOne({_id:seq, t:new Date()}); ok++; }
         catch(e) { fail++; print("FAIL seq="+seq+" "+new Date().toISOString()+" "+e.message); try { connect(); } catch (e2) {} }
@@ -547,14 +552,14 @@ spec:
         sleep(500); }
       print("DONE seq="+seq+" ok="+ok+" fail="+fail+" stored="+c.countDocuments());
 EOF
-kubectl -n "$NS" wait --for=condition=Ready pod/writer --timeout=5m
+waitfor 300 pod/writer '{.status.conditions[?(@.type=="Ready")].status}' True
 ```
 **Expected:** the pod is `Running`. `kubectl -n "$NS" logs writer` prints a progress line every minute with `fail=0`.
 
 #### HA-02: Scale out to 3 instances
 ```bash
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"instancesPerNode":3}}'
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=3 --timeout=15m
+waitfor 900 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '3'
 kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,NODE:.spec.nodeName,IMAGE:.spec.containers[0].image'
 ```
 **Expected:** 3 pods, 1 `primary` and 2 `replica`, ideally on different nodes, all using the combined image. **Record the time to 3 ready instances.**
@@ -589,11 +594,11 @@ OLD=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.stat
 kubectl -n "$NS" delete pod "$OLD" --grace-period=0 --force
 until P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}'); [ -n "$P" ] && [ "$P" != "$OLD" ]; do sleep 2; done; date -u +"new primary $P %H:%M:%S"
 sleep 15
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=3 --timeout=10m
-kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | tail -3
+waitfor 600 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '3'
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp -o custom-columns='TIME:.lastTimestamp,REASON:.reason,MESSAGE:.message' | tail -4
 ```
 **Expected:**
-- events `FailingOver` ("Current primary isn't healthy, initiating a failover…") and `FailoverTarget`;
+- an event `FailingOver` ("Current primary isn't healthy, initiating a failover…") with a time just after the `crash` time printed above; a `FailoverTarget` event may also appear. Check the times, because the list also contains events from HA-04;
 - a new primary within about **15 s** (validation runs: 7 s);
 - all 3 instances ready again within a few minutes, with the crashed instance rejoining as a replica;
 - the writer pauses for seconds (validation runs: 8–15 s) and resumes on its own. One or two `FAIL` lines (for example `ECONNRESET`) are normal: those writes were in flight on the crashed primary and were never acknowledged.
@@ -607,26 +612,26 @@ N=$(kubectl -n "$NS" get pod "$(kubectl -n "$NS" get clusters.postgresql.cnpg.io
 date -u +"drain start %H:%M:%S"
 kubectl drain "$N" --pod-selector="cnpg.io/cluster=${DB}" --ignore-daemonsets --delete-emptydir-data --timeout=15m
 date -u +"drain end %H:%M:%S"
-kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | tail -3
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=3 --timeout=15m
-kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,NODE:.spec.nodeName'
 kubectl uncordon "$N"
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp -o custom-columns='TIME:.lastTimestamp,REASON:.reason,MESSAGE:.message' | tail -4
+waitfor 900 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '3'
+kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,NODE:.spec.nodeName'
 ```
 **Expected:**
 - event `SwitchingOver`: "Current primary is running on unschedulable node …, switching over from … to …". This is a *controlled* switchover, because the primary's PodDisruptionBudget blocks a plain eviction;
-- `Cannot evict pod as it would violate the pod's disruption budget` retries while the switchover runs. These are expected;
+- the drain may print `Cannot evict pod as it would violate the pod's disruption budget` retries while the switchover runs. These are expected, and it's also fine if none appear;
 - the drain completes within a few minutes (validation runs: 34–67 s);
 - the evicted instance restarts on another node with its data volume and rejoins as a replica (`readyInstances=3`);
 - the writer pauses (validation runs: 31–33 s) **without failed writes**.
 
-**Always run `kubectl uncordon`**, even if a step fails.
+The node is uncordoned right after the drain. **If any step fails, still run `kubectl uncordon "$N"`.**
 
 #### HA-07: Check for lost writes, then scale back in
 ```bash
 kubectl -n "$NS" logs writer | grep FAIL
 m 'const d=db.getSiblingDB("ha").ticks.find({},{t:1}).sort({_id:1}).toArray(); const ids=new Set(d.map(x=>x._id)); const max=d[d.length-1]._id; const miss=[]; for (let i=1;i<=max;i++) if (!ids.has(i)) miss.push(i); const gaps=[]; for (let i=1;i<d.length;i++){ const g=(d[i].t-d[i-1].t)/1000; if (g>2) gaps.push(d[i].t.toISOString().slice(11,19)+" "+g.toFixed(1)+"s"); } print("stored="+d.length+" maxSeq="+max+" missingIds=["+miss.join(",")+"] pauses>2s: "+(gaps.join(", ")||"none"))'
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"instancesPerNode":1}}'
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.readyInstances}'=1 --timeout=15m
+waitfor 900 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '1'
 ```
 **Expected:**
 - every ID in `missingIds` also appears in a `FAIL seq=<id>` line. Those writes were never acknowledged. **Any missing ID without a matching `FAIL` line is a lost acknowledged write: file it as a Sev 1 bug;**
@@ -640,19 +645,21 @@ kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.stat
 m 'print(db.getSiblingDB("bugbash").orders.countDocuments())'
 P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
 kubectl -n "$NS" delete pod "$P"
-kubectl -n "$NS" wait "documentdb/${DB}" --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=10m
-kubectl -n "$NS" wait --for=condition=Ready "pod/$P" --timeout=10m
+sleep 20
+waitfor 600 "pod/$P" '{.status.conditions[?(@.type=="Ready")].status}' True
+waitfor 600 "documentdb/${DB}" '{.status.status}' 'Cluster in healthy state'
 m 'print(db.getSiblingDB("bugbash").orders.countDocuments())'
 ```
 **Expected:** the same count before and after (`1000`), and the cluster healthy again.
 
 #### RES-02: Operator restart doesn't disturb the database (cluster owner coordinates)
 ```bash
-kubectl -n "$NS" get pod "${DB}-1" -o jsonpath='uid={.metadata.uid} restarts={.status.containerStatuses[*].restartCount}{"\n"}'
+P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
+kubectl -n "$NS" get pod "$P" -o jsonpath='uid={.metadata.uid} restarts={.status.containerStatuses[*].restartCount}{"\n"}'
 kubectl -n documentdb-operator rollout restart deploy/documentdb-operator
 kubectl -n documentdb-operator rollout status deploy/documentdb-operator --timeout=5m
 sleep 90
-kubectl -n "$NS" get pod "${DB}-1" -o jsonpath='uid={.metadata.uid} restarts={.status.containerStatuses[*].restartCount}{"\n"}'
+kubectl -n "$NS" get pod "$P" -o jsonpath='uid={.metadata.uid} restarts={.status.containerStatuses[*].restartCount}{"\n"}'
 kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='mode={.metadata.annotations.documentdb\.io/image-mode}{"\n"}'
 ```
 **Expected:** the same pod UID and restart counts before and after, and `mode=combined` unchanged.
@@ -680,7 +687,7 @@ spec:
   resource: {storage: {pvcSize: 10Gi}}
   exposeViaService: {serviceType: ClusterIP}
 EOF
-kubectl -n "$NS" wait "documentdb/${DB}-restore" --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=15m
+waitfor 900 "documentdb/${DB}-restore" '{.status.status}' 'Cluster in healthy state'
 export URI2="mongodb://${DB_USER}:${DB_PASS}@documentdb-service-${DB}-restore:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 kubectl -n "$NS" exec mongosh -- mongorestore --uri="$URI2" --tlsInsecure --gzip --archive=/tmp/bugbash.archive.gz
 ```
@@ -699,15 +706,17 @@ diff <(m "$SUM") <(kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI2" --ev
 ```bash
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"monitoring":{"enabled":true,"exporter":{"prometheus":{"port":9188}}}}}'
 sleep 60
-kubectl -n "$NS" wait "documentdb/${DB}" --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=15m
-kubectl -n "$NS" get pod "${DB}-1" -o jsonpath='{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{.metadata.annotations.prometheus\.io/scrape} {.metadata.annotations.prometheus\.io/port}{"\n"}'
+waitfor 900 "documentdb/${DB}" '{.status.status}' 'Cluster in healthy state'
+P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
+kubectl -n "$NS" get pod "$P" -o jsonpath='{range .spec.containers[*]}{.name}{" "}{end}{"\n"}{.metadata.annotations.prometheus\.io/scrape} {.metadata.annotations.prometheus\.io/port}{"\n"}'
 ```
 **Expected:** containers `postgres documentdb-gateway otel-collector`; annotations `true 9188`. The pod restarts once to add the sidecar; that's expected.
 
 #### MON-02: Scrape the metric
 ```bash
-kubectl -n "$NS" port-forward "pod/${DB}-1" 19188:9188 &
-sleep 5; curl -s localhost:19188/metrics | grep documentdb_postgres_up; kill %1
+P=$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='{.status.currentPrimary}')
+kubectl -n "$NS" port-forward "pod/$P" 19188:9188 >/dev/null 2>&1 & PF=$!
+sleep 5; curl -s localhost:19188/metrics | grep documentdb_postgres_up; kill "$PF"
 ```
 **Expected:** `documentdb_postgres_up{documentdb_cluster="${DB}",…} 1`.
 
@@ -717,7 +726,7 @@ sleep 5; curl -s localhost:19188/metrics | grep documentdb_postgres_up; kill %1
 ```bash
 PV=$(kubectl -n "$NS" get pvc "${DB}-restore-1" -o jsonpath='{.spec.volumeName}')
 kubectl -n "$NS" delete documentdb "${DB}-restore" --wait=true --timeout=10m
-sleep 30
+for i in $(seq 1 36); do [ "$(kubectl get pv "$PV" -o jsonpath='{.status.phase}')" = Released ] && break; sleep 5; done
 kubectl get pv "$PV" -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,RECLAIM:.spec.persistentVolumeReclaimPolicy'
 ```
 **Expected:** the PV still exists, with `RECLAIM=Retain` and `STATUS=Released`. Recovering a new cluster from this volume is **out of scope** (see section 1); don't try it.
@@ -734,7 +743,7 @@ No operator or engine release newer than what's installed exists yet, so these t
 #### UPG-01: Operator upgrade and rollback (cluster owner, one cluster only)
 This replaces the operator for **everyone** on the cluster, so the cluster owner announces it first. Run it on the cluster assigned UPG-01 in section 3, while other testers' DocumentDB clusters and, ideally, an HA writer (HA-01) are running.
 ```bash
-snap() { kubectl get pods -A -l cnpg.io/cluster -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,RESTARTS:.status.containerStatuses[*].restartCount,IMAGES:.spec.containers[*].image' --sort-by=.metadata.name; }
+snap() { kubectl get pods -A -l cnpg.io/cluster -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,RESTARTS:.status.containerStatuses[*].restartCount,IMAGES:.spec.containers[*].image,DELETING:.metadata.deletionTimestamp' --sort-by=.metadata.name | awk 'NR==1 || $NF=="<none>"'; }   # skips pods that are shutting down
 snap > upg-before.txt; cat upg-before.txt
 
 # 1. Apply the target chart's CRDs first (helm upgrade never updates CRDs)
@@ -769,13 +778,13 @@ sleep 120; snap > upg-rollback.txt; diff upg-before.txt upg-rollback.txt && echo
 **Expected:** the operator image is back to `…/operator:1.1.0`, and again `NO DATABASE POD CHANGES`. **Record** the upgrade and rollback durations.
 
 #### UPG-02: Engine image update and revert (rolling update)
-Use your 3-instance cluster from HA-02 with the writer running, before HA-07 scales it in. If the writer has finished, run `kubectl -n "$NS" delete pod writer` and then HA-01 again.
+Use your 3-instance cluster from HA-02 with the writer running, before HA-07 scales it in. If the writer has already finished (`kubectl -n "$NS" get pod writer` shows `Completed`), first run HA-07's two check commands and record the result, then `kubectl -n "$NS" delete pod writer` and run HA-01 again; restarting the writer clears its data.
 ```bash
 R=ghcr.io/documentdb/documentdb-kubernetes-operator; T=1.0.0-build-42099757352-1-f6af3d1
 date -u +"update %H:%M:%S"
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p "{\"spec\":{\"image\":{\"documentDB\":\"$R/documentdb:$T\",\"gateway\":\"$R/gateway:$T\"}}}"
 sleep 60
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m; date -u +"done %H:%M:%S"
+waitfor 1200 "clusters.postgresql.cnpg.io/${DB}" '{.status.phase}' 'Cluster in healthy state'; date -u +"done %H:%M:%S"
 kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,IMAGES:.spec.containers[*].image'
 kubectl -n "$NS" get documentdb "$DB" -o jsonpath='status={.status.status} schema={.status.schemaVersion}{"\n"}'
 kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | grep -E 'UpgradingInstance|Switchover' | tail -4
@@ -785,13 +794,13 @@ kubectl -n "$NS" logs writer | grep FAIL
 - all 3 pods run `…/documentdb-combined:18-1.0.0-build-…` and `…/gateway:1.0.0-build-…`, with `READY 2/2`. The operator derives the combined image tag from `spec.image.documentDB`;
 - events show the replicas updated first (`UpgradingInstance`), then a `Switchover` so the old primary is updated last;
 - `schema=1.0.0` (unchanged: same extension version);
-- the update finishes within about 5 minutes (validation runs: 4 min 12 s). Writes pause during the switchover; a few seconds of `FAIL` lines can also appear while the new primary starts accepting connections (validation runs: 0 and 13 failures, about 7 s). That's acceptable as long as HA-07's check shows every missing ID has a `FAIL` line.
+- the update finishes within about 5 minutes (validation runs: 4 min 12 s). Writes pause during the switchover for up to about a minute (validation runs: 50 s); a few seconds of `FAIL` lines can also appear while the new primary starts accepting connections (validation runs: 0 and 13 failures, about 7 s). That's acceptable as long as HA-07's check shows every missing ID has a `FAIL` line.
 
 Revert to the release images by removing the overrides:
 ```bash
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"image":null}}'
 sleep 60
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m
+waitfor 1200 "clusters.postgresql.cnpg.io/${DB}" '{.status.phase}' 'Cluster in healthy state'
 kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,IMAGES:.spec.containers[*].image'
 ```
 **Expected:** all pods are back on `…/documentdb-combined:18-1.0.0` and `…/gateway:1.0.0` (validation run: 2 min 44 s). Then run HA-07's lost-write check: every missing ID must have a `FAIL` line.
@@ -814,8 +823,8 @@ spec:
   resource: {storage: {pvcSize: 10Gi}}
   exposeViaService: {serviceType: ClusterIP}
 EOF
-kubectl -n "$NS" wait "documentdb/${DB}-old" --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=15m
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.readyInstances}'=2 --timeout=10m
+waitfor 900 "documentdb/${DB}-old" '{.status.status}' 'Cluster in healthy state'
+waitfor 600 "clusters.postgresql.cnpg.io/${DB}-old" '{.status.readyInstances}' '2'
 ext() { kubectl -n "$NS" exec "$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "${DB}-old" -o jsonpath='{.status.currentPrimary}')" -c postgres -- psql -U postgres -tAc "select extname, extversion from pg_extension where extname like 'documentdb%' order by 1"; }
 mo() { kubectl -n "$NS" exec mongosh -- mongosh --quiet "${URI/documentdb-service-${DB}:/documentdb-service-${DB}-old:}" --eval "$1"; }
 kubectl -n "$NS" get documentdb "${DB}-old" -o jsonpath='schema={.status.schemaVersion} image={.status.documentDBImage}{"\n"}'; ext
@@ -833,8 +842,8 @@ mo "$FP" | tee fp-before.txt
 ```bash
 kubectl -n "$NS" patch documentdb "${DB}-old" --type merge -p '{"spec":{"image":null,"documentDBVersion":"1.0.0"}}'
 sleep 60
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m
-kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.readyInstances}'=2 --timeout=10m
+waitfor 1200 "clusters.postgresql.cnpg.io/${DB}-old" '{.status.phase}' 'Cluster in healthy state'
+waitfor 600 "clusters.postgresql.cnpg.io/${DB}-old" '{.status.readyInstances}' '2'
 sleep 30
 kubectl -n "$NS" get documentdb "${DB}-old" -o jsonpath='schema={.status.schemaVersion} image={.status.documentDBImage}{"\n"}'; ext
 kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}-old,reason=SchemaUpdateAvailable" -o jsonpath='{.items[0].message}{"\n"}'
@@ -946,10 +955,12 @@ Everyone:
 kubectl delete namespace "$NS" --wait=true --timeout=10m
 ```
 
-Cluster owner, after everyone has finished. The DocumentDB clusters use `Retain`, so their data volumes are kept until deleted:
+Cluster owner, after everyone has finished. The DocumentDB clusters use `Retain`, so their data volumes are kept. Switch them to `Delete`, which makes the CSI driver delete the disk on Azure Local as well. Don't use `kubectl delete pv`: with `Retain`, that removes only the Kubernetes object and leaves the disk behind.
 ```bash
 kubectl get pv -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,CLAIM_NS:.spec.claimRef.namespace' | grep -E 'bb-' \
-  | awk '$2=="Released"{print $1}' | xargs -r kubectl delete pv
+  | awk '$2=="Released"{print $1}' \
+  | xargs -r -I{} kubectl patch pv {} -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+sleep 30; kubectl get pv | grep -E 'bb-' || echo "all bug bash volumes deleted"
 # Optional, only if the clusters will be reused for something else:
 # helm uninstall documentdb-operator -n documentdb-operator
 ```
@@ -960,7 +971,7 @@ Stop the `az connectedk8s proxy` terminal when you're done.
 ## Appendix A: Full data-validation script
 This runs DATA-01 … DATA-10 in one go and prints one `PASS`/`FAIL` line per area.
 ```bash
-cat > /tmp/bugbash-data.js <<'EOF'
+cat > ./bugbash-data.js <<'EOF'
 const results=[]; function check(n,f){try{const r=f();results.push(`PASS ${n}${r===undefined?"":" -> "+r}`)}catch(e){results.push(`FAIL ${n} -> ${e.codeName||""} ${e.message}`)}}
 const d=db.getSiblingDB("bugbash_auto"); d.dropDatabase();
 check("DATA-01 crud",()=>{const c=d.crud;c.insertOne({_id:1,qty:5});c.insertMany([{_id:2,qty:3},{_id:3,qty:8}]);c.updateOne({_id:2},{$inc:{qty:10}});c.replaceOne({_id:3},{qty:1});c.deleteOne({_id:1});const x=c.find().sort({_id:1}).toArray();if(x.length!==2||x[0].qty!==13||x[1].qty!==1)throw new Error(JSON.stringify(x));});
@@ -975,7 +986,7 @@ check("DATA-09 text",()=>{const c=d.txt;c.insertMany([{_id:1,t:"fast databases o
 check("DATA-10 transaction",()=>{d.tx.insertOne({_id:1,b:100});const s=db.getMongo().startSession(),c=s.getDatabase("bugbash_auto").tx;s.startTransaction();c.updateOne({_id:1},{$inc:{b:-30}});s.abortTransaction();if(d.tx.findOne({_id:1}).b!==100)throw new Error("abort");s.startTransaction();c.updateOne({_id:1},{$inc:{b:-30}});s.commitTransaction();if(d.tx.findOne({_id:1}).b!==70)throw new Error("commit");});
 print(results.join("\n"));
 EOF
-kubectl -n "$NS" cp /tmp/bugbash-data.js mongosh:/tmp/bugbash-data.js
+kubectl -n "$NS" cp ./bugbash-data.js mongosh:/tmp/bugbash-data.js
 kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI" /tmp/bugbash-data.js
 ```
 **Expected:** ten `PASS` lines.
@@ -1016,15 +1027,17 @@ An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this
    export URI="mongodb://\${DB_USER}:\${DB_PASS}@documentdb-service-\${DB}:10260/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
    m() { kubectl -n "\$NS" exec mongosh -- mongosh --quiet "\$URI" --eval "\$1"; }
    start_proxy() {
-     kubectl get --raw /version --request-timeout=5s >/dev/null 2>&1 && { echo "proxy already up"; return 0; }
-     [ -f "\$HOME/arc-proxy.pid" ] && kill "\$(cat "\$HOME/arc-proxy.pid")" 2>/dev/null; sleep 2
+     kubectl get ns default --request-timeout=10s >/dev/null 2>&1 && { echo "proxy already up"; return 0; }
+     stop_proxy
      nohup az connectedk8s proxy -n "\$CLUSTER" -g "\$RESOURCE_GROUP" --subscription "\$SUBSCRIPTION" \\
        --file "\$KUBECONFIG" --port 47011 > "\$HOME/arc-proxy.log" 2>&1 &
      echo \$! > "\$HOME/arc-proxy.pid"
-     for i in \$(seq 1 36); do kubectl get --raw /version --request-timeout=5s >/dev/null 2>&1 && { echo "proxy ready"; return 0; }; sleep 5; done
+     for i in \$(seq 1 36); do kubectl get ns default --request-timeout=10s >/dev/null 2>&1 && { echo "proxy ready"; return 0; }; sleep 5; done
      echo "proxy NOT ready, see \$HOME/arc-proxy.log"; return 1
    }
-   stop_proxy() { [ -f "\$HOME/arc-proxy.pid" ] && kill "\$(cat "\$HOME/arc-proxy.pid")" 2>/dev/null; rm -f "\$HOME/arc-proxy.pid"; }
+   stop_proxy() { [ -f "\$HOME/arc-proxy.pid" ] && kill "\$(cat "\$HOME/arc-proxy.pid")" 2>/dev/null; rm -f "\$HOME/arc-proxy.pid"; for h in \$(pgrep -f 'clientproxy/arcProxy'); do kill "\$h"; done; sleep 2; }
+   waitfor() { local end=\$((SECONDS+\$1)) v; until v=\$(kubectl -n "\$NS" get "\$2" -o jsonpath="\$3" 2>/dev/null) && [ "\$v" = "\$4" ]; do
+     [ "\$SECONDS" -ge "\$end" ] && { echo "TIMEOUT after \$1 s: \$2 \$3 is '\$v', expected '\$4'"; return 1; }; sleep 5; done; echo "OK: \$2 \$3=\$4"; }
    EOF
    ```
    Replace every `<…>` value. In the command above, `\$` is intentional (it's expanded later); only `DB_PASS` is generated now and stays the same for the whole run.
@@ -1033,16 +1046,16 @@ An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this
 
 ### C.2 Rules for the agent
 - Start **every** shell command with `source ~/bugbash.env;`.
-- Use `start_proxy` instead of SETUP-02's "separate terminal". If a command fails with `Unknown proxy error`, `No proxy found`, `status code 490`, `connection refused` on `127.0.0.1:47011`, or `localhost:8080`, run `start_proxy` and retry the command **once**. Never start a second proxy.
-- Run the tests in section 6 in this order: SETUP-02 → SETUP-03, SETUP-04 (owner only) → SETUP-05 → DEP → CON-01 → DATA (Appendix A, plus DATA-01 … DATA-10 individually if any fail) → AUTH → VAL → HA-01 … HA-06 → UPG-02 → HA-07 → RES → BAK → MON → LIFE → UPG-03 → UPG-01 (owner only) → section 9 cleanup of your own namespace.
+- Use `start_proxy` instead of SETUP-02's "separate terminal". If a command fails with `Unknown proxy error`, `No proxy found`, `status code 490`, `connection refused` on `127.0.0.1:47011`, `localhost:8080`, or `the server has asked for the client to provide credentials` (the proxy's credential expires after a few hours), run `stop_proxy; start_proxy` and retry. Retry only the commands that failed: if part of a block already succeeded (for example a `patch`), don't run that part again. Never start a second proxy.
+- Run the tests in section 6 in this order: SETUP-02 → SETUP-03, SETUP-04 (owner only) → SETUP-05 → DEP → CON-01 → DATA-01 … DATA-10 (individually; later tests use their `bugbash` database) → Appendix A → AUTH → VAL → HA-01 … HA-06 → UPG-02 → HA-07 → RES → BAK → MON → LIFE → UPG-03 → UPG-01 (owner only) → section 9 cleanup of your own namespace.
 - `ROLE=tester`: record SETUP-03, SETUP-04, RES-02, HA-06 and UPG-01 as `SKIPPED (owner only)`. Never run `kubectl drain`, `helm install/upgrade/rollback`, or anything outside `$NS` other than read-only `get`/`describe`/`logs`.
 - `AREAS`: always run the core path (SETUP-05, DEP, CON-01, DATA, AUTH, VAL). Run HA, UPG, RES, BAK, MON and LIFE only if listed (or `all`); record the others as `SKIPPED (not assigned)`. UPG-02 needs HA-01 … HA-06.
 - Skip CON-02 if `mongosh` isn't installed locally (`SKIPPED (no local mongosh)`).
 - Copy commands exactly, substituting only variables. If you have to change a command to make it work, record the change under *Deviations*. Never change the product, the cluster's platform components, or other testers' namespaces.
 - Compare each result with the guide's **Expected**. If it doesn't match, collect diagnostics (section 8), record `FAIL` with the evidence, and continue with the next independent test. Use `BLOCKED` when an earlier failure prevents a test from running.
-- Long steps are normal: HA-01's writer runs 30 minutes, and some waits are 15–20 minutes. Don't abort them early.
+- Long steps are normal: HA-01's writer runs for 2 hours in the background, and some waits are 15–20 minutes. Don't abort them early.
 - Never print or write `DB_PASS` or other secrets into the results; replace them with `***`.
-- Stop and ask the human only for: an expired Azure sign-in, `kubectl auth can-i` saying `no`, or a proxy that won't start after 3 attempts.
+- Stop and ask the human only for: an expired Azure sign-in (`az account get-access-token` fails), `kubectl auth can-i` saying `no`, or a proxy that won't start after 3 attempts.
 
 ### C.3 Results file
 Write `results-<CLUSTER>-<ALIAS>.md` in the working folder, updating it after every test:
