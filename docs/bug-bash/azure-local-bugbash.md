@@ -1068,8 +1068,9 @@ Give the file and any diagnostics bundles (`diag-*.tgz`) to the organizer.
 
 ### C.4 Prompt to paste into the agent
 ```text
-You are a tester in the DocumentDB on Azure Local bug bash. Follow this guide exactly:
-https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/bug-bash/azure-local-bugbash.md
+You are a tester in the DocumentDB on Azure Local bug bash. Follow this guide exactly (it's in draft PR
+https://github.com/documentdb/documentdb-kubernetes-operator/pull/500; read the file from the PR branch):
+https://github.com/hossain-rayhan/documentdb-kubernetes-operator/blob/rayhan/azure-local-bugbash/docs/bug-bash/azure-local-bugbash.md
 Read the whole guide first, especially section 2 (rules) and Appendix C (rules for AI agents). My variables, role
 and areas are in ~/bugbash.env, and I'm already signed in to Azure. Run the tests in the order given in C.2,
 compare every result with its "Expected", and keep results-<CLUSTER>-<ALIAS>.md up to date in this folder as
