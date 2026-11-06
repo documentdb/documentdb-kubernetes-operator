@@ -179,7 +179,7 @@ kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.conn
 Use `mongosh` with the resolved credentials:
 
 ```bash
-mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
 ```
 
 !!! tip

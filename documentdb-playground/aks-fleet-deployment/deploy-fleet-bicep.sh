@@ -36,11 +36,47 @@ wait_for_no_inprogress() {
   return 1
 }
 
+check_existing_subnet_outbound_access() {
+  local rg="$1"
+  local incompatible=()
+  local vnet
+
+  while IFS= read -r vnet; do
+    [ -z "$vnet" ] && continue
+
+    local outbound_access
+    outbound_access=$(az network vnet subnet show \
+      --resource-group "$rg" \
+      --vnet-name "$vnet" \
+      --name aks-subnet \
+      --query defaultOutboundAccess \
+      --output tsv 2>/dev/null || true)
+
+    if [ "$outbound_access" != "false" ]; then
+      incompatible+=("$vnet")
+    fi
+  done < <(az network vnet list \
+    --resource-group "$rg" \
+    --query "[?starts_with(name, 'member-') && ends_with(name, '-vnet')].name" \
+    --output tsv)
+
+  if [ "${#incompatible[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  echo "Existing AKS subnets cannot be updated to defaultOutboundAccess=false:" >&2
+  printf '  - %s/aks-subnet\n' "${incompatible[@]}" >&2
+  echo "This property is creation-only. Deploy into a new resource group, or delete" >&2
+  echo "the affected AKS clusters and VNets before rerunning this script." >&2
+  return 1
+}
+
 echo "Creating or using resource group..."
 EXISTING_RG_LOCATION=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv 2>/dev/null || true)
 if [ -n "$EXISTING_RG_LOCATION" ]; then
   echo "Using existing resource group '$RESOURCE_GROUP' in location '$EXISTING_RG_LOCATION'"
   RG_LOCATION="$EXISTING_RG_LOCATION"
+  check_existing_subnet_outbound_access "$RESOURCE_GROUP"
 else
   az group create --name "$RESOURCE_GROUP" --location "$RG_LOCATION"
 fi

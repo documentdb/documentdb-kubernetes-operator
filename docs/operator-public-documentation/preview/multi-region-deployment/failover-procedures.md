@@ -183,7 +183,7 @@ kubectl --context new-primary port-forward \
   -n documentdb-preview-ns svc/documentdb-preview 10260:10260 &
 
 # Connect with mongosh
-mongosh "mongodb://admin:password@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
+mongosh "mongodb://<username>:<password>@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
 
 # Test write operation
 db.testCollection.insertOne({
@@ -328,7 +328,7 @@ kubectl --context new-primary get documentdb documentdb-preview \
 kubectl --context new-primary port-forward \
   -n documentdb-preview-ns svc/documentdb-preview 10260:10260 &
 
-mongosh "mongodb://admin:password@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
+mongosh "mongodb://<username>:<password>@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
 db.testCollection.insertOne({message: "DR failover test"})
 ```
 
