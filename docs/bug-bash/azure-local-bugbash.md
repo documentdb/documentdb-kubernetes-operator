@@ -70,6 +70,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 | Logical backup and restore (`mongodump`/`mongorestore`) | BAK-01 … BAK-03 |
 | Monitoring (OpenTelemetry sidecar, Prometheus metric) | MON-01, MON-02 |
 | Cluster deletion keeps the data volume (`Retain`) | LIFE-01 |
+| **Upgrades with test builds:** operator upgrade and rollback without database restarts; rolling engine image update and revert under writes; engine schema upgrade 0.117.0 → 1.0.0 (pending) | UPG-01 … UPG-03 |
 
 ### Out of scope (not tested) and why
 
@@ -81,8 +82,8 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 | `LoadBalancer` service exposure / external client access | These clusters have no load-balancer provider, so `LoadBalancer` services get no external IP. Use port-forward (CON-02). |
 | Unplanned loss of a whole node (VM power-off, host failure) | Needs Azure Local infrastructure access that bug bash testers don't have. HA-05 (crash) and HA-06 (node drain) cover the database side of failover. A cluster owner with Azure Local admin rights may try it as an exploratory test. |
 | Multi-region / cross-cluster replication and promotion | Not applicable: DocumentDB on Azure Local is a **single-region, single-node** setup only (`nodeCount: 1`). Local high availability inside that node, with up to 3 instances, is covered by HA-01 … HA-07. |
-| Operator upgrade from 1.0.0 | Operator 1.0.0 can't run DocumentDB on containerd 1.7, so no 1.0.0 cluster can exist on Azure Local. |
-| DocumentDB engine upgrade (`spec.documentDBVersion`) | No engine version newer than 1.0.0 has been released. |
+| Operator upgrade **from 1.0.0** | Operator 1.0.0 can't run DocumentDB on containerd 1.7, so no 1.0.0 cluster can exist on Azure Local. UPG-01 covers upgrading from the current release (1.1.0) instead. |
+| Upgrading to an operator or engine **release** newer than 1.1.0 / 1.0.0 | None has been released yet. UPG-01 … UPG-03 use test builds to exercise the same upgrade mechanics. |
 | ImageVolume mode | Not available on containerd 1.7 (expected; see DEP-03). |
 | Change streams (preview feature gate) | Preview feature with no combined image. |
 | Creating extra database users (`createUser`) | The operator-managed user has `readWriteAnyDatabase` and `clusterAdmin` but not user administration, so `createUser` returns `Unauthorized` (expected). |
@@ -109,9 +110,9 @@ The organizer fills in this table. Each cluster has one **cluster owner**, who i
 | Cluster | Azure Local location | Cluster owner | Engineers | Deep-dive areas |
 |---|---|---|---|---|
 | `<CLUSTER_1>` | `<LOCATION>` | `<name>` | `<names>` | HA, RES |
-| `<CLUSTER_2>` | `<LOCATION>` | `<name>` | `<names>` | BAK, LIFE |
+| `<CLUSTER_2>` | `<LOCATION>` | `<name>` | `<names>` | BAK, LIFE, UPG-01 (operator upgrade) |
 | `<CLUSTER_3>` | `<LOCATION>` | `<name>` | `<names>` | MON, AUTH (extended) |
-| `<CLUSTER_4>` | `<LOCATION>` | `<name>` | `<names>` | HA (3 instances), DATA (larger data sets) |
+| `<CLUSTER_4>` | `<LOCATION>` | `<name>` | `<names>` | HA (3 instances), UPG-02, DATA (larger data sets) |
 | `<CLUSTER_5>` | `<LOCATION>` | `<name>` | `<names>` | Exploratory (your own scenarios) |
 
 ---
@@ -717,6 +718,83 @@ kubectl get pv "$PV" -o custom-columns='NAME:.metadata.name,STATUS:.status.phase
 ```
 **Expected:** the PV still exists, with `RECLAIM=Retain` and `STATUS=Released`. Recovering a new cluster from this volume is **out of scope** (see section 1); don't try it.
 
+### 6.11 Upgrades (UPG)
+
+No operator or engine release newer than what's installed exists yet, so these tests use **test builds** that CI publishes next to the releases. Nothing here installs a fake release version.
+
+| Test build | Image tag | What it is |
+|---|---|---|
+| Operator and sidecar | `0.2.0-test` | Built automatically from the `main` branch; a different image from `1.1.0` |
+| DocumentDB engine and gateway | `1.0.0-build-42099757352-1-f6af3d1` | A rebuild of engine 1.0.0 (same extension schema `1.0-0`), as an engine patch release would ship |
+
+#### UPG-01: Operator upgrade and rollback (cluster owner, one cluster only)
+This replaces the operator for **everyone** on the cluster, so the cluster owner announces it first. Run it on the cluster assigned UPG-01 in section 3, while other testers' DocumentDB clusters and, ideally, an HA writer (HA-01) are running.
+```bash
+snap() { kubectl get pods -A -l cnpg.io/cluster -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,RESTARTS:.status.containerStatuses[*].restartCount,IMAGES:.spec.containers[*].image' --sort-by=.metadata.name; }
+snap > upg-before.txt; cat upg-before.txt
+
+# 1. Apply the target chart's CRDs first (helm upgrade never updates CRDs)
+helm show crds oci://ghcr.io/documentdb/documentdb-operator --version 1.1.0 \
+  | kubectl apply --server-side --force-conflicts -f -
+
+# 2. Upgrade the operator to the test build
+helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator --version 1.1.0 \
+  -n documentdb-operator --reset-values \
+  --set image.documentdbk8soperator.tag=0.2.0-test --set image.sidecarinjector.tag=0.2.0-test \
+  --wait --timeout 10m
+kubectl -n documentdb-operator get deploy documentdb-operator -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl -n cnpg-system get deploy sidecar-injector -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+
+# 3. Give the new operator 2 minutes to reconcile, then compare
+sleep 120; snap > upg-after.txt; diff upg-before.txt upg-after.txt && echo "NO DATABASE POD CHANGES"
+kubectl get documentdb -A
+```
+**Expected:**
+- the upgrade succeeds and both images end in `:0.2.0-test`;
+- `NO DATABASE POD CHANGES`: the same pods, UIDs, restart counts and images. An operator upgrade must not restart databases;
+- every DocumentDB is still `Cluster in healthy state`, and any running writer shows no `FAIL` lines.
+
+While the test build is running, each tester on the cluster runs DATA-01 and VAL-01 against their own cluster, and one tester creates a new cluster as in DEP-01 (named `${DB}-upg`) and deletes it once it's healthy.
+
+Then roll back to the release:
+```bash
+helm rollback documentdb-operator 0 -n documentdb-operator --wait --timeout 10m
+kubectl -n documentdb-operator get deploy documentdb-operator -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+sleep 120; snap > upg-rollback.txt; diff upg-before.txt upg-rollback.txt && echo "NO DATABASE POD CHANGES"
+```
+**Expected:** the operator image is back to `…/operator:1.1.0`, and again `NO DATABASE POD CHANGES`. **Record** the upgrade and rollback durations.
+
+#### UPG-02: Engine image update and revert (rolling update)
+Use your 3-instance cluster from HA-02 with the writer running, before HA-07 scales it in. If the writer has finished, run `kubectl -n "$NS" delete pod writer` and then HA-01 again.
+```bash
+R=ghcr.io/documentdb/documentdb-kubernetes-operator; T=1.0.0-build-42099757352-1-f6af3d1
+date -u +"update %H:%M:%S"
+kubectl -n "$NS" patch documentdb "$DB" --type merge -p "{\"spec\":{\"image\":{\"documentDB\":\"$R/documentdb:$T\",\"gateway\":\"$R/gateway:$T\"}}}"
+sleep 60
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m; date -u +"done %H:%M:%S"
+kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,IMAGES:.spec.containers[*].image'
+kubectl -n "$NS" get documentdb "$DB" -o jsonpath='status={.status.status} schema={.status.schemaVersion}{"\n"}'
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | grep -E 'UpgradingInstance|Switchover' | tail -4
+kubectl -n "$NS" logs writer | grep FAIL
+```
+**Expected:**
+- all 3 pods run `…/documentdb-combined:18-1.0.0-build-…` and `…/gateway:1.0.0-build-…`, with `READY 2/2`. The operator derives the combined image tag from `spec.image.documentDB`;
+- events show the replicas updated first (`UpgradingInstance`), then a `Switchover` so the old primary is updated last;
+- `schema=1.0.0` (unchanged: same extension version);
+- the update finishes within about 5 minutes (validation run: 4 min 12 s), and the writer has no `FAIL` lines (validation run: one 50 s pause, 0 failures).
+
+Revert to the release images by removing the overrides:
+```bash
+kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"image":null}}'
+sleep 60
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m
+kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,IMAGES:.spec.containers[*].image'
+```
+**Expected:** all pods are back on `…/documentdb-combined:18-1.0.0` and `…/gateway:1.0.0` (validation run: 2 min 44 s). Then run HA-07's lost-write check: every missing ID must have a `FAIL` line.
+
+#### UPG-03: Engine upgrade with schema migration, 0.117.0 → 1.0.0 (pending)
+This covers a real extension upgrade (`ALTER EXTENSION documentdb UPDATE` from `0.117-0` to `1.0-0`) in combined mode, including the two-phase default: the binary is updated first, the schema only when `spec.schemaVersion` is set, and image rollback is blocked afterwards. Step-by-step commands will be added here after a maintainer validates them on Azure Local with a 0.117.0 test build. Until then, skip UPG-03.
+
 ---
 
 ## 7. Results and reporting
@@ -731,6 +809,8 @@ Copy this into the shared tracker, one row per test per cluster.
 | HA-04 | | | | failover time: / failed writes: | | |
 | HA-05 | | | | time to new primary: / write pause: | | |
 | HA-06 | | | | drain time: / write pause: / failed writes: | | |
+| UPG-01 | | | | upgrade time: / rollback time: / database pod changes: | | |
+| UPG-02 | | | | update time: / revert time: / failed writes: | | |
 | … | | | | | | |
 
 ### Metrics we collect
@@ -742,6 +822,8 @@ Copy this into the shared tracker, one row per test per cluster.
 | Scale-out time (1 → 3) | HA-02 | Recorded |
 | Failover and switchover time, write impact | HA-04 … HA-07 writer log and pauses | Crash: new primary within ~15 s. Node drain: controlled switchover, no failed writes. Writes always resume without manual action. |
 | Database disruption from operator restarts | RES-02 | None (same pod UID, no restarts) |
+| Database disruption from operator upgrade and rollback | UPG-01 | None (`NO DATABASE POD CHANGES`) |
+| Rolling engine update impact | UPG-02 | Finishes within ~5 min; no failed writes |
 | Bugs by severity | Bug tracker | No open Sev 1 / Sev 2 at exit |
 
 ### Exit criteria
