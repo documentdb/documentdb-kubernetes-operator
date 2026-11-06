@@ -1,0 +1,93 @@
+# Namespace definition with Istio injection enabled
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: documentdb-preview-ns
+  labels:
+    istio-injection: enabled
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: documentdb-credentials
+  namespace: documentdb-preview-ns
+type: Opaque
+stringData:
+  username: default_user
+  password: {{DOCUMENTDB_PASSWORD}}
+
+---
+
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata:
+  name: documentdb-preview
+  namespace: documentdb-preview-ns
+spec:
+  nodeCount: 1
+  instancesPerNode: 1
+  # Use the operator's split images (extension via ImageVolume + gateway sidecar).
+  # The legacy ghcr.io/microsoft/documentdb/documentdb-local:16 all-in-one image
+  # does not satisfy the new ImageVolume-based extension contract on operator
+  # 0.2.0+, which requires the pg_cron / pg_documentdb extension files at the
+  # documented prefixes (lib/, share/, lib/system/).
+  documentDBImage: ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:0.110.0
+  gatewayImage: ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:0.110.0
+  resource:
+    storage:
+      pvcSize: 10Gi
+  # Note: k3s clusters use 'aks' environment (only aks/eks/gke are supported)
+  environment: aks
+  clusterReplication:
+    highAvailability: true
+    # Use Istio for cross-cluster communication
+    crossCloudNetworkingStrategy: Istio
+    primary: {{PRIMARY_CLUSTER}}
+    clusterList:
+{{CLUSTER_LIST}}
+  exposeViaService:
+    serviceType: LoadBalancer
+  logLevel: info
+
+---
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: documentdb-namespace-crp
+spec:
+  resourceSelectors:
+    - group: ""
+      version: v1
+      kind: Namespace
+      name: documentdb-preview-ns
+      selectionScope: NamespaceOnly
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
+
+---
+
+# ResourcePlacement for DocumentDB resources within the namespace
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ResourcePlacement
+metadata:
+  name: documentdb-resource-rp
+  namespace: documentdb-preview-ns
+spec:
+  resourceSelectors:
+    - group: documentdb.io
+      kind: DocumentDB
+      version: preview
+      name: documentdb-preview
+    - group: ""
+      version: v1
+      kind: Secret
+      name: documentdb-credentials
+  policy:
+    placementType: PickAll
+  strategy:
+    type: RollingUpdate
