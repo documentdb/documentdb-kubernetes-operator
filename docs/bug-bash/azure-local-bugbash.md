@@ -850,7 +850,7 @@ mo "$FP" | diff fp-before.txt - && echo "DATA IDENTICAL"
 ```
 **Expected:**
 - `schema=1.0.0` within seconds, with no pod restarts;
-- `documentdb` is `1.0-0`. `documentdb_core` stays `0.117-0`: that's a known operator bug (it doesn't update `documentdb_core`), harmless for this upgrade because upstream's `documentdb_core` 0.117 → 1.0 script is empty. Don't file it again;
+- `documentdb` is `1.0-0`. `documentdb_core` stays `0.117-0`: that's a known operator bug, [#501](https://github.com/documentdb/documentdb-kubernetes-operator/issues/501) (it doesn't update `documentdb_core`), harmless for this upgrade because upstream's `documentdb_core` 0.117 → 1.0 script is empty. Don't file it again;
 - `DATA IDENTICAL`.
 
 **Rolling back is now blocked:**
@@ -861,7 +861,7 @@ kubectl -n "$NS" patch documentdb "${DB}-old" --type merge -p '{"spec":{"documen
 
 Clean up: `kubectl -n "$NS" delete documentdb "${DB}-old"`.
 
-> Setting `spec.schemaVersion` alone, as the `SchemaUpdateAvailable` event suggests, is rejected unless `spec.documentDBVersion` or an image is also set ("the webhook needs a binary version to validate against"). This guide sets `documentDBVersion` in phase 1 to avoid that; it's a known issue, so don't file it again.
+> Setting `spec.schemaVersion` alone, as the `SchemaUpdateAvailable` event suggests, is rejected unless `spec.documentDBVersion` or an image is also set ("the webhook needs a binary version to validate against"). This guide sets `documentDBVersion` in phase 1 to avoid that; it's a known issue, [#502](https://github.com/documentdb/documentdb-kubernetes-operator/issues/502), so don't file it again.
 
 ---
 
