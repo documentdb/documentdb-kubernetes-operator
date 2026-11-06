@@ -4,6 +4,35 @@ This guide is a step-by-step test plan for running DocumentDB on **AKS enabled b
 
 Every command shows its expected result. Record **PASS**, **FAIL** or **BLOCKED** for each test case ID in the [results table](#7-results-and-reporting).
 
+**How this bug bash works:**
+1. **You start with an AKS cluster on Azure Local.** This guide doesn't create clusters. If you don't have one, set it up first with the official documentation ([section 0](#0-before-you-start-an-aks-cluster-on-azure-local)).
+2. **Install the DocumentDB operator** on that cluster ([section 5](#5-setup)).
+3. **Run the test cases** ([section 6](#6-test-cases)) and report the results ([section 7](#7-results-and-reporting)).
+
+---
+
+## 0. Before you start: an AKS cluster on Azure Local
+
+We expect your Kubernetes cluster to be **ready and running on Azure Local** before you begin. This guide starts after that point.
+
+**If you don't have a cluster yet,** create one with the official Microsoft documentation, then come back here:
+- [What is AKS enabled by Azure Arc (AKS Hybrid and Edge)?](https://learn.microsoft.com/azure/aks-hybrid-edge/aks-overview): overview and prerequisites
+- [Create Kubernetes clusters using Azure CLI](https://learn.microsoft.com/azure/aks-hybrid-edge/local/aks-create-clusters-cli)
+- [Create Kubernetes clusters by using the Azure portal](https://learn.microsoft.com/azure/aks-hybrid-edge/local/aks-create-clusters-portal)
+- [Use cluster connect to securely connect to Azure Arc-enabled Kubernetes clusters](https://learn.microsoft.com/azure/azure-arc/kubernetes/cluster-connect): how you reach the cluster from your machine
+
+**The cluster must have:**
+| Requirement | Why |
+|---|---|
+| AKS on Azure Local, **Arc-connected** (connectivity status *Connected*) | You reach the cluster through Arc cluster connect (SETUP-02) |
+| Kubernetes **1.32 or later** (this bug bash is validated on 1.33) | Minimum version supported by the operator chart |
+| At least **3 Linux worker nodes**, 4 vCPU / 16 GiB each recommended | The HA tests run 3 database instances on separate nodes |
+| A **default StorageClass** (AKS Arc provides `default`) | Database data volumes |
+| Outbound internet access to `ghcr.io`, `quay.io` and Docker Hub | Operator, DocumentDB, cert-manager and test-client images |
+| Your Microsoft Entra account has **cluster-admin** rights through cluster connect | Installing the operator creates cluster-wide resources (CRDs, RBAC, webhooks) |
+
+When the cluster is ready, check it with SETUP-02. Everything after that, from installing cert-manager and the operator to testing, is covered in this guide.
+
 ---
 
 ## 1. Scope at a glance
@@ -606,7 +635,6 @@ Actual: <output>
 Diagnostics: <attached bundle from section 8>
 Severity: Sev1 (data loss/security) | Sev2 (feature broken, no workaround) | Sev3 (workaround exists) | Sev4 (cosmetic/docs)
 ```
-**Security problems:** don't file them in public GitHub issues. Report them privately to the bug bash organizer, who follows the project's `SECURITY.md` process.
 
 ---
 
