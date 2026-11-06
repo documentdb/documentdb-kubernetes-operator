@@ -70,7 +70,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 | Logical backup and restore (`mongodump`/`mongorestore`) | BAK-01 … BAK-03 |
 | Monitoring (OpenTelemetry sidecar, Prometheus metric) | MON-01, MON-02 |
 | Cluster deletion keeps the data volume (`Retain`) | LIFE-01 |
-| **Upgrades with test builds:** operator upgrade and rollback without database restarts; rolling engine image update and revert under writes; engine schema upgrade 0.117.0 → 1.0.0 (pending) | UPG-01 … UPG-03 |
+| **Upgrades with test builds:** operator upgrade and rollback without database restarts; rolling engine image update and revert under writes; engine schema upgrade 0.117.0 → 1.0.0 (two-phase) and blocked rollback | UPG-01 … UPG-03 |
 
 ### Out of scope (not tested) and why
 
@@ -111,7 +111,7 @@ The organizer fills in this table. Each cluster has one **cluster owner**, who i
 |---|---|---|---|---|
 | `<CLUSTER_1>` | `<LOCATION>` | `<name>` | `<names>` | HA, RES |
 | `<CLUSTER_2>` | `<LOCATION>` | `<name>` | `<names>` | BAK, LIFE, UPG-01 (operator upgrade) |
-| `<CLUSTER_3>` | `<LOCATION>` | `<name>` | `<names>` | MON, AUTH (extended) |
+| `<CLUSTER_3>` | `<LOCATION>` | `<name>` | `<names>` | MON, AUTH (extended), UPG-03 |
 | `<CLUSTER_4>` | `<LOCATION>` | `<name>` | `<names>` | HA (3 instances), UPG-02, DATA (larger data sets) |
 | `<CLUSTER_5>` | `<LOCATION>` | `<name>` | `<names>` | Exploratory (your own scenarios) |
 
@@ -781,7 +781,7 @@ kubectl -n "$NS" logs writer | grep FAIL
 - all 3 pods run `…/documentdb-combined:18-1.0.0-build-…` and `…/gateway:1.0.0-build-…`, with `READY 2/2`. The operator derives the combined image tag from `spec.image.documentDB`;
 - events show the replicas updated first (`UpgradingInstance`), then a `Switchover` so the old primary is updated last;
 - `schema=1.0.0` (unchanged: same extension version);
-- the update finishes within about 5 minutes (validation run: 4 min 12 s), and the writer has no `FAIL` lines (validation run: one 50 s pause, 0 failures).
+- the update finishes within about 5 minutes (validation runs: 4 min 12 s). Writes pause during the switchover; a few seconds of `FAIL` lines can also appear while the new primary starts accepting connections (validation runs: 0 and 13 failures, about 7 s). That's acceptable as long as HA-07's check shows every missing ID has a `FAIL` line.
 
 Revert to the release images by removing the overrides:
 ```bash
@@ -792,8 +792,76 @@ kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.me
 ```
 **Expected:** all pods are back on `…/documentdb-combined:18-1.0.0` and `…/gateway:1.0.0` (validation run: 2 min 44 s). Then run HA-07's lost-write check: every missing ID must have a `FAIL` line.
 
-#### UPG-03: Engine upgrade with schema migration, 0.117.0 → 1.0.0 (pending)
-This covers a real extension upgrade (`ALTER EXTENSION documentdb UPDATE` from `0.117-0` to `1.0-0`) in combined mode, including the two-phase default: the binary is updated first, the schema only when `spec.schemaVersion` is set, and image rollback is blocked afterwards. Step-by-step commands will be added here after a maintainer validates them on Azure Local with a 0.117.0 test build. Until then, skip UPG-03.
+#### UPG-03: Engine upgrade with schema migration, 0.117.0 → 1.0.0
+This is a real extension upgrade (`ALTER EXTENSION … UPDATE` from `0.117-0` to `1.0-0`) in combined mode. It uses the default **two-phase** flow: first the binary is updated while the schema stays on 0.117, then you finalize the schema, after which rolling back the image is blocked. It creates its own 2-instance cluster, `${DB}-old`, from a 0.117.0 test build.
+```bash
+R=ghcr.io/documentdb/documentdb-kubernetes-operator; OLD=0.117.0-build-42184844433-1-f6af3d1
+cat <<EOF | kubectl apply -f -
+apiVersion: documentdb.io/preview
+kind: DocumentDB
+metadata: {name: ${DB}-old, namespace: ${NS}}
+spec:
+  nodeCount: 1
+  instancesPerNode: 2
+  documentDbCredentialSecret: documentdb-credentials
+  image:
+    documentDB: ${R}/documentdb:${OLD}
+    gateway: ${R}/gateway:${OLD}
+  resource: {storage: {pvcSize: 10Gi}}
+  exposeViaService: {serviceType: ClusterIP}
+EOF
+kubectl -n "$NS" wait "documentdb/${DB}-old" --for=jsonpath='{.status.status}'='Cluster in healthy state' --timeout=15m
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.readyInstances}'=2 --timeout=10m
+ext() { kubectl -n "$NS" exec "$(kubectl -n "$NS" get clusters.postgresql.cnpg.io "${DB}-old" -o jsonpath='{.status.currentPrimary}')" -c postgres -- psql -U postgres -tAc "select extname, extversion from pg_extension where extname like 'documentdb%' order by 1"; }
+mo() { kubectl -n "$NS" exec mongosh -- mongosh --quiet "${URI/documentdb-service-${DB}:/documentdb-service-${DB}-old:}" --eval "$1"; }
+kubectl -n "$NS" get documentdb "${DB}-old" -o jsonpath='schema={.status.schemaVersion} image={.status.documentDBImage}{"\n"}'; ext
+
+# Load data and record a fingerprint
+mo 'const c=db.getSiblingDB("upg").items; c.drop(); const a=[]; for (let i=0;i<5000;i++) a.push({_id:i, name:"item"+i, qty:i%97, price:NumberDecimal((i*1.07).toFixed(2)), desc:(i%3==0?"running through the forest":"slow walk by the river"), loc:{type:"Point",coordinates:[-122+(i%100)/100,47+(i%50)/100]}}); c.insertMany(a); c.createIndex({name:1},{unique:true}); c.createIndex({qty:1}); c.createIndex({desc:"text"}); c.createIndex({loc:"2dsphere"}); print("loaded")'
+FP='const c=db.getSiblingDB("upg").items; const h=crypto.createHash("sha256").update(EJSON.stringify(c.find().sort({_id:1}).toArray())).digest("hex").slice(0,16); let dup; try { c.insertOne({_id:-1,name:"item1"}); dup="ACCEPTED"; } catch(e) { dup="rejected"; } print("count="+c.countDocuments()+" hash="+h+" idx="+c.getIndexes().map(i=>i.name).sort().join("|")+" text="+c.countDocuments({$text:{$search:"run"}})+" geo="+c.countDocuments({loc:{$geoWithin:{$centerSphere:[[-121.5,47.0],0.002]}}})+" dupName="+dup)'
+mo "$FP" | tee fp-before.txt
+```
+**Expected:**
+- `schema=0.117.0`, image `…/documentdb-combined:18-0.117.0-build-…`, and both extensions on `0.117-0`;
+- a fingerprint line such as `count=5000 hash=… idx=_id_|desc_text|loc_2dsphere|name_1|qty_1 text=1667 geo=500 dupName=rejected`.
+
+**Phase 1: update the binary to 1.0.0, keep the 0.117 schema.** Remove the test-build images and pin the release version:
+```bash
+kubectl -n "$NS" patch documentdb "${DB}-old" --type merge -p '{"spec":{"image":null,"documentDBVersion":"1.0.0"}}'
+sleep 60
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.phase}'='Cluster in healthy state' --timeout=20m
+kubectl -n "$NS" wait "clusters.postgresql.cnpg.io/${DB}-old" --for=jsonpath='{.status.readyInstances}'=2 --timeout=10m
+sleep 30
+kubectl -n "$NS" get documentdb "${DB}-old" -o jsonpath='schema={.status.schemaVersion} image={.status.documentDBImage}{"\n"}'; ext
+kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}-old,reason=SchemaUpdateAvailable" -o jsonpath='{.items[0].message}{"\n"}'
+mo "$FP" | diff fp-before.txt - && echo "DATA IDENTICAL"
+```
+**Expected:**
+- image `…/documentdb-combined:18-1.0.0`, but still `schema=0.117.0` and both extensions on `0.117-0`;
+- a `SchemaUpdateAvailable` event: "binary version is 1.0.0, schema is at 0.117.0…";
+- `DATA IDENTICAL`.
+
+**Phase 2: finalize the schema.**
+```bash
+kubectl -n "$NS" patch documentdb "${DB}-old" --type merge -p '{"spec":{"schemaVersion":"1.0.0"}}'
+sleep 30
+kubectl -n "$NS" get documentdb "${DB}-old" -o jsonpath='schema={.status.schemaVersion} status={.status.status}{"\n"}'; ext
+mo "$FP" | diff fp-before.txt - && echo "DATA IDENTICAL"
+```
+**Expected:**
+- `schema=1.0.0` within seconds, with no pod restarts;
+- `documentdb` is `1.0-0`. `documentdb_core` stays `0.117-0`: that's a known operator bug (it doesn't update `documentdb_core`), harmless for this upgrade because upstream's `documentdb_core` 0.117 → 1.0 script is empty. Don't file it again;
+- `DATA IDENTICAL`.
+
+**Rolling back is now blocked:**
+```bash
+kubectl -n "$NS" patch documentdb "${DB}-old" --type merge -p '{"spec":{"documentDBVersion":"0.117.0"}}'
+```
+**Expected:** rejected with `image rollback blocked: requested version 0.117.0 is older than installed schema version 1.0.0…`.
+
+Clean up: `kubectl -n "$NS" delete documentdb "${DB}-old"`.
+
+> Setting `spec.schemaVersion` alone, as the `SchemaUpdateAvailable` event suggests, is rejected unless `spec.documentDBVersion` or an image is also set ("the webhook needs a binary version to validate against"). This guide sets `documentDBVersion` in phase 1 to avoid that; it's a known issue, so don't file it again.
 
 ---
 
@@ -811,6 +879,7 @@ Copy this into the shared tracker, one row per test per cluster.
 | HA-06 | | | | drain time: / write pause: / failed writes: | | |
 | UPG-01 | | | | upgrade time: / rollback time: / database pod changes: | | |
 | UPG-02 | | | | update time: / revert time: / failed writes: | | |
+| UPG-03 | | | | phase 1 time: / phase 2 time: / data identical: | | |
 | … | | | | | | |
 
 ### Metrics we collect
@@ -823,7 +892,8 @@ Copy this into the shared tracker, one row per test per cluster.
 | Failover and switchover time, write impact | HA-04 … HA-07 writer log and pauses | Crash: new primary within ~15 s. Node drain: controlled switchover, no failed writes. Writes always resume without manual action. |
 | Database disruption from operator restarts | RES-02 | None (same pod UID, no restarts) |
 | Database disruption from operator upgrade and rollback | UPG-01 | None (`NO DATABASE POD CHANGES`) |
-| Rolling engine update impact | UPG-02 | Finishes within ~5 min; no failed writes |
+| Rolling engine update impact | UPG-02 | Finishes within ~5 min; no lost acknowledged writes |
+| Engine schema upgrade | UPG-03 | Schema finalized only on request; data identical; rollback blocked |
 | Bugs by severity | Bug tracker | No open Sev 1 / Sev 2 at exit |
 
 ### Exit criteria
