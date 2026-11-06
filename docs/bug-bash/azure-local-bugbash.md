@@ -105,7 +105,7 @@ The operator normally mounts the DocumentDB extension into PostgreSQL pods with 
 
 ## 3. Cluster assignments
 
-### Minimal path: everyone, about 45 minutes
+### Minimal path: everyone, about 25 minutes
 Every tester runs these, in this order, on their own DocumentDB cluster:
 
 | Step | Tests | About |
@@ -340,7 +340,7 @@ EOF
 
 time waitfor 900 "documentdb/${DB}" '{.status.status}' 'Cluster in healthy state'
 ```
-**Expected:** `condition met`, usually within **1–3 minutes** (longer the first time a node pulls the ~700 MB image). **Record the time.**
+**Expected:** `OK: documentdb/… {.status.status}=Cluster in healthy state`, usually within **1–3 minutes** (longer the first time a node pulls the ~700 MB image). **Record the time.**
 
 #### DEP-02: Pods, services and storage
 ```bash
@@ -620,7 +620,7 @@ kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-
 - an event `FailingOver` ("Current primary isn't healthy, initiating a failover…") with a time just after the `crash` time printed above; a `FailoverTarget` event may also appear. Check the times, because the list also contains events from HA-04;
 - a new primary within about **15 s** (validation runs: 7 s);
 - all 3 instances ready again within a few minutes, with the crashed instance rejoining as a replica;
-- the writer pauses for seconds (validation runs: 8–15 s) and resumes on its own. One or two `FAIL` lines (for example `ECONNRESET`) are normal: those writes were in flight on the crashed primary and were never acknowledged.
+- the writer pauses for up to about 40 s (validation runs: 8–35 s) and resumes on its own. One or two `FAIL` lines (for example `ECONNRESET`) are normal: those writes were in flight on the crashed primary and were never acknowledged.
 
 **Record** the time to the new primary.
 
@@ -651,11 +651,12 @@ kubectl -n "$NS" logs writer | grep FAIL
 m 'const d=db.getSiblingDB("ha").ticks.find({},{t:1}).sort({_id:1}).toArray(); const ids=new Set(d.map(x=>x._id)); const max=d[d.length-1]._id; const miss=[]; for (let i=1;i<=max;i++) if (!ids.has(i)) miss.push(i); const gaps=[]; for (let i=1;i<d.length;i++){ const g=(d[i].t-d[i-1].t)/1000; if (g>2) gaps.push(d[i].t.toISOString().slice(11,19)+" "+g.toFixed(1)+"s"); } print("stored="+d.length+" maxSeq="+max+" missingIds=["+miss.join(",")+"] pauses>2s: "+(gaps.join(", ")||"none"))'
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p '{"spec":{"instancesPerNode":1}}'
 waitfor 900 "clusters.postgresql.cnpg.io/${DB}" '{.status.readyInstances}' '1'
+kubectl -n "$NS" delete pod writer --wait=false
 ```
 **Expected:**
 - every ID in `missingIds` also appears in a `FAIL seq=<id>` line. Those writes were never acknowledged. **Any missing ID without a matching `FAIL` line is a lost acknowledged write: file it as a Sev 1 bug;**
 - the pauses listed match the failover and switchover times above (record them);
-- after scaling in, 1 instance is ready.
+- after scaling in, 1 instance is ready. The writer is stopped here because it's no longer needed.
 
 ### 6.7 Resilience (RES)
 
@@ -714,10 +715,10 @@ kubectl -n "$NS" exec mongosh -- mongorestore --uri="$URI2" --tlsInsecure --gzip
 
 #### BAK-03: Compare source and restored data
 ```bash
-SUM='const o={}; for (const d of ["bugbash","bugbash_auto","ha"]) { const s=db.getSiblingDB(d); for (const c of s.getCollectionNames().sort()) { const col=s.getCollection(c); o[d+"."+c]=col.countDocuments()+" idx="+col.getIndexes().map(i=>i.name).sort().join("|"); } } print(JSON.stringify(o));'
+SUM='const o={}; for (const d of ["bugbash","bugbash_auto"]) { const s=db.getSiblingDB(d); for (const c of s.getCollectionNames().sort()) { const col=s.getCollection(c); o[d+"."+c]=col.countDocuments()+" idx="+col.getIndexes().map(i=>i.name).sort().join("|"); } } print(JSON.stringify(o));'
 diff <(m "$SUM") <(kubectl -n "$NS" exec mongosh -- mongosh --quiet "$URI2" --eval "$SUM") && echo IDENTICAL
 ```
-**Expected:** `IDENTICAL`. Document counts and index names match for every collection, including the vector, 2dsphere, unique and text indexes. If the writer was still running during BAK-01, `ha.ticks` may differ; compare after it finishes.
+**Expected:** `IDENTICAL`. Document counts and index names match for every collection, including the vector, 2dsphere, unique and text indexes. The HA writer's `ha` database is left out because the writer keeps changing it.
 
 ### 6.9 Monitoring (MON)
 
@@ -800,18 +801,19 @@ sleep 120; snap > upg-rollback.txt; diff upg-before.txt upg-rollback.txt && echo
 Use your 3-instance cluster from HA-02 with the writer running, before HA-07 scales it in. If the writer has already finished (`kubectl -n "$NS" get pod writer` shows `Completed`), first run HA-07's two check commands and record the result, then `kubectl -n "$NS" delete pod writer` and run HA-01 again; restarting the writer clears its data.
 ```bash
 R=ghcr.io/documentdb/documentdb-kubernetes-operator; T=1.0.0-build-42099757352-1-f6af3d1
+kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='primary before={.status.currentPrimary}{"\n"}'
 date -u +"update %H:%M:%S"
 kubectl -n "$NS" patch documentdb "$DB" --type merge -p "{\"spec\":{\"image\":{\"documentDB\":\"$R/documentdb:$T\",\"gateway\":\"$R/gateway:$T\"}}}"
 sleep 60
 waitfor 1200 "clusters.postgresql.cnpg.io/${DB}" '{.status.phase}' 'Cluster in healthy state'; date -u +"done %H:%M:%S"
 kubectl -n "$NS" get pods -l "cnpg.io/cluster=${DB}" -o custom-columns='NAME:.metadata.name,ROLE:.metadata.labels.cnpg\.io/instanceRole,IMAGES:.spec.containers[*].image'
 kubectl -n "$NS" get documentdb "$DB" -o jsonpath='status={.status.status} schema={.status.schemaVersion}{"\n"}'
-kubectl -n "$NS" get events --field-selector "involvedObject.name=${DB}" --sort-by=.lastTimestamp | grep -E 'UpgradingInstance|Switchover' | tail -4
+kubectl -n "$NS" get clusters.postgresql.cnpg.io "$DB" -o jsonpath='primary after={.status.currentPrimary}{"\n"}'
 kubectl -n "$NS" logs writer | grep FAIL
 ```
 **Expected:**
 - all 3 pods run `…/documentdb-combined:18-1.0.0-build-…` and `…/gateway:1.0.0-build-…`, with `READY 2/2`. The operator derives the combined image tag from `spec.image.documentDB`;
-- events show the replicas updated first (`UpgradingInstance`), then a `Switchover` so the old primary is updated last;
+- `primary after` differs from `primary before`: the replicas are updated first, then the operator switches over so the old primary is updated last. `UpgradingInstance` and `Switchover` events may also appear, but not always;
 - `schema=1.0.0` (unchanged: same extension version);
 - the update finishes within about 5 minutes (validation runs: 4 min 12 s). Writes pause during the switchover for up to about a minute (validation runs: 50 s); a few seconds of `FAIL` lines can also appear while the new primary starts accepting connections (validation runs: 0 and 13 failures, about 7 s). That's acceptable as long as HA-07's check shows every missing ID has a `FAIL` line.
 
@@ -1073,7 +1075,7 @@ An AI coding agent with a terminal (for example GitHub Copilot CLI) can run this
 - If CON-02 is selected but `mongosh` isn't installed locally, record `SKIPPED (no local mongosh)`.
 - Copy commands exactly, substituting only variables. If you have to change a command to make it work, record the change under *Deviations*. Never change the product, the cluster's platform components, or other testers' namespaces.
 - Compare each result with the guide's **Expected**. If it doesn't match, collect diagnostics (section 8), record `FAIL` with the evidence, and continue with the next independent test. Use `BLOCKED` when an earlier failure prevents a test from running.
-- Long steps are normal: HA-01's writer runs for 60 minutes in the background, and some waits are several minutes. Don't abort them early. The minimal path takes about 45 minutes.
+- Long steps are normal: HA-01's writer runs for 60 minutes in the background, and some waits are several minutes. Don't abort them early. The minimal path takes about 25 minutes.
 - Never print or write `DB_PASS` or other secrets into the results; replace them with `***`.
 - Stop and ask the human only for: an expired Azure sign-in (`az account get-access-token` fails), `kubectl auth can-i` saying `no`, or a proxy that won't start after 3 attempts.
 
