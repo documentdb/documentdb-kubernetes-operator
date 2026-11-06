@@ -142,19 +142,76 @@ Keep `DB_PASS` for the whole session. If you open a new terminal, set it to the 
 ## 5. Setup
 
 ### SETUP-01: Tools on your machine
-Install:
-- **Azure CLI** with the `connectedk8s` extension;
-- **kubectl** 1.32 or later;
-- **Helm** 3.8 or later;
-- `jq` and `openssl`.
+You need:
+
+| Tool | Version | Why |
+|---|---|---|
+| Azure CLI with the `connectedk8s` extension | 2.70 or later | Sign in and open the Arc proxy to the cluster |
+| kubectl | 1.33 (within one minor version of the cluster) | Talk to the cluster |
+| Helm | 3.8 or later, **3.x** | Install the operator |
+| `jq`, `openssl`, `curl` | any | Used by the commands in this guide |
+
+You don't need to clone this repository, sign in to GitHub, or install Docker. The Helm chart and all container images are public on `ghcr.io`.
+
+Pick your platform, run its block once, then run the check below.
+
+#### Windows: use WSL (Ubuntu)
+Run **everything** in this guide inside an Ubuntu terminal in WSL, not in PowerShell or Command Prompt. If you don't have WSL yet, run `wsl --install -d Ubuntu-24.04` in an administrator PowerShell, reboot, and open **Ubuntu** from the Start menu. See [Install WSL](https://learn.microsoft.com/windows/wsl/install).
 
 ```bash
+# Base tools
+sudo apt-get update && sudo apt-get install -y curl jq openssl ca-certificates
+# Azure CLI (Microsoft's installer for Ubuntu/Debian)
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+# kubectl 1.33
+curl -fsSLo kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable-1.33.txt)/bin/linux/$(dpkg --print-architecture)/kubectl"
+sudo install -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+# Helm 3
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# Arc cluster connect extension
 az extension add --name connectedk8s --upgrade --yes
-az version --query '"azure-cli"' -o tsv
-kubectl version --client
-helm version --short
 ```
-**Expected:** every command prints a version; no errors.
+
+WSL tips:
+- **Use the Linux tools, not the Windows ones.** WSL can also see Windows programs such as `az.exe` or `kubectl.exe`. The check below flags any tool found under `/mnt/c/…`; install the Linux version as shown above.
+- **Signing in:** if `az login` can't open a browser, use `az login --use-device-code` and open the link it prints in your Windows browser.
+- **Clock drift:** after Windows sleeps, the WSL clock can fall behind and sign-in or `kubectl` fails with token or certificate time errors. Fix it with `sudo hwclock -s`, or `wsl --shutdown` from PowerShell and reopen Ubuntu.
+- **Second terminal:** SETUP-02 needs one terminal for the proxy. Open a second **Ubuntu** tab in Windows Terminal, and set the section 4 variables again there.
+
+#### macOS
+Needs [Homebrew](https://brew.sh).
+```bash
+# Azure CLI and jq (macOS already includes curl and openssl)
+brew install azure-cli jq
+# kubectl 1.33 (Homebrew's kubernetes-cli tracks the newest Kubernetes, which is too new for these clusters)
+ARCH=$(uname -m | sed 's/x86_64/amd64/')
+curl -fsSLo kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable-1.33.txt)/bin/darwin/${ARCH}/kubectl"
+sudo install -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+# Helm 3 (Homebrew's helm may be Helm 4, which this bug bash doesn't cover)
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# Arc cluster connect extension
+az extension add --name connectedk8s --upgrade --yes
+```
+If you already have a newer kubectl or Helm 4 from Homebrew, `/usr/local/bin` must come first in your `PATH`, or run `brew unlink kubernetes-cli helm`.
+
+#### Check your tools (both platforms)
+```bash
+for t in az kubectl helm jq openssl curl; do
+  p=$(command -v "$t") || { echo "MISSING  $t"; continue; }
+  case "$p" in /mnt/*) echo "WINDOWS  $t -> $p (install the Linux version inside WSL)";; *) echo "OK       $t -> $p";; esac
+done
+echo "azure-cli    $(az version --query '"azure-cli"' -o tsv 2>/dev/null)"
+echo "connectedk8s $(az extension show --name connectedk8s --query version -o tsv 2>/dev/null || echo MISSING)"
+echo "kubectl      $(kubectl version --client -o json 2>/dev/null | jq -r .clientVersion.gitVersion)"
+echo "helm         $(helm version --short 2>/dev/null)"
+```
+**Expected:**
+- every tool line says `OK` (none `MISSING` or `WINDOWS`);
+- `azure-cli` is 2.70 or later and `connectedk8s` shows a version;
+- `kubectl` is `v1.33.x`;
+- `helm` is `v3.x`.
+
+> **If `az extension add` fails** with `Pip failed`, `SSLError` or `files.pythonhosted.org` in the output, your network is blocking the Python package index that the extension installs from (common on corporate VPNs and proxies). Disconnect from the VPN or switch networks, run `az extension add --name connectedk8s --upgrade --yes` again, then reconnect.
 
 ### SETUP-02: Connect to the cluster through Azure Arc
 The clusters' API servers are on a private network, so you reach them through **Arc cluster connect**.
@@ -199,6 +256,14 @@ helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
 **Expected:** `STATUS: deployed`.
 
 > If the operator is already installed, run `helm list -n documentdb-operator` and confirm the chart is `documentdb-operator-1.1.0` instead.
+
+> **Where things come from.** The chart (`oci://ghcr.io/documentdb/documentdb-operator`) and every image (`ghcr.io/documentdb/documentdb-kubernetes-operator/…`) are public, so you don't need `helm registry login` or an image pull secret. The cluster's nodes pull the images themselves, so they need outbound HTTPS access to `ghcr.io`.
+>
+> **CRDs.** `helm install` creates the DocumentDB CRDs from the chart; you don't need this repository. `helm upgrade` never updates CRDs, so before upgrading to a newer chart, apply its CRDs first:
+> ```bash
+> helm show crds oci://ghcr.io/documentdb/documentdb-operator --version <NEW_VERSION> \
+>   | kubectl apply --server-side --force-conflicts -f -
+> ```
 
 ### SETUP-05: Verify the operator (everyone)
 ```bash
