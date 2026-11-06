@@ -19,6 +19,7 @@ Key characteristics:
 
 - **VolumeSnapshot-based** — backups use the [CSI (Container Storage Interface)](https://kubernetes.io/docs/concepts/storage/volumes/#csi) driver's snapshot capability, so they are fast and storage-efficient.
 - **Primary-only** — the operator always targets the primary instance for backups.
+- **Multi-region aware** — in a multi-region deployment the operator backs up only the region that is currently primary; requests against a standby region are skipped. See [Backups in multi-region deployments](#backups-in-multi-region-deployments).
 - **Namespace-scoped** — `Backup` and `ScheduledBackup` resources must reside in the same namespace as the `DocumentDB` cluster.
 - **Retention-managed** — expired backups are automatically deleted by the operator.
 
@@ -238,6 +239,44 @@ Once the status shows `Cluster in healthy state`, connect and verify your data. 
 - The restore version must be **>= the backup's schema version** when that version is known (from the `Backup` or a PV's `documentdb.io/schema-version` annotation); otherwise the restore is allowed with a warning. See [Version compatibility](#version-compatibility).
 
 For additional recovery options (including PV-based recovery), see [Restore a Deleted DocumentDB Cluster](restore-deleted-cluster.md).
+
+## Backups in multi-region deployments
+
+In a [multi-region deployment](../multi-region-deployment/overview.md), a single DocumentDB cluster spans multiple regions — one region is the **primary** and the others are **standby** replicas. Each region runs its own operator, and **an operator only acts on `Backup` and `ScheduledBackup` resources in its own Kubernetes cluster — there is no cross-cluster routing.** Apart from that, backups behave exactly as in a single-region cluster.
+
+### What you need to do
+
+Make sure the `Backup` or `ScheduledBackup` exists in the cluster that currently holds the **primary** role. You have two options:
+
+- **Apply it directly** to the current primary cluster, or
+- **Propagate it to every member cluster** (for example, via [KubeFleet](../multi-region-deployment/overview.md#managed-fleet-orchestration)). The primary-region operator runs the backup while standby-region operators skip it, so the same resource is safe to define identically in every region — including after a failover.
+
+### Region behavior at a glance
+
+| Region role | Operator behavior | Backup `Phase` |
+|-------------|-------------------|----------------|
+| **Primary** | Takes the VolumeSnapshot | `completed` |
+| **Standby** | Skips it, with the message *"Backups can only be created from the primary cluster"* (not an error) | `skipped` |
+| **Promotion in progress** | Defers the backup and retries until the new primary endpoint is ready (not an error) | pending → `completed` |
+
+**Failover (site-swap) is handled automatically.** When the primary role moves to another region (planned or unplanned), subsequent backups are taken from the newly promoted primary. A backup requested while promotion is still in progress is deferred and retried once the primary endpoint is ready — it is never failed for this reason.
+
+### Verify which backups ran
+
+List the backups and check the `PHASE` column to see which region took the snapshot and which skipped:
+
+```bash
+kubectl get backups -n <namespace>
+# NAME             CLUSTER              PHASE       ...
+# backup-example   documentdb-preview   completed        # taken on the primary region
+# backup-example   documentdb-preview   skipped          # standby region, safely skipped
+```
+
+!!! tip "Scheduled backups across regions"
+
+    Define your `ScheduledBackup` in the same namespace as the DocumentDB cluster, and make sure it exists in the current primary cluster — either apply it there directly or propagate it to every member cluster (for example, via KubeFleet). Because standby regions skip backups rather than erroring, a propagated schedule keeps producing backups from whichever region is primary — including after a failover — with no manual reconfiguration.
+
+For planned and unplanned failover steps, see [Failover procedures](../multi-region-deployment/failover-procedures.md).
 
 ## Backup Retention Policy
 
