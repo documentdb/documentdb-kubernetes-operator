@@ -29,7 +29,7 @@ We expect your Kubernetes cluster to be **ready and running on Azure Local** bef
 | At least **3 Linux worker nodes**, 4 vCPU / 16 GiB each recommended | The HA tests run 3 database instances on separate nodes |
 | A **default StorageClass** (AKS Arc provides `default`) | Database data volumes |
 | Outbound internet access to `ghcr.io`, `quay.io` and Docker Hub | Operator, DocumentDB, cert-manager and test-client images |
-| Your Microsoft Entra account has **cluster-admin** rights through cluster connect | Installing the operator creates cluster-wide resources (CRDs, RBAC, webhooks) |
+| Your Microsoft Entra account has **cluster-admin** rights through cluster connect | Installing the operator creates cluster-wide resources (CRDs, RBAC, webhooks), and testers create their own namespaces. Access limited to one namespace, which many shared lab clusters give by default, isn't enough; ask the organizer to add you to the cluster's admin group. SETUP-02 checks this. |
 
 When the cluster is ready, check it with SETUP-02. Everything after that, from installing cert-manager and the operator to testing, is covered in this guide.
 
@@ -215,10 +215,10 @@ echo "helm         $(helm version --short 2>/dev/null)"
 > **If `az extension add` fails** with `Pip failed`, `SSLError` or `files.pythonhosted.org` in the output, your network is blocking the Python package index that the extension installs from (common on corporate VPNs and proxies). Disconnect from the VPN or switch networks, run `az extension add --name connectedk8s --upgrade --yes` again, then reconnect.
 
 ### SETUP-02: Connect to the cluster through Azure Arc
-The clusters' API servers are on a private network, so you reach them through **Arc cluster connect**.
+The clusters' API servers are on a private network, so you reach them through **Arc cluster connect**. You can do this from your own machine (WSL or macOS, set up in SETUP-01); you don't need a lab virtual desktop. If your cluster is in the Adaptive Cloud (ACX) lab, its [connection guide](https://portal.adaptivecloudlab.com/getting-started/03-connecting/#option-b-kubectl-with-azure-ad) describes the same steps, including the tenant to sign in to.
 
 ```bash
-az login --tenant "$TENANT"
+az login --tenant "$TENANT"            # add --use-device-code if no browser opens
 az account set --subscription "$SUBSCRIPTION"
 ```
 
@@ -227,12 +227,16 @@ In a **separate terminal**, start the proxy and leave it running:
 az connectedk8s proxy -n "$CLUSTER" -g "$RESOURCE_GROUP" \
   --file "$HOME/.kube/${CLUSTER}.yaml" --port 47011
 ```
+Wait until it prints `Proxy is listening on port 47011`. Run **only one proxy per machine**: a second `az connectedk8s proxy`, even for another cluster or port, fails with `Failed to fetch public key info from client proxy`. Stop the first one (Ctrl+C) before switching clusters.
 
 Back in your working terminal (with the variables from section 4 set):
 ```bash
 kubectl get nodes -o custom-columns='NAME:.metadata.name,K8S:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion,ARCH:.status.nodeInfo.architecture'
+kubectl auth can-i '*' '*' --all-namespaces
 ```
-**Expected:** 4 nodes, Kubernetes `v1.33.x`, runtime `containerd://1.7.x`, architecture `amd64`.
+**Expected:**
+- 4 nodes, Kubernetes `v1.33.x`, runtime `containerd://1.7.x`, architecture `amd64`;
+- `yes` from `auth can-i`. If it says `no`, you don't have cluster-admin: stop and ask the organizer to add you to the cluster's admin group.
 
 > If kubectl later fails with `Unknown proxy error occurred` or connection errors, restart the proxy command. Arc cluster connect drops occasionally, and its credential refresh can fail on long sessions. That's not a DocumentDB bug.
 
