@@ -31,6 +31,8 @@ RUN GOEXPERIMENT=nosystemcrypto CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${A
 # Use Microsoft official image from MCR as minimal base image to package the manager binary
 FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/devcontainers/base:alpine
 WORKDIR /
+# Pick up package fixes published since the base image was built.
+RUN apk upgrade --no-cache
 COPY --from=builder /workspace/manager .
 RUN addgroup -S manager && adduser -S manager -G manager
 USER manager
