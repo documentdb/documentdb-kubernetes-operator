@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] - 2026-11-09
+
+### Security
+- Refresh operator runtime OS packages at build time. Operator-track candidate builds always pull current base images and bypass cached layers so package upgrades run on every build.
+
+### Bug Fixes
+- Refuse `walReplica: true` in the Helm chart until the WAL replica plugin works (#492).
+
+### Documentation
+- Update installation scripts and documentation to avoid missing or pre-1.0 versions (#479).
+
+### Enhancements & Fixes
+- Check loaded test images with `docker image inspect` instead of matching image-list output (#490).
+
 ## [Unreleased]
 
 ### Bug Fixes
