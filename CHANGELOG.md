@@ -3,7 +3,7 @@
 ## [1.1.1] - 2026-11-09
 
 ### Security
-- Refresh operator runtime OS packages at build time. Operator-track candidate builds always pull current base images and bypass cached layers so package upgrades run on every build.
+- Refresh operator runtime OS packages at build time. Operator-track candidate builds pull current base images.
 
 ### Bug Fixes
 - Refuse `walReplica: true` in the Helm chart until the WAL replica plugin works (#492).

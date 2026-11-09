@@ -71,8 +71,8 @@ jobs:
         TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
         IMAGE=ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:$TAG
 
-        # Refresh base images and rerun package upgrades even if the base digest is unchanged.
-        docker build --pull --no-cache --build-arg ARCH=${{ matrix.base_arch }} \
+        # Pull the latest base images for this build.
+        docker build --pull --build-arg ARCH=${{ matrix.base_arch }} \
           -t $IMAGE \
           -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
         docker push $IMAGE
