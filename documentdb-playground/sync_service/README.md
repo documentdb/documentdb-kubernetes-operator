@@ -101,10 +101,10 @@ Example:
 
 ```yaml
 source:
-  uri: "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
+  uri: "mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"
 
 target:
-  uri: "mongodb+srv://admin:MyP%40ss@target-cluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000"
+  uri: "mongodb+srv://<username>:<password>@target-cluster.mongocluster.cosmos.azure.com/?tls=true&authMechanism=SCRAM-SHA-256&retrywrites=false&maxIdleTimeMS=120000"
 
 watch:
   collections:
@@ -147,7 +147,7 @@ This walkthrough uses three terminals side by side.
 
 | Terminal | Purpose | Connect with [mongosh][mongosh] |
 |----------|---------|----------------------------------|
-| **Source** | On-premise DocumentDB on Kubernetes | `mongosh "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"` |
+| **Source** | On-premise DocumentDB on Kubernetes | `mongosh "mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true"` |
 | **Target** | [Azure DocumentDB][azure-documentdb] | `mongosh "<your-azure-documentdb-connection-string>"` |
 | **Sync service** | Runs the Python sync service | — |
 

@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}@{{ required "image.digest is required" .Values.image.digest }}"
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c"]
           args:

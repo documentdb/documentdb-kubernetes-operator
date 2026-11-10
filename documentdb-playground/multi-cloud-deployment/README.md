@@ -196,12 +196,12 @@ mongosh localhost:10260 -u docdb -p <password> \
 When `ENABLE_AZURE_DNS=true`, use the MongoDB SRV connection string:
 
 ```bash
-mongosh "mongodb+srv://docdb:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+mongosh "mongodb+srv://<username>:<password>@<zone-name>.<parent-zone>/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 ```
 
 Example:
 ```bash
-mongosh "mongodb+srv://docdb:mypassword@documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+mongosh "mongodb+srv://<username>:<password>@documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
 ```
 
 ### Observability and Telemetry

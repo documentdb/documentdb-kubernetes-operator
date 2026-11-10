@@ -3,4 +3,4 @@ name: lightrag
 description: LightRAG graph-based RAG engine with DocumentDB backend
 type: application
 version: 0.1.0
-appVersion: "1.4.13"
+appVersion: "1.5.7"

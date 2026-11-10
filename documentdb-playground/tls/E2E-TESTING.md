@@ -553,7 +553,7 @@ All scripts provide detailed output:
 ✅ mongosh connection successful
 
 Connection string:
-mongodb://docdbuser:P@ssw0rd123@10.0.0.1:10260/?tls=true&tlsAllowInvalidCertificates=true
+mongodb://<username>:<password>@ssw0rd123@10.0.0.1:10260/?tls=true&tlsAllowInvalidCertificates=true
 ```
 
 ### Debugging Automated Tests
