@@ -16,6 +16,9 @@
 
 ## [Unreleased]
 
+### Security
+- Upgrade the cert-manager Go dependency and pinned Arc/Fleet installations to `v1.19.6` to address [CVE-2026-62290](https://github.com/advisories/GHSA-8rvj-mm4h-c258). Existing clusters must upgrade their separately installed cert-manager controller to a patched release (`1.19.6` or `1.20.3`); upgrading the DocumentDB operator alone does not upgrade cert-manager.
+
 ### Bug Fixes
 - The Helm chart now refuses `walReplica: true`. The WAL replica plugin doesn't work yet, so enabling it only produced a broken deployment.
 
