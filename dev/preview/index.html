@@ -1927,7 +1927,7 @@
 <p>If CloudNativePG is already installed in your cluster, you may experience conflicts. See the Helm chart documentation for options to skip the CNPG dependency.</p>
 </div>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="m">1</span>.1.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="m">1</span>.1.1<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--wait
@@ -2010,8 +2010,8 @@
 <h3 id="connect-to-the-documentdb-cluster">Connect to the DocumentDB cluster<a class="headerlink" href="#connect-to-the-documentdb-cluster" title="Permanent link">&para;</a></h3>
 <p>Choose a connection method based on your service type. For more details on service types, load balancers, and Network Policies, see <a href="configuration/networking/">Networking</a>. For TLS certificate configuration, see <a href="configuration/tls/">TLS</a>.</p>
 <h4 id="option-1-clusterip-service-default-for-local-development">Option 1: ClusterIP service (default — for local development)<a class="headerlink" href="#option-1-clusterip-service-default-for-local-development" title="Permanent link">&para;</a></h4>
-<p><strong>Step 1:</strong> Set up port forwarding (keep this terminal open):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>pod/documentdb-preview-1<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
+<p><strong>Step 1:</strong> Set up port forwarding to the gateway Service, which selects the current primary (keep this terminal open):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>svc/documentdb-service-documentdb-preview<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-preview-ns
 </code></pre></div>
 <p><strong>Step 2:</strong> In a new terminal, connect with <a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>mongosh<span class="w"> </span><span class="m">127</span>.0.0.1:10260<span class="w"> </span><span class="se">\</span>

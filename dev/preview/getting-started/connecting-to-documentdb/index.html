@@ -1954,10 +1954,14 @@
 </div>
 <h2 id="access-methods">Access methods<a class="headerlink" href="#access-methods" title="Permanent link">&para;</a></h2>
 <h3 id="port-forwarding-local-development">Port forwarding (local development)<a class="headerlink" href="#port-forwarding-local-development" title="Permanent link">&para;</a></h3>
-<p>For <code>ClusterIP</code> services, use kubectl port-forward:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>pod/my-documentdb-1<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
+<p>For <code>ClusterIP</code> services, use kubectl port-forward to the gateway Service, which selects the current primary:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>svc/documentdb-service-my-documentdb<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
 </code></pre></div>
 <p>Then connect to <code>127.0.0.1:10260</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Port forwarding binds to a pod selected by the Service when the command starts; it does not automatically reconnect after failover or pod replacement. If the primary changes or the selected pod restarts, stop and rerun the same command to connect to the current primary.</p>
+</div>
 <h3 id="loadbalancer-cloud-deployments">LoadBalancer (cloud deployments)<a class="headerlink" href="#loadbalancer-cloud-deployments" title="Permanent link">&para;</a></h3>
 <p>For <code>LoadBalancer</code> services, the gateway is reachable through the external IP:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>documentdb-service-my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span><span class="se">\</span>

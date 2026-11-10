@@ -1740,7 +1740,7 @@
 <h2 id="install-the-documentdb-operator">Install the DocumentDB operator<a class="headerlink" href="#install-the-documentdb-operator" title="Permanent link">&para;</a></h2>
 <p>The operator Helm chart automatically installs the <a href="https://cloudnative-pg.io/">CloudNativePG operator</a> as a dependency.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>helm<span class="w"> </span>install<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="m">1</span>.1.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--version<span class="w"> </span><span class="m">1</span>.1.1<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--create-namespace<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--wait
@@ -1809,8 +1809,8 @@
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>my-documentdb-1   2/2     Running   0          2m
 </code></pre></div>
 <h2 id="connect-to-documentdb">Connect to DocumentDB<a class="headerlink" href="#connect-to-documentdb" title="Permanent link">&para;</a></h2>
-<p>Set up port forwarding to access the DocumentDB Gateway (port 10260):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>pod/my-documentdb-1<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
+<p>Set up port forwarding to the gateway Service to access the current primary (port 10260):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>kubectl<span class="w"> </span>port-forward<span class="w"> </span>svc/documentdb-service-my-documentdb<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span>-n<span class="w"> </span>documentdb-ns
 </code></pre></div>
 <p>In a new terminal, retrieve the connection string from the DocumentDB cluster status and connect:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Get the connection string (contains embedded kubectl commands to resolve credentials)</span>
