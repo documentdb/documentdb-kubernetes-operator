@@ -22,3 +22,8 @@ becomes ready (webhook TLS Secret is never issued).
 {{- fail "cert-manager is required but was not found in the cluster (cert-manager.io/v1/Certificate CRD is missing). Install cert-manager (https://cert-manager.io/docs/installation/) before installing this chart, or set certManager.preflightCheck=false to skip this check." -}}
 {{- end -}}
 {{- end -}}
+
+{{/* The WAL replica plugin doesn't work yet; refuse rather than deploy it broken. */}}
+{{- if .Values.walReplica -}}
+{{- fail "walReplica is not supported yet; leave it set to false." -}}
+{{- end -}}

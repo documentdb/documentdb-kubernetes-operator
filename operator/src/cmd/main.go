@@ -217,6 +217,7 @@ func main() {
 		Scheme:    mgr.GetScheme(),
 		Config:    mgr.GetConfig(),
 		Clientset: clientset,
+		Recorder:  mgr.GetEventRecorderFor("documentdb-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DocumentDB")
 		os.Exit(1)

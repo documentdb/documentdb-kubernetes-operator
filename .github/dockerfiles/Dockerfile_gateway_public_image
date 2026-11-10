@@ -3,7 +3,9 @@ FROM ${SOURCE_IMAGE} AS source
 
 FROM debian:trixie-slim
 
+# Upgrade first: the slim base can lag Debian security fixes (e.g. zlib1g).
 RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \

@@ -21,7 +21,7 @@ DocumentDB uses PostgreSQL as its underlying storage engine. The DocumentDB Gate
 
 ### Which Kubernetes distributions are supported?
 
-The operator works on any conformant Kubernetes distribution (version 1.35 or later, or 1.33/1.34 with the ImageVolume feature gate enabled). It has been tested on:
+The operator works on any conformant Kubernetes distribution (version 1.32 or later; 1.35+ is recommended, and CloudNativePG officially supports 1.33+). It has been tested on:
 
 - **Azure Kubernetes Service (AKS)**
 - **Amazon Elastic Kubernetes Service (EKS)**
@@ -40,7 +40,7 @@ See the [API Reference](api-reference.md) for auto-generated documentation of al
 
 ### What are the minimum Kubernetes version requirements?
 
-The operator depends on the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature to mount the DocumentDB extension. That feature is GA (on by default) in **Kubernetes 1.35+**, which is the recommended baseline. On **1.33 or 1.34** the feature is beta and off by default, so it works only if you enable the `ImageVolume` feature gate on the kube-apiserver and every kubelet (self-managed clusters only) with a container runtime that supports image volumes (containerd ≥ 2.1 or CRI-O ≥ 1.33). When the feature is unavailable, the operator's admission webhook rejects `DocumentDB` creation with an actionable error rather than letting pods hang.
+The operator depends on the [ImageVolume](https://kubernetes.io/docs/concepts/storage/volumes/#image) feature to mount the DocumentDB extension. That feature is GA (on by default) in **Kubernetes 1.35+**, which is the recommended baseline. On **1.33 or 1.34** the feature is beta and off by default, so it works only if you enable the `ImageVolume` feature gate on the kube-apiserver and every kubelet (self-managed clusters only) with a container runtime that supports image volumes (containerd ≥ 2.1 or CRI-O ≥ 1.33). When the feature is unavailable (for example, on Kubernetes 1.32 or on nodes running containerd 1.7), the operator's default `imageMode: auto` falls back to a combined PostgreSQL 18 + DocumentDB image, so the cluster still works. Set `imageMode: imageVolume` in the Helm values to require ImageVolume instead; the admission webhook then rejects `DocumentDB` creation with an actionable error when the API server does not support the feature. It cannot check node container runtimes, so with `imageVolume` you must make sure every node runs containerd ≥ 2.1 or CRI-O ≥ 1.33.
 
 ### Do I need to install CloudNativePG separately?
 

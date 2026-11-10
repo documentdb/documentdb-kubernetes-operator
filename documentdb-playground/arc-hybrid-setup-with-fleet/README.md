@@ -188,7 +188,7 @@ az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --ov
 
 ```bash
 kubectl config use-context documentdb-aks
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.6/cert-manager.yaml
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 ```
 
@@ -269,7 +269,7 @@ If `microsoft.certmanagement` is not offered for your connected cluster, fall ba
 
 ```bash
 kubectl config use-context kind-documentdb-onprem
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.2/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.19.6/cert-manager.yaml
 kubectl wait --for=condition=Available deployment --all -n cert-manager --timeout=300s
 ```
 

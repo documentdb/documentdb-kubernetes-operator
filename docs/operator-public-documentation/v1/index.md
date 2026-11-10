@@ -7,7 +7,7 @@ DocumentDB is the engine powering vCore-based Azure Cosmos DB for MongoDB. Built
 When you deploy a DocumentDB cluster, the operator creates and manages PostgreSQL instances, the [DocumentDB Gateway](https://github.com/microsoft/documentdb/tree/main/pg_documentdb_gw), and supporting Kubernetes resources. The gateway enables you to connect with MongoDB-compatible drivers, APIs, and tools, while PostgreSQL serves as the underlying storage engine.
 
 !!! note
-    Operator `1.0.0` is generally available for DocumentDB 1.0. The stable API version is `documentdb.io/v1`; the earlier `documentdb.io/preview` version is deprecated but still served for existing resources. We welcome your feedback and contributions!
+    Operator `1.1.0` is generally available for DocumentDB 1.0. The stable API version is `documentdb.io/v1`; the earlier `documentdb.io/preview` version is deprecated but still served for existing resources. We welcome your feedback and contributions!
 
 ## Quickstart
 
@@ -190,10 +190,10 @@ Choose a connection method based on your service type. For more details on servi
 
 #### Option 1: ClusterIP service (default — for local development)
 
-**Step 1:** Set up port forwarding (keep this terminal open):
+**Step 1:** Set up port forwarding to the gateway Service, which selects the current primary (keep this terminal open):
 
 ```bash
-kubectl port-forward pod/documentdb-preview-1 10260:10260 -n documentdb-preview-ns
+kubectl port-forward svc/documentdb-service-documentdb-preview 10260:10260 -n documentdb-preview-ns
 ```
 
 **Step 2:** In a new terminal, connect with [mongosh](https://www.mongodb.com/docs/mongodb-shell/install/):

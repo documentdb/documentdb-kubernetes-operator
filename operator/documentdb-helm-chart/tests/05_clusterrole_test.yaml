@@ -72,6 +72,15 @@ tests:
             resources: ["pods", "services", "endpoints", "serviceaccounts", "configmaps", "persistentvolumeclaims"]
             verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+  - it: should allow reading nodes for image mode detection
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["nodes"]
+            verbs: ["get", "list"]
+
   - it: should include pods/exec permission (create only)
     asserts:
       - contains:

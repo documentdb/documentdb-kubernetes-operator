@@ -35,8 +35,9 @@ type ClusterClient interface {
 	// GetClusterHealth returns the current health of the target cluster.
 	GetClusterHealth(ctx context.Context) (ClusterHealth, error)
 
-	// GetCurrentDocumentDBImageTag returns the tag portion of status.documentDBImage
-	// (e.g., "0.109.0" from "ghcr.io/.../documentdb:0.109.0").
+	// GetCurrentDocumentDBImageTag returns the DocumentDB version in the tag of
+	// status.documentDBImage (e.g., "0.109.0" from "ghcr.io/.../documentdb:0.109.0",
+	// and "1.0.0" from the combined image "ghcr.io/.../documentdb-combined:18-1.0.0").
 	// Returns empty string if status not yet populated.
 	GetCurrentDocumentDBImageTag(ctx context.Context) (string, error)
 

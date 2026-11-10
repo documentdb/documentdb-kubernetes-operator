@@ -1,7 +1,9 @@
+{{- if and (index .Values "cloudnative-pg").enabled (index .Values "cloudnative-pg").namespaceOverride }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cnpg-system
+  name: {{ (index .Values "cloudnative-pg").namespaceOverride }}
   labels:
     app.kubernetes.io/name: {{ include "documentdb-chart.name" . }}
     app.kubernetes.io/managed-by: "Helm"
+{{- end }}

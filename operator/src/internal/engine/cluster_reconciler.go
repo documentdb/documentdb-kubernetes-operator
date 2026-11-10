@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	cnpg "github.com/documentdb/documentdb-operator/internal/cnpg"
+	"github.com/documentdb/documentdb-operator/internal/imagemode"
 	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -85,9 +86,37 @@ type ClusterReconciler[T client.Object] struct {
 	Replication ReplicationHooks[T]
 	// Mutex, when set, serializes reconciliations.
 	Mutex *sync.Mutex
+	// ImageModeDetector, when set, decides the image mode (ImageVolume or
+	// combined) for a CNPG Cluster about to be created and returns a reason.
+	// Nil keeps ImageVolume mode. Combined mode requires the adapter to set
+	// ClusterIntent.Images.Combined.
+	ImageModeDetector func(ctx context.Context, namespace string) (imagemode.Mode, string, error)
 }
 
 func (r *ClusterReconciler[T]) profile() product.ProductProfile { return r.Adapter.Profile() }
+
+// selectImageMode decides the image mode for a CNPG Cluster about to be
+// created, renders desired accordingly, and records the mode as an annotation.
+func (r *ClusterReconciler[T]) selectImageMode(ctx context.Context, desired *cnpgv1.Cluster, intent product.ClusterIntent) (imagemode.Mode, string, error) {
+	mode, reason := imagemode.ImageVolume, "image mode detection not configured"
+	if r.ImageModeDetector != nil {
+		var err error
+		if mode, reason, err = r.ImageModeDetector(ctx, desired.Namespace); err != nil {
+			return "", "", err
+		}
+	}
+	if mode == imagemode.Combined {
+		if intent.Images.Combined == "" {
+			return "", "", fmt.Errorf("combined image mode selected (%s) but %s defines no combined image", reason, r.profile().Name)
+		}
+		cnpg.ApplyCombinedImageMode(desired, intent.Images)
+	}
+	if desired.Annotations == nil {
+		desired.Annotations = map[string]string{}
+	}
+	desired.Annotations[imagemode.AnnotationKey] = string(mode)
+	return mode, reason, nil
+}
 
 func (r *ClusterReconciler[T]) replicationContext(ctx context.Context, obj T) (*util.ReplicationContext, error) {
 	if r.Replication != nil {
@@ -258,15 +287,31 @@ func (r *ClusterReconciler[T]) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.Get(ctx, types.NamespacedName{Name: desiredCnpgCluster.Name, Namespace: req.Namespace}, currentCnpgCluster); err != nil {
 		if errors.IsNotFound(err) {
+			mode, reason, err := r.selectImageMode(ctx, desiredCnpgCluster, intent)
+			if err != nil {
+				logger.Error(err, "Failed to detect image mode; retrying before creating the CNPG Cluster")
+				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+			}
 			if err := r.Create(ctx, desiredCnpgCluster); err != nil {
 				logger.Error(err, "Failed to create CNPG Cluster")
 				return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
 			}
-			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace)
+			logger.Info("CNPG Cluster created successfully", "Cluster.Name", desiredCnpgCluster.Name, "Namespace", desiredCnpgCluster.Namespace,
+				"imageMode", mode, "reason", reason)
+			if r.Recorder != nil {
+				r.Recorder.Eventf(obj, corev1.EventTypeNormal, "ImageModeSelected",
+					"Using %s image mode (image %s): %s", mode, desiredCnpgCluster.Spec.ImageName, reason)
+			}
 			return ctrl.Result{RequeueAfter: RequeueAfterLong}, nil
 		}
 		logger.Error(err, "Failed to get CNPG Cluster")
 		return ctrl.Result{RequeueAfter: RequeueAfterShort}, nil
+	}
+
+	// The image mode is fixed when the CNPG Cluster is created; keep rendering an
+	// existing combined-mode cluster in combined mode.
+	if cnpg.IsCombinedImageMode(currentCnpgCluster) {
+		cnpg.ApplyCombinedImageMode(desiredCnpgCluster, intent.Images)
 	}
 
 	var replicationOps []cnpg.JSONPatch

@@ -6,6 +6,29 @@
 - **`documentdb.io/v1` API**: `DocumentDB`, `Backup` and `ScheduledBackup` graduate from `documentdb.io/preview` to the stable `documentdb.io/v1` API, which is now the storage version. `preview` remains served with an identical schema and returns a deprecation warning; it will be removed in a future release. **Apply the updated CRDs before running `helm upgrade`** (Helm does not upgrade CRDs), otherwise the new operator cannot start. Update manifests to `apiVersion: documentdb.io/v1`; no other field changes are needed. The Go API package moved from `operator/src/api/preview` to `operator/src/api/v1`, the validating webhook path is now `/validate-documentdb-io-v1-documentdb`, and `kubectl documentdb` uses `v1`. The public documentation moved from `.../preview/` to `.../v1/`; old URLs redirect. See [Migrating to the `documentdb.io/v1` API](docs/operator-public-documentation/v1/operations/upgrades.md#migrating-to-the-documentdbiov1-api).
 
 ### Security
+- Upgrade the cert-manager Go dependency and pinned Arc/Fleet installations to `v1.19.6` to address [CVE-2026-62290](https://github.com/advisories/GHSA-8rvj-mm4h-c258). Existing clusters must upgrade their separately installed cert-manager controller to a patched release (`1.19.6` or `1.20.3`); upgrading the DocumentDB operator alone does not upgrade cert-manager.
+- Upgrade `github.com/klauspost/compress` to `v1.20.2` in the sidecar injector and shared, E2E, and long-haul test modules to address [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865).
+
+## [1.1.1] - 2026-11-09
+
+### Security
+- Refresh operator runtime OS packages at build time. Operator-track candidate builds pull current base images.
+
+### Bug Fixes
+- Refuse `walReplica: true` in the Helm chart until the WAL replica plugin works (#492).
+
+### Documentation
+- Update installation scripts and documentation to avoid missing or pre-1.0 versions (#479).
+
+### Enhancements & Fixes
+- Check loaded test images with `docker image inspect` instead of matching image-list output (#490).
+
+## [1.1.0] - 2026-11-17
+
+Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar and Helm chart change. Clusters on Kubernetes or container runtimes without image volume support (for example containerd 1.7, or Kubernetes 1.32) now run with a combined PostgreSQL + DocumentDB image instead of being rejected. Apply the 1.1.0 CRDs before `helm upgrade`; existing clusters keep their image layout and are not restarted.
+
+
+### Security
 - Require Go 1.26.10 across all six modules and pin Go builder images to that patch release to address [GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) in `crypto/x509`. Unit-test workflows now resolve Go from the operator module instead of an older hard-coded version.
 
 ### Bug Fixes
@@ -13,9 +36,14 @@
 - Encode configured health metric names as YAML strings, support an explicit monitoring password Secret for products using SCRAM authentication, and support dotted extension versions through `PostgresProfile.ExtensionVersionFormat`.
 - Give each cluster its own gateway Service when `documentdb-service-<name>` exceeds 63 characters: long names are shortened with a stable hash of the cluster name instead of plain truncation, which could make two clusters share one Service and publish the other cluster's endpoint. Clusters that already own a plainly truncated Service or gateway certificate keep that name. The operator records the chosen name in the `documentdb.io/gateway-service-name` annotation, so recreating the Service keeps the same hostname, and adds any missing Service DNS names to its managed gateway certificate (the operator ClusterRole now includes `patch` on cert-manager Certificates). Rolling the operator back to an earlier release is not supported for these long-name clusters. The operator now refuses a same-named Service controlled by another resource, gateway certificate DNS names follow the actual Service name, and `kubectl documentdb status` finds the Service by its owning DocumentDB instead of a name substring.
 - Quote product-defined extension and replication role names in lifecycle SQL, and use a product-independent ImageVolume probe name so display names such as `Cosmos DB` do not bypass capability checks.
+- The DocumentDB controller now has an event recorder, so its events (`ImageModeSelected`, `PVsRetained`, `ExtensionRollback`, `SchemaUpdateAvailable`) are actually emitted; previously they were silently dropped.
 
 ### Major Features
 - **Product-neutral operator core**: The CNPG `Cluster` renderer, sync, PostgreSQL parameter merge, resource split/validation and extension lifecycle SQL are now driven by a `ProductProfile` and `ClusterIntent` instead of the `DocumentDB` custom resource, and are exported for other operator modules through `operator/src/pkg/core`. The sidecar injector accepts optional `gatewayContainerName`, `gatewayPort`, `gatewayArgs`, `gatewayUsernameEnv` and `gatewayPasswordEnv` parameters for non-DocumentDB gateways. The operator keeps these parameters in sync on existing clusters, and the client Service port follows the gateway port. Other products can build multi-region topologies with `core.NewReplicationContext` and name the OTel SQL health metric with `NamingProfile.HealthMetricName` (DocumentDB keeps `documentdb.postgres.up`). The cluster, certificate, persistent volume, backup and scheduled-backup reconcilers and the admission validation rules are generic over the custom resource type through a `ClusterAdapter`, with DocumentDB as the first implementation; `pkg/core` exports them too. Default DocumentDB CNPG rendering and CRD schemas are unchanged. RBAC permits the naming annotation and certificate updates described above; long-name gateway Services have the documented compatibility behavior. See [Product-neutral operator core](docs/designs/product-neutral-core.md).
+- **Combined-image fallback when ImageVolume is unavailable**: A new Helm value `imageMode` (`auto` by default, or `imageVolume` / `combined`) controls how the DocumentDB extension reaches PostgreSQL pods. In `auto` mode the operator checks node container runtimes (containerd ≥ 2.1 or CRI-O ≥ 1.33) and probes the ImageVolume API when a `DocumentDB` is first created; if either check fails it deploys the new `documentdb-combined:18-<version>` image (PostgreSQL 18 + DocumentDB in one image) instead of rejecting the resource. The choice is recorded in the `documentdb.io/image-mode` annotation and is never changed for an existing cluster, and engine upgrades in combined mode roll the combined image tag. The chart's `kubeVersion` floor drops to `>= 1.32.0-0`, and the operator ClusterRole now needs `get`/`list` on `nodes`. Set `imageMode: imageVolume` to keep the previous fail-fast webhook rejection. Combined images are published from DocumentDB `1.0.0` on. Downgrading the operator is not supported for combined clusters, and clusters an earlier operator created on a runtime without image volume support (for example containerd 1.7) must be recreated to use combined mode. See [the design](docs/designs/combined-image-fallback.md).
+
+### Enhancements & Fixes
+- E2E coverage for the combined-image fallback: a `combined-image` job verifies the published and PR-built `documentdb-combined` images on amd64 and arm64 (ImageVolume gate off, and containerd 1.7), including the pulled architecture, extension version and Mongo reads/writes (#488).
 
 ## [1.0.0] - 2026-10-19
 

@@ -48,9 +48,23 @@ const (
 	// RuntimeDefault profile plus the io_uring_{setup,enter,register} syscalls.
 	DEFAULT_IOURING_SECCOMP_PROFILE = "profiles/documentdb-iouring.json"
 
-	// Image repositories for deb-based images (must match build_images.yml naming)
+	// DOCUMENTDB_IMAGE_MODE_ENV selects how the DocumentDB extension reaches
+	// PostgreSQL: "auto" (default), "imageVolume", or "combined". See
+	// docs/designs/combined-image-fallback.md.
+	DOCUMENTDB_IMAGE_MODE_ENV = "DOCUMENTDB_IMAGE_MODE"
+	// DOCUMENTDB_COMBINED_IMAGE_REPO_ENV overrides the combined PostgreSQL +
+	// DocumentDB image repository (host+path, no tag) used in combined mode.
+	DOCUMENTDB_COMBINED_IMAGE_REPO_ENV = "DOCUMENTDB_COMBINED_IMAGE_REPO"
+
+	// Image repositories for deb-based images (must match build_documentdb_images.yml naming)
 	DOCUMENTDB_EXTENSION_IMAGE_REPO = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb"
+	DOCUMENTDB_COMBINED_IMAGE_REPO  = "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb-combined"
 	GATEWAY_IMAGE_REPO              = "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway"
+
+	// COMBINED_IMAGE_PG_MAJOR prefixes combined image tags (e.g. "18-1.0.0").
+	// CloudNativePG derives the PostgreSQL major version from the image tag, so
+	// the tag must start with it.
+	COMBINED_IMAGE_PG_MAJOR = "18"
 
 	// DEFAULT_DOCUMENTDB_TAG is the default tag for the extension and gateway
 	// images when neither an explicit image nor a version is supplied.

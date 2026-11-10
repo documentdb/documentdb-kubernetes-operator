@@ -16,6 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 // podHasImageVolume reports whether any of the Pod's volumes uses an
@@ -97,44 +99,30 @@ func pruneImageVolume(obj client.Object) error {
 	return nil
 }
 
-var _ = Describe("ImageVolume capability probe", func() {
+var _ = Describe("ImageVolume admission check", func() {
 	BeforeEach(func() {
 		// The positive-result cache is a package global; reset it so specs
 		// don't leak state into one another.
 		imageVolumeConfirmed.Store(false)
 	})
 
-	Describe("probeImageVolume", func() {
-		It("reports supported when both probe Pods are admitted", func() {
-			v := newValidatorWithCreate(nil, acceptAll)
-			supported, conclusive := v.probeImageVolume(context.Background(), "default")
-			Expect(conclusive).To(BeTrue())
-			Expect(supported).To(BeTrue())
-		})
-
-		It("reports unsupported when only the image-volume Pod is rejected", func() {
-			v := newValidatorWithCreate(nil, rejectImageVolume)
-			supported, conclusive := v.probeImageVolume(context.Background(), "default")
-			Expect(conclusive).To(BeTrue())
-			Expect(supported).To(BeFalse())
-		})
-
-		It("reports unsupported when the image volume is admitted but pruned (gate off)", func() {
-			v := newValidatorWithCreate(nil, pruneImageVolume)
-			supported, conclusive := v.probeImageVolume(context.Background(), "default")
-			Expect(conclusive).To(BeTrue())
-			Expect(supported).To(BeFalse())
-		})
-
-		It("is inconclusive when the baseline Pod is rejected", func() {
-			v := newValidatorWithCreate(nil, rejectAll)
-			supported, conclusive := v.probeImageVolume(context.Background(), "default")
-			Expect(conclusive).To(BeFalse())
-			Expect(supported).To(BeFalse())
-		})
+	Context("when imageMode is auto or combined", func() {
+		for _, mode := range []string{"", "auto", "combined"} {
+			It(fmt.Sprintf("never probes or blocks (DOCUMENTDB_IMAGE_MODE=%q)", mode), func() {
+				GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_MODE_ENV, mode)
+				var creates int32
+				v := newValidatorWithCreate(&creates, rejectImageVolume)
+				Expect(v.ensureImageVolumeSupported(context.Background(), "default")).To(Succeed())
+				Expect(atomic.LoadInt32(&creates)).To(BeZero())
+			})
+		}
 	})
 
-	Describe("ensureImageVolumeSupported", func() {
+	Context("when imageMode is imageVolume", func() {
+		BeforeEach(func() {
+			GinkgoT().Setenv(util.DOCUMENTDB_IMAGE_MODE_ENV, "imageVolume")
+		})
+
 		It("allows creation and caches the positive result when supported", func() {
 			v := newValidatorWithCreate(nil, acceptAll)
 			Expect(v.ensureImageVolumeSupported(context.Background(), "default")).To(Succeed())
@@ -146,6 +134,7 @@ var _ = Describe("ImageVolume capability probe", func() {
 			err := v.ensureImageVolumeSupported(context.Background(), "default")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("ImageVolume feature is not enabled"))
+			Expect(err.Error()).To(ContainSubstring("imageMode"))
 			Expect(imageVolumeConfirmed.Load()).To(BeFalse())
 		})
 
@@ -165,8 +154,6 @@ var _ = Describe("ImageVolume capability probe", func() {
 
 		It("short-circuits without probing once the positive result is cached", func() {
 			var creates int32
-			// This client would reject the image-volume probe, so a call that
-			// actually probed would error — proving the cache short-circuit.
 			v := newValidatorWithCreate(&creates, rejectImageVolume)
 			imageVolumeConfirmed.Store(true)
 

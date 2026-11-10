@@ -66,11 +66,50 @@ jobs:
         run: bash .github/scripts/verify-e2e-passed.sh
 
   # ---------------------------------------------------------------------------
+  # Verify the combined PostgreSQL + DocumentDB image for the chart's default
+  # documentDbVersion is published and public. The operator falls back to it
+  # (imageMode=auto) on clusters without ImageVolume; releasing the operator
+  # before it exists would leave those clusters stuck pulling a missing image.
+  # The inspect runs without logging in, so a private package also fails.
+  # ---------------------------------------------------------------------------
+  verify-combined-image:
+    name: Verify combined image is published
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout values.yaml
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          sparse-checkout: |
+            operator/documentdb-helm-chart/values.yaml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Inspect combined image anonymously
+        env:
+          FORCE: ${{ inputs.force }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DOCDB_VERSION=$(grep '^documentDbVersion:' operator/documentdb-helm-chart/values.yaml | sed 's/.*"\(.*\)".*/\1/')
+          IMAGE="ghcr.io/${REPO}/documentdb-combined:18-${DOCDB_VERSION}"
+          echo "Checking ${IMAGE}"
+          if docker buildx imagetools inspect "${IMAGE}" >/dev/null; then
+            echo "✓ ${IMAGE} is published and public"
+          elif [[ "${FORCE}" == "true" ]]; then
+            echo "::warning::${IMAGE} is missing or private; continuing because force=true"
+          else
+            echo "::error::${IMAGE} is missing or not public. Build it with 'RELEASE - Build DocumentDB Candidate Images', promote the combined tag, and make the package public before releasing the operator."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
   # Promote operator and sidecar images (retag candidate → release)
   # ---------------------------------------------------------------------------
   promote-operator-images:
     name: Promote ${{ matrix.image }}
-    needs: verify-e2e-passed
+    needs: [verify-e2e-passed, verify-combined-image]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -117,7 +156,7 @@ jobs:
 
       - name: Set chart version
         run: |
-            echo "CHART_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+            echo "CHART_VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
             echo "Using chart version: ${{ inputs.version }}"
 
       - name: Update Chart.yaml metadata
@@ -139,7 +178,7 @@ jobs:
       - name: Package Helm chart
         run: |
           helm dependency update operator/documentdb-helm-chart
-          helm package $CHART_NAME --version $CHART_VERSION
+          helm package "$CHART_NAME" --version "$CHART_VERSION"
 
       - name: Log in to GHCR
         run: |
@@ -147,17 +186,19 @@ jobs:
 
       - name: Push Helm chart to GHCR
         run: |
-          CHART_FILE=$(ls documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null || ls */documentdb-operator-${CHART_VERSION}.tgz 2>/dev/null)
-          helm push "$CHART_FILE" oci://${GHCR_REPO}
+          CHART_FILE=$(ls "documentdb-operator-${CHART_VERSION}.tgz" 2>/dev/null || ls ./*/"documentdb-operator-${CHART_VERSION}.tgz" 2>/dev/null)
+          helm push "$CHART_FILE" "oci://${GHCR_REPO}"
 
       - name: Release summary
         run: |
-          echo "## Operator Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Operator Version**: \`$CHART_VERSION\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Images Promoted**: operator, sidecar" >> $GITHUB_STEP_SUMMARY
-          echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Chart Source Ref**: \`${{ inputs.source_ref }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Registry**: \`$GHCR_REPO\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Note**: Database images (documentdb, gateway) are released independently via \`release_documentdb_images.yml\`." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Operator Release Summary"
+            echo ""
+            echo "- **Operator Version**: \`$CHART_VERSION\`"
+            echo "- **Images Promoted**: operator, sidecar"
+            echo "- **Source Tag**: \`${{ inputs.candidate_version }}\` → \`${{ inputs.version }}\`"
+            echo "- **Chart Source Ref**: \`${{ inputs.source_ref }}\`"
+            echo "- **Registry**: \`$GHCR_REPO\`"
+            echo ""
+            echo "**Note**: Database images (documentdb, gateway) are released independently via \`release_documentdb_images.yml\`."
+          } >> "$GITHUB_STEP_SUMMARY"

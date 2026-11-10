@@ -8,6 +8,17 @@ replicaCount: 1
 # When empty, the operator falls back to its compiled-in defaults (see constants.go).
 documentDbVersion: "1.0.0"
 
+# How the DocumentDB extension reaches PostgreSQL pods. Decided once, when a
+# DocumentDB cluster is created; existing clusters keep their mode.
+#   auto        (default) Use Kubernetes ImageVolume when the API server and the
+#               container runtime of every schedulable node support it
+#               (containerd >= 2.1 or CRI-O >= 1.33); otherwise use the combined
+#               PostgreSQL + DocumentDB image (image.documentdbCombined).
+#   imageVolume Always use ImageVolume. DocumentDB creation is rejected when the
+#               API server does not support it.
+#   combined    Always use the combined image.
+imageMode: auto
+
 serviceAccount:
   create: true
   automount: true
@@ -15,7 +26,7 @@ serviceAccount:
   name: "documentdb-operator"
   
 # WAL Replica feature flag
-walReplica: false  # Set to true to deploy the WAL replica plugin
+walReplica: false  # Not supported yet; the chart refuses true
 
 # Image pull secrets used by all operator components (operator, sidecar injector, wal-replica).
 # Each entry must be a Kubernetes Secret reference: [{ name: my-registry-secret }, ...]
@@ -69,6 +80,11 @@ image:
   gateway:
     repository: documentdb/documentdb-kubernetes-operator/gateway
     pullPolicy: IfNotPresent
+  # PostgreSQL + DocumentDB image used in combined image mode (see imageMode).
+  # Tagged "<pg major>-<documentDbVersion>", e.g. 18-1.0.0; pulled with
+  # image.documentdb.pullPolicy.
+  documentdbCombined:
+    repository: documentdb/documentdb-kubernetes-operator/documentdb-combined
 
   # --- Extra images. Default to a built-in image; set a repository to override.
   # Same rule as above: a bare path gets the `registry` prefix, a full ref
@@ -209,6 +225,11 @@ walReplicaPlugin:
   priorityClassName: ""
 
 cloudnative-pg:
+  # Deploy the bundled CloudNativePG operator.  
+  # Set false when using an existing CloudNativePG installation. 
+  # If set to false make sure your existing CloudNativePG is installed to "cnpg-system" 
+  # or set the "cloudnative-pg.namespaceOverride" value to the appropriate namespace
+  enabled: true
   namespaceOverride: cnpg-system
   additionalEnv:
     - name: ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES

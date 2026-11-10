@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -193,8 +194,15 @@ func (k *K8sClusterClient) ScaleCluster(ctx context.Context, instancesPerNode in
 	return nil
 }
 
+// combinedImageTagPattern matches a combined PostgreSQL + DocumentDB image tag,
+// "<pg major>-<documentdb version>" (e.g. "18-1.0.0").
+var combinedImageTagPattern = regexp.MustCompile(`^[0-9]+-([0-9]+\.[0-9]+.*)$`)
+
 // GetCurrentDocumentDBImageTag reads status.documentDBImage from the CR
-// and returns the tag portion (after the last colon).
+// and returns the DocumentDB version in its tag (after the last colon). For a
+// cluster in combined image mode the tag carries a PostgreSQL major prefix
+// ("18-1.0.0"), which is stripped so the result compares with requested
+// DocumentDB versions.
 func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (string, error) {
 	dd, err := k.getCR(ctx)
 	if err != nil {
@@ -209,7 +217,11 @@ func (k *K8sClusterClient) GetCurrentDocumentDBImageTag(ctx context.Context) (st
 	if idx < 0 || idx == len(image)-1 {
 		return "", nil
 	}
-	return image[idx+1:], nil
+	tag := image[idx+1:]
+	if m := combinedImageTagPattern.FindStringSubmatch(tag); m != nil {
+		return m[1], nil
+	}
+	return tag, nil
 }
 
 // UpgradeDocumentDB patches the DocumentDB CR to set documentDBVersion

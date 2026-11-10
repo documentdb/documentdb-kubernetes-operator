@@ -13,6 +13,11 @@ on:
         required: false
         default: ''
         type: string
+      build_combined:
+        description: 'Also build the combined PostgreSQL + DocumentDB image from .github/dockerfiles/Dockerfile_combined (uploaded as build-docker-documentdb-combined-<arch>).'
+        required: false
+        default: false
+        type: boolean
     outputs:
       image_tag:
         description: 'Built image tag (operator/sidecar)'
@@ -46,6 +51,7 @@ jobs:
       version: ${{ steps.probe.outputs.version }}
       documentdb_ref: ${{ steps.probe.outputs.documentdb_ref }}
       ext_image_tag: ${{ steps.probe.outputs.ext_image_tag }}
+      package_source: ${{ steps.probe.outputs.package_source }}
     steps:
     - uses: actions/checkout@v4
     - name: Probe documentdb + gateway images
@@ -68,6 +74,7 @@ jobs:
           echo "version=$REGISTRY_VERSION"
           echo "documentdb_ref=${SOURCE_RELEASE_TAG:-v${VERSION_DASH}}"
           echo "ext_image_tag=$EXT_TAG"
+          echo "package_source=$PACKAGE_SOURCE"
         } >> "$GITHUB_OUTPUT"
 
         if [[ -n "$INPUT_REF" ]]; then
@@ -257,7 +264,12 @@ jobs:
   build-packages:
     name: Build DocumentDB Packages (${{ matrix.arch }})
     needs: [probe-images]
-    if: needs.probe-images.outputs.mode == 'build'
+    # Also runs in registry mode when the combined image is requested for a
+    # version PGDG does not package (RCs resolve to package_source=source), so
+    # build-combined uses the matching source-built package.
+    if: |
+      needs.probe-images.outputs.mode == 'build' ||
+      (inputs.build_combined && needs.probe-images.outputs.package_source == 'source')
     timeout-minutes: 60
     strategy:
       matrix:
@@ -530,6 +542,102 @@ jobs:
       with:
         name: build-docker-gateway-${{ matrix.arch }}
         path: gateway-${{ matrix.arch }}-image.tar
+        retention-days: 1
+
+  # Builds the combined PostgreSQL + DocumentDB image from this checkout's
+  # Dockerfile_combined so changes to it are tested before release. Uses the
+  # extension .deb from build-packages in build mode and for RCs (which have no
+  # PGDG package); for stable releases in registry mode it downloads the same
+  # pinned package from PGDG. The image is
+  # tagged with the name the operator resolves for a DocumentDB whose
+  # spec.image.documentDB is the CI documentdb image (<ext tag>-<arch>), and is
+  # uploaded separately so only the combined-image E2E job downloads it.
+  # continue-on-error: a failure here fails that job instead of skipping every
+  # E2E job that needs this workflow.
+  build-combined:
+    name: Build Combined Images (${{ matrix.arch }})
+    if: |
+      always() && inputs.build_combined &&
+      needs.probe-images.result == 'success' &&
+      (needs.build-packages.result == 'success' || needs.build-packages.result == 'skipped') &&
+      needs.read-extension-version.result == 'success'
+    needs: [probe-images, build-packages, read-extension-version]
+    continue-on-error: true
+    timeout-minutes: 30
+    env:
+      EXT_IMAGE_TAG: ${{ needs.read-extension-version.outputs.ext_image_tag }}
+      MODE: ${{ needs.probe-images.outputs.mode }}
+      DOC_VERSION: ${{ needs.probe-images.outputs.version }}
+      PACKAGE_SOURCE: ${{ needs.probe-images.outputs.package_source }}
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download source-built packages
+      if: env.MODE == 'build' || env.PACKAGE_SOURCE == 'source'
+      uses: actions/download-artifact@v4
+      with:
+        name: build-packages-${{ matrix.arch }}
+        path: packages/
+
+    - name: Download pinned extension package from PGDG (registry mode, stable release)
+      if: env.MODE == 'registry' && env.PACKAGE_SOURCE != 'source'
+      env:
+        DOCUMENTDB_GATEWAY_IMAGE_REPO: ghcr.io/documentdb/documentdb/documentdb-local
+      run: |
+        set -euo pipefail
+        RAW_VERSION="$DOC_VERSION" source .github/scripts/resolve-documentdb-version.sh > /dev/null
+        mkdir -p packages
+        docker run --rm -e VERSION_DASH="$VERSION_DASH" -v "$PWD/packages:/out" debian:trixie-slim sh -euc '
+          apt-get update -qq >/dev/null
+          apt-get install -y -qq --no-install-recommends ca-certificates curl gnupg >/dev/null
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
+            > /etc/apt/sources.list.d/pgdg.list
+          apt-get update -qq >/dev/null
+          DEB_VERSION=$(apt-cache madison postgresql-18-documentdb | awk -v p="${VERSION_DASH}-" "index(\$3, p) == 1 {print \$3; exit}")
+          [ -n "$DEB_VERSION" ] || { echo "postgresql-18-documentdb ${VERSION_DASH} not found in trixie-pgdg" >&2; exit 1; }
+          echo "Using postgresql-18-documentdb=$DEB_VERSION"
+          cd /out && apt-get download -qq "postgresql-18-documentdb=$DEB_VERSION"
+          chmod 644 /out/*.deb'
+        ls -la packages/
+
+    - name: Build combined image for ${{ matrix.arch }}
+      run: |
+        set -euo pipefail
+        DEB_FILE=""
+        for package in packages/*postgresql*documentdb*.deb; do
+          [[ -f "$package" && "$package" != *dbgsym* ]] || continue
+          DEB_FILE="$package"
+          break
+        done
+        if [[ -z "$DEB_FILE" ]]; then
+          echo "::error::No DocumentDB extension .deb found in packages/"
+          exit 1
+        fi
+        TARGET="ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb-combined:18-${EXT_IMAGE_TAG}-${{ matrix.arch }}"
+        echo "Building $TARGET from $DEB_FILE"
+        docker build \
+          --build-arg PG_MAJOR=18 \
+          --build-arg "DEB_PACKAGE_REL_PATH=$DEB_FILE" \
+          --tag "$TARGET" \
+          -f .github/dockerfiles/Dockerfile_combined .
+        docker save "$TARGET" > documentdb-combined-${{ matrix.arch }}-image.tar
+
+    - name: Upload combined image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-docker-documentdb-combined-${{ matrix.arch }}
+        path: documentdb-combined-${{ matrix.arch }}-image.tar
         retention-days: 1
 
   consolidate-images:

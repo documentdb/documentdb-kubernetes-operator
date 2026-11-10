@@ -70,6 +70,11 @@ rules:
 - apiGroups: [""]
   resources: ["persistentvolumes"]
   verbs: ["get", "list", "watch", "update", "patch"]
+# Nodes: read container runtime versions to decide whether new clusters can use
+# ImageVolume or must fall back to the combined image (imageMode=auto).
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
 # StorageClass permissions for PV controller (needed to check provisioner capabilities)
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses"]

@@ -5,7 +5,7 @@ go 1.26.10
 godebug default=go1.23
 
 require (
-	github.com/cert-manager/cert-manager v1.19.3
+	github.com/cert-manager/cert-manager v1.19.6
 	github.com/cloudnative-pg/cloudnative-pg v1.29.2
 	github.com/cloudnative-pg/machinery v0.5.0
 	github.com/go-logr/logr v1.4.4

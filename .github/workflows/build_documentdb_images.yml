@@ -231,8 +231,16 @@ jobs:
         image:
           - name: documentdb
             dockerfile: .github/dockerfiles/Dockerfile_extension
+            tag_prefix: ''
           - name: gateway
             dockerfile: .github/dockerfiles/Dockerfile_gateway_public_image
+            tag_prefix: ''
+          # Full PostgreSQL 18 + DocumentDB image for clusters without
+          # ImageVolume support (see docs/designs/combined-image-fallback.md).
+          # CNPG parses the PostgreSQL major from the tag, hence the 18- prefix.
+          - name: documentdb-combined
+            dockerfile: .github/dockerfiles/Dockerfile_combined
+            tag_prefix: '18-'
         include:
           - arch: amd64
             runner: ubuntu-22.04
@@ -248,7 +256,7 @@ jobs:
         persist-credentials: false
 
     - name: Download and verify APT package checksum
-      if: matrix.image.name == 'documentdb' && needs.resolve-public-artifacts.outputs.package_source == 'apt'
+      if: startsWith(matrix.image.name, 'documentdb') && needs.resolve-public-artifacts.outputs.package_source == 'apt'
       env:
         PACKAGE: postgresql-${{ env.DOCUMENTDB_PG_MAJOR }}-documentdb
         DEB_URL: ${{ fromJSON(needs.resolve-public-artifacts.outputs.extension_packages || '{}')[matrix.arch].url }}
@@ -267,7 +275,7 @@ jobs:
         echo "DEB_PACKAGE_REL_PATH=$DEB_FILE" >> "$GITHUB_ENV"
 
     - name: Checkout pinned upstream source
-      if: matrix.image.name == 'documentdb' && needs.resolve-public-artifacts.outputs.package_source == 'source'
+      if: startsWith(matrix.image.name, 'documentdb') && needs.resolve-public-artifacts.outputs.package_source == 'source'
       uses: actions/checkout@v4
       with:
         repository: documentdb/documentdb
@@ -277,7 +285,7 @@ jobs:
         persist-credentials: false
 
     - name: Build Debian 13 PostgreSQL 18 package from source
-      if: matrix.image.name == 'documentdb' && needs.resolve-public-artifacts.outputs.package_source == 'source'
+      if: startsWith(matrix.image.name, 'documentdb') && needs.resolve-public-artifacts.outputs.package_source == 'source'
       env:
         PACKAGE: postgresql-${{ env.DOCUMENTDB_PG_MAJOR }}-documentdb
         DEB_VERSION: ${{ needs.resolve-public-artifacts.outputs.extension_deb_version }}
@@ -300,7 +308,7 @@ jobs:
         echo "DEB_PACKAGE_REL_PATH=$DEB_FILE" >> "$GITHUB_ENV"
 
     - name: Validate extension package metadata and schema
-      if: matrix.image.name == 'documentdb'
+      if: startsWith(matrix.image.name, 'documentdb')
       env:
         PACKAGE: postgresql-${{ env.DOCUMENTDB_PG_MAJOR }}-documentdb
         DEB_VERSION: ${{ needs.resolve-public-artifacts.outputs.extension_deb_version }}
@@ -353,23 +361,23 @@ jobs:
     - name: Build and Push ${{ matrix.image.name }} (${{ matrix.arch }})
       run: |
         set -euo pipefail
-        TAG=${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+        TAG=${{ matrix.image.tag_prefix }}${{ env.IMAGE_TAG }}-${{ matrix.arch }}
         IMAGE="$IMAGE_REPOSITORY/${{ matrix.image.name }}:$TAG"
 
-        BUILD_ARGS=""
+        BUILD_ARGS=()
 
         case "${{ matrix.image.name }}" in
-          documentdb)
+          documentdb|documentdb-combined)
             echo "Using deb: $DEB_PACKAGE_REL_PATH"
-            BUILD_ARGS="--build-arg PG_MAJOR=${{ env.DOCUMENTDB_PG_MAJOR }} --build-arg DEB_PACKAGE_REL_PATH=$DEB_PACKAGE_REL_PATH"
+            BUILD_ARGS=(--build-arg "PG_MAJOR=${{ env.DOCUMENTDB_PG_MAJOR }}" --build-arg "DEB_PACKAGE_REL_PATH=$DEB_PACKAGE_REL_PATH")
             ;;
           gateway)
             echo "Using public gateway source image: ${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
-            BUILD_ARGS="--build-arg SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}"
+            BUILD_ARGS=(--build-arg "SOURCE_IMAGE=${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}")
             ;;
         esac
 
-        docker build --pull $BUILD_ARGS \
+        docker build --pull "${BUILD_ARGS[@]}" \
           --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
           --label "org.opencontainers.image.revision=${{ github.sha }}" \
           -t "$IMAGE" \
@@ -383,11 +391,19 @@ jobs:
     name: Create, Push, Sign & Verify Manifest (${{ matrix.image }})
     strategy:
       matrix:
-        image: [documentdb, gateway]
+        image: [documentdb, gateway, documentdb-combined]
+        include:
+          - image: documentdb
+            tag_prefix: ''
+          - image: gateway
+            tag_prefix: ''
+          # Combined image tags carry the PostgreSQL major prefix (18-<version>).
+          - image: documentdb-combined
+            tag_prefix: '18-'
     runs-on: ubuntu-22.04
     needs: [resolve-public-artifacts, build-and-push]
     env:
-      IMAGE_TAG: ${{ needs.resolve-public-artifacts.outputs.image_tag }}
+      IMAGE_TAG: ${{ matrix.tag_prefix }}${{ needs.resolve-public-artifacts.outputs.image_tag }}
     steps:
     - name: Login to GHCR
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -451,7 +467,7 @@ jobs:
           echo "- **Extension Schema**: \`${{ needs.resolve-public-artifacts.outputs.documentdb_version_dash }}\`"
           echo "- **Gateway Source Image**: \`${{ needs.resolve-public-artifacts.outputs.gateway_source_image }}\`"
           echo "- **Image Repository Prefix**: \`${IMAGE_REPOSITORY}\`"
-          echo "- **Images**: documentdb, gateway"
+          echo "- **Images**: documentdb, gateway, documentdb-combined (tag \`${{ env.DOCUMENTDB_PG_MAJOR }}-${{ needs.resolve-public-artifacts.outputs.image_tag }}\`)"
           if [[ "$IS_RC" == true ]]; then
             echo "- **RC Safety**: Fresh instances only; upgrades from older versions, between RCs, or to GA are unsupported."
           fi
