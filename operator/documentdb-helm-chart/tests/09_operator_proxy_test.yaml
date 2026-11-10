@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: operator proxy wiring
+templates:
+  - 09_documentdb_operator.yaml
+  - 08_proxy_secret.yaml
+
+capabilities:
+  apiVersions:
+    - cert-manager.io/v1/Certificate
+
+tests:
+  - it: should wire proxy envFrom and checksum annotation when proxy is enabled
+    template: 09_documentdb_operator.yaml
+    set:
+      proxy.isProxyEnabled: true
+      proxy.httpsProxy: "http://proxy.example.com:3128"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: documentdb-proxy-config
+      - exists:
+          path: spec.template.metadata.annotations["checksum/proxy-config"]

@@ -20,7 +20,7 @@ spec:
       annotations:
         # Roll the operator when the proxy configuration changes so the new
         # DOCUMENTDB_OTEL_* proxy values take effect.
-        checksum/proxy-config: {{ printf "%s|%s|%s" ((include "documentdb.proxy" . | fromJson).httpProxy) ((include "documentdb.proxy" . | fromJson).httpsProxy) (include "documentdb.noProxy" .) | sha256sum }}
+        checksum/proxy-config: {{ include (print $.Template.BasePath "/08_proxy_secret.yaml") . | sha256sum }}
       {{- end }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
