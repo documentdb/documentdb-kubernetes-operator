@@ -156,8 +156,10 @@ func (r *ClusterReconciler[T]) HandleExtensionUpgrade(ctx context.Context, curre
 		}
 	}
 
-	// If versions match, no upgrade needed
-	if defaultVersion == installedVersion {
+	// An up-to-date main extension can still have outdated dependencies left
+	// by an earlier operator. Check them when schema upgrades are authorized.
+	if defaultVersion == installedVersion &&
+		(len(r.profile().Postgres.ExtensionDependencies) == 0 || r.Adapter.Spec(obj).SchemaVersion == "") {
 		logger.V(1).Info(name+" extension is up to date", "version", installedVersion)
 		return nil
 	}
@@ -195,6 +197,14 @@ func (r *ClusterReconciler[T]) HandleExtensionUpgrade(ctx context.Context, curre
 		return nil
 	}
 
+	updateSQL, err = r.extensionUpgradeSQL(ctx, currentCluster, schemaTarget, installedVersion, updateSQL)
+	if err != nil {
+		return err
+	}
+	if updateSQL == "" {
+		return nil
+	}
+
 	// Run ALTER EXTENSION to upgrade
 	logger.Info("Upgrading "+name+" extension",
 		"fromVersion", installedVersion,
@@ -219,6 +229,58 @@ func (r *ClusterReconciler[T]) HandleExtensionUpgrade(ctx context.Context, curre
 	}
 
 	return nil
+}
+
+func (r *ClusterReconciler[T]) extensionUpgradeSQL(
+	ctx context.Context,
+	cluster *cnpgv1.Cluster,
+	targetVersion, installedVersion, mainSQL string,
+) (string, error) {
+	dependencies := r.profile().Postgres.ExtensionDependencies
+	var statements []string
+	for _, extension := range dependencies {
+		output, err := r.SQLExecutor(ctx, cluster, cnpg.ExtensionVersionSQL(extension))
+		if err != nil {
+			return "", fmt.Errorf("failed to check %s extension versions: %w", extension, err)
+		}
+		defaultVersion, installed, ok := ParseExtensionVersions(output)
+		if !ok || defaultVersion == "" || installed == "" {
+			return "", fmt.Errorf("cannot upgrade dependency %s: extension versions missing or invalid: %q", extension, output)
+		}
+		binaryCmp, err := r.compareExtensionVersions(targetVersion, defaultVersion)
+		if err != nil {
+			return "", fmt.Errorf("failed to compare %s dependency binary version: %w", extension, err)
+		}
+		if binaryCmp > 0 {
+			return "", fmt.Errorf("cannot upgrade dependency %s to %s: binary offers %s", extension, targetVersion, defaultVersion)
+		}
+		installedCmp, err := r.compareExtensionVersions(targetVersion, installed)
+		if err != nil {
+			return "", fmt.Errorf("failed to compare %s dependency installed version: %w", extension, err)
+		}
+		if installedCmp < 0 {
+			return "", fmt.Errorf("cannot downgrade dependency %s from %s to %s", extension, installed, targetVersion)
+		}
+		if installedCmp > 0 {
+			statements = append(statements, cnpg.ExtensionUpdateSQL(extension, targetVersion))
+		}
+	}
+	if targetVersion != installedVersion {
+		if len(dependencies) > 0 {
+			// Pin auto upgrades too, so every extension uses the same target,
+			// rather than each extension's potentially different default.
+			mainSQL = cnpg.ExtensionUpdateSQL(r.extensionName(), targetVersion)
+		}
+		statements = append(statements, mainSQL)
+	}
+	if len(statements) == 0 {
+		return "", nil
+	}
+	if len(dependencies) == 0 {
+		return mainSQL, nil
+	}
+	// Execute as one SQLExecutor call: separate calls use separate sessions.
+	return "BEGIN; " + strings.Join(statements, "; ") + "; COMMIT;", nil
 }
 
 func (r *ClusterReconciler[T]) setSchemaVersion(obj T, version string) {
@@ -287,7 +349,7 @@ func (r *ClusterReconciler[T]) DetermineSchemaTarget(
 			return "", ""
 		}
 
-		// Check: target must be > installed version (otherwise no-op)
+		// An equal target can still require repairing outdated dependencies.
 		installedCmp, err := r.compareExtensionVersions(targetPgVersion, installedVersion)
 		if err != nil {
 			logger.Error(err, "Failed to compare target schema version with installed version",
@@ -295,7 +357,7 @@ func (r *ClusterReconciler[T]) DetermineSchemaTarget(
 				"installedVersion", installedVersion)
 			return "", ""
 		}
-		if installedCmp <= 0 {
+		if installedCmp < 0 || (installedCmp == 0 && len(r.profile().Postgres.ExtensionDependencies) == 0) {
 			logger.V(1).Info("Schema already at or beyond requested version",
 				"requestedVersion", specSchemaVersion,
 				"installedVersion", installedVersion)

@@ -159,6 +159,14 @@ var _ = Describe("DocumentDB upgrade — schema (auto mode)",
 				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
 			).Should(Equal(newVersion), "auto mode should migrate schema to %s in a single step", newVersion)
 
+			By("verifying documentdb and documentdb_core both migrated")
+			Eventually(func() (string, error) {
+				return primaryInstalledSchemaVersion(ctx, env, ns, ddName)
+			},
+				timeouts.For(timeouts.DocumentDBUpgrade),
+				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
+			).Should(Equal(newVersion), "both extensions must migrate to %s in auto mode", newVersion)
+
 			By("verifying seeded data survived the single-step upgrade")
 			handle2, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "reconnect to DocumentDB gateway after single-step upgrade")

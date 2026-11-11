@@ -251,8 +251,29 @@ func replicaInstalledSchemaVersion(
 	return agreed, nil
 }
 
-// podInstalledSchemaVersion execs psql on a single pod and returns the
-// installed documentdb extension version normalized to semver.
+func primaryInstalledSchemaVersion(
+	ctx context.Context,
+	env *environment.TestingEnvironment,
+	ns, clusterName string,
+) (string, error) {
+	var pods corev1.PodList
+	if err := env.Client.List(ctx, &pods,
+		client.InNamespace(ns),
+		client.MatchingLabels{
+			"cnpg.io/cluster":      clusterName,
+			"cnpg.io/instanceRole": "primary",
+		},
+	); err != nil {
+		return "", fmt.Errorf("list primary pod for cluster %s/%s: %w", ns, clusterName, err)
+	}
+	if len(pods.Items) != 1 {
+		return "", fmt.Errorf("expected one primary pod for cluster %s/%s, found %d", ns, clusterName, len(pods.Items))
+	}
+	return podInstalledSchemaVersion(ctx, env, pods.Items[0])
+}
+
+// podInstalledSchemaVersion requires documentdb and documentdb_core to agree
+// and returns their installed version normalized to semver.
 func podInstalledSchemaVersion(
 	ctx context.Context,
 	env *environment.TestingEnvironment,
@@ -261,15 +282,20 @@ func podInstalledSchemaVersion(
 	timeout := time.Minute
 	stdout, stderr, err := env.EventuallyExecCommand(ctx, pod, "postgres", &timeout,
 		"psql", "-U", "postgres", "-d", "postgres", "-tAc",
-		"SELECT extversion FROM pg_extension WHERE extname='documentdb'")
+		"SELECT extversion FROM pg_extension WHERE extname IN ('documentdb', 'documentdb_core') ORDER BY extname")
 	if err != nil {
 		return "", fmt.Errorf("exec psql on pod %s: %w (stderr: %s)", pod.Name, err, stderr)
 	}
 
-	raw := strings.TrimSpace(stdout)
-	if raw == "" {
-		return "", fmt.Errorf("documentdb extension not installed on pod %s", pod.Name)
+	versions := strings.Fields(stdout)
+	if len(versions) != 2 {
+		return "", fmt.Errorf("expected documentdb and documentdb_core versions on pod %s, got %q", pod.Name, stdout)
 	}
+	if versions[0] != versions[1] {
+		return "", fmt.Errorf("extension versions differ on pod %s: documentdb=%s, documentdb_core=%s",
+			pod.Name, versions[0], versions[1])
+	}
+	raw := versions[0]
 	// "0.110-0" -> "0.110.0"; a value already in semver form is unchanged.
 	if i := strings.LastIndex(raw, "-"); i >= 0 {
 		raw = raw[:i] + "." + raw[i+1:]

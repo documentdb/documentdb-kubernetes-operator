@@ -29,7 +29,8 @@ func DocumentDBProfile() ProductProfile {
 				ExtensionControlPath: []string{"share"},
 				LdLibraryPath:        []string{"lib", "system"},
 			},
-			AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
+			ExtensionDependencies: []string{"documentdb_core"},
+			AdditionalLibraries:   []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
 			BootstrapSQL: []string{
 				"CREATE EXTENSION documentdb CASCADE",
 				"CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'",

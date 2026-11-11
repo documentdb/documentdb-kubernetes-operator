@@ -144,12 +144,20 @@ var _ = Describe("DocumentDB upgrade — schema",
 			// Consistently below: it caches the last good read so a transient
 			// API error can't fail the Consistently window (see helper doc).
 			schemaVersion := schemaVersionGetter(ctx, c, key)
+			installedSchemaVersion := func() (string, error) {
+				return primaryInstalledSchemaVersion(ctx, env, ns, ddName)
+			}
 
 			By("waiting for status.schemaVersion to settle on the old version")
 			Eventually(schemaVersion,
 				timeouts.For(timeouts.DocumentDBReady),
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Equal(oldVersion), "initial schema version should be %s", oldVersion)
+
+			Eventually(installedSchemaVersion,
+				timeouts.For(timeouts.DocumentDBReady),
+				timeouts.PollInterval(timeouts.DocumentDBReady),
+			).Should(Equal(oldVersion), "both extensions must start at %s", oldVersion)
 
 			By("seeding data on the old schema")
 			docs := seed.SmallDataset()
@@ -192,6 +200,10 @@ var _ = Describe("DocumentDB upgrade — schema",
 			).Should(Equal(oldVersion),
 				"schema must remain at %s until spec.schemaVersion is set (two-phase)", oldVersion)
 
+			Consistently(installedSchemaVersion,
+				15*time.Second, 5*time.Second,
+			).Should(Equal(oldVersion), "neither extension may migrate before schema finalization")
+
 			By("verifying seeded data survived the binary upgrade")
 			handle2, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
 			Expect(err).NotTo(HaveOccurred(), "reconnect to DocumentDB gateway after binary upgrade")
@@ -213,6 +225,11 @@ var _ = Describe("DocumentDB upgrade — schema",
 				timeouts.For(timeouts.DocumentDBUpgrade),
 				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
 			).Should(Equal(newVersion), "schema did not migrate to %s after finalize", newVersion)
+
+			Eventually(installedSchemaVersion,
+				timeouts.For(timeouts.DocumentDBUpgrade),
+				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
+			).Should(Equal(newVersion), "both extensions must migrate to %s", newVersion)
 
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, key),
 				timeouts.For(timeouts.DocumentDBUpgrade),
