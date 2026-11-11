@@ -99,11 +99,10 @@ whose PostgreSQL extension uses dotted semantic versions set
 `core.ExtensionVersionSemver`; automatic upgrades, explicit targets, comparison,
 events, and schema status then use that format without rewriting it.
 
-`PostgresProfile.ExtensionDependencies` lists co-versioned dependencies to
-upgrade before the main extension, to the same target in one transaction.
-DocumentDB configures only `documentdb_core`, not independently versioned
-dependencies such as PostGIS or pg_cron. This applies when the main extension
-is upgraded; it does not repair existing version mismatches.
+DocumentDB schema upgrades also update `documentdb_core` first, to the same
+target in one transaction. This is specific to the `documentdb` extension;
+other products and independently versioned dependencies are unchanged.
+Existing version mismatches are not repaired.
 
 The DocumentDB controllers and webhook in `internal/controller` and
 `internal/webhook` are now thin wrappers over these packages. They keep their

@@ -1396,7 +1396,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			// Explicit version: update to 0.110.0 (binary is also 0.110-0)
+			// Explicit version: update both extensions to 0.110.0, below binary 0.111-0.
 			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
@@ -1421,8 +1421,8 @@ var _ = Describe("DocumentDB Controller", func() {
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 					sqlCalls = append(sqlCalls, sql)
 					if len(sqlCalls) == 1 {
-						// Binary is 0.110-0, installed is 0.109-0
-						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
+						// Binary is 0.111-0, installed is 0.109-0.
+						return " default_version | installed_version \n-----------------+-------------------\n 0.111-0         | 0.109-0           \n", nil
 					}
 					return "ALTER EXTENSION", nil
 				},

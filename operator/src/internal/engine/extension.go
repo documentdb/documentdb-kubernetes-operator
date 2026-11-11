@@ -195,15 +195,10 @@ func (r *ClusterReconciler[T]) HandleExtensionUpgrade(ctx context.Context, curre
 		return nil
 	}
 
-	if dependencies := r.profile().Postgres.ExtensionDependencies; len(dependencies) > 0 {
-		// ALTER EXTENSION does not upgrade dependencies. Use one transaction
-		// and pin every extension to the same target, including in auto mode.
-		statements := []string{"BEGIN"}
-		for _, dependency := range dependencies {
-			statements = append(statements, cnpg.ExtensionUpdateSQL(dependency, schemaTarget))
-		}
-		statements = append(statements, cnpg.ExtensionUpdateSQL(extension, schemaTarget), "COMMIT")
-		updateSQL = strings.Join(statements, "; ") + ";"
+	if extension == product.DocumentDBExtensionName {
+		// PostgreSQL does not upgrade dependencies, so update core first.
+		updateSQL = "BEGIN; " + cnpg.ExtensionUpdateSQL(product.DocumentDBCoreExtensionName, schemaTarget) +
+			"; " + cnpg.ExtensionUpdateSQL(extension, schemaTarget) + "; COMMIT;"
 	}
 
 	// Run ALTER EXTENSION to upgrade

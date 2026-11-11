@@ -15,8 +15,7 @@ import (
 
 type extensionPolicyAdapter struct {
 	product.DocumentDBAdapter
-	format       product.ExtensionVersionFormat
-	dependencies []string
+	format product.ExtensionVersionFormat
 }
 
 func (a extensionPolicyAdapter) Profile() product.ProductProfile {
@@ -24,7 +23,6 @@ func (a extensionPolicyAdapter) Profile() product.ProductProfile {
 	p.Name = "Widget"
 	p.Postgres.Extension.Name = "widget"
 	p.Postgres.ExtensionVersionFormat = a.format
-	p.Postgres.ExtensionDependencies = a.dependencies
 	return p
 }
 
@@ -32,7 +30,6 @@ func TestHandleExtensionUpgradeVersionPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name                           string
 		format                         product.ExtensionVersionFormat
-		dependencies                   []string
 		installed, binary, requested   string
 		wantSQL, wantSchema, wantEvent string
 	}{
@@ -97,23 +94,6 @@ func TestHandleExtensionUpgradeVersionPolicy(t *testing.T) {
 			name: "dotted invalid target", format: product.ExtensionVersionSemver,
 			installed: "1.2.3", binary: "1.3.0", requested: "not-a-version", wantSchema: "1.2.3",
 		},
-		{
-			name: "dotted auto with dependency", format: product.ExtensionVersionSemver,
-			dependencies: []string{"widget_core"},
-			installed:    "1.2.3", binary: "1.3.0", requested: "auto", wantSchema: "1.3.0",
-			wantSQL: `BEGIN; ALTER EXTENSION "widget_core" UPDATE TO '1.3.0'; ALTER EXTENSION "widget" UPDATE TO '1.3.0'; COMMIT;`,
-		},
-		{
-			name: "dotted explicit dependency target below binary", format: product.ExtensionVersionSemver,
-			dependencies: []string{"widget_core"},
-			installed:    "1.2.3", binary: "1.3.0", requested: "1.3.0-rc.1", wantSchema: "1.3.0-rc.1",
-			wantSQL: `BEGIN; ALTER EXTENSION "widget_core" UPDATE TO '1.3.0-rc.1'; ALTER EXTENSION "widget" UPDATE TO '1.3.0-rc.1'; COMMIT;`,
-		},
-		{
-			name: "dotted two phase with dependency", format: product.ExtensionVersionSemver,
-			dependencies: []string{"widget_core"},
-			installed:    "1.2.3", binary: "1.3.0", wantSchema: "1.2.3",
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := newTestScheme(t)
@@ -121,7 +101,7 @@ func TestHandleExtensionUpgradeVersionPolicy(t *testing.T) {
 			db.Spec.SchemaVersion = tc.requested
 			c := newFakeClient(t, s, nil, db)
 			r, rec := newClusterReconciler(c, s, &sqlRecorder{})
-			r.Adapter = extensionPolicyAdapter{format: tc.format, dependencies: tc.dependencies}
+			r.Adapter = extensionPolicyAdapter{format: tc.format}
 			var updates []string
 			r.SQLExecutor = func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 				if strings.Contains(sql, "pg_available_extensions") {

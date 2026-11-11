@@ -99,10 +99,6 @@ type PostgresProfile struct {
 	// ExtensionVersionFormat controls extension comparison and spec/status
 	// conversion. Its zero value preserves DocumentDB's version convention.
 	ExtensionVersionFormat ExtensionVersionFormat
-	// ExtensionDependencies lists co-versioned extensions to upgrade before
-	// Extension, in dependency order, to the same target version and in the
-	// same transaction. Do not include independently versioned dependencies.
-	ExtensionDependencies []string
 	// AdditionalLibraries are added to shared_preload_libraries.
 	AdditionalLibraries []string
 	// BootstrapSQL runs once at initdb, before any user PostInitSQL.

@@ -29,8 +29,7 @@ func DocumentDBProfile() ProductProfile {
 				ExtensionControlPath: []string{"share"},
 				LdLibraryPath:        []string{"lib", "system"},
 			},
-			ExtensionDependencies: []string{"documentdb_core"},
-			AdditionalLibraries:   []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
+			AdditionalLibraries: []string{"pg_cron", "pg_documentdb_core", "pg_documentdb"},
 			BootstrapSQL: []string{
 				"CREATE EXTENSION documentdb CASCADE",
 				"CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'",
@@ -58,6 +57,9 @@ func DocumentDBProfile() ProductProfile {
 
 // DocumentDBExtensionName is the PostgreSQL extension backing DocumentDB.
 const DocumentDBExtensionName = "documentdb"
+
+// DocumentDBCoreExtensionName is the co-versioned PostgreSQL core extension.
+const DocumentDBCoreExtensionName = "documentdb_core"
 
 // DocumentDBAdapter is the first product adapter. It maps the DocumentDB custom
 // resource onto the product-neutral model consumed by the reconciler.
