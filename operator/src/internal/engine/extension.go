@@ -195,12 +195,6 @@ func (r *ClusterReconciler[T]) HandleExtensionUpgrade(ctx context.Context, curre
 		return nil
 	}
 
-	if extension == product.DocumentDBExtensionName {
-		// PostgreSQL does not upgrade dependencies, so update core first.
-		updateSQL = "BEGIN; " + cnpg.ExtensionUpdateSQL(product.DocumentDBCoreExtensionName, schemaTarget) +
-			"; " + cnpg.ExtensionUpdateSQL(extension, schemaTarget) + "; COMMIT;"
-	}
-
 	// Run ALTER EXTENSION to upgrade
 	logger.Info("Upgrading "+name+" extension",
 		"fromVersion", installedVersion,

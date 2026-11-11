@@ -9,6 +9,7 @@ import (
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/lib/pq"
 
+	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -22,14 +23,20 @@ func ExtensionVersionSQL(extension string) string {
 	return fmt.Sprintf("SELECT default_version, installed_version FROM pg_available_extensions WHERE name = %s", pq.QuoteLiteral(extension))
 }
 
-// ExtensionUpdateSQL returns the ALTER EXTENSION statement for the named
-// extension. An empty targetVersion updates to the binary's default version.
+// ExtensionUpdateSQL returns SQL to upgrade the named extension. DocumentDB
+// upgrades documentdb_core first in the same transaction. An empty targetVersion
+// updates each extension to its binary's default version.
 // targetVersion must already be validated (digits, dots, and hyphens only).
 func ExtensionUpdateSQL(extension, targetVersion string) string {
-	if targetVersion == "" {
-		return fmt.Sprintf("ALTER EXTENSION %s UPDATE", pq.QuoteIdentifier(extension))
+	updateSQL := fmt.Sprintf("ALTER EXTENSION %s UPDATE", pq.QuoteIdentifier(extension))
+	if targetVersion != "" {
+		updateSQL += " TO " + pq.QuoteLiteral(targetVersion)
 	}
-	return fmt.Sprintf("ALTER EXTENSION %s UPDATE TO %s", pq.QuoteIdentifier(extension), pq.QuoteLiteral(targetVersion))
+	if extension == product.DocumentDBExtensionName {
+		coreSQL := ExtensionUpdateSQL(product.DocumentDBCoreExtensionName, targetVersion)
+		return "BEGIN; " + coreSQL + "; " + updateSQL + "; COMMIT;"
+	}
+	return updateSQL
 }
 
 // ReplicationRoleCheckSQL returns the query that yields one row when CNPG's
