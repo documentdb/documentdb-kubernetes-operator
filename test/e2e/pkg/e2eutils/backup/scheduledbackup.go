@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // ScheduledBackupVars names the variables substituted into
@@ -47,8 +47,8 @@ func (v ScheduledBackupVars) toMap() map[string]string {
 }
 
 // RenderScheduled loads manifests/backup/scheduled_backup.yaml.template,
-// substitutes vars, and unmarshals into a preview ScheduledBackup.
-func RenderScheduled(vars ScheduledBackupVars) (*previewv1.ScheduledBackup, error) {
+// substitutes vars, and unmarshals into a v1 ScheduledBackup.
+func RenderScheduled(vars ScheduledBackupVars) (*dbv1.ScheduledBackup, error) {
 	if vars.Name == "" || vars.Namespace == "" || vars.ClusterName == "" {
 		return nil, errors.New("backup.RenderScheduled: Name, Namespace and ClusterName are required")
 	}
@@ -56,7 +56,7 @@ func RenderScheduled(vars ScheduledBackupVars) (*previewv1.ScheduledBackup, erro
 	if err != nil {
 		return nil, err
 	}
-	obj := &previewv1.ScheduledBackup{}
+	obj := &dbv1.ScheduledBackup{}
 	if err := yaml.Unmarshal(raw, obj); err != nil {
 		return nil, fmt.Errorf("unmarshal ScheduledBackup YAML: %w", err)
 	}
@@ -70,7 +70,7 @@ func RenderScheduled(vars ScheduledBackupVars) (*previewv1.ScheduledBackup, erro
 }
 
 // CreateScheduled renders and applies a ScheduledBackup CR.
-func CreateScheduled(ctx context.Context, c client.Client, vars ScheduledBackupVars) (*previewv1.ScheduledBackup, error) {
+func CreateScheduled(ctx context.Context, c client.Client, vars ScheduledBackupVars) (*dbv1.ScheduledBackup, error) {
 	if c == nil {
 		return nil, errors.New("backup.CreateScheduled: client must not be nil")
 	}
@@ -85,8 +85,8 @@ func CreateScheduled(ctx context.Context, c client.Client, vars ScheduledBackupV
 }
 
 // GetScheduled fetches a ScheduledBackup by key.
-func GetScheduled(ctx context.Context, c client.Client, ns, name string) (*previewv1.ScheduledBackup, error) {
-	var s previewv1.ScheduledBackup
+func GetScheduled(ctx context.Context, c client.Client, ns, name string) (*dbv1.ScheduledBackup, error) {
+	var s dbv1.ScheduledBackup
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &s); err != nil {
 		return nil, fmt.Errorf("get ScheduledBackup %s/%s: %w", ns, name, err)
 	}
@@ -96,7 +96,7 @@ func GetScheduled(ctx context.Context, c client.Client, ns, name string) (*previ
 // DeleteScheduled issues a foreground delete on the ScheduledBackup CR
 // and returns when the object is gone or timeout elapses.
 func DeleteScheduled(ctx context.Context, c client.Client, ns, name string, timeout time.Duration) error {
-	obj := &previewv1.ScheduledBackup{}
+	obj := &dbv1.ScheduledBackup{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -127,12 +127,12 @@ func DeleteScheduled(ctx context.Context, c client.Client, ns, name string, time
 // the supplied cluster name. This covers both the CRs created directly
 // by the ScheduledBackup reconciler and any ad-hoc Backup objects the
 // test itself wrote against the same cluster.
-func ListChildBackups(ctx context.Context, c client.Client, ns, clusterName string) ([]previewv1.Backup, error) {
-	var list previewv1.BackupList
+func ListChildBackups(ctx context.Context, c client.Client, ns, clusterName string) ([]dbv1.Backup, error) {
+	var list dbv1.BackupList
 	if err := c.List(ctx, &list, client.InNamespace(ns)); err != nil {
 		return nil, fmt.Errorf("list Backups in %s: %w", ns, err)
 	}
-	out := make([]previewv1.Backup, 0, len(list.Items))
+	out := make([]dbv1.Backup, 0, len(list.Items))
 	for _, b := range list.Items {
 		if b.Spec.Cluster.Name == clusterName {
 			out = append(out, b)
@@ -144,7 +144,7 @@ func ListChildBackups(ctx context.Context, c client.Client, ns, clusterName stri
 // WaitForFirstChildCompleted polls until at least one child Backup CR
 // for clusterName has phase "completed". Returns the first such
 // completed Backup (as observed).
-func WaitForFirstChildCompleted(ctx context.Context, c client.Client, ns, clusterName string, timeout time.Duration) (*previewv1.Backup, error) {
+func WaitForFirstChildCompleted(ctx context.Context, c client.Client, ns, clusterName string, timeout time.Duration) (*dbv1.Backup, error) {
 	if c == nil {
 		return nil, errors.New("backup.WaitForFirstChildCompleted: client must not be nil")
 	}

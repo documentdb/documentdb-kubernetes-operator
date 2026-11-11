@@ -45,7 +45,123 @@ spec:
       jsonPath: .status.schemaVersion
       name: SchemaVersion
       type: string
+    deprecated: true
+    deprecationWarning: documentdb.io/preview is deprecated; use documentdb.io/v1
     name: preview
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BackupSpec defines the desired state of Backup.
+            properties:
+              cluster:
+                description: |-
+                  Cluster specifies the DocumentDB cluster to backup.
+                  The cluster must exist in the same namespace as the Backup resource.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                required:
+                - name
+                type: object
+              retentionDays:
+                description: |-
+                  RetentionDays specifies how many days the backup should be retained.
+                  If not specified, the default retention period from the cluster's backup retention policy will be used.
+                type: integer
+            required:
+            - cluster
+            type: object
+            x-kubernetes-validations:
+            - message: BackupSpec is immutable once set
+              rule: oldSelf == self
+          status:
+            description: BackupStatus defines the observed state of Backup.
+            properties:
+              expiredAt:
+                description: ExpiredAt is the time when the backup is considered expired
+                  and can be deleted.
+                format: date-time
+                type: string
+              message:
+                description: |-
+                  Message contains additional information about the backup status.
+                  For failed backups, this contains the error message.
+                  For skipped backups, this explains why the backup was skipped.
+                type: string
+              phase:
+                description: Phase represents the current phase of the backup operation.
+                type: string
+              schemaVersion:
+                description: |-
+                  SchemaVersion is the DocumentDB extension schema version of the source
+                  cluster at backup time, captured from the source DocumentDB's
+                  status.schemaVersion. It is used to validate restore compatibility:
+                  a restore must target a binary version >= this schema version, otherwise
+                  an older binary would run against a newer, irreversible schema.
+                type: string
+              startedAt:
+                description: StartedAt is the time when the backup operation started.
+                format: date-time
+                type: string
+              stoppedAt:
+                description: StoppedAt is the time when the backup operation completed.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: false
+    subresources:
+      status: {}
+  - additionalPrinterColumns:
+    - description: Target DocumentDB cluster
+      jsonPath: .spec.cluster.name
+      name: Cluster
+      type: string
+    - description: Backup phase
+      jsonPath: .status.phase
+      name: Phase
+      type: string
+    - description: Backup start time
+      jsonPath: .status.startedAt
+      name: StartedAt
+      type: string
+    - description: Backup completion time
+      jsonPath: .status.stoppedAt
+      name: StoppedAt
+      type: string
+    - description: Backup expiration time
+      jsonPath: .status.expiredAt
+      name: ExpiredAt
+      type: string
+    - description: Backup status message
+      jsonPath: .status.message
+      name: Message
+      type: string
+    - description: DocumentDB schema version at backup time
+      jsonPath: .status.schemaVersion
+      name: SchemaVersion
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         properties:

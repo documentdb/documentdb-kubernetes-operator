@@ -42,7 +42,7 @@ When the gate is disabled (the default), the operator changes nothing and CNPG k
 Add the feature gate to your DocumentDB custom resource:
 
 ```yaml title="documentdb.yaml"
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: my-documentdb
@@ -58,7 +58,7 @@ spec:
 
 1. Opt in to PostgreSQL 18 `io_method=io_uring`. The operator also relaxes the PostgreSQL container seccomp profile using the operator-level Localhost profile.
 
-For the full field reference, see [DocumentDBSpec](preview/api-reference.md#documentdbspec) in the API Reference.
+For the full field reference, see [DocumentDBSpec](v1/api-reference.md#documentdbspec) in the API Reference.
 
 ## Seccomp configuration
 
@@ -170,5 +170,5 @@ the seccomp profile wasn't relaxed for that pod. Check, in order:
 ## Related
 
 - [PostgreSQL parameter tuning](postgresql-tuning.md) — how protected parameters such as `io_method` are managed
-- [API Reference: DocumentDBSpec](preview/api-reference.md#documentdbspec) — the `featureGates` field
+- [API Reference: DocumentDBSpec](v1/api-reference.md#documentdbspec) — the `featureGates` field
 - [io_uring feature playground](https://github.com/documentdb/documentdb-kubernetes-operator/tree/main/documentdb-playground/io-uring-feature) — kind `extraMount`, DaemonSet installer, and curated profile

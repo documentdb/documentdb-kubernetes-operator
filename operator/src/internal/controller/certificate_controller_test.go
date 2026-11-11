@@ -20,14 +20,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 // helper to build TLS reconciler with objects
 func buildCertificateReconciler(t *testing.T, objs ...runtime.Object) *CertificateReconciler {
 	scheme := runtime.NewScheme()
-	require.NoError(t, dbpreview.AddToScheme(scheme))
+	require.NoError(t, dbv1.AddToScheme(scheme))
 	require.NoError(t, cmapi.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
 	builder := fake.NewClientBuilder().WithScheme(scheme)
@@ -47,24 +47,24 @@ func buildCertificateReconciler(t *testing.T, objs ...runtime.Object) *Certifica
 	return &CertificateReconciler{Client: c, Scheme: scheme}
 }
 
-func baseDocumentDB(name, ns string) *dbpreview.DocumentDB {
-	return &dbpreview.DocumentDB{
+func baseDocumentDB(name, ns string) *dbv1.DocumentDB {
+	return &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec: dbpreview.DocumentDBSpec{
+		Spec: dbv1.DocumentDBSpec{
 			NodeCount:        1,
 			InstancesPerNode: 1,
-			Resource:         dbpreview.Resource{Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"}},
-			Image:            &dbpreview.ImageSpec{DocumentDB: "test-image"},
-			ExposeViaService: dbpreview.ExposeViaService{ServiceType: "ClusterIP"},
+			Resource:         dbv1.Resource{Storage: dbv1.StorageConfiguration{PvcSize: "1Gi"}},
+			Image:            &dbv1.ImageSpec{DocumentDB: "test-image"},
+			ExposeViaService: dbv1.ExposeViaService{ServiceType: "ClusterIP"},
 		},
 	}
 }
 
-func enableAzureFleetReplication(ddb *dbpreview.DocumentDB) {
-	ddb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+func enableAzureFleetReplication(ddb *dbv1.DocumentDB) {
+	ddb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 		CrossCloudNetworkingStrategy: string(util.AzureFleet),
 		Primary:                      "member-a",
-		ClusterList: []dbpreview.MemberCluster{
+		ClusterList: []dbv1.MemberCluster{
 			{Name: "member-a"},
 			{Name: "member-b"},
 		},
@@ -81,7 +81,7 @@ func fleetMemberNameConfigMap(memberName string) *corev1.ConfigMap {
 func TestEnsureProvidedSecret(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-prov", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "Provided", Provided: &dbpreview.ProvidedTLS{SecretName: "mycert"}}}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: "Provided", Provided: &dbv1.ProvidedTLS{SecretName: "mycert"}}}
 	// Secret missing first
 	r := buildCertificateReconciler(t, ddb)
 	res, err := r.reconcileCertificates(ctx, ddb)
@@ -102,8 +102,8 @@ func TestEnsureProvidedSecret(t *testing.T) {
 func TestEnsureCertManagerManagedCert(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-cm", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "CertManager", CertManager: &dbpreview.CertManagerTLS{IssuerRef: dbpreview.IssuerRef{Name: "test-issuer", Kind: "Issuer"}, DNSNames: []string{"custom.example"}}}}
-	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: "CertManager", CertManager: &dbv1.CertManagerTLS{IssuerRef: dbv1.IssuerRef{Name: "test-issuer", Kind: "Issuer"}, DNSNames: []string{"custom.example"}}}}
+	ddb.Status.TLS = &dbv1.TLSStatus{}
 	issuer := &cmapi.Issuer{ObjectMeta: metav1.ObjectMeta{Name: "test-issuer", Namespace: "default"}, Spec: cmapi.IssuerSpec{IssuerConfig: cmapi.IssuerConfig{SelfSigned: &cmapi.SelfSignedIssuer{}}}}
 	r := buildCertificateReconciler(t, ddb, issuer)
 
@@ -142,8 +142,8 @@ func TestEnsureCertManagerManagedCert(t *testing.T) {
 func TestEnsureSelfSignedCert(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-ss", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "SelfSigned"}}
-	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: "SelfSigned"}}
+	ddb.Status.TLS = &dbv1.TLSStatus{}
 	r := buildCertificateReconciler(t, ddb)
 
 	// First call should create issuer and certificate
@@ -199,7 +199,7 @@ func TestEnsurePostgresCertificatesWithPartialPostgresTLSDoesNotFillDefaults(t *
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-pg-provided", "default")
 	enableAzureFleetReplication(ddb)
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{
 		Postgres: &v1.CertificatesConfiguration{ServerCASecret: "provided-server-ca"},
 	}
 	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
@@ -217,7 +217,7 @@ func TestEnsurePostgresCertificatesAzureFleetWithProvidedCertsSkipsPostgresResou
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-pg-explicit", "default")
 	enableAzureFleetReplication(ddb)
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{
 		Postgres: &v1.CertificatesConfiguration{
 			ServerCASecret:       "provided-server-ca",
 			ServerTLSSecret:      "provided-server-tls",
@@ -243,15 +243,15 @@ func TestEnsurePostgresCertificatesAzureFleetWithProvidedCertsSkipsPostgresResou
 func TestEnsurePostgresCertificatesIstioSkipsPostgresResources(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-pg-istio", "default")
-	ddb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+	ddb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 		CrossCloudNetworkingStrategy: string(util.Istio),
 		Primary:                      "member-a",
-		ClusterList: []dbpreview.MemberCluster{
+		ClusterList: []dbv1.MemberCluster{
 			{Name: "member-a"},
 			{Name: "member-b"},
 		},
 	}
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{
 		Postgres: &v1.CertificatesConfiguration{},
 	}
 	r := buildCertificateReconciler(t, ddb, fleetMemberNameConfigMap("member-a"))
@@ -293,8 +293,8 @@ func TestEmptyModeDefaultsToSelfSigned(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-empty-mode", "default")
 	// Empty mode should default to SelfSigned behavior
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: ""}}
-	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: ""}}
+	ddb.Status.TLS = &dbv1.TLSStatus{}
 	r := buildCertificateReconciler(t, ddb)
 
 	// First call should create issuer and certificate (SelfSigned behavior)
@@ -321,7 +321,7 @@ func TestEmptyModeDefaultsToSelfSigned(t *testing.T) {
 func TestEmptyModeWithNilStatus(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-empty-nil", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: ""}}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: ""}}
 	// Status.TLS is nil - fresh resource
 	ddb.Status.TLS = nil
 	r := buildCertificateReconciler(t, ddb)
@@ -359,7 +359,7 @@ func TestNilTLSDefaultsToSelfSigned(t *testing.T) {
 func TestNilGatewayDefaultsToSelfSigned(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-nil-gateway", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: nil}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: nil}
 	ddb.Status.TLS = nil
 	r := buildCertificateReconciler(t, ddb)
 
@@ -378,8 +378,8 @@ func TestNilGatewayDefaultsToSelfSigned(t *testing.T) {
 func TestDisabledModeFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	ddb := baseDocumentDB("ddb-disabled", "default")
-	ddb.Spec.TLS = &dbpreview.TLSConfiguration{Gateway: &dbpreview.GatewayTLS{Mode: "Disabled"}}
-	ddb.Status.TLS = &dbpreview.TLSStatus{}
+	ddb.Spec.TLS = &dbv1.TLSConfiguration{Gateway: &dbv1.GatewayTLS{Mode: "Disabled"}}
+	ddb.Status.TLS = &dbv1.TLSStatus{}
 	r := buildCertificateReconciler(t, ddb)
 
 	// Even for invalid legacy values, the controller should fail closed and

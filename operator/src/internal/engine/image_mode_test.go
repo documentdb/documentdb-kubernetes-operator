@@ -13,7 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/imagemode"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
@@ -33,8 +33,8 @@ func imageModeTestCluster() *cnpgv1.Cluster {
 	}
 }
 
-func imageModeReconciler(detect func(context.Context, string) (imagemode.Mode, string, error)) *ClusterReconciler[*dbpreview.DocumentDB] {
-	return &ClusterReconciler[*dbpreview.DocumentDB]{Adapter: product.DocumentDBAdapter{}, ImageModeDetector: detect}
+func imageModeReconciler(detect func(context.Context, string) (imagemode.Mode, string, error)) *ClusterReconciler[*dbv1.DocumentDB] {
+	return &ClusterReconciler[*dbv1.DocumentDB]{Adapter: product.DocumentDBAdapter{}, ImageModeDetector: detect}
 }
 
 var imageModeTestIntent = product.ClusterIntent{Images: product.Images{Combined: "documentdb-combined:18-1.0.0"}}

@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/imagemode"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
@@ -56,7 +56,7 @@ var _ = Describe("DocumentDB Controller", func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
 		recorder = record.NewFakeRecorder(10)
-		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+		Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	})
@@ -88,7 +88,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -98,7 +98,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -134,7 +134,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -144,7 +144,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -182,7 +182,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -192,7 +192,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -209,7 +209,7 @@ var _ = Describe("DocumentDB Controller", func() {
 
 			// Image patching is now done by SyncCnpgCluster; handleExtensionUpgrade only
 			// updates image status and returns early when ExtensionUpdated is true
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 		})
@@ -248,7 +248,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -258,7 +258,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -274,7 +274,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// handleExtensionUpgrade reads current images from the CNPG cluster and updates status
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal("documentdb/gateway:v1.0.0"))
@@ -301,7 +301,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// DocumentDB resource does NOT exist in the fake client — refetch will fail
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "non-existent-documentdb",
 					Namespace: clusterNamespace,
@@ -311,7 +311,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -358,7 +358,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -368,7 +368,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -380,7 +380,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Image status should still be updated even though primary isn't healthy
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal("gateway:v1.0.0"))
@@ -419,12 +419,12 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// Status has stale/old image values
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					GatewayImage:    "gateway:v1.0.0",
 				},
@@ -433,7 +433,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -445,7 +445,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify stale status was corrected
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v2.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal("gateway:v2.0.0"))
@@ -475,12 +475,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 				},
 			}
@@ -488,7 +488,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -533,7 +533,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -543,7 +543,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -586,7 +586,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -596,7 +596,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -638,7 +638,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -648,7 +648,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -690,7 +690,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -700,7 +700,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -716,7 +716,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Status should reflect the installed version as semver
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
@@ -747,7 +747,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -757,7 +757,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCallCount := 0
@@ -786,7 +786,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(event).To(ContainSubstring("0.110-0"))
 
 			// Status should still reflect the installed version
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
@@ -817,12 +817,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "auto",
 				},
 			}
@@ -830,7 +830,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -858,7 +858,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version (default version as semver)
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
@@ -889,12 +889,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "auto",
 				},
 			}
@@ -902,7 +902,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			callCount := 0
@@ -952,7 +952,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -962,7 +962,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCallCount := 0
@@ -1004,7 +1004,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -1014,7 +1014,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 						return c.Patch(ctx, obj, patch, opts...)
@@ -1060,7 +1060,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -1070,7 +1070,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 						return fmt.Errorf("status update failed")
@@ -1115,12 +1115,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					// Images match cluster so updateImageStatus is a no-op
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					// SchemaVersion is stale — triggers step 5 status update
@@ -1131,7 +1131,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 						return fmt.Errorf("status update conflict")
@@ -1180,15 +1180,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "auto",
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					// Images match cluster so updateImageStatus is a no-op
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					// Version matches installed so step 5 is a no-op
@@ -1199,7 +1199,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 						return fmt.Errorf("status update conflict")
@@ -1257,7 +1257,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// schemaVersion is empty (default) → two-phase mode
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -1267,7 +1267,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1290,7 +1290,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
 
 			// Status should reflect installed version, NOT the binary version
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.109.0"))
 
@@ -1326,12 +1326,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "auto",
 				},
 			}
@@ -1339,7 +1339,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1365,7 +1365,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE`))
 
 			// Status should reflect the upgraded version
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
@@ -1397,12 +1397,12 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// Explicit version: update to 0.110.0 (binary is also 0.110-0)
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "0.110.0",
 				},
 			}
@@ -1410,7 +1410,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1437,7 +1437,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls[1]).To(Equal(`ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'`))
 
 			// Status should reflect the explicit version
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.110.0"))
 		})
@@ -1472,12 +1472,12 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// Explicit version 0.112.0 exceeds binary version 0.110-0
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "0.112.0",
 				},
 			}
@@ -1485,7 +1485,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1507,7 +1507,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(sqlCalls).To(HaveLen(1))
 
 			// Status should reflect installed version (not upgraded)
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.SchemaVersion).To(Equal("0.109.0"))
 		})
@@ -1539,12 +1539,12 @@ var _ = Describe("DocumentDB Controller", func() {
 			}
 
 			// Explicit version matches installed → no-op
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "0.109.0",
 				},
 			}
@@ -1552,7 +1552,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1600,12 +1600,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					SchemaVersion: "0.110.0",
 				},
 			}
@@ -1613,7 +1613,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cluster, documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			sqlCalls := []string{}
@@ -1651,19 +1651,19 @@ var _ = Describe("DocumentDB Controller", func() {
 					}},
 				},
 			}
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-documentdb", Namespace: clusterNamespace},
 			}
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 			reconciler := &DocumentDBReconciler{Client: fakeClient, Scheme: scheme}
 
 			Expect(reconciler.updateImageStatus(ctx, documentdb, cluster)).To(Succeed())
 
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb-combined:18-1.0.0"))
 		})
@@ -1692,7 +1692,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -1702,7 +1702,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -1713,7 +1713,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.updateImageStatus(ctx, documentdb, cluster)
 			Expect(err).ToNot(HaveOccurred())
 
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal("documentdb/gateway:v1.0.0"))
@@ -1743,12 +1743,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 					GatewayImage:    "documentdb/gateway:v1.0.0",
 				},
@@ -1757,7 +1757,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -1769,7 +1769,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Status should remain unchanged
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal("documentdb/gateway:v1.0.0"))
@@ -1791,7 +1791,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
@@ -1801,7 +1801,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -1812,7 +1812,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.updateImageStatus(ctx, documentdb, cluster)
 			Expect(err).ToNot(HaveOccurred())
 
-			updatedDB := &dbpreview.DocumentDB{}
+			updatedDB := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "test-documentdb", Namespace: clusterNamespace}, updatedDB)).To(Succeed())
 			Expect(updatedDB.Status.DocumentDBImage).To(Equal("documentdb/documentdb:v1.0.0"))
 			Expect(updatedDB.Status.GatewayImage).To(Equal(""))
@@ -1834,12 +1834,12 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-documentdb",
 					Namespace: clusterNamespace,
 				},
-				Status: dbpreview.DocumentDBStatus{
+				Status: dbv1.DocumentDBStatus{
 					// Different from cluster → triggers status update
 					DocumentDBImage: "documentdb/documentdb:v1.0.0",
 				},
@@ -1848,7 +1848,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 						return fmt.Errorf("status update failed")
@@ -2007,7 +2007,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2051,7 +2051,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2086,7 +2086,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2109,7 +2109,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2145,7 +2145,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2170,7 +2170,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2195,7 +2195,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: nil, // No recorder
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
@@ -2209,15 +2209,15 @@ var _ = Describe("DocumentDB Controller", func() {
 
 	Describe("reconcileFinalizer", func() {
 		It("adds finalizer when not present and object is not being deleted", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{}, // No finalizer
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize:                       "10Gi",
 							PersistentVolumeReclaimPolicy: "Delete",
 						},
@@ -2243,21 +2243,21 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(result.Requeue).To(BeTrue())
 
 			// Verify finalizer was added
-			updated := &dbpreview.DocumentDB{}
+			updated := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
 		})
 
 		It("continues reconciliation when finalizer is present and object is not being deleted", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{documentDBFinalizer}, // Finalizer present
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize:                       "10Gi",
 							PersistentVolumeReclaimPolicy: "Retain",
 						},
@@ -2283,7 +2283,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(result.Requeue).To(BeFalse())
 
 			// Verify finalizer is still present
-			updated := &dbpreview.DocumentDB{}
+			updated := &dbv1.DocumentDB{}
 			Expect(fakeClient.Get(ctx, types.NamespacedName{Name: documentDBName, Namespace: documentDBNamespace}, updated)).To(Succeed())
 			Expect(controllerutil.ContainsFinalizer(updated, documentDBFinalizer)).To(BeTrue())
 		})
@@ -2299,15 +2299,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{documentDBFinalizer},
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize:                       "10Gi",
 							PersistentVolumeReclaimPolicy: "Delete",
 						},
@@ -2339,12 +2339,12 @@ var _ = Describe("DocumentDB Controller", func() {
 
 	Describe("reconcilePVRecovery", func() {
 		It("returns immediately when PV recovery is not configured", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					// No bootstrap.recovery.persistentVolume configured
 				},
 			}
@@ -2367,15 +2367,15 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("returns error when PV does not exist", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "non-existent-pv",
 							},
 						},
@@ -2415,15 +2415,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "bound-pv",
 							},
 						},
@@ -2467,15 +2467,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "released-pv",
 							},
 						},
@@ -2521,16 +2521,16 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 					UID:       "test-uid",
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "available-pv",
 							},
 						},
@@ -2590,15 +2590,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "available-pv",
 							},
 						},
@@ -2652,15 +2652,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "available-pv",
 							},
 						},
@@ -2703,15 +2703,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "some-pv",
 							},
 						},
@@ -2759,15 +2759,15 @@ var _ = Describe("DocumentDB Controller", func() {
 				},
 			}
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Bootstrap: &dbpreview.BootstrapConfiguration{
-						Recovery: &dbpreview.RecoveryConfiguration{
-							PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Spec: dbv1.DocumentDBSpec{
+					Bootstrap: &dbv1.BootstrapConfiguration{
+						Recovery: &dbv1.RecoveryConfiguration{
+							PersistentVolume: &dbv1.PVRecoveryConfiguration{
 								Name: "some-pv",
 							},
 						},
@@ -2843,20 +2843,20 @@ var _ = Describe("DocumentDB Controller", func() {
 			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
 			// Create DocumentDB with finalizer already present (skip finalizer-add requeue)
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{documentDBFinalizer},
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "1Gi",
 						},
 					},
-					Monitoring: &dbpreview.MonitoringSpec{
+					Monitoring: &dbv1.MonitoringSpec{
 						Enabled: true,
 					},
 				},
@@ -2902,7 +2902,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb, cnpgCluster).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			// Mock SQLExecutor: permissions already granted, extension versions match
@@ -2939,16 +2939,16 @@ var _ = Describe("DocumentDB Controller", func() {
 		It("retains the OTel ConfigMap when cluster sync fails while disabling monitoring", func() {
 			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{documentDBFinalizer},
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{PvcSize: "1Gi"},
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{PvcSize: "1Gi"},
 					},
 				},
 			}
@@ -3003,7 +3003,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb, cnpgCluster, configMap).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				WithInterceptorFuncs(interceptor.Funcs{
 					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 						if _, ok := obj.(*cnpgv1.Cluster); ok {
@@ -3031,22 +3031,22 @@ var _ = Describe("DocumentDB Controller", func() {
 		It("should add restart annotation when TLS secret name changes", func() {
 			Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
 
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       documentDBName,
 					Namespace:  documentDBNamespace,
 					Finalizers: []string{documentDBFinalizer},
 				},
-				Spec: dbpreview.DocumentDBSpec{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "1Gi",
 						},
 					},
 				},
-				Status: dbpreview.DocumentDBStatus{
-					TLS: &dbpreview.TLSStatus{
+				Status: dbv1.DocumentDBStatus{
+					TLS: &dbv1.TLSStatus{
 						Ready:      true,
 						SecretName: "new-tls-secret",
 					},
@@ -3093,7 +3093,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(documentdb, cnpgCluster).
-				WithStatusSubresource(&dbpreview.DocumentDB{}).
+				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
 			reconciler := &DocumentDBReconciler{
@@ -3126,16 +3126,16 @@ var _ = Describe("DocumentDB Controller", func() {
 
 	Describe("reconcileOtelConfigMap", func() {
 		It("creates an OTel ConfigMap when monitoring is enabled", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Monitoring: &dbpreview.MonitoringSpec{
+				Spec: dbv1.DocumentDBSpec{
+					Monitoring: &dbv1.MonitoringSpec{
 						Enabled: true,
-						Exporter: &dbpreview.ExporterSpec{
-							OTLP: &dbpreview.OTLPExporterSpec{
+						Exporter: &dbv1.ExporterSpec{
+							OTLP: &dbv1.OTLPExporterSpec{
 								Endpoint: "otel-collector:4317",
 							},
 						},
@@ -3169,13 +3169,13 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("updates an existing OTel ConfigMap when monitoring spec changes", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Monitoring: &dbpreview.MonitoringSpec{
+				Spec: dbv1.DocumentDBSpec{
+					Monitoring: &dbv1.MonitoringSpec{
 						Enabled: true,
 					},
 				},
@@ -3217,14 +3217,14 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("does not create ConfigMap when monitoring is disabled", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: documentDBNamespace,
 					UID:       "test-uid",
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Monitoring: &dbpreview.MonitoringSpec{
+				Spec: dbv1.DocumentDBSpec{
+					Monitoring: &dbv1.MonitoringSpec{
 						Enabled: false,
 					},
 				},
@@ -3253,17 +3253,17 @@ var _ = Describe("DocumentDB Controller", func() {
 		})
 
 		It("returns error when owner reference cannot be set", func() {
-			documentdb := &dbpreview.DocumentDB{
+			documentdb := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      documentDBName,
 					Namespace: "different-namespace",
 					UID:       "test-uid",
 				},
-				Spec: dbpreview.DocumentDBSpec{
-					Monitoring: &dbpreview.MonitoringSpec{
+				Spec: dbv1.DocumentDBSpec{
+					Monitoring: &dbv1.MonitoringSpec{
 						Enabled: true,
-						Exporter: &dbpreview.ExporterSpec{
-							Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+						Exporter: &dbv1.ExporterSpec{
+							Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 						},
 					},
 				},

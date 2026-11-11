@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -28,8 +28,8 @@ const BackupClusterField = "spec.cluster"
 // the shared scheduled-backup spec and status types.
 type ScheduledBackupAdapter[S client.Object] interface {
 	New() S
-	Spec(S) *dbpreview.ScheduledBackupSpec
-	Status(S) *dbpreview.ScheduledBackupStatus
+	Spec(S) *dbv1.ScheduledBackupSpec
+	Status(S) *dbv1.ScheduledBackupStatus
 }
 
 // ScheduledBackupReconciler creates Backups of a product cluster on a cron schedule.
@@ -94,7 +94,7 @@ func (r *ScheduledBackupReconciler[T, S, B]) Reconcile(ctx context.Context, req 
 		lastBackupCreated = &created
 	}
 	status := r.Scheduled.Status(scheduledBackup)
-	nextScheduleTime := dbpreview.NextScheduleTime(schedule, status, lastBackupCreated)
+	nextScheduleTime := dbv1.NextScheduleTime(schedule, status, lastBackupCreated)
 	now := time.Now()
 	if !now.Before(nextScheduleTime) {
 		backup := r.newBackup(scheduledBackup, now)
@@ -132,12 +132,12 @@ func (r *ScheduledBackupReconciler[T, S, B]) Reconcile(ctx context.Context, req 
 func (r *ScheduledBackupReconciler[T, S, B]) newBackup(scheduledBackup S, now time.Time) B {
 	spec := r.Scheduled.Spec(scheduledBackup)
 	backup := r.Backups.New()
-	backup.SetName(dbpreview.ScheduledBackupName(scheduledBackup.GetName(), now))
+	backup.SetName(dbv1.ScheduledBackupName(scheduledBackup.GetName(), now))
 	backup.SetNamespace(scheduledBackup.GetNamespace())
 	backup.SetLabels(map[string]string{
-		dbpreview.ScheduledBackupLabel: scheduledBackup.GetName(),
+		dbv1.ScheduledBackupLabel: scheduledBackup.GetName(),
 	})
-	*r.Backups.Spec(backup) = dbpreview.BackupSpec{
+	*r.Backups.Spec(backup) = dbv1.BackupSpec{
 		Cluster:       spec.Cluster,
 		RetentionDays: spec.RetentionDays,
 	}

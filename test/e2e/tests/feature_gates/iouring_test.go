@@ -13,7 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	mongohelper "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
 	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
@@ -22,7 +22,7 @@ import (
 // backingCluster fetches the CNPG Cluster that backs the given
 // DocumentDB. The Cluster name equals the DocumentDB name for single-
 // cluster deployments (see the lifecycle deploy spec).
-func backingCluster(ctx context.Context, c client.Client, dd *previewv1.DocumentDB) (*cnpgv1.Cluster, error) {
+func backingCluster(ctx context.Context, c client.Client, dd *dbv1.DocumentDB) (*cnpgv1.Cluster, error) {
 	cluster := &cnpgv1.Cluster{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: dd.Namespace, Name: dd.Name}, cluster); err != nil {
 		return nil, fmt.Errorf("get CNPG Cluster %s/%s: %w", dd.Namespace, dd.Name, err)

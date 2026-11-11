@@ -11,14 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	bkp "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/backup"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // Cluster-replication backup tests verify that:
@@ -159,13 +159,13 @@ var _ = Describe("DocumentDB cluster-replication backup",
 			By(fmt.Sprintf("patching both CRs to promote %s as primary", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).NotTo(HaveOccurred(), "patch primary CR to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).NotTo(HaveOccurred(), "patch replica CR to promote")

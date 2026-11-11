@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	preview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,13 +27,13 @@ func newScheme(t *testing.T) *runtime.Scheme {
 func TestAssertDocumentDBReady(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	dd := &preview.DocumentDB{
+	dd := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "db1", Namespace: "ns"},
-		Status:     preview.DocumentDBStatus{Status: "Cluster in healthy state"},
+		Status:     dbv1.DocumentDBStatus{Status: "Cluster in healthy state"},
 	}
-	notReady := &preview.DocumentDB{
+	notReady := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "db2", Namespace: "ns"},
-		Status:     preview.DocumentDBStatus{Status: "Setting up primary"},
+		Status:     dbv1.DocumentDBStatus{Status: "Setting up primary"},
 	}
 	c := fake.NewClientBuilder().WithScheme(s).WithObjects(dd, notReady).Build()
 
@@ -51,7 +51,7 @@ func TestAssertDocumentDBReady(t *testing.T) {
 func TestAssertInstanceCount(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	dd := &preview.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"}}
+	dd := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"}}
 	cluster := &cnpgv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
 		Status:     cnpgv1.ClusterStatus{ReadyInstances: 3},
@@ -136,11 +136,11 @@ func TestAssertServiceType(t *testing.T) {
 func TestAssertConnectionStringMatches(t *testing.T) {
 	t.Parallel()
 	s := newScheme(t)
-	dd := &preview.DocumentDB{
+	dd := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
-		Status:     preview.DocumentDBStatus{ConnectionString: "mongodb://user:pw@svc:10260/?tls=true"},
+		Status:     dbv1.DocumentDBStatus{ConnectionString: "mongodb://user:pw@svc:10260/?tls=true"},
 	}
-	empty := &preview.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "ns"}}
+	empty := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "ns"}}
 	c := fake.NewClientBuilder().WithScheme(s).WithObjects(dd, empty).Build()
 	k := client.ObjectKey{Namespace: "ns", Name: "db"}
 

@@ -9,7 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -28,7 +28,7 @@ import (
 //     omitted; it falls back to an envelope-independent default.
 //   - If neither the envelope nor any container sets the dimension, it is left
 //     unmanaged (no error).
-func ValidateResources(documentdb *dbpreview.DocumentDB, cfg SplitConfig) field.ErrorList {
+func ValidateResources(documentdb *dbv1.DocumentDB, cfg SplitConfig) field.ErrorList {
 	return ValidateResourcesFor(product.DocumentDBResources(documentdb), monitoringEnabled(documentdb.Spec.Monitoring), field.NewPath("spec", "resource"), cfg)
 }
 

@@ -110,7 +110,7 @@ kubectl get pods -n cnpg-system
 
 ### Deploy a test DocumentDB instance
 
-Create a namespace and credentials Secret first (the operator expects keys `username` and `password`; the default Secret name is `documentdb-credentials` — see [quickstart-kind.md](../operator-public-documentation/preview/getting-started/quickstart-kind.md#create-credentials) for the canonical example):
+Create a namespace and credentials Secret first (the operator expects keys `username` and `password`; the default Secret name is `documentdb-credentials` — see [quickstart-kind.md](../operator-public-documentation/v1/getting-started/quickstart-kind.md#create-credentials) for the canonical example):
 
 ```bash
 kubectl apply -f - <<EOF
@@ -140,7 +140,7 @@ DB_TAG=<version>-build-<run_id>-<attempt>-<sha>   # candidate_version from the S
                                                   # and point the images at ghcr.io/documentdb/...
 
 kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: dev-test

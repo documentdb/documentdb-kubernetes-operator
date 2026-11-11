@@ -30,49 +30,82 @@ extra:
 # The Material theme handles mermaid rendering without external CDN dependencies.
 
 nav:
-  - Preview:
-      - Home: preview/index.md
+  - Documentation:
+      - Home: v1/index.md
       - Getting Started:
-          - Before You Start: preview/getting-started/before-you-start.md
-          - "Quickstart: Kind": preview/getting-started/quickstart-kind.md
-          - "Quickstart: K3s": preview/getting-started/quickstart-k3s.md
-          - Deploy on AKS: preview/getting-started/deploy-on-aks.md
-          - Deploy on EKS: preview/getting-started/deploy-on-eks.md
-          - Deploy on GKE: preview/getting-started/deploy-on-gke.md
-          - Connecting to DocumentDB: preview/getting-started/connecting-to-documentdb.md
+          - Before You Start: v1/getting-started/before-you-start.md
+          - "Quickstart: Kind": v1/getting-started/quickstart-kind.md
+          - "Quickstart: K3s": v1/getting-started/quickstart-k3s.md
+          - Deploy on AKS: v1/getting-started/deploy-on-aks.md
+          - Deploy on EKS: v1/getting-started/deploy-on-eks.md
+          - Deploy on GKE: v1/getting-started/deploy-on-gke.md
+          - Connecting to DocumentDB: v1/getting-started/connecting-to-documentdb.md
       - Architecture:
-          - Overview: preview/architecture/overview.md
+          - Overview: v1/architecture/overview.md
       - Configuration:
-          - Storage: preview/configuration/storage.md
-          - Networking: preview/configuration/networking.md
-          - TLS: preview/configuration/tls.md
+          - Storage: v1/configuration/storage.md
+          - Networking: v1/configuration/networking.md
+          - TLS: v1/configuration/tls.md
           - PostgreSQL Tuning: postgresql-tuning.md
           - io_uring Async I/O: io-uring.md
       - Operations:
-          - Upgrades: preview/operations/upgrades.md
-          - Failover: preview/operations/failover.md
-          - Backup and Restore: preview/operations/backup-and-restore.md
-          - Restore a Deleted Cluster: preview/operations/restore-deleted-cluster.md
-          - Maintenance: preview/operations/maintenance.md
+          - Upgrades: v1/operations/upgrades.md
+          - Failover: v1/operations/failover.md
+          - Backup and Restore: v1/operations/backup-and-restore.md
+          - Restore a Deleted Cluster: v1/operations/restore-deleted-cluster.md
+          - Maintenance: v1/operations/maintenance.md
       - High Availability:
-          - Overview: preview/high-availability/overview.md
-          - Local HA: preview/high-availability/local-ha.md
-      - Advanced Configuration: preview/advanced-configuration/README.md
+          - Overview: v1/high-availability/overview.md
+          - Local HA: v1/high-availability/local-ha.md
+      - Advanced Configuration: v1/advanced-configuration/README.md
       - Monitoring:
-          - Overview: preview/monitoring/overview.md
-          - Metrics Reference: preview/monitoring/metrics.md
+          - Overview: v1/monitoring/overview.md
+          - Metrics Reference: v1/monitoring/metrics.md
       - Multi-region deployment:
-          - Overview: preview/multi-region-deployment/overview.md
-          - Setup guide: preview/multi-region-deployment/setup.md
-          - Failover procedures: preview/multi-region-deployment/failover-procedures.md
-          - Multi-cloud differences: preview/multi-region-deployment/multi-cloud.md
-      - FAQ: preview/faq.md
+          - Overview: v1/multi-region-deployment/overview.md
+          - Setup guide: v1/multi-region-deployment/setup.md
+          - Failover procedures: v1/multi-region-deployment/failover-procedures.md
+          - Multi-cloud differences: v1/multi-region-deployment/multi-cloud.md
+      - FAQ: v1/faq.md
       - Tools:
-          - Kubectl Plugin: preview/kubectl-plugin.md
-      - API Reference: preview/api-reference.md
+          - Kubectl Plugin: v1/kubectl-plugin.md
+      - API Reference: v1/api-reference.md
 
 plugins:
   - search
+  # Keep links to the pre-1.1 docs layout (preview/...) working after the
+  # folder moved to v1/ with the documentdb.io/v1 API graduation.
+  - redirects:
+      redirect_maps:
+        preview/advanced-configuration/README.md: v1/advanced-configuration/README.md
+        preview/api-reference.md: v1/api-reference.md
+        preview/architecture/overview.md: v1/architecture/overview.md
+        preview/configuration/networking.md: v1/configuration/networking.md
+        preview/configuration/storage.md: v1/configuration/storage.md
+        preview/configuration/tls.md: v1/configuration/tls.md
+        preview/faq.md: v1/faq.md
+        preview/getting-started/before-you-start.md: v1/getting-started/before-you-start.md
+        preview/getting-started/connecting-to-documentdb.md: v1/getting-started/connecting-to-documentdb.md
+        preview/getting-started/deploy-on-aks.md: v1/getting-started/deploy-on-aks.md
+        preview/getting-started/deploy-on-eks.md: v1/getting-started/deploy-on-eks.md
+        preview/getting-started/deploy-on-gke.md: v1/getting-started/deploy-on-gke.md
+        preview/getting-started/quickstart-k3s.md: v1/getting-started/quickstart-k3s.md
+        preview/getting-started/quickstart-kind.md: v1/getting-started/quickstart-kind.md
+        preview/high-availability/local-ha.md: v1/high-availability/local-ha.md
+        preview/high-availability/overview.md: v1/high-availability/overview.md
+        preview/index.md: v1/index.md
+        preview/kubectl-plugin.md: v1/kubectl-plugin.md
+        preview/monitoring/metrics.md: v1/monitoring/metrics.md
+        preview/monitoring/overview.md: v1/monitoring/overview.md
+        preview/multi-region-deployment/failover-procedures.md: v1/multi-region-deployment/failover-procedures.md
+        preview/multi-region-deployment/multi-cloud.md: v1/multi-region-deployment/multi-cloud.md
+        preview/multi-region-deployment/overview.md: v1/multi-region-deployment/overview.md
+        preview/multi-region-deployment/setup.md: v1/multi-region-deployment/setup.md
+        preview/operations/backup-and-restore.md: v1/operations/backup-and-restore.md
+        preview/operations/failover.md: v1/operations/failover.md
+        preview/operations/maintenance.md: v1/operations/maintenance.md
+        preview/operations/restore-deleted-cluster.md: v1/operations/restore-deleted-cluster.md
+        preview/operations/upgrades.md: v1/operations/upgrades.md
 
 markdown_extensions:
   - admonition

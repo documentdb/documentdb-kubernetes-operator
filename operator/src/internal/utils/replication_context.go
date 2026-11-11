@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -75,7 +75,7 @@ func NewSingleRegionContext(name, environment, storageClass string) *Replication
 	return rc
 }
 
-func GetReplicationContext(ctx context.Context, client client.Client, documentdb dbpreview.DocumentDB) (*ReplicationContext, error) {
+func GetReplicationContext(ctx context.Context, client client.Client, documentdb dbv1.DocumentDB) (*ReplicationContext, error) {
 	singleClusterReplicationContext := NewSingleRegionContext(documentdb.Name, documentdb.Spec.Environment, documentdb.Spec.Resource.Storage.StorageClass)
 	if documentdb.Spec.ClusterReplication == nil {
 		return singleClusterReplicationContext, nil
@@ -237,7 +237,7 @@ func (r *ReplicationContext) CreateStandbyNamesList() []string {
 	return standbyNames
 }
 
-func getTopology(ctx context.Context, client client.Client, documentdb dbpreview.DocumentDB) (*dbpreview.MemberCluster, []string, ReplicationState, error) {
+func getTopology(ctx context.Context, client client.Client, documentdb dbv1.DocumentDB) (*dbv1.MemberCluster, []string, ReplicationState, error) {
 	memberClusterName := documentdb.Name
 	var err error
 
@@ -254,7 +254,7 @@ func getTopology(ctx context.Context, client client.Client, documentdb dbpreview
 	}
 
 	others := []string{}
-	var self *dbpreview.MemberCluster
+	var self *dbv1.MemberCluster
 	for _, c := range documentdb.Spec.ClusterReplication.ClusterList {
 		if c.Name != memberClusterName {
 			others = append(others, c.Name)

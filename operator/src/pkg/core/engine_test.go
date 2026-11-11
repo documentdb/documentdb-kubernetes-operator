@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/pkg/core"
 )
 
@@ -40,12 +40,12 @@ type accountSpec struct {
 }
 
 type accountStatus struct {
-	State         string               `json:"state,omitempty"`
-	Endpoint      string               `json:"endpoint,omitempty"`
-	SchemaVersion string               `json:"schemaVersion,omitempty"`
-	Engine        string               `json:"engine,omitempty"`
-	Gateway       string               `json:"gateway,omitempty"`
-	TLS           *dbpreview.TLSStatus `json:"tls,omitempty"`
+	State         string          `json:"state,omitempty"`
+	Endpoint      string          `json:"endpoint,omitempty"`
+	SchemaVersion string          `json:"schemaVersion,omitempty"`
+	Engine        string          `json:"engine,omitempty"`
+	Gateway       string          `json:"gateway,omitempty"`
+	TLS           *dbv1.TLSStatus `json:"tls,omitempty"`
 }
 
 func (a *account) DeepCopyObject() runtime.Object {
@@ -247,7 +247,7 @@ func (monitoredAccountAdapter) Profile() core.ProductProfile {
 }
 
 func (monitoredAccountAdapter) Spec(*account) core.ClusterSpec {
-	return core.ClusterSpec{Monitoring: &dbpreview.MonitoringSpec{Enabled: true}}
+	return core.ClusterSpec{Monitoring: &dbv1.MonitoringSpec{Enabled: true}}
 }
 
 // TestSecondProductMonitoringConfig checks the collector config the cluster

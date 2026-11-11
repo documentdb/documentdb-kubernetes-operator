@@ -14,7 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 //go:embed base_config.yaml
@@ -94,7 +94,7 @@ func ConfigMapName(clusterName string) string {
 // disabled, the operator deletes the ConfigMap and removes sidecar parameters,
 // then triggers a rolling restart (via restart annotation) so that CNPG
 // recreates pods without the sidecar.
-func GenerateConfigMapData(clusterName, namespace string, spec *dbpreview.MonitoringSpec) (map[string]string, error) {
+func GenerateConfigMapData(clusterName, namespace string, spec *dbv1.MonitoringSpec) (map[string]string, error) {
 	return GenerateConfigMapDataWithOptions(Options{}, clusterName, namespace, spec)
 }
 
@@ -118,7 +118,7 @@ const (
 )
 
 // GenerateConfigMapDataWithOptions is GenerateConfigMapData with product naming.
-func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (map[string]string, error) {
+func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace string, spec *dbv1.MonitoringSpec) (map[string]string, error) {
 	if opts.ClusterAttribute == "" {
 		opts.ClusterAttribute = defaultClusterAttribute
 	}
@@ -146,7 +146,7 @@ func GenerateConfigMapDataWithOptions(opts Options, clusterName, namespace strin
 // generateDynamicConfig builds the per-cluster dynamic config (resource
 // processor, exporters, pipeline wiring) that the collector deep-merges
 // with the embedded base_config.yaml.
-func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec *dbpreview.MonitoringSpec) (string, error) {
+func generateDynamicConfig(clusterAttribute, clusterName, namespace string, spec *dbv1.MonitoringSpec) (string, error) {
 	cfg := collectorConfig{
 		Processors: map[string]any{
 			// `insert` (not `upsert`) so receivers that already emit their
@@ -258,7 +258,7 @@ func HashConfigMapData(data map[string]string) string {
 
 // ResolvePrometheusPort returns the effective Prometheus port from the spec,
 // or 0 if Prometheus exporter is not configured.
-func ResolvePrometheusPort(spec *dbpreview.MonitoringSpec) int32 {
+func ResolvePrometheusPort(spec *dbv1.MonitoringSpec) int32 {
 	if spec == nil || spec.Exporter == nil || spec.Exporter.Prometheus == nil {
 		return 0
 	}

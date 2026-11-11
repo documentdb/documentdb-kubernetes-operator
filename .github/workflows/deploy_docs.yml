@@ -33,7 +33,7 @@ jobs:
           python-version: 3.x
 
       - name: Install dependencies
-        run: pip install "mkdocs-material==9.5.19" "mike==2.1.3"
+        run: pip install "mkdocs-material==9.5.19" "mike==2.1.3" "mkdocs-redirects==1.2.2"
 
       - name: Configure Git for mike
         run: |

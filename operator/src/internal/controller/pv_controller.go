@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
@@ -26,8 +26,8 @@ type PersistentVolumeReconciler struct {
 	client.Client
 }
 
-func (r *PersistentVolumeReconciler) engine() *engine.PersistentVolumeReconciler[*dbpreview.DocumentDB] {
-	return &engine.PersistentVolumeReconciler[*dbpreview.DocumentDB]{Client: r.Client, Adapter: product.DocumentDBAdapter{}}
+func (r *PersistentVolumeReconciler) engine() *engine.PersistentVolumeReconciler[*dbv1.DocumentDB] {
+	return &engine.PersistentVolumeReconciler[*dbv1.DocumentDB]{Client: r.Client, Adapter: product.DocumentDBAdapter{}}
 }
 
 // Package-level RBAC also covers PVC lifecycle operations performed by the
@@ -42,7 +42,7 @@ func (r *PersistentVolumeReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 // applyDesiredPVConfiguration applies the desired reclaim policy, mount options, and labels to a PV.
 // Returns true if any changes were made.
-func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Context, pv *corev1.PersistentVolume, documentdb *dbpreview.DocumentDB) bool {
+func (r *PersistentVolumeReconciler) applyDesiredPVConfiguration(ctx context.Context, pv *corev1.PersistentVolume, documentdb *dbv1.DocumentDB) bool {
 	return r.engine().ApplyDesiredPVConfiguration(ctx, pv, documentdb)
 }
 
@@ -64,7 +64,7 @@ func mergeMountOptions(current, desired []string) []string {
 // findDocumentDBForPV traverses the ownership chain to find the DocumentDB
 // associated with a PersistentVolume:
 // PV.claimRef -> PVC -> (ownerRef) CNPG Cluster -> (ownerRef) DocumentDB
-func (r *PersistentVolumeReconciler) findDocumentDBForPV(ctx context.Context, pv *corev1.PersistentVolume) (*dbpreview.DocumentDB, error) {
+func (r *PersistentVolumeReconciler) findDocumentDBForPV(ctx context.Context, pv *corev1.PersistentVolume) (*dbv1.DocumentDB, error) {
 	documentdb, _, err := r.engine().FindOwnerForPV(ctx, pv)
 	return documentdb, err
 }
@@ -75,7 +75,7 @@ func (r *PersistentVolumeReconciler) findCNPGClusterOwner(ctx context.Context, p
 }
 
 // findDocumentDBOwner finds the DocumentDB that owns the given CNPG Cluster
-func (r *PersistentVolumeReconciler) findDocumentDBOwner(ctx context.Context, cluster *cnpgv1.Cluster) *dbpreview.DocumentDB {
+func (r *PersistentVolumeReconciler) findDocumentDBOwner(ctx context.Context, cluster *cnpgv1.Cluster) *dbv1.DocumentDB {
 	documentdb, _ := r.engine().FindClusterOwner(ctx, cluster)
 	return documentdb
 }
@@ -86,7 +86,7 @@ func isCNPGClusterOwnerRef(ownerRef metav1.OwnerReference) bool {
 }
 
 // getDesiredReclaimPolicy returns the reclaim policy based on DocumentDB configuration
-func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbpreview.DocumentDB) corev1.PersistentVolumeReclaimPolicy {
+func (r *PersistentVolumeReconciler) getDesiredReclaimPolicy(documentdb *dbv1.DocumentDB) corev1.PersistentVolumeReclaimPolicy {
 	return engine.DesiredReclaimPolicy(documentdb.Spec.Resource.Storage.PersistentVolumeReclaimPolicy)
 }
 

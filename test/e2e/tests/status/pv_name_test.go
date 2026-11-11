@@ -17,7 +17,7 @@ import (
 // DocumentDB persistent volume — CRD discrepancy note.
 //
 // The task brief asked the spec to inspect `status.persistentVolumeClaim`
-// but the `DocumentDBStatus` type in operator/src/api/preview/documentdb_types.go
+// but the `DocumentDBStatus` type in operator/src/api/v1/documentdb_types.go
 // does not expose such a field. The authoritative ownership of a
 // DocumentDB's data volumes sits on the backing CloudNative-PG Cluster,
 // which labels each PVC with `cnpg.io/cluster=<name>`.

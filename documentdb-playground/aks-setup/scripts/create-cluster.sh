@@ -455,7 +455,7 @@ EOF
     if [ "$CREATE_STORAGE_CLASS" = "true" ]; then
         # Use custom Premium SSD storage class
         kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: sample-documentdb
@@ -476,7 +476,7 @@ EOF
     else
         # Use AKS default storage (StandardSSD_LRS)
         kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: sample-documentdb

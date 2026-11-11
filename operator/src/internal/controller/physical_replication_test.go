@@ -17,14 +17,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/cnpg"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
 func buildDocumentDBReconciler(objs ...runtime.Object) *DocumentDBReconciler {
 	scheme := runtime.NewScheme()
-	Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+	Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 	Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 	Expect(corev1.AddToScheme(scheme)).To(Succeed())
 	Expect(rbacv1.AddToScheme(scheme)).To(Succeed())
@@ -54,17 +54,17 @@ var _ = Describe("Physical Replication", func() {
 		documentdb := baseDocumentDB("docdb-not-present", namespace)
 		documentdb.UID = types.UID("docdb-not-present-uid")
 		documentdb.Finalizers = []string{documentDBFinalizer}
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.AzureFleet),
 			Primary:                      "member-2",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "member-2"},
 				{Name: "member-3"},
 			},
 		}
 
 		ownerRef := metav1.OwnerReference{
-			APIVersion: "documentdb.io/preview",
+			APIVersion: "documentdb.io/v1",
 			Kind:       "DocumentDB",
 			Name:       documentdb.Name,
 			UID:        documentdb.UID,
@@ -171,10 +171,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-r2r", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-c",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 				{Name: "cluster-c"},
@@ -227,10 +227,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-r2p", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -282,10 +282,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-p2r", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-b",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -346,11 +346,11 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-p2r-ha", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-b",
 			HighAvailability:             true,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -415,11 +415,11 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-r2p-ha", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
 			HighAvailability:             true,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -484,10 +484,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-stale-token", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -546,10 +546,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-clean-token", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -592,10 +592,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-repl", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      documentdb.Name,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: documentdb.Name},
 				{Name: "member-2"},
 			},
@@ -659,10 +659,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-repl-nonha", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      documentdb.Name,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: documentdb.Name},
 				{Name: "member-2"},
 			},
@@ -773,7 +773,7 @@ var _ = Describe("Physical Replication", func() {
 			},
 		}
 
-		documentdb := &dbpreview.DocumentDB{}
+		documentdb := &dbv1.DocumentDB{}
 		reconciler := buildDocumentDBReconciler(current)
 		replicationContext := &util.ReplicationContext{
 			OtherCNPGClusterNames: []string{"standby-1", "standby-2", "standby-3"},
@@ -820,7 +820,7 @@ var _ = Describe("Physical Replication", func() {
 		}
 		desired.Spec.PostgresConfiguration.Synchronous = nil
 
-		documentdb := &dbpreview.DocumentDB{}
+		documentdb := &dbv1.DocumentDB{}
 		reconciler := buildDocumentDBReconciler(current)
 		replicationContext := &util.ReplicationContext{
 			OtherCNPGClusterNames: []string{"standby-2"},
@@ -872,7 +872,7 @@ var _ = Describe("Physical Replication", func() {
 			Number: 2,
 		}
 
-		documentdb := &dbpreview.DocumentDB{}
+		documentdb := &dbv1.DocumentDB{}
 		reconciler := buildDocumentDBReconciler(current)
 		replicationContext := &util.ReplicationContext{
 			OtherCNPGClusterNames: []string{"standby-3", "standby-4"},
@@ -890,10 +890,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-repl-pghba", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      documentdb.Name,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: documentdb.Name},
 				{Name: "member-2"},
 			},
@@ -960,10 +960,10 @@ var _ = Describe("Physical Replication", func() {
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-repl-ha-sync", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      documentdb.Name,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: documentdb.Name},
 				{Name: "member-2"},
 			},
@@ -1047,15 +1047,15 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-cert-provided", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
 		}
-		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
+		documentdb.Spec.TLS = &dbv1.TLSConfiguration{
 			Postgres: &cnpgv1.CertificatesConfiguration{
 				ServerCASecret:       "provided-server-ca",
 				ClientCASecret:       "provided-client-ca",
@@ -1099,15 +1099,15 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-cert-partial", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
 		}
-		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
+		documentdb.Spec.TLS = &dbv1.TLSConfiguration{
 			Postgres: &cnpgv1.CertificatesConfiguration{
 				ReplicationTLSSecret: "replication-tls",
 				ClientCASecret:       "replication-tls",
@@ -1138,15 +1138,15 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-distinct-ca", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.None),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
 		}
-		documentdb.Spec.TLS = &dbpreview.TLSConfiguration{
+		documentdb.Spec.TLS = &dbv1.TLSConfiguration{
 			Postgres: &cnpgv1.CertificatesConfiguration{
 				ReplicationTLSSecret: "cross-region-client-cert",
 				ClientCASecret:       "cross-region-client-cert",
@@ -1177,11 +1177,11 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-cert-omitted", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.Istio),
 			Primary:                      "cluster-a",
 			DisableTLS:                   true,
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},
@@ -1215,10 +1215,10 @@ var _ = Describe("AddClusterReplicationToClusterSpec - cert management fields", 
 		namespace := "default"
 
 		documentdb := baseDocumentDB("docdb-cert-omitted-default", namespace)
-		documentdb.Spec.ClusterReplication = &dbpreview.ClusterReplication{
+		documentdb.Spec.ClusterReplication = &dbv1.ClusterReplication{
 			CrossCloudNetworkingStrategy: string(util.Istio),
 			Primary:                      "cluster-a",
-			ClusterList: []dbpreview.MemberCluster{
+			ClusterList: []dbv1.MemberCluster{
 				{Name: "cluster-a"},
 				{Name: "cluster-b"},
 			},

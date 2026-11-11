@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 
 	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
@@ -219,7 +219,7 @@ func manifestsDir() (string, error) {
 
 // renderTemplate applies envsubst to the template at path relative to
 // manifestsDir() and unmarshals the result into a DocumentDB CR.
-func renderDocumentDB(relPath string, vars map[string]string) (*previewv1.DocumentDB, error) {
+func renderDocumentDB(relPath string, vars map[string]string) (*dbv1.DocumentDB, error) {
 	root, err := manifestsDir()
 	if err != nil {
 		return nil, err
@@ -232,7 +232,7 @@ func renderDocumentDB(relPath string, vars map[string]string) (*previewv1.Docume
 	if err != nil {
 		return nil, fmt.Errorf("envsubst on %s: %w", relPath, err)
 	}
-	out := &previewv1.DocumentDB{}
+	out := &dbv1.DocumentDB{}
 	if err := yaml.Unmarshal(rendered, out); err != nil {
 		return nil, fmt.Errorf("unmarshal rendered %s: %w", relPath, err)
 	}
@@ -409,7 +409,7 @@ func baseVars(namespace, name, instances string) map[string]string {
 // CR's run-id label matches the current RunID(); a mismatch returns an
 // explicit collision error so the caller can abort rather than adopt a
 // foreign fixture.
-func createDocumentDB(ctx context.Context, c client.Client, dd *previewv1.DocumentDB, fixture string) error {
+func createDocumentDB(ctx context.Context, c client.Client, dd *dbv1.DocumentDB, fixture string) error {
 	if dd.Labels == nil {
 		dd.Labels = map[string]string{}
 	}
@@ -425,7 +425,7 @@ func createDocumentDB(ctx context.Context, c client.Client, dd *previewv1.Docume
 	if !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("create documentdb %s/%s: %w", dd.Namespace, dd.Name, err)
 	}
-	existing := &previewv1.DocumentDB{}
+	existing := &dbv1.DocumentDB{}
 	key := types.NamespacedName{Namespace: dd.Namespace, Name: dd.Name}
 	if getErr := c.Get(ctx, key, existing); getErr != nil {
 		return fmt.Errorf("get existing documentdb %s: %w", key, getErr)
@@ -445,7 +445,7 @@ func createDocumentDB(ctx context.Context, c client.Client, dd *previewv1.Docume
 // reports the canonical healthy string used by the operator and CI.
 func waitDocumentDBHealthy(ctx context.Context, c client.Client, namespace, name string, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, defaultPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		dd := &previewv1.DocumentDB{}
+		dd := &dbv1.DocumentDB{}
 		if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, dd); err != nil {
 			if apierrors.IsNotFound(err) {
 				return false, nil
@@ -459,12 +459,12 @@ func waitDocumentDBHealthy(ctx context.Context, c client.Client, namespace, name
 // deleteDocumentDB deletes the DocumentDB CR and waits for it to be
 // fully removed.
 func deleteDocumentDB(ctx context.Context, c client.Client, namespace, name string, timeout time.Duration) error {
-	dd := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	dd := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 	if err := c.Delete(ctx, dd); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete documentdb %s/%s: %w", namespace, name, err)
 	}
 	return wait.PollUntilContextTimeout(ctx, defaultPollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &previewv1.DocumentDB{})
+		err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &dbv1.DocumentDB{})
 		if apierrors.IsNotFound(err) {
 			return true, nil
 		}
@@ -499,7 +499,7 @@ func teardownFixtureByLabels(ctx context.Context, c client.Client, fixture strin
 		LabelFixture: fixture,
 	}
 	// Step 1: delete DocumentDB CRs cluster-wide.
-	dds := &previewv1.DocumentDBList{}
+	dds := &dbv1.DocumentDBList{}
 	if err := c.List(ctx, dds, sel); err != nil {
 		return fmt.Errorf("list %s DocumentDB CRs: %w", fixture, err)
 	}

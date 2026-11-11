@@ -11,17 +11,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // The design doc calls the field `spec.documentDbVersion`; the CRD at
-// operator/src/api/preview/documentdb_types.go names it DocumentDBVersion
+// operator/src/api/v1/documentdb_types.go names it DocumentDBVersion
 // (JSON `documentDBVersion`) and also exposes spec.image.documentDB /
 // spec.image.gateway which take precedence when set. Because the base
 // template provides spec.image.documentDB (not Version), we exercise the
@@ -82,9 +82,9 @@ var _ = Describe("DocumentDB lifecycle — update spec.image.documentDB",
 
 			// Refetch for a fresh resourceVersion before patching.
 			fresh := getDD(ctx, ns, name)
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				if s.Image == nil {
-					s.Image = &previewv1.ImageSpec{}
+					s.Image = &dbv1.ImageSpec{}
 				}
 				s.Image.DocumentDB = targetImage
 			})).To(Succeed())

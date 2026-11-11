@@ -12,18 +12,18 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/clusterprobe"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // The CRD nests storage as Spec.Resource.Storage.PvcSize (see
-// operator/src/api/preview/documentdb_types.go). The design doc wording
+// operator/src/api/v1/documentdb_types.go). The design doc wording
 // "spec.resource or spec.persistentVolumeClaim" is ambiguous — the real
 // field is `spec.resource.storage.pvcSize`, patched below.
 var _ = Describe("DocumentDB lifecycle — update storage.pvcSize",
@@ -74,7 +74,7 @@ var _ = Describe("DocumentDB lifecycle — update storage.pvcSize",
 
 			// Patch the storage size.
 			fresh := getDD(ctx, ns, name)
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				s.Resource.Storage.PvcSize = "2Gi"
 			})).To(Succeed())
 

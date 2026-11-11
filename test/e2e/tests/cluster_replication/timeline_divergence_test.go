@@ -24,15 +24,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	emongo "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/mongo"
-	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
+	sharedmongo "github.com/documentdb/documentdb-operator/test/shared/mongo"
 )
 
 // ---------------------------------------------------------------------------
@@ -158,13 +158,13 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			By(fmt.Sprintf("patching both CRs to set primary=%s", replicaName))
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddb.PatchSpec(ctx, c, primaryDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary to demote")
 
 			replicaDD := getDD(ctx, ns, replicaName)
-			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddb.PatchSpec(ctx, c, replicaDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = replicaName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica to promote")
@@ -233,13 +233,13 @@ var _ = Describe("Issue #375: rapid back-to-back failover causes WAL timeline di
 			// Promote back to original primary WITHOUT waiting for
 			// replication health — this is the trigger for timeline divergence
 			replicaDD := getDD(ctx, ns, replicaName)
-			err := shareddb.PatchSpec(ctx, c, replicaDD, func(spec *previewv1.DocumentDBSpec) {
+			err := shareddb.PatchSpec(ctx, c, replicaDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = primaryName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch replica to demote (rapid switchback)")
 
 			primaryDD := getDD(ctx, ns, primaryName)
-			err = shareddb.PatchSpec(ctx, c, primaryDD, func(spec *previewv1.DocumentDBSpec) {
+			err = shareddb.PatchSpec(ctx, c, primaryDD, func(spec *dbv1.DocumentDBSpec) {
 				spec.ClusterReplication.Primary = primaryName
 			})
 			Expect(err).ToNot(HaveOccurred(), "patch primary to promote (rapid switchback)")

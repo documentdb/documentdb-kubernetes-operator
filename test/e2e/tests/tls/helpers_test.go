@@ -18,15 +18,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/portforward"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // Shared per-spec setup for the TLS area. Each TLS spec uses the same
@@ -52,7 +52,7 @@ const (
 // clusterSetup holds the artefacts returned by provisionCluster.
 type clusterSetup struct {
 	NamespaceName string
-	DD            *previewv1.DocumentDB
+	DD            *dbv1.DocumentDB
 }
 
 // provisionCluster builds a TLS-configured DocumentDB from the base
@@ -120,7 +120,7 @@ func provisionCluster(
 // openGatewayForward opens a port-forward to the gateway Service of
 // dd on a locally-reserved port and returns (host, port, stop). The
 // caller defers stop; the host is always "127.0.0.1".
-func openGatewayForward(ctx context.Context, dd *previewv1.DocumentDB) (string, string, func()) {
+func openGatewayForward(ctx context.Context, dd *dbv1.DocumentDB) (string, string, func()) {
 	GinkgoHelper()
 	port := pickFreeLocalPort()
 	stop, err := portforward.Open(ctx, e2e.SuiteEnv(), dd, port)

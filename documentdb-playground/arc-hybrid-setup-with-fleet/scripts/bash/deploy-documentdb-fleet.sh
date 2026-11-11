@@ -134,7 +134,7 @@ if [[ "$DEPLOY_INSTANCES" == "true" ]]; then
         
         # Deploy instance
         kubectl apply -f - <<EOF
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-$MEMBER

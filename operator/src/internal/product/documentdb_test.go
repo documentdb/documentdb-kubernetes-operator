@@ -8,7 +8,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -19,26 +19,26 @@ func TestDocumentDBAdapterExtensionImage(t *testing.T) {
 	a := DocumentDBAdapter{}
 	tests := []struct {
 		name string
-		spec dbpreview.DocumentDBSpec
+		spec dbv1.DocumentDBSpec
 		want string
 	}{
-		{"explicit image overrides feature gate", dbpreview.DocumentDBSpec{
-			Image:        &dbpreview.ImageSpec{DocumentDB: "custom-registry/custom-image:v1"},
-			FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		{"explicit image overrides feature gate", dbv1.DocumentDBSpec{
+			Image:        &dbv1.ImageSpec{DocumentDB: "custom-registry/custom-image:v1"},
+			FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: true},
 		}, "custom-registry/custom-image:v1"},
-		{"documentDBVersion resolves image", dbpreview.DocumentDBSpec{DocumentDBVersion: "1.2.3"}, util.DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3"},
-		{"explicit overrides documentDBVersion", dbpreview.DocumentDBSpec{
-			Image:             &dbpreview.ImageSpec{DocumentDB: "custom-registry/custom-image:v1"},
+		{"documentDBVersion resolves image", dbv1.DocumentDBSpec{DocumentDBVersion: "1.2.3"}, util.DOCUMENTDB_EXTENSION_IMAGE_REPO + ":1.2.3"},
+		{"explicit overrides documentDBVersion", dbv1.DocumentDBSpec{
+			Image:             &dbv1.ImageSpec{DocumentDB: "custom-registry/custom-image:v1"},
 			DocumentDBVersion: "1.2.3",
 		}, "custom-registry/custom-image:v1"},
-		{"changestream enabled", dbpreview.DocumentDBSpec{FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true}}, util.CHANGESTREAM_DOCUMENTDB_IMAGE},
-		{"changestream disabled falls through to default", dbpreview.DocumentDBSpec{FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false}}, util.DEFAULT_DOCUMENTDB_IMAGE},
-		{"default when no overrides", dbpreview.DocumentDBSpec{}, util.DEFAULT_DOCUMENTDB_IMAGE},
+		{"changestream enabled", dbv1.DocumentDBSpec{FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: true}}, util.CHANGESTREAM_DOCUMENTDB_IMAGE},
+		{"changestream disabled falls through to default", dbv1.DocumentDBSpec{FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: false}}, util.DEFAULT_DOCUMENTDB_IMAGE},
+		{"default when no overrides", dbv1.DocumentDBSpec{}, util.DEFAULT_DOCUMENTDB_IMAGE},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := a.ExtensionImage(&dbpreview.DocumentDB{Spec: tt.spec}); got != tt.want {
+			if got := a.ExtensionImage(&dbv1.DocumentDB{Spec: tt.spec}); got != tt.want {
 				t.Errorf("ExtensionImage() = %q, want %q", got, tt.want)
 			}
 		})
@@ -53,26 +53,26 @@ func TestDocumentDBAdapterCombinedImage(t *testing.T) {
 	repo := util.DOCUMENTDB_COMBINED_IMAGE_REPO + ":18-"
 	tests := []struct {
 		name string
-		spec dbpreview.DocumentDBSpec
+		spec dbv1.DocumentDBSpec
 		want string
 	}{
-		{"changestream gate ignored", dbpreview.DocumentDBSpec{
+		{"changestream gate ignored", dbv1.DocumentDBSpec{
 			DocumentDBVersion: "0.117.0",
-			FeatureGates:      map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+			FeatureGates:      map[string]bool{dbv1.FeatureGateChangeStreams: true},
 		}, repo + "0.117.0"},
-		{"explicit release tag", dbpreview.DocumentDBSpec{
-			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb:1.0.0"},
+		{"explicit release tag", dbv1.DocumentDBSpec{
+			Image:             &dbv1.ImageSpec{DocumentDB: "mirror.example.com/documentdb:1.0.0"},
 			DocumentDBVersion: "0.117.0",
 		}, repo + "1.0.0"},
-		{"explicit digest falls back to documentDBVersion", dbpreview.DocumentDBSpec{
-			Image:             &dbpreview.ImageSpec{DocumentDB: "mirror.example.com/documentdb@sha256:abc"},
+		{"explicit digest falls back to documentDBVersion", dbv1.DocumentDBSpec{
+			Image:             &dbv1.ImageSpec{DocumentDB: "mirror.example.com/documentdb@sha256:abc"},
 			DocumentDBVersion: "0.117.0",
 		}, repo + "0.117.0"},
-		{"default", dbpreview.DocumentDBSpec{}, repo + util.DEFAULT_DOCUMENTDB_TAG},
+		{"default", dbv1.DocumentDBSpec{}, repo + util.DEFAULT_DOCUMENTDB_TAG},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := &dbpreview.DocumentDB{Spec: tt.spec}
+			db := &dbv1.DocumentDB{Spec: tt.spec}
 			if got := a.CombinedImage(db); got != tt.want {
 				t.Errorf("CombinedImage() = %q, want %q", got, tt.want)
 			}
@@ -88,26 +88,26 @@ func TestDocumentDBAdapterGatewayImage(t *testing.T) {
 	a := DocumentDBAdapter{}
 	tests := []struct {
 		name string
-		spec dbpreview.DocumentDBSpec
+		spec dbv1.DocumentDBSpec
 		want string
 	}{
-		{"default when no overrides", dbpreview.DocumentDBSpec{}, util.DEFAULT_GATEWAY_IMAGE},
-		{"explicit image takes precedence", dbpreview.DocumentDBSpec{
-			Image:        &dbpreview.ImageSpec{Gateway: "custom-registry/custom-gateway:v1"},
-			FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
+		{"default when no overrides", dbv1.DocumentDBSpec{}, util.DEFAULT_GATEWAY_IMAGE},
+		{"explicit image takes precedence", dbv1.DocumentDBSpec{
+			Image:        &dbv1.ImageSpec{Gateway: "custom-registry/custom-gateway:v1"},
+			FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: true},
 		}, "custom-registry/custom-gateway:v1"},
-		{"documentDBVersion resolves image", dbpreview.DocumentDBSpec{DocumentDBVersion: "1.2.3"}, util.GATEWAY_IMAGE_REPO + ":1.2.3"},
-		{"explicit overrides documentDBVersion", dbpreview.DocumentDBSpec{
-			Image:             &dbpreview.ImageSpec{Gateway: "custom-registry/custom-gateway:v1"},
+		{"documentDBVersion resolves image", dbv1.DocumentDBSpec{DocumentDBVersion: "1.2.3"}, util.GATEWAY_IMAGE_REPO + ":1.2.3"},
+		{"explicit overrides documentDBVersion", dbv1.DocumentDBSpec{
+			Image:             &dbv1.ImageSpec{Gateway: "custom-registry/custom-gateway:v1"},
 			DocumentDBVersion: "1.2.3",
 		}, "custom-registry/custom-gateway:v1"},
-		{"changestream enabled", dbpreview.DocumentDBSpec{FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true}}, util.CHANGESTREAM_GATEWAY_IMAGE},
-		{"changestream disabled", dbpreview.DocumentDBSpec{FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: false}}, util.DEFAULT_GATEWAY_IMAGE},
+		{"changestream enabled", dbv1.DocumentDBSpec{FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: true}}, util.CHANGESTREAM_GATEWAY_IMAGE},
+		{"changestream disabled", dbv1.DocumentDBSpec{FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: false}}, util.DEFAULT_GATEWAY_IMAGE},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := a.GatewayImage(&dbpreview.DocumentDB{Spec: tt.spec}); got != tt.want {
+			if got := a.GatewayImage(&dbv1.DocumentDB{Spec: tt.spec}); got != tt.want {
 				t.Errorf("GatewayImage() = %q, want %q", got, tt.want)
 			}
 		})
@@ -119,7 +119,7 @@ func TestDocumentDBAdapterGatewayImage(t *testing.T) {
 func TestDocumentDBAdapterImageResolutionEnvVar(t *testing.T) {
 	t.Setenv(util.DOCUMENTDB_VERSION_ENV, "0.200.0")
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+	db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}
 
 	if got, want := a.ExtensionImage(db), util.DOCUMENTDB_EXTENSION_IMAGE_REPO+":0.200.0"; got != want {
 		t.Errorf("ExtensionImage() = %q, want %q", got, want)
@@ -136,7 +136,7 @@ func TestDocumentDBAdapterRepoOverrideFlowsToDefault(t *testing.T) {
 	t.Setenv(util.DOCUMENTDB_EXTENSION_IMAGE_REPO_ENV, "mcr.microsoft.com/documentdb/documentdb")
 	t.Setenv(util.GATEWAY_IMAGE_REPO_ENV, "mcr.microsoft.com/documentdb/gateway")
 	a := DocumentDBAdapter{}
-	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}
+	db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}
 
 	if got, want := a.ExtensionImage(db), "mcr.microsoft.com/documentdb/documentdb:"+util.DEFAULT_DOCUMENTDB_TAG; got != want {
 		t.Errorf("ExtensionImage() = %q, want %q", got, want)
@@ -153,7 +153,7 @@ func TestDocumentDBAdapterPostgresImage(t *testing.T) {
 	a := DocumentDBAdapter{}
 
 	t.Run("empty when unset defers to CNPG", func(t *testing.T) {
-		got := a.ToClusterIntent(&dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}).Images.Postgres
+		got := a.ToClusterIntent(&dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}).Images.Postgres
 		if got != "" {
 			t.Errorf("Postgres = %q, want empty", got)
 		}
@@ -161,7 +161,7 @@ func TestDocumentDBAdapterPostgresImage(t *testing.T) {
 
 	t.Run("operator default from env", func(t *testing.T) {
 		t.Setenv(util.POSTGRES_IMAGE_ENV, "mcr.microsoft.com/oss/cloudnative-pg/postgresql:17.6")
-		got := a.ToClusterIntent(&dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{}}).Images.Postgres
+		got := a.ToClusterIntent(&dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{}}).Images.Postgres
 		if want := "mcr.microsoft.com/oss/cloudnative-pg/postgresql:17.6"; got != want {
 			t.Errorf("Postgres = %q, want %q", got, want)
 		}
@@ -169,8 +169,8 @@ func TestDocumentDBAdapterPostgresImage(t *testing.T) {
 
 	t.Run("CR pin overrides operator default", func(t *testing.T) {
 		t.Setenv(util.POSTGRES_IMAGE_ENV, "mcr.microsoft.com/oss/cloudnative-pg/postgresql:17.6")
-		db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-			Image: &dbpreview.ImageSpec{Postgres: "custom-registry/pg:16"},
+		db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{
+			Image: &dbv1.ImageSpec{Postgres: "custom-registry/pg:16"},
 		}}
 		if got, want := a.ToClusterIntent(db).Images.Postgres, "custom-registry/pg:16"; got != want {
 			t.Errorf("Postgres = %q, want %q", got, want)
@@ -184,20 +184,20 @@ func TestDocumentDBAdapterRendererInputs(t *testing.T) {
 	t.Setenv(util.DOCUMENTDB_IMAGE_PULL_POLICY_ENV, "bogus")
 	t.Setenv(util.GATEWAY_IMAGE_PULL_POLICY_ENV, "Never")
 	certs := &cnpgv1.CertificatesConfiguration{ServerTLSSecret: "pg-tls"}
-	db := &dbpreview.DocumentDB{Spec: dbpreview.DocumentDBSpec{
-		Resource: dbpreview.Resource{
+	db := &dbv1.DocumentDB{Spec: dbv1.DocumentDBSpec{
+		Resource: dbv1.Resource{
 			Memory:  "8Gi",
 			CPU:     "2",
-			Gateway: &dbpreview.ComponentResources{Memory: "1Gi"},
+			Gateway: &dbv1.ComponentResources{Memory: "1Gi"},
 		},
-		Monitoring:   &dbpreview.MonitoringSpec{Enabled: true},
+		Monitoring:   &dbv1.MonitoringSpec{Enabled: true},
 		LogLevel:     "debug",
-		Timeouts:     dbpreview.Timeouts{StopDelay: 90},
-		Postgres:     &dbpreview.PostgresSpec{Parameters: map[string]string{"work_mem": "8MB"}},
-		FeatureGates: map[string]bool{dbpreview.FeatureGateChangeStreams: true},
-		TLS:          &dbpreview.TLSConfiguration{Postgres: certs},
+		Timeouts:     dbv1.Timeouts{StopDelay: 90},
+		Postgres:     &dbv1.PostgresSpec{Parameters: map[string]string{"work_mem": "8MB"}},
+		FeatureGates: map[string]bool{dbv1.FeatureGateChangeStreams: true},
+		TLS:          &dbv1.TLSConfiguration{Postgres: certs},
 	}}
-	db.Status.TLS = &dbpreview.TLSStatus{Ready: false, SecretName: "gw-tls"}
+	db.Status.TLS = &dbv1.TLSStatus{Ready: false, SecretName: "gw-tls"}
 
 	intent := DocumentDBAdapter{}.ToClusterIntent(db)
 

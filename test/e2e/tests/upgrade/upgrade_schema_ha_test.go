@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"k8s.io/apimachinery/pkg/types"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
@@ -139,7 +139,7 @@ var _ = Describe("DocumentDB upgrade — schema (multi-instance HA)",
 			By("upgrading the binary via spec.documentDBVersion without setting schemaVersion")
 			fresh, err := shareddb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before version patch")
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				s.DocumentDBVersion = newVersion
 			})).To(Succeed(), "patch DocumentDBVersion from %s to %s", oldVersion, newVersion)
 
@@ -167,7 +167,7 @@ var _ = Describe("DocumentDB upgrade — schema (multi-instance HA)",
 			By("finalizing the schema by setting spec.schemaVersion to the new version")
 			fresh2, err := shareddb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before schema finalize")
-			Expect(shareddb.PatchSpec(ctx, c, fresh2, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh2, func(s *dbv1.DocumentDBSpec) {
 				s.SchemaVersion = newVersion
 			})).To(Succeed(), "patch DocumentDB schemaVersion to %s", newVersion)
 

@@ -15,6 +15,6 @@ resources:
   domain: microsoft.com
   group: db
   kind: DocumentDB
-  path: github.com/documentdb/documentdb-operator/api/preview
-  version: preview
+  path: github.com/documentdb/documentdb-operator/api/v1
+  version: v1
 version: "3"

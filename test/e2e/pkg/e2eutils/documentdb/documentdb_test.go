@@ -30,7 +30,7 @@ func newScheme(t *testing.T) *runtime.Scheme {
 func TestRenderCRConcatenatesBaseAndMixins(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, baseSubdir, "ddb"+templateExt),
-		"apiVersion: documentdb.io/preview\nkind: DocumentDB\nmetadata:\n  name: ${NAME}\n  namespace: ${NAMESPACE}\n")
+		"apiVersion: documentdb.io/v1\nkind: DocumentDB\nmetadata:\n  name: ${NAME}\n  namespace: ${NAMESPACE}\n")
 	mustWrite(t, filepath.Join(dir, mixinSubdir, "tls"+templateExt),
 		"# tls mixin for ${NAME}\n")
 

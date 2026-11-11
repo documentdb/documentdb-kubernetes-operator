@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/pkg/core"
 )
 
@@ -86,7 +86,7 @@ func regionContext(state core.ReplicationState, currentLocalPrimary, targetLocal
 func replicationScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, cnpgv1.AddToScheme, dbpreview.AddToScheme, snapshotv1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{clientgoscheme.AddToScheme, cnpgv1.AddToScheme, dbv1.AddToScheme, snapshotv1.AddToScheme} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
@@ -226,14 +226,14 @@ func TestClusterReconcilerNotPresentSkipsCluster(t *testing.T) {
 
 type backupAdapter struct{}
 
-func (backupAdapter) New() *dbpreview.Backup                             { return &dbpreview.Backup{} }
-func (backupAdapter) NewList() client.ObjectList                         { return &dbpreview.BackupList{} }
-func (backupAdapter) Spec(b *dbpreview.Backup) *dbpreview.BackupSpec     { return &b.Spec }
-func (backupAdapter) Status(b *dbpreview.Backup) *dbpreview.BackupStatus { return &b.Status }
-func (backupAdapter) Items(list client.ObjectList) []*dbpreview.Backup {
-	items := []*dbpreview.Backup{}
-	for i := range list.(*dbpreview.BackupList).Items {
-		items = append(items, &list.(*dbpreview.BackupList).Items[i])
+func (backupAdapter) New() *dbv1.Backup                        { return &dbv1.Backup{} }
+func (backupAdapter) NewList() client.ObjectList               { return &dbv1.BackupList{} }
+func (backupAdapter) Spec(b *dbv1.Backup) *dbv1.BackupSpec     { return &b.Spec }
+func (backupAdapter) Status(b *dbv1.Backup) *dbv1.BackupStatus { return &b.Status }
+func (backupAdapter) Items(list client.ObjectList) []*dbv1.Backup {
+	items := []*dbv1.Backup{}
+	for i := range list.(*dbv1.BackupList).Items {
+		items = append(items, &list.(*dbv1.BackupList).Items[i])
 	}
 	return items
 }
@@ -250,23 +250,23 @@ func TestBackupReconcilerReplicationGating(t *testing.T) {
 	}{
 		{"primary", regionContext(core.ReplicationPrimary, "acct-1", "acct-1"), true, "", 5 * time.Second},
 		{"primary awaiting promotion", regionContext(core.ReplicationPrimary, "acct-1", "acct-2"), false, "", time.Minute},
-		{"replica", regionContext(core.ReplicationReplica, "", ""), false, dbpreview.BackupPhaseSkipped, 0}, // requeues for expiry
+		{"replica", regionContext(core.ReplicationReplica, "", ""), false, dbv1.BackupPhaseSkipped, 0}, // requeues for expiry
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			scheme := replicationScheme(t)
 			acct := &account{ObjectMeta: metav1.ObjectMeta{Name: "acct", Namespace: "ns", UID: "uid-1"}}
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{Name: "b1", Namespace: "ns", UID: "uid-b"},
-				Spec:       dbpreview.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "acct"}},
+				Spec:       dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: "acct"}},
 			}
 			vsc := &snapshotv1.VolumeSnapshotClass{
 				ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: map[string]string{"snapshot.storage.kubernetes.io/is-default-class": "true"}},
 				Driver:     "disk.csi.example.com",
 			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(acct, backup, vsc).
-				WithStatusSubresource(&dbpreview.Backup{}).Build()
-			r := &core.BackupReconciler[*account, *dbpreview.Backup]{
+				WithStatusSubresource(&dbv1.Backup{}).Build()
+			r := &core.BackupReconciler[*account, *dbv1.Backup]{
 				Client: c, Scheme: scheme, Recorder: record.NewFakeRecorder(10),
 				Cluster: accountAdapter{}, Backups: backupAdapter{},
 				Replication: &accountReplication{rc: tc.rc},
@@ -286,7 +286,7 @@ func TestBackupReconcilerReplicationGating(t *testing.T) {
 			if tc.wantCreated && cnpgBackup.Spec.Cluster.Name != "acct" {
 				t.Errorf("CNPG backup cluster = %q, want acct", cnpgBackup.Spec.Cluster.Name)
 			}
-			got := &dbpreview.Backup{}
+			got := &dbv1.Backup{}
 			if err := c.Get(ctx, client.ObjectKeyFromObject(backup), got); err != nil {
 				t.Fatal(err)
 			}

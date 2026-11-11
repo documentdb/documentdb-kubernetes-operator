@@ -17,7 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	otelcfg "github.com/documentdb/documentdb-operator/internal/otel"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -28,7 +28,7 @@ import (
 // documentdbImage argument overrides the resolved extension image; pass "" to
 // use the image resolved from the instance. Retained for callers that supply an
 // explicit extension image.
-func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbpreview.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
+func GetCnpgClusterSpec(req ctrl.Request, documentdb *dbv1.DocumentDB, documentdbImage, serviceAccountName, storageClass string, isPrimaryRegion bool, log logr.Logger) *cnpgv1.Cluster {
 	intent := product.DocumentDBAdapter{}.ToClusterIntent(documentdb)
 	if documentdbImage != "" {
 		intent.Images.PostgresExtension = documentdbImage
@@ -215,7 +215,7 @@ func bootstrapConfigurationFromIntent(intent product.ClusterIntent, isPrimaryReg
 
 // getBootstrapConfiguration adapts a DocumentDB instance onto the intent-based
 // bootstrap builder. Retained for direct callers that hold the custom resource.
-func getBootstrapConfiguration(documentdb *dbpreview.DocumentDB, isPrimaryRegion bool, log logr.Logger) *cnpgv1.BootstrapConfiguration {
+func getBootstrapConfiguration(documentdb *dbv1.DocumentDB, isPrimaryRegion bool, log logr.Logger) *cnpgv1.BootstrapConfiguration {
 	return bootstrapConfigurationFromIntent(product.DocumentDBAdapter{}.ToClusterIntent(documentdb), isPrimaryRegion, log)
 }
 
@@ -233,12 +233,12 @@ func defaultBootstrapConfigurationFromIntent(intent product.ClusterIntent) *cnpg
 
 // getDefaultBootstrapConfiguration adapts a DocumentDB instance onto the
 // intent-based default bootstrap builder. Retained for direct callers.
-func getDefaultBootstrapConfiguration(documentdb *dbpreview.DocumentDB) *cnpgv1.BootstrapConfiguration {
+func getDefaultBootstrapConfiguration(documentdb *dbv1.DocumentDB) *cnpgv1.BootstrapConfiguration {
 	return defaultBootstrapConfigurationFromIntent(product.DocumentDBAdapter{}.ToClusterIntent(documentdb))
 }
 
 // getMaxStopDelayOrDefault returns StopDelay if set, otherwise util.CNPG_DEFAULT_STOP_DELAY
-func getMaxStopDelayOrDefault(documentdb *dbpreview.DocumentDB) int32 {
+func getMaxStopDelayOrDefault(documentdb *dbv1.DocumentDB) int32 {
 	return stopDelayOrDefault(documentdb.Spec.Timeouts.StopDelay)
 }
 
@@ -364,7 +364,7 @@ func applyIOUringSeccomp(spec *cnpgv1.ClusterSpec, intent product.ClusterIntent)
 //
 // Password authentication is an explicit product choice backed by an existing
 // Secret. Without one, retain the password-disabled DocumentDB default.
-func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, monitoring *dbpreview.MonitoringSpec, passwordSecret string) {
+func applyOtelMonitorRole(spec *cnpgv1.ClusterSpec, monitoring *dbv1.MonitoringSpec, passwordSecret string) {
 	if spec.Managed == nil {
 		spec.Managed = &cnpgv1.ManagedConfiguration{}
 	}

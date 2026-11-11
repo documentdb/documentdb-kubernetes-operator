@@ -195,7 +195,7 @@ so callers can wrap them in `Eventually(...).Should(Succeed())`.
 
 | Package | Role |
 |---|---|
-| `testenv/` | Wraps CNPG's `environment.TestingEnvironment` with dummy `POSTGRES_IMG`; registers our `api/preview` scheme on the typed `client.Client`. |
+| `testenv/` | Wraps CNPG's `environment.TestingEnvironment` with dummy `POSTGRES_IMG`; registers our `api/v1` scheme on the typed `client.Client`. |
 | `documentdb/` | DocumentDB CR verbs: `RenderCR` (base + mixin envsubst), `Create` (multi-doc merge), `PatchSpec`, `WaitHealthy`, `Delete`, `List`. |
 | `mongo/` | `go.mongodb.org/mongo-driver/v2` client builder, seed/probe/count helpers; owns the post-port-forward ping retry budget (`connectRetryTimeout`). |
 | `portforward/` | Thin wrapper over CNPG's `forwardconnection` for the DocumentDB gateway port. |

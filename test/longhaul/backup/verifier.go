@@ -10,7 +10,7 @@ import (
 
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/longhaul/journal"
 )
 
@@ -34,8 +34,8 @@ const (
 // monitor.K8sClusterClient satisfies it structurally.
 type Client interface {
 	EnsureScheduledBackup(ctx context.Context, name, schedule string, retentionDays int) error
-	GetScheduledBackup(ctx context.Context, name string) (*previewv1.ScheduledBackup, error)
-	ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]previewv1.Backup, error)
+	GetScheduledBackup(ctx context.Context, name string) (*dbv1.ScheduledBackup, error)
+	ListScheduledChildBackups(ctx context.Context, scheduledBackupName string) ([]dbv1.Backup, error)
 }
 
 // Config parameterizes the backup verifier.
@@ -219,7 +219,7 @@ func pruneAbsent(seen, present map[string]struct{}) {
 
 // recordPhase counts new completed / skipped / terminally-failed child
 // backups, deduplicated by name.
-func (v *Verifier) recordPhase(b *previewv1.Backup) {
+func (v *Verifier) recordPhase(b *dbv1.Backup) {
 	switch {
 	case isCompleted(b):
 		if _, seen := v.seenCompleted[b.Name]; !seen {
@@ -259,7 +259,7 @@ func (v *Verifier) recordPhase(b *previewv1.Backup) {
 // configured retention differs from what an older backup was created under.
 // Falls back to the run config if a backup carries no retention.
 // Flagged once per backup.
-func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
+func (v *Verifier) checkRetentionLeak(b *dbv1.Backup, now time.Time) {
 	if !isCompleted(b) || b.Status.StoppedAt == nil {
 		return
 	}
@@ -284,15 +284,15 @@ func (v *Verifier) checkRetentionLeak(b *previewv1.Backup, now time.Time) {
 }
 
 // isCompleted reports whether a Backup reached the "completed" phase.
-func isCompleted(b *previewv1.Backup) bool {
+func isCompleted(b *dbv1.Backup) bool {
 	return b != nil && b.Status.Phase == cnpgv1.BackupPhaseCompleted
 }
 
 // isSkipped reports whether a Backup reached the "skipped" phase — a terminal
 // no-op the operator emits for a non-primary/standby. recordPhase treats it
 // like a completion for the stall gap; it is not counted as a failure.
-func isSkipped(b *previewv1.Backup) bool {
-	return b != nil && b.Status.Phase == previewv1.BackupPhaseSkipped
+func isSkipped(b *dbv1.Backup) bool {
+	return b != nil && b.Status.Phase == dbv1.BackupPhaseSkipped
 }
 
 // isTerminalFailure reports whether a Backup reached a genuine failure
@@ -300,6 +300,6 @@ func isSkipped(b *previewv1.Backup) bool {
 // deliberately excluded: the operator emits it when a backup is
 // intentionally not taken (e.g. the cluster is a non-primary/standby), which
 // is an expected no-op, not a failure of the backup machinery.
-func isTerminalFailure(b *previewv1.Backup) bool {
+func isTerminalFailure(b *dbv1.Backup) bool {
 	return b != nil && b.Status.Phase == cnpgv1.BackupPhaseFailed
 }

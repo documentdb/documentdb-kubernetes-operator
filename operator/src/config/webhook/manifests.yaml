@@ -10,14 +10,14 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-documentdb-io-preview-documentdb
+      path: /validate-documentdb-io-v1-documentdb
   failurePolicy: Fail
   name: vdocumentdb.kb.io
   rules:
   - apiGroups:
     - documentdb.io
     apiVersions:
-    - preview
+    - v1
     operations:
     - CREATE
     - UPDATE

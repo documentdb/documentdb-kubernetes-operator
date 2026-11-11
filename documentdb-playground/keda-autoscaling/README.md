@@ -122,7 +122,7 @@ Interactive walkthrough that seeds jobs, watches scaling, drains jobs, and watch
 > Using `tlsAllowInvalidCertificates=true` alone causes `x509: certificate is not valid for any
 > names` errors because hostname verification still applies. For production, switch DocumentDB to
 > `CertManager` TLS mode — see the
-> [TLS configuration documentation](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/configuration/tls.md).
+> [TLS configuration documentation](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/configuration/tls.md).
 
 > **Note:** The `directConnection=true` parameter is essential. Without it, the Go MongoDB driver
 > attempts replica set discovery, which fails with DocumentDB because it doesn't expose a standard
@@ -153,6 +153,6 @@ Interactive walkthrough that seeds jobs, watches scaling, drains jobs, and watch
 
 - [KEDA MongoDB scaler documentation](https://keda.sh/docs/2.19/scalers/mongodb/)
 - [KEDA ScaledObject specification](https://keda.sh/docs/2.19/concepts/scaling-deployments/)
-- [DocumentDB Kubernetes Operator documentation](https://documentdb.io/documentdb-kubernetes-operator/preview/)
-- [Connecting to DocumentDB](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/getting-started/connecting-to-documentdb.md)
-- [DocumentDB TLS configuration](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/preview/configuration/tls.md)
+- [DocumentDB Kubernetes Operator documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/)
+- [Connecting to DocumentDB](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/getting-started/connecting-to-documentdb.md)
+- [DocumentDB TLS configuration](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/configuration/tls.md)

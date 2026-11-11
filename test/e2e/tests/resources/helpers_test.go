@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
@@ -82,7 +82,7 @@ func setupFreshCluster(
 	c client.Client,
 	name, podMemory string,
 	monitoringEnabled bool,
-) (*previewv1.DocumentDB, func()) {
+) (*dbv1.DocumentDB, func()) {
 	ns := namespaces.NamespaceForSpec(e2e.ResourcesLabel)
 	Expect(fixtures.CreateLabeledNamespace(ctx, c, ns, e2e.ResourcesLabel)).To(Succeed())
 	Expect(fixtures.CreateLabeledCredentialSecret(ctx, c, ns)).To(Succeed())
@@ -103,7 +103,7 @@ func setupExplicitCluster(
 	ctx context.Context,
 	c client.Client,
 	name, gatewayMemory, databaseMemory string,
-) (*previewv1.DocumentDB, func()) {
+) (*dbv1.DocumentDB, func()) {
 	ns := namespaces.NamespaceForSpec(e2e.ResourcesLabel)
 	Expect(fixtures.CreateLabeledNamespace(ctx, c, ns, e2e.ResourcesLabel)).To(Succeed())
 	Expect(fixtures.CreateLabeledCredentialSecret(ctx, c, ns)).To(Succeed())
@@ -123,7 +123,7 @@ func createAndWait(
 	ns, name string,
 	mixins []string,
 	vars map[string]string,
-) (*previewv1.DocumentDB, func()) {
+) (*dbv1.DocumentDB, func()) {
 	_, err := documentdbutil.Create(ctx, c, ns, name, documentdbutil.CreateOptions{
 		Base:          "documentdb",
 		Mixins:        mixins,

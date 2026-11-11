@@ -6,29 +6,29 @@ package product
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // DocumentDBBackupAdapter maps the documentdb.io Backup custom resource onto
 // the shared backup spec and status (engine.BackupAdapter).
 type DocumentDBBackupAdapter struct{}
 
-func (DocumentDBBackupAdapter) New() *dbpreview.Backup     { return &dbpreview.Backup{} }
-func (DocumentDBBackupAdapter) NewList() client.ObjectList { return &dbpreview.BackupList{} }
-func (DocumentDBBackupAdapter) Spec(b *dbpreview.Backup) *dbpreview.BackupSpec {
+func (DocumentDBBackupAdapter) New() *dbv1.Backup          { return &dbv1.Backup{} }
+func (DocumentDBBackupAdapter) NewList() client.ObjectList { return &dbv1.BackupList{} }
+func (DocumentDBBackupAdapter) Spec(b *dbv1.Backup) *dbv1.BackupSpec {
 	return &b.Spec
 }
-func (DocumentDBBackupAdapter) Status(b *dbpreview.Backup) *dbpreview.BackupStatus {
+func (DocumentDBBackupAdapter) Status(b *dbv1.Backup) *dbv1.BackupStatus {
 	return &b.Status
 }
 
 // Items returns pointers to the Backups of a BackupList.
-func (DocumentDBBackupAdapter) Items(list client.ObjectList) []*dbpreview.Backup {
-	backupList, ok := list.(*dbpreview.BackupList)
+func (DocumentDBBackupAdapter) Items(list client.ObjectList) []*dbv1.Backup {
+	backupList, ok := list.(*dbv1.BackupList)
 	if !ok {
 		return nil
 	}
-	items := make([]*dbpreview.Backup, 0, len(backupList.Items))
+	items := make([]*dbv1.Backup, 0, len(backupList.Items))
 	for i := range backupList.Items {
 		items = append(items, &backupList.Items[i])
 	}
@@ -40,12 +40,12 @@ func (DocumentDBBackupAdapter) Items(list client.ObjectList) []*dbpreview.Backup
 // (engine.ScheduledBackupAdapter).
 type DocumentDBScheduledBackupAdapter struct{}
 
-func (DocumentDBScheduledBackupAdapter) New() *dbpreview.ScheduledBackup {
-	return &dbpreview.ScheduledBackup{}
+func (DocumentDBScheduledBackupAdapter) New() *dbv1.ScheduledBackup {
+	return &dbv1.ScheduledBackup{}
 }
-func (DocumentDBScheduledBackupAdapter) Spec(s *dbpreview.ScheduledBackup) *dbpreview.ScheduledBackupSpec {
+func (DocumentDBScheduledBackupAdapter) Spec(s *dbv1.ScheduledBackup) *dbv1.ScheduledBackupSpec {
 	return &s.Spec
 }
-func (DocumentDBScheduledBackupAdapter) Status(s *dbpreview.ScheduledBackup) *dbpreview.ScheduledBackupStatus {
+func (DocumentDBScheduledBackupAdapter) Status(s *dbv1.ScheduledBackup) *dbv1.ScheduledBackupStatus {
 	return &s.Status
 }

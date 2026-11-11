@@ -80,16 +80,20 @@ webhooks:
       service:
         name: documentdb-webhook-service
         namespace: {{ $ns }}
-        path: /validate-documentdb-io-preview-documentdb
+        path: /validate-documentdb-io-v1-documentdb
     # Fail-closed: reject requests when the webhook is unreachable.
     # Safe because readiness/startup probes keep the pod out of the
     # Service endpoints until the TLS cert is loaded (CNPG pattern).
     failurePolicy: Fail
+    # Equivalent (the default) makes the API server convert requests for the
+    # deprecated documentdb.io/preview version to v1 before calling the
+    # webhook, so preview objects are validated too.
+    matchPolicy: Equivalent
     rules:
       - apiGroups:
           - documentdb.io
         apiVersions:
-          - preview
+          - v1
         operations:
           - CREATE
           - UPDATE

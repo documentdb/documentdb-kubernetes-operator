@@ -1,12 +1,12 @@
 // Package documentdb provides CRUD and lifecycle helpers for the
-// DocumentDB preview CR used by the E2E suite.
+// DocumentDB v1 CR used by the E2E suite.
 //
 // The package is deliberately framework-agnostic: it returns plain
 // errors rather than calling into Ginkgo/Gomega so unit tests can
 // exercise it with a fake client. Suite code wraps these in
 // gomega.Eventually where appropriate.
 //
-// Manifest rendering
+// # Manifest rendering
 //
 // Create/RenderCR compose a YAML document from a base template plus
 // zero or more mixins, concatenated with "---\n", then run the result
@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	e2emanifests "github.com/documentdb/documentdb-operator/test/e2e/manifests"
 )
 
@@ -75,7 +75,7 @@ type CreateOptions struct {
 // converting to the typed DocumentDB object. The public RenderCR API
 // still returns the raw multi-doc bytes, which are useful for artifact
 // dumps and manual kubectl apply.
-func Create(ctx context.Context, c client.Client, ns, name string, opts CreateOptions) (*previewv1.DocumentDB, error) {
+func Create(ctx context.Context, c client.Client, ns, name string, opts CreateOptions) (*dbv1.DocumentDB, error) {
 	raw, err := RenderCR(opts.Base, name, ns, opts.Mixins, opts.Vars, opts.ManifestsRoot)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func Create(ctx context.Context, c client.Client, ns, name string, opts CreateOp
 // Maps are merged recursively; scalars and slices in later documents
 // overwrite earlier values — the contract every mixin under
 // manifests/mixins/ is written against.
-func decodeMergedDocumentDB(raw []byte) (*previewv1.DocumentDB, error) {
+func decodeMergedDocumentDB(raw []byte) (*dbv1.DocumentDB, error) {
 	docs, err := splitYAMLDocuments(raw)
 	if err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func decodeMergedDocumentDB(raw []byte) (*previewv1.DocumentDB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("re-marshaling merged DocumentDB YAML: %w", err)
 	}
-	obj := &previewv1.DocumentDB{}
+	obj := &dbv1.DocumentDB{}
 	if err := yaml.Unmarshal(buf, obj); err != nil {
 		return nil, fmt.Errorf("unmarshaling merged DocumentDB YAML: %w", err)
 	}

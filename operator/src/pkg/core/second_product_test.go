@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/pkg/core"
 )
 
@@ -72,7 +72,7 @@ func newCosmosAdapter() *cosmosAdapter {
 		},
 		spec: core.ClusterSpec{
 			ServiceType: "LoadBalancer", StorageClass: "onprem-csi",
-			Monitoring: &dbpreview.MonitoringSpec{Enabled: true},
+			Monitoring: &dbv1.MonitoringSpec{Enabled: true},
 		},
 	}
 }
@@ -118,7 +118,7 @@ func TestCosmosPublicLifecycle(t *testing.T) {
 	acct := &account{
 		ObjectMeta: metav1.ObjectMeta{Name: "acct", Namespace: "ns", UID: "uid-1"},
 		Spec:       accountSpec{Instances: 3, PvcSize: "20Gi"},
-		Status:     accountStatus{TLS: &dbpreview.TLSStatus{Ready: true, SecretName: "cosmos-gateway-tls"}},
+		Status:     accountStatus{TLS: &dbv1.TLSStatus{Ready: true, SecretName: "cosmos-gateway-tls"}},
 	}
 	controlled := true
 	svc := &corev1.Service{
@@ -360,9 +360,9 @@ func TestCosmosCertificateServiceDNS(t *testing.T) {
 			t.Run(mode+"/"+name, func(t *testing.T) {
 				ctx := context.Background()
 				a := newCosmosAdapter()
-				a.spec.GatewayTLS = &dbpreview.GatewayTLS{
+				a.spec.GatewayTLS = &dbv1.GatewayTLS{
 					Mode:        mode,
-					CertManager: &dbpreview.CertManagerTLS{IssuerRef: dbpreview.IssuerRef{Name: "corporate-ca"}},
+					CertManager: &dbv1.CertManagerTLS{IssuerRef: dbv1.IssuerRef{Name: "corporate-ca"}},
 				}
 				scheme := replicationScheme(t)
 				if err := cmapi.AddToScheme(scheme); err != nil {
@@ -395,8 +395,8 @@ func TestCosmosCertificateServiceDNS(t *testing.T) {
 type accountBackup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              dbpreview.BackupSpec   `json:"spec,omitempty"`
-	Status            dbpreview.BackupStatus `json:"status,omitempty"`
+	Spec              dbv1.BackupSpec   `json:"spec,omitempty"`
+	Status            dbv1.BackupStatus `json:"status,omitempty"`
 }
 
 func (b *accountBackup) DeepCopyObject() runtime.Object {
@@ -425,10 +425,10 @@ func (l *accountBackupList) DeepCopyObject() runtime.Object {
 
 type accountBackupAdapter struct{}
 
-func (accountBackupAdapter) New() *accountBackup                             { return &accountBackup{} }
-func (accountBackupAdapter) NewList() client.ObjectList                      { return &accountBackupList{} }
-func (accountBackupAdapter) Spec(b *accountBackup) *dbpreview.BackupSpec     { return &b.Spec }
-func (accountBackupAdapter) Status(b *accountBackup) *dbpreview.BackupStatus { return &b.Status }
+func (accountBackupAdapter) New() *accountBackup                        { return &accountBackup{} }
+func (accountBackupAdapter) NewList() client.ObjectList                 { return &accountBackupList{} }
+func (accountBackupAdapter) Spec(b *accountBackup) *dbv1.BackupSpec     { return &b.Spec }
+func (accountBackupAdapter) Status(b *accountBackup) *dbv1.BackupStatus { return &b.Status }
 func (accountBackupAdapter) Items(list client.ObjectList) []*accountBackup {
 	items := list.(*accountBackupList).Items
 	result := make([]*accountBackup, len(items))
@@ -451,7 +451,7 @@ func TestCosmosBackupAndRestoreMetadata(t *testing.T) {
 	}
 	backup := &accountBackup{
 		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "ns", UID: "backup-uid"},
-		Spec:       dbpreview.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: acct.Name}},
+		Spec:       dbv1.BackupSpec{Cluster: cnpgv1.LocalObjectReference{Name: acct.Name}},
 	}
 	vsc := &snapshotv1.VolumeSnapshotClass{
 		ObjectMeta: metav1.ObjectMeta{Name: "onprem", Annotations: map[string]string{"snapshot.storage.kubernetes.io/is-default-class": "true"}},

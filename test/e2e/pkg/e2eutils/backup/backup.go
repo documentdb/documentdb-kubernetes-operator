@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // Package backup provides CRUD and waiting helpers for the DocumentDB
-// Backup / ScheduledBackup preview CRs and for the underlying
+// Backup / ScheduledBackup v1 CRs and for the underlying
 // VolumeSnapshot resources that CNPG creates beneath them.
 //
 // The package is deliberately framework-agnostic: it returns plain
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 )
 
 // DefaultPollInterval is the polling cadence used by the Wait* helpers.
@@ -95,9 +95,9 @@ func (v BackupVars) toMap() map[string]string {
 }
 
 // Render loads manifests/backup/backup.yaml.template, substitutes vars,
-// and unmarshals into a preview Backup object. Name/Namespace are
+// and unmarshals into a v1 Backup object. Name/Namespace are
 // copied from vars when the rendered manifest omits them.
-func Render(vars BackupVars) (*previewv1.Backup, error) {
+func Render(vars BackupVars) (*dbv1.Backup, error) {
 	if vars.Name == "" || vars.Namespace == "" || vars.ClusterName == "" {
 		return nil, errors.New("backup.Render: Name, Namespace and ClusterName are required")
 	}
@@ -109,8 +109,8 @@ func Render(vars BackupVars) (*previewv1.Backup, error) {
 }
 
 // decodeBackup is exported indirectly via Render and the unit tests.
-func decodeBackup(raw []byte, name, ns string) (*previewv1.Backup, error) {
-	obj := &previewv1.Backup{}
+func decodeBackup(raw []byte, name, ns string) (*dbv1.Backup, error) {
+	obj := &dbv1.Backup{}
 	if err := yaml.Unmarshal(raw, obj); err != nil {
 		return nil, fmt.Errorf("unmarshal Backup YAML: %w", err)
 	}
@@ -125,7 +125,7 @@ func decodeBackup(raw []byte, name, ns string) (*previewv1.Backup, error) {
 
 // Create renders the Backup CR and applies it via c.Create. The
 // returned object reflects the in-cluster state after Create.
-func Create(ctx context.Context, c client.Client, vars BackupVars) (*previewv1.Backup, error) {
+func Create(ctx context.Context, c client.Client, vars BackupVars) (*dbv1.Backup, error) {
 	if c == nil {
 		return nil, errors.New("backup.Create: client must not be nil")
 	}
@@ -140,8 +140,8 @@ func Create(ctx context.Context, c client.Client, vars BackupVars) (*previewv1.B
 }
 
 // Get fetches a Backup by (namespace, name).
-func Get(ctx context.Context, c client.Client, ns, name string) (*previewv1.Backup, error) {
-	var b previewv1.Backup
+func Get(ctx context.Context, c client.Client, ns, name string) (*dbv1.Backup, error) {
+	var b dbv1.Backup
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &b); err != nil {
 		return nil, fmt.Errorf("get Backup %s/%s: %w", ns, name, err)
 	}
@@ -151,20 +151,20 @@ func Get(ctx context.Context, c client.Client, ns, name string) (*previewv1.Back
 // IsCompleted is the predicate used by WaitForCompleted. The backup
 // controller writes the phase string verbatim from CNPG — the literal
 // constant is "completed" (lowercase).
-func IsCompleted(b *previewv1.Backup) bool {
+func IsCompleted(b *dbv1.Backup) bool {
 	return b != nil && b.Status.Phase == cnpgv1.BackupPhaseCompleted
 }
 
 // IsTerminalFailure returns true when the backup has reached a phase
 // from which no further reconcile loop will recover the object.
-func IsTerminalFailure(b *previewv1.Backup) bool {
+func IsTerminalFailure(b *dbv1.Backup) bool {
 	if b == nil {
 		return false
 	}
 	switch b.Status.Phase {
 	case cnpgv1.BackupPhaseFailed:
 		return true
-	case previewv1.BackupPhaseSkipped:
+	case dbv1.BackupPhaseSkipped:
 		return true
 	}
 	return false
@@ -173,12 +173,12 @@ func IsTerminalFailure(b *previewv1.Backup) bool {
 // WaitForCompleted polls the Backup CR until its phase is "completed"
 // or timeout elapses. A terminal failure phase short-circuits with a
 // descriptive error instead of consuming the full timeout.
-func WaitForCompleted(ctx context.Context, c client.Client, ns, name string, timeout time.Duration) (*previewv1.Backup, error) {
+func WaitForCompleted(ctx context.Context, c client.Client, ns, name string, timeout time.Duration) (*dbv1.Backup, error) {
 	if c == nil {
 		return nil, errors.New("backup.WaitForCompleted: client must not be nil")
 	}
 	deadline := time.Now().Add(timeout)
-	var last previewv1.Backup
+	var last dbv1.Backup
 	for {
 		err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &last)
 		if err != nil && !apierrors.IsNotFound(err) {
@@ -219,7 +219,7 @@ func WaitForCompleted(ctx context.Context, c client.Client, ns, name string, tim
 //
 // Implementation detail: this must use c.Status().Patch — patching
 // the same field through c.Patch is a silent no-op because Backup
-// declares status as a subresource (see operator/src/api/preview/
+// declares status as a subresource (see operator/src/api/v1/
 // backup_types.go +kubebuilder:subresource:status).
 //
 // A fresh Get is performed inside the helper so callers can pass a
@@ -229,7 +229,7 @@ func MarkExpired(ctx context.Context, c client.Client, ns, name string, when tim
 	if c == nil {
 		return errors.New("backup.MarkExpired: client must not be nil")
 	}
-	var current previewv1.Backup
+	var current dbv1.Backup
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &current); err != nil {
 		return fmt.Errorf("get Backup %s/%s: %w", ns, name, err)
 	}
@@ -253,7 +253,7 @@ func WaitForBackupDeleted(ctx context.Context, c client.Client, ns, name string,
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		var b previewv1.Backup
+		var b dbv1.Backup
 		err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, &b)
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -277,7 +277,7 @@ func WaitForBackupDeleted(ctx context.Context, c client.Client, ns, name string,
 // the object is gone or timeout elapses. Safe to call on a missing
 // object (IsNotFound is treated as success).
 func Delete(ctx context.Context, c client.Client, ns, name string, timeout time.Duration) error {
-	obj := &previewv1.Backup{}
+	obj := &dbv1.Backup{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil

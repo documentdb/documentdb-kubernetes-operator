@@ -16,7 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -40,19 +40,19 @@ var renderEnv = []string{
 	util.OTEL_CPU_LIMIT_ENV,
 }
 
-func goldenBaseDocumentDB() *dbpreview.DocumentDB {
-	return &dbpreview.DocumentDB{
-		TypeMeta: metav1.TypeMeta{APIVersion: "documentdb.io/preview", Kind: "DocumentDB"},
+func goldenBaseDocumentDB() *dbv1.DocumentDB {
+	return &dbv1.DocumentDB{
+		TypeMeta: metav1.TypeMeta{APIVersion: "documentdb.io/v1", Kind: "DocumentDB"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "golden",
 			Namespace: "golden-ns",
 			UID:       "00000000-0000-0000-0000-000000000001",
 		},
-		Spec: dbpreview.DocumentDBSpec{
+		Spec: dbv1.DocumentDBSpec{
 			NodeCount:        1,
 			InstancesPerNode: 1,
-			Resource: dbpreview.Resource{
-				Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+			Resource: dbv1.Resource{
+				Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 			},
 		},
 	}
@@ -61,7 +61,7 @@ func goldenBaseDocumentDB() *dbpreview.DocumentDB {
 type goldenCase struct {
 	name         string
 	env          map[string]string
-	mutate       func(*dbpreview.DocumentDB)
+	mutate       func(*dbv1.DocumentDB)
 	extImage     string
 	storageClass string
 	primary      bool
@@ -74,39 +74,39 @@ func goldenCases() []goldenCase {
 			name:         "full",
 			primary:      true,
 			storageClass: "premium",
-			mutate: func(d *dbpreview.DocumentDB) {
+			mutate: func(d *dbv1.DocumentDB) {
 				d.Spec.InstancesPerNode = 3
 				d.Spec.Resource.Memory = "16Gi"
 				d.Spec.Resource.CPU = "4"
-				d.Spec.Image = &dbpreview.ImageSpec{
+				d.Spec.Image = &dbv1.ImageSpec{
 					DocumentDB: "reg.example/ext:9.9.9",
 					Gateway:    "reg.example/gw:9.9.9",
 					Postgres:   "reg.example/pg:18",
 				}
 				d.Spec.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "pull"}}
 				d.Spec.DocumentDbCredentialSecret = "creds"
-				d.Spec.Plugins = &dbpreview.PluginsSpec{SidecarInjectorName: "custom.injector.io"}
-				d.Spec.Postgres = &dbpreview.PostgresSpec{
+				d.Spec.Plugins = &dbv1.PluginsSpec{SidecarInjectorName: "custom.injector.io"}
+				d.Spec.Postgres = &dbv1.PostgresSpec{
 					UID:         ptr.To[int64](26),
 					GID:         ptr.To[int64](26),
 					PostInitSQL: []string{"SELECT 1"},
 					Parameters:  map[string]string{"work_mem": "64MB", "max_wal_senders": "99"},
 				}
 				d.Spec.FeatureGates = map[string]bool{
-					dbpreview.FeatureGateChangeStreams: true,
-					dbpreview.FeatureGateIOUring:       true,
+					dbv1.FeatureGateChangeStreams: true,
+					dbv1.FeatureGateIOUring:       true,
 				}
 				d.Spec.LogLevel = "debug"
 				d.Spec.Timeouts.StopDelay = 120
-				d.Spec.TLS = &dbpreview.TLSConfiguration{
+				d.Spec.TLS = &dbv1.TLSConfiguration{
 					Postgres: &cnpgv1.CertificatesConfiguration{ServerTLSSecret: "pg-server-tls", ServerCASecret: "pg-ca"},
 				}
-				d.Status.TLS = &dbpreview.TLSStatus{Ready: true, SecretName: "gw-tls"}
-				d.Spec.Monitoring = &dbpreview.MonitoringSpec{
+				d.Status.TLS = &dbv1.TLSStatus{Ready: true, SecretName: "gw-tls"}
+				d.Spec.Monitoring = &dbv1.MonitoringSpec{
 					Enabled: true,
-					Exporter: &dbpreview.ExporterSpec{
-						OTLP:       &dbpreview.OTLPExporterSpec{Endpoint: "otel:4317"},
-						Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9187},
+					Exporter: &dbv1.ExporterSpec{
+						OTLP:       &dbv1.OTLPExporterSpec{Endpoint: "otel:4317"},
+						Prometheus: &dbv1.PrometheusExporterSpec{Port: 9187},
 					},
 				}
 				d.Spec.Affinity = cnpgv1.AffinityConfiguration{
@@ -118,29 +118,29 @@ func goldenCases() []goldenCase {
 		{
 			name:    "explicit-component-resources",
 			primary: true,
-			mutate: func(d *dbpreview.DocumentDB) {
-				d.Spec.Resource.Database = &dbpreview.ComponentResources{Memory: "4Gi", CPU: "2"}
-				d.Spec.Resource.Gateway = &dbpreview.ComponentResources{Memory: "1Gi", CPU: "500m"}
-				d.Spec.Monitoring = &dbpreview.MonitoringSpec{Enabled: true}
-				d.Spec.Resource.OTel = &dbpreview.ComponentResources{Memory: "256Mi", CPU: "100m"}
+			mutate: func(d *dbv1.DocumentDB) {
+				d.Spec.Resource.Database = &dbv1.ComponentResources{Memory: "4Gi", CPU: "2"}
+				d.Spec.Resource.Gateway = &dbv1.ComponentResources{Memory: "1Gi", CPU: "500m"}
+				d.Spec.Monitoring = &dbv1.MonitoringSpec{Enabled: true}
+				d.Spec.Resource.OTel = &dbv1.ComponentResources{Memory: "256Mi", CPU: "100m"}
 			},
 		},
 		{
 			name:    "recovery-backup",
 			primary: true,
-			mutate: func(d *dbpreview.DocumentDB) {
-				d.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{Backup: cnpgv1.LocalObjectReference{Name: "bk"}},
+			mutate: func(d *dbv1.DocumentDB) {
+				d.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{Backup: cnpgv1.LocalObjectReference{Name: "bk"}},
 				}
 			},
 		},
 		{
 			name:    "recovery-pv",
 			primary: true,
-			mutate: func(d *dbpreview.DocumentDB) {
-				d.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
-						PersistentVolume: &dbpreview.PVRecoveryConfiguration{Name: "pv-1"},
+			mutate: func(d *dbv1.DocumentDB) {
+				d.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
+						PersistentVolume: &dbv1.PVRecoveryConfiguration{Name: "pv-1"},
 					},
 				}
 			},
@@ -148,9 +148,9 @@ func goldenCases() []goldenCase {
 		{
 			name:    "replica-region-ignores-recovery",
 			primary: false,
-			mutate: func(d *dbpreview.DocumentDB) {
-				d.Spec.Bootstrap = &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{Backup: cnpgv1.LocalObjectReference{Name: "bk"}},
+			mutate: func(d *dbv1.DocumentDB) {
+				d.Spec.Bootstrap = &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{Backup: cnpgv1.LocalObjectReference{Name: "bk"}},
 				}
 			},
 		},
@@ -166,10 +166,10 @@ func goldenCases() []goldenCase {
 				util.IOURING_SECCOMP_PROFILE_ENV:      "profiles/custom.json",
 				util.OTEL_COLLECTOR_IMAGE_ENV:         "env/otel:1",
 			},
-			mutate: func(d *dbpreview.DocumentDB) {
+			mutate: func(d *dbv1.DocumentDB) {
 				d.Spec.Resource.Memory = "8Gi"
-				d.Spec.FeatureGates = map[string]bool{dbpreview.FeatureGateIOUring: true}
-				d.Spec.Monitoring = &dbpreview.MonitoringSpec{Enabled: true}
+				d.Spec.FeatureGates = map[string]bool{dbv1.FeatureGateIOUring: true}
+				d.Spec.Monitoring = &dbv1.MonitoringSpec{Enabled: true}
 			},
 		},
 	}

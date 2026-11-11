@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
@@ -44,10 +44,10 @@ func TestTeardownFixtureByLabels_SelectsOnlyMatchingRun(t *testing.T) {
 
 	mineNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-mine", Labels: mineLabels}}
 	theirsNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-theirs", Labels: theirsLabels}}
-	mineDD := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
+	mineDD := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
 		Name: "dd-mine", Namespace: "e2e-mine", Labels: mineLabels,
 	}}
-	theirsDD := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
+	theirsDD := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{
 		Name: "dd-theirs", Namespace: "e2e-theirs", Labels: theirsLabels,
 	}}
 
@@ -65,7 +65,7 @@ func TestTeardownFixtureByLabels_SelectsOnlyMatchingRun(t *testing.T) {
 	if err := c.Get(ctx, types.NamespacedName{Name: "e2e-mine"}, &corev1.Namespace{}); err == nil {
 		t.Fatalf("expected mine namespace to be deleted")
 	}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: "e2e-mine", Name: "dd-mine"}, &previewv1.DocumentDB{}); err == nil {
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "e2e-mine", Name: "dd-mine"}, &dbv1.DocumentDB{}); err == nil {
 		t.Fatalf("expected mine documentdb to be deleted")
 	}
 
@@ -73,7 +73,7 @@ func TestTeardownFixtureByLabels_SelectsOnlyMatchingRun(t *testing.T) {
 	if err := c.Get(ctx, types.NamespacedName{Name: "e2e-theirs"}, &corev1.Namespace{}); err != nil {
 		t.Fatalf("theirs namespace should still exist: %v", err)
 	}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: "e2e-theirs", Name: "dd-theirs"}, &previewv1.DocumentDB{}); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Namespace: "e2e-theirs", Name: "dd-theirs"}, &dbv1.DocumentDB{}); err != nil {
 		t.Fatalf("theirs documentdb should still exist: %v", err)
 	}
 }
@@ -86,7 +86,7 @@ func TestCreateDocumentDB_RunIDMismatchIsExplicitError(t *testing.T) {
 	resetRunIDForTest()
 	SetRunID("newrun")
 
-	existing := &previewv1.DocumentDB{
+	existing := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "shared",
 			Namespace: "ns",
@@ -101,7 +101,7 @@ func TestCreateDocumentDB_RunIDMismatchIsExplicitError(t *testing.T) {
 		WithObjects(existing).
 		Build()
 
-	attempt := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "ns"}}
+	attempt := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "ns"}}
 	err := createDocumentDB(context.Background(), c, attempt, FixtureSharedRO)
 	if err == nil {
 		t.Fatal("expected collision error, got nil")
@@ -121,7 +121,7 @@ func TestCreateDocumentDB_AdoptsMatchingRun(t *testing.T) {
 	resetRunIDForTest()
 	SetRunID("runX")
 
-	existing := &previewv1.DocumentDB{
+	existing := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "shared",
 			Namespace: "ns",
@@ -136,7 +136,7 @@ func TestCreateDocumentDB_AdoptsMatchingRun(t *testing.T) {
 		WithObjects(existing).
 		Build()
 
-	attempt := &previewv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "ns"}}
+	attempt := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "ns"}}
 	if err := createDocumentDB(context.Background(), c, attempt, FixtureSharedRO); err != nil {
 		t.Fatalf("expected idempotent success, got %v", err)
 	}

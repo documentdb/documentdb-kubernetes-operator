@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"k8s.io/apimachinery/pkg/types"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/assertions"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
@@ -134,7 +134,7 @@ var _ = Describe("DocumentDB upgrade — schema (auto mode)",
 			By("upgrading the binary via spec.documentDBVersion (schemaVersion stays auto)")
 			fresh, err := shareddb.Get(ctx, c, key)
 			Expect(err).NotTo(HaveOccurred(), "re-fetch DocumentDB before version patch")
-			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *previewv1.DocumentDBSpec) {
+			Expect(shareddb.PatchSpec(ctx, c, fresh, func(s *dbv1.DocumentDBSpec) {
 				s.DocumentDBVersion = newVersion
 			})).To(Succeed(), "patch DocumentDBVersion from %s to %s", oldVersion, newVersion)
 

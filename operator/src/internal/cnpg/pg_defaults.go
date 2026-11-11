@@ -6,7 +6,7 @@ package cnpg
 import (
 	"fmt"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/product"
 )
 
@@ -81,7 +81,7 @@ func StaticDefaults() map[string]string {
 
 // ProtectedParameters returns parameters that are always force-set by the
 // operator for a DocumentDB instance and cannot be overridden by users.
-func ProtectedParameters(documentdb *dbpreview.DocumentDB) map[string]string {
+func ProtectedParameters(documentdb *dbv1.DocumentDB) map[string]string {
 	return ProtectedParametersFor(product.DocumentDBAdapter{}.ToClusterIntent(documentdb))
 }
 
@@ -107,7 +107,7 @@ func ProtectedParametersFor(intent product.ClusterIntent) map[string]string {
 
 // MergeParameters merges all parameter sources for a DocumentDB instance; see
 // MergeParametersFor.
-func MergeParameters(documentdb *dbpreview.DocumentDB, memoryLimitBytes int64) map[string]string {
+func MergeParameters(documentdb *dbv1.DocumentDB, memoryLimitBytes int64) map[string]string {
 	return MergeParametersFor(product.DocumentDBAdapter{}.ToClusterIntent(documentdb), memoryLimitBytes)
 }
 

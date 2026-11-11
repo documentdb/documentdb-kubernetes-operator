@@ -12,13 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	documentdbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/timeouts"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 // Credential constants now alias the fixtures exports so every area
@@ -81,7 +81,7 @@ func setupFreshCluster(
 	name string,
 	mixins []string,
 	extraVars map[string]string,
-) (*previewv1.DocumentDB, func()) {
+) (*dbv1.DocumentDB, func()) {
 	ns := namespaces.NamespaceForSpec(e2e.ExposureLabel)
 	Expect(fixtures.CreateLabeledNamespace(ctx, c, ns, e2e.ExposureLabel)).To(Succeed())
 	Expect(fixtures.CreateLabeledCredentialSecret(ctx, c, ns)).To(Succeed())

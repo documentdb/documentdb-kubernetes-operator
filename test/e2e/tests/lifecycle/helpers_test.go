@@ -13,10 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
-	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/fixtures"
+	shareddb "github.com/documentdb/documentdb-operator/test/shared/documentdb"
 )
 
 var (
@@ -101,7 +101,7 @@ func createCredentialSecret(ctx context.Context, c client.Client, ns, name strin
 
 // getDD is a convenience shortcut around shareddb.Get used by specs
 // that need to refetch the CR after a patch.
-func getDD(ctx context.Context, ns, name string) *previewv1.DocumentDB {
+func getDD(ctx context.Context, ns, name string) *dbv1.DocumentDB {
 	c := e2e.SuiteEnv().Client
 	dd, err := shareddb.Get(ctx, c, types.NamespacedName{Namespace: ns, Name: name})
 	Expect(err).ToNot(HaveOccurred())

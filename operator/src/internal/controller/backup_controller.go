@@ -12,7 +12,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/engine"
 	"github.com/documentdb/documentdb-operator/internal/product"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
@@ -26,8 +26,8 @@ type BackupReconciler struct {
 	Recorder record.EventRecorder
 }
 
-func (r *BackupReconciler) engine() *engine.BackupReconciler[*dbpreview.DocumentDB, *dbpreview.Backup] {
-	return &engine.BackupReconciler[*dbpreview.DocumentDB, *dbpreview.Backup]{
+func (r *BackupReconciler) engine() *engine.BackupReconciler[*dbv1.DocumentDB, *dbv1.Backup] {
+	return &engine.BackupReconciler[*dbv1.DocumentDB, *dbv1.Backup]{
 		Client:      r.Client,
 		Scheme:      r.Scheme,
 		Recorder:    r.Recorder,
@@ -43,20 +43,20 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 // createCNPGBackup creates a new CNPG Backup resource
-func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbpreview.Backup, cluster *dbpreview.DocumentDB, replicationContext *util.ReplicationContext) (ctrl.Result, error) {
+func (r *BackupReconciler) createCNPGBackup(ctx context.Context, backup *dbv1.Backup, cluster *dbv1.DocumentDB, replicationContext *util.ReplicationContext) (ctrl.Result, error) {
 	return r.engine().CreateCNPGBackup(ctx, backup, cluster.Spec.Backup, replicationContext)
 }
 
 // updateBackupStatus reconciles and persists the Backup's status, returning the reconcile result.
-func (r *BackupReconciler) updateBackupStatus(ctx context.Context, backup *dbpreview.Backup, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbpreview.BackupConfiguration, sourceSchemaVersion string) (ctrl.Result, error) {
+func (r *BackupReconciler) updateBackupStatus(ctx context.Context, backup *dbv1.Backup, cnpgBackup *cnpgv1.Backup, backupConfiguration *dbv1.BackupConfiguration, sourceSchemaVersion string) (ctrl.Result, error) {
 	return r.engine().UpdateBackupStatus(ctx, backup, cnpgBackup, backupConfiguration, sourceSchemaVersion)
 }
 
-func (r *BackupReconciler) SetBackupPhaseFailed(ctx context.Context, backup *dbpreview.Backup, errMessage string, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
+func (r *BackupReconciler) SetBackupPhaseFailed(ctx context.Context, backup *dbv1.Backup, errMessage string, backupConfiguration *dbv1.BackupConfiguration) (ctrl.Result, error) {
 	return r.engine().SetBackupPhaseFailed(ctx, backup, errMessage, backupConfiguration)
 }
 
-func (r *BackupReconciler) SetBackupPhaseSkipped(ctx context.Context, backup *dbpreview.Backup, message string, backupConfiguration *dbpreview.BackupConfiguration) (ctrl.Result, error) {
+func (r *BackupReconciler) SetBackupPhaseSkipped(ctx context.Context, backup *dbv1.Backup, message string, backupConfiguration *dbv1.BackupConfiguration) (ctrl.Result, error) {
 	return r.engine().SetBackupPhaseSkipped(ctx, backup, message, backupConfiguration)
 }
 

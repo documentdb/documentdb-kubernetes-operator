@@ -16,7 +16,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -24,8 +24,8 @@ var _ = Describe("getBootstrapConfiguration", func() {
 	var log = zap.New(zap.WriteTo(GinkgoWriter))
 
 	It("returns default bootstrap when no bootstrap is configured", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{},
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{},
 		}
 
 		result := getBootstrapConfiguration(documentdb, true, log)
@@ -37,10 +37,10 @@ var _ = Describe("getBootstrapConfiguration", func() {
 	})
 
 	It("returns default bootstrap when not primary region", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
 						Backup: cnpgv1.LocalObjectReference{
 							Name: "my-backup",
 						},
@@ -56,9 +56,9 @@ var _ = Describe("getBootstrapConfiguration", func() {
 	})
 
 	It("returns default bootstrap when recovery is not configured", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{},
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{},
 			},
 		}
 
@@ -70,10 +70,10 @@ var _ = Describe("getBootstrapConfiguration", func() {
 
 	It("returns backup recovery when backup name is specified", func() {
 		backupName := "my-backup"
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
 						Backup: cnpgv1.LocalObjectReference{
 							Name: backupName,
 						},
@@ -93,14 +93,14 @@ var _ = Describe("getBootstrapConfiguration", func() {
 
 	It("returns PV recovery when PV name is specified", func() {
 		pvName := "my-pv"
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-cluster",
 			},
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
-						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
+						PersistentVolume: &dbv1.PVRecoveryConfiguration{
 							Name: pvName,
 						},
 					},
@@ -121,10 +121,10 @@ var _ = Describe("getBootstrapConfiguration", func() {
 	})
 
 	It("returns default bootstrap when backup name is empty", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
 						Backup: cnpgv1.LocalObjectReference{
 							Name: "",
 						},
@@ -140,11 +140,11 @@ var _ = Describe("getBootstrapConfiguration", func() {
 	})
 
 	It("returns default bootstrap when PV name is empty", func() {
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
-						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
+						PersistentVolume: &dbv1.PVRecoveryConfiguration{
 							Name: "",
 						},
 					},
@@ -161,14 +161,14 @@ var _ = Describe("getBootstrapConfiguration", func() {
 
 var _ = Describe("getDefaultBootstrapConfiguration", func() {
 	It("returns a bootstrap configuration with InitDB", func() {
-		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
+		result := getDefaultBootstrapConfiguration(&dbv1.DocumentDB{})
 		Expect(result).ToNot(BeNil())
 		Expect(result.InitDB).ToNot(BeNil())
 		Expect(result.Recovery).To(BeNil())
 	})
 
 	It("includes required PostInitSQL statements by default", func() {
-		result := getDefaultBootstrapConfiguration(&dbpreview.DocumentDB{})
+		result := getDefaultBootstrapConfiguration(&dbv1.DocumentDB{})
 		Expect(result.InitDB.PostInitSQL).To(HaveLen(3))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE EXTENSION documentdb CASCADE"))
 		Expect(result.InitDB.PostInitSQL).To(ContainElement("CREATE ROLE documentdb WITH LOGIN PASSWORD 'Admin100'"))
@@ -176,9 +176,9 @@ var _ = Describe("getDefaultBootstrapConfiguration", func() {
 	})
 
 	It("appends spec.postgres.postInitSQL after operator-required statements", func() {
-		db := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
-				Postgres: &dbpreview.PostgresSpec{
+		db := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
+				Postgres: &dbv1.PostgresSpec{
 					PostInitSQL: []string{"SELECT 1", "SELECT 2"},
 				},
 			},
@@ -197,11 +197,11 @@ var _ = Describe("Postgres certificate configuration", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -224,13 +224,13 @@ var _ = Describe("Postgres certificate configuration", func() {
 			ClientCASecret:       "client-ca-secret",
 		}
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
-				TLS: &dbpreview.TLSConfiguration{
+				TLS: &dbv1.TLSConfiguration{
 					Postgres: certificatesConfig,
 				},
 			},
@@ -262,14 +262,14 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Image: &dbpreview.ImageSpec{
+				Image: &dbv1.ImageSpec{
 					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
 				},
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -306,16 +306,16 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
 						Backup: cnpgv1.LocalObjectReference{
 							Name: "test-backup",
 						},
@@ -337,20 +337,20 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test-cluster",
 			},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Bootstrap: &dbpreview.BootstrapConfiguration{
-					Recovery: &dbpreview.RecoveryConfiguration{
-						PersistentVolume: &dbpreview.PVRecoveryConfiguration{
+				Bootstrap: &dbv1.BootstrapConfiguration{
+					Recovery: &dbv1.RecoveryConfiguration{
+						PersistentVolume: &dbv1.PVRecoveryConfiguration{
 							Name: "test-pv",
 						},
 					},
@@ -373,11 +373,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -395,11 +395,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -416,17 +416,17 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
 			},
-			Status: dbpreview.DocumentDBStatus{
-				TLS: &dbpreview.TLSStatus{
+			Status: dbv1.DocumentDBStatus{
+				TLS: &dbv1.TLSStatus{
 					Ready:      true,
 					SecretName: "my-tls-secret",
 				},
@@ -445,15 +445,15 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Plugins: &dbpreview.PluginsSpec{
+				Plugins: &dbv1.PluginsSpec{
 					SidecarInjectorName: "custom-injector",
 				},
 			},
@@ -477,15 +477,15 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			ClientCASecret:       "client-ca-secret",
 		}
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 3,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				TLS: &dbpreview.TLSConfiguration{
+				TLS: &dbv1.TLSConfiguration{
 					Postgres: certificatesConfig,
 				},
 			},
@@ -502,11 +502,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -527,11 +527,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -546,11 +546,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -564,11 +564,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -583,11 +583,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -602,11 +602,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			req.Name = "test-cluster"
 			req.Namespace = "default"
 
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "10Gi",
 						},
 					},
@@ -623,16 +623,16 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			req.Name = "test-cluster"
 			req.Namespace = "default"
 
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "10Gi",
 						},
 					},
 					FeatureGates: map[string]bool{
-						dbpreview.FeatureGateChangeStreams: true,
+						dbv1.FeatureGateChangeStreams: true,
 					},
 				},
 			}
@@ -648,16 +648,16 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			req.Name = "test-cluster"
 			req.Namespace = "default"
 
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "10Gi",
 						},
 					},
 					FeatureGates: map[string]bool{
-						dbpreview.FeatureGateChangeStreams: false,
+						dbv1.FeatureGateChangeStreams: false,
 					},
 				},
 			}
@@ -677,12 +677,12 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			req.Namespace = "default"
 		})
 
-		createDocumentDB := func(featureGateEnabled bool) *dbpreview.DocumentDB {
-			documentdb := &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
+		createDocumentDB := func(featureGateEnabled bool) *dbv1.DocumentDB {
+			documentdb := &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
 					InstancesPerNode: 1,
-					Resource: dbpreview.Resource{
-						Storage: dbpreview.StorageConfiguration{
+					Resource: dbv1.Resource{
+						Storage: dbv1.StorageConfiguration{
 							PvcSize: "10Gi",
 						},
 					},
@@ -690,7 +690,7 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 			}
 			if featureGateEnabled {
 				documentdb.Spec.FeatureGates = map[string]bool{
-					dbpreview.FeatureGateIOUring: true,
+					dbv1.FeatureGateIOUring: true,
 				}
 			}
 			return documentdb
@@ -733,11 +733,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -757,11 +757,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 					Memory: "16Gi",
@@ -786,20 +786,20 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "default",
 			},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 					Memory: "16Gi",
 				},
-				Monitoring: &dbpreview.MonitoringSpec{
+				Monitoring: &dbv1.MonitoringSpec{
 					Enabled: true,
 				},
 			},
@@ -820,22 +820,22 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "default",
 			},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Monitoring: &dbpreview.MonitoringSpec{
+				Monitoring: &dbv1.MonitoringSpec{
 					Enabled: true,
-					Exporter: &dbpreview.ExporterSpec{
-						OTLP: &dbpreview.OTLPExporterSpec{
+					Exporter: &dbv1.ExporterSpec{
+						OTLP: &dbv1.OTLPExporterSpec{
 							Endpoint: "otel-collector.monitoring:4317",
 						},
 					},
@@ -857,22 +857,22 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "default",
 			},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Monitoring: &dbpreview.MonitoringSpec{
+				Monitoring: &dbv1.MonitoringSpec{
 					Enabled: true,
-					Exporter: &dbpreview.ExporterSpec{
-						Prometheus: &dbpreview.PrometheusExporterSpec{Port: 9090},
+					Exporter: &dbv1.ExporterSpec{
+						Prometheus: &dbv1.PrometheusExporterSpec{Port: 9090},
 					},
 				},
 			},
@@ -889,11 +889,11 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
@@ -913,19 +913,19 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
 				Namespace: "default",
 			},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{
 						PvcSize: "10Gi",
 					},
 				},
-				Monitoring: &dbpreview.MonitoringSpec{Enabled: true},
+				Monitoring: &dbv1.MonitoringSpec{Enabled: true},
 			},
 		}
 
@@ -950,14 +950,14 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req.Name = "test-cluster"
 		req.Namespace = "default"
 
-		documentdb := &dbpreview.DocumentDB{
+		documentdb := &dbv1.DocumentDB{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: "default"},
-			Spec: dbpreview.DocumentDBSpec{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
-				Monitoring: &dbpreview.MonitoringSpec{Enabled: false},
+				Monitoring: &dbv1.MonitoringSpec{Enabled: false},
 			},
 		}
 
@@ -971,19 +971,19 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
 		req.Namespace = "default"
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
 				ImagePullSecrets: []corev1.LocalObjectReference{
 					{Name: "registry-creds"},
 					{Name: ""},
 					{Name: "private-pull"},
 				},
-				Image: &dbpreview.ImageSpec{
+				Image: &dbv1.ImageSpec{
 					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
 				},
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -998,18 +998,18 @@ var _ = Describe("GetCnpgClusterSpec", func() {
 		req := ctrl.Request{}
 		req.Name = "test-cluster"
 		req.Namespace = "default"
-		documentdb := &dbpreview.DocumentDB{
-			Spec: dbpreview.DocumentDBSpec{
+		documentdb := &dbv1.DocumentDB{
+			Spec: dbv1.DocumentDBSpec{
 				InstancesPerNode: 1,
-				Image: &dbpreview.ImageSpec{
+				Image: &dbv1.ImageSpec{
 					Postgres: "ghcr.io/cloudnative-pg/postgresql:18-minimal-trixie",
 				},
-				Postgres: &dbpreview.PostgresSpec{
+				Postgres: &dbv1.PostgresSpec{
 					UID: ptr.To(int64(1001)),
 					GID: ptr.To(int64(1002)),
 				},
-				Resource: dbpreview.Resource{
-					Storage: dbpreview.StorageConfiguration{PvcSize: "10Gi"},
+				Resource: dbv1.Resource{
+					Storage: dbv1.StorageConfiguration{PvcSize: "10Gi"},
 				},
 			},
 		}
@@ -1080,14 +1080,14 @@ func TestGetInheritedMetadataLabels(t *testing.T) {
 func TestGetMaxStopDelayOrDefault(t *testing.T) {
 	tests := []struct {
 		name       string
-		documentdb *dbpreview.DocumentDB
+		documentdb *dbv1.DocumentDB
 		expected   int32
 	}{
 		{
 			name: "returns default when StopDelay is 0",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Timeouts: dbpreview.Timeouts{
+			documentdb: &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Timeouts: dbv1.Timeouts{
 						StopDelay: 0,
 					},
 				},
@@ -1096,9 +1096,9 @@ func TestGetMaxStopDelayOrDefault(t *testing.T) {
 		},
 		{
 			name: "returns custom StopDelay when set",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Timeouts: dbpreview.Timeouts{
+			documentdb: &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Timeouts: dbv1.Timeouts{
 						StopDelay: 60,
 					},
 				},
@@ -1107,9 +1107,9 @@ func TestGetMaxStopDelayOrDefault(t *testing.T) {
 		},
 		{
 			name: "returns max StopDelay",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{
-					Timeouts: dbpreview.Timeouts{
+			documentdb: &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{
+					Timeouts: dbv1.Timeouts{
 						StopDelay: 1800,
 					},
 				},
@@ -1118,8 +1118,8 @@ func TestGetMaxStopDelayOrDefault(t *testing.T) {
 		},
 		{
 			name: "returns default when Timeouts is empty",
-			documentdb: &dbpreview.DocumentDB{
-				Spec: dbpreview.DocumentDBSpec{},
+			documentdb: &dbv1.DocumentDB{
+				Spec: dbv1.DocumentDBSpec{},
 			},
 			expected: util.CNPG_DEFAULT_STOP_DELAY,
 		},

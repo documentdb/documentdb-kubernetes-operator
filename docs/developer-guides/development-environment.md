@@ -205,7 +205,7 @@ To build the documentation and run a development server for live previewing:
 3. Install MkDocs:
 
    ```bash
-   pip install mkdocs mkdocs-material
+   pip install mkdocs mkdocs-material mkdocs-redirects
    ```
 
 4. Run the local MkDocs server for testing:

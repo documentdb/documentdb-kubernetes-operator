@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	util "github.com/documentdb/documentdb-operator/internal/utils"
 )
 
@@ -40,8 +40,8 @@ var _ = Describe("Backup Controller", func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
 		recorder = record.NewFakeRecorder(10)
-		// register both preview and CNPG types used by the controller
-		Expect(dbpreview.AddToScheme(scheme)).To(Succeed())
+		// register both DocumentDB v1 and CNPG types used by the controller
+		Expect(dbv1.AddToScheme(scheme)).To(Succeed())
 		Expect(cnpgv1.AddToScheme(scheme)).To(Succeed())
 		Expect(snapshotv1.AddToScheme(scheme)).To(Succeed())
 	})
@@ -52,17 +52,17 @@ var _ = Describe("Backup Controller", func() {
 			brokenScheme := runtime.NewScheme()
 			Expect(cnpgv1.AddToScheme(brokenScheme)).To(Succeed())
 
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
 			}
 
-			cluster := &dbpreview.DocumentDB{
+			cluster := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: backupNamespace,
@@ -73,7 +73,7 @@ var _ = Describe("Backup Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(backup).
-				WithStatusSubresource(&dbpreview.Backup{}).
+				WithStatusSubresource(&dbv1.Backup{}).
 				Build()
 
 			reconciler := &BackupReconciler{
@@ -102,19 +102,19 @@ var _ = Describe("Backup Controller", func() {
 				Recorder: recorder,
 			}
 
-			// input dbpreview Backup
-			backup := &dbpreview.Backup{
+			// input dbv1 Backup
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
 			}
 
 			// Create the associated DocumentDB cluster
-			cluster := &dbpreview.DocumentDB{
+			cluster := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: backupNamespace,
@@ -144,7 +144,7 @@ var _ = Describe("Backup Controller", func() {
 			Expect(cnpgBackup.Spec.Method).To(Equal(cnpgv1.BackupMethodVolumeSnapshot))
 			Expect(cnpgBackup.Spec.Cluster.Name).To(Equal(clusterName))
 
-			// Owner reference should reference the dbpreview Backup (by name)
+			// Owner reference should reference the dbv1 Backup (by name)
 			Expect(len(cnpgBackup.OwnerReferences)).To(Equal(1))
 			ownerReference := cnpgBackup.OwnerReferences[0]
 			Expect(ownerReference.Name).To(Equal(backup.Name))
@@ -155,15 +155,15 @@ var _ = Describe("Backup Controller", func() {
 
 	Describe("updateBackupStatus", func() {
 		It("requeues until expiration time when CNPG Backup phase is Completed", func() {
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
-				Status: dbpreview.BackupStatus{
+				Status: dbv1.BackupStatus{
 					Phase: cnpgv1.BackupPhasePending,
 				},
 			}
@@ -171,7 +171,7 @@ var _ = Describe("Backup Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(backup).
-				WithStatusSubresource(&dbpreview.Backup{}).
+				WithStatusSubresource(&dbv1.Backup{}).
 				Build()
 
 			reconciler := &BackupReconciler{
@@ -198,7 +198,7 @@ var _ = Describe("Backup Controller", func() {
 			Expect(res.RequeueAfter).NotTo(Equal(0))
 
 			// Verify status was updated with times and the source schema version.
-			updated := &dbpreview.Backup{}
+			updated := &dbv1.Backup{}
 			Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, updated)).To(Succeed())
 			Expect(string(updated.Status.Phase)).To(Equal(string(cnpgv1.BackupPhaseCompleted)))
 			Expect(updated.Status.StartedAt).ToNot(BeNil())
@@ -209,15 +209,15 @@ var _ = Describe("Backup Controller", func() {
 		})
 
 		It("stops reconciling (returns zero result) when CNPG Backup phase is Failed", func() {
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
-				Status: dbpreview.BackupStatus{
+				Status: dbv1.BackupStatus{
 					Phase:     cnpgv1.BackupPhaseStarted,
 					StartedAt: &metav1.Time{Time: time.Now().UTC().Add(-5 * time.Minute)},
 				},
@@ -226,7 +226,7 @@ var _ = Describe("Backup Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(backup).
-				WithStatusSubresource(&dbpreview.Backup{}).
+				WithStatusSubresource(&dbv1.Backup{}).
 				Build()
 
 			reconciler := &BackupReconciler{
@@ -255,7 +255,7 @@ var _ = Describe("Backup Controller", func() {
 			Expect(res.RequeueAfter).NotTo(Equal(0))
 
 			// Verify status was updated with error
-			updated := &dbpreview.Backup{}
+			updated := &dbv1.Backup{}
 			Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, updated)).To(Succeed())
 			Expect(string(updated.Status.Phase)).To(Equal(string(cnpgv1.BackupPhaseFailed)))
 			Expect(updated.Status.Message).To(Equal("connection timeout"))
@@ -266,15 +266,15 @@ var _ = Describe("Backup Controller", func() {
 		})
 
 		It("does not update status when phase hasn't changed", func() {
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
-				Status: dbpreview.BackupStatus{
+				Status: dbv1.BackupStatus{
 					Phase: cnpgv1.BackupPhaseRunning,
 				},
 			}
@@ -282,7 +282,7 @@ var _ = Describe("Backup Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(backup).
-				WithStatusSubresource(&dbpreview.Backup{}).
+				WithStatusSubresource(&dbv1.Backup{}).
 				Build()
 
 			reconciler := &BackupReconciler{
@@ -307,7 +307,7 @@ var _ = Describe("Backup Controller", func() {
 			Expect(res.RequeueAfter).To(Equal(10 * time.Second))
 
 			// Phase should remain unchanged
-			updated := &dbpreview.Backup{}
+			updated := &dbv1.Backup{}
 			Expect(fakeClient.Get(ctx, client.ObjectKey{Name: backupName, Namespace: backupNamespace}, updated)).To(Succeed())
 			Expect(string(updated.Status.Phase)).To(Equal(string(cnpgv1.BackupPhaseRunning)))
 		})
@@ -315,21 +315,21 @@ var _ = Describe("Backup Controller", func() {
 
 	Describe("Reconcile", func() {
 		It("creates CNPG Backup using ReplicationContext.CNPGClusterName when no CNPG Backup exists", func() {
-			backup := &dbpreview.Backup{
+			backup := &dbv1.Backup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      backupName,
 					Namespace: backupNamespace,
 				},
-				Spec: dbpreview.BackupSpec{
+				Spec: dbv1.BackupSpec{
 					Cluster: cnpgv1.LocalObjectReference{Name: clusterName},
 				},
-				Status: dbpreview.BackupStatus{
+				Status: dbv1.BackupStatus{
 					Phase: cnpgv1.BackupPhasePending,
 				},
 			}
 
 			// DocumentDB cluster without replication (IsPrimary() and EndpointEnabled() are true)
-			cluster := &dbpreview.DocumentDB{
+			cluster := &dbv1.DocumentDB{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName,
 					Namespace: backupNamespace,
@@ -351,7 +351,7 @@ var _ = Describe("Backup Controller", func() {
 			fakeClient := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(backup, cluster, vsc).
-				WithStatusSubresource(&dbpreview.Backup{}).
+				WithStatusSubresource(&dbv1.Backup{}).
 				Build()
 
 			reconciler := &BackupReconciler{

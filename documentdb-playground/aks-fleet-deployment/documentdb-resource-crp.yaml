@@ -74,7 +74,7 @@ spec:
     group: cert-manager.io
 ---
 
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview
@@ -131,7 +131,7 @@ spec:
   resourceSelectors:
     - group: documentdb.io
       kind: DocumentDB
-      version: preview
+      version: v1
       name: documentdb-preview
     - group: ""
       version: v1

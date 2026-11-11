@@ -4,7 +4,7 @@
     "namespace": "golden-ns",
     "ownerReferences": [
       {
-        "apiVersion": "documentdb.io/preview",
+        "apiVersion": "documentdb.io/v1",
         "kind": "DocumentDB",
         "name": "golden",
         "uid": "00000000-0000-0000-0000-000000000001",

@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
-	previewv1 "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/test/e2e"
 	ddbutil "github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/documentdb"
 	"github.com/documentdb/documentdb-operator/test/e2e/pkg/e2eutils/namespaces"
@@ -54,7 +54,7 @@ var _ = Describe("DocumentDB TLS — legacy Service recovery",
 				"LOG_LEVEL":         "info",
 			}, "")
 			Expect(err).NotTo(HaveOccurred())
-			db := &previewv1.DocumentDB{}
+			db := &dbv1.DocumentDB{}
 			Expect(yaml.Unmarshal(raw, db)).To(Succeed())
 			legacy := (portforward.ServiceNamePrefix + name)[:63]
 			db.Annotations = map[string]string{portforward.ServiceNameAnnotation: legacy}

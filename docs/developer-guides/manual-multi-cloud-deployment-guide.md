@@ -319,7 +319,7 @@ metadata:
 
 ---
 
-apiVersion: documentdb.io/preview
+apiVersion: documentdb.io/v1
 kind: DocumentDB
 metadata:
   name: documentdb-preview

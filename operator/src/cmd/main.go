@@ -27,7 +27,7 @@ import (
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	dbpreview "github.com/documentdb/documentdb-operator/api/preview"
+	dbv1 "github.com/documentdb/documentdb-operator/api/v1"
 	"github.com/documentdb/documentdb-operator/internal/controller"
 	webhookhandler "github.com/documentdb/documentdb-operator/internal/webhook"
 	fleetv1alpha1 "go.goms.io/fleet-networking/api/v1alpha1"
@@ -42,7 +42,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(dbpreview.AddToScheme(scheme))
+	utilruntime.Must(dbv1.AddToScheme(scheme))
 	utilruntime.Must(cnpgv1.AddToScheme(scheme))
 	utilruntime.Must(cmapi.AddToScheme(scheme))
 	utilruntime.Must(fleetv1alpha1.AddToScheme(scheme))
