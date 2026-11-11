@@ -12,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 
+	cnpgclusterutils "github.com/cloudnative-pg/cloudnative-pg/tests/utils/clusterutils"
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/environment"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -256,20 +257,14 @@ func primaryInstalledSchemaVersion(
 	env *environment.TestingEnvironment,
 	ns, clusterName string,
 ) (string, error) {
-	var pods corev1.PodList
-	if err := env.Client.List(ctx, &pods,
-		client.InNamespace(ns),
-		client.MatchingLabels{
-			"cnpg.io/cluster":      clusterName,
-			"cnpg.io/instanceRole": "primary",
-		},
-	); err != nil {
-		return "", fmt.Errorf("list primary pod for cluster %s/%s: %w", ns, clusterName, err)
+	pod, err := cnpgclusterutils.GetPrimary(ctx, env.Client, ns, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("get primary pod for cluster %s/%s: %w", ns, clusterName, err)
 	}
-	if len(pods.Items) != 1 {
-		return "", fmt.Errorf("expected one primary pod for cluster %s/%s, found %d", ns, clusterName, len(pods.Items))
+	if pod == nil || pod.Name == "" {
+		return "", fmt.Errorf("no primary pod found for cluster %s/%s", ns, clusterName)
 	}
-	return podInstalledSchemaVersion(ctx, env, pods.Items[0])
+	return podInstalledSchemaVersion(ctx, env, *pod)
 }
 
 // podInstalledSchemaVersion requires documentdb and documentdb_core to agree
