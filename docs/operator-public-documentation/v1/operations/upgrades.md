@@ -68,8 +68,8 @@ Server-side apply (`--server-side --force-conflicts`) is required because the Do
 !!! warning
     Always use CRDs from the **same version** as the Helm chart you are installing. Using CRDs from `main` or a different release may introduce schema mismatches.
 
-!!! important "Upgrading from 1.0.x"
-    This step is **required** when upgrading from operator `1.0.x`. Newer operators use the `documentdb.io/v1` API, which the `1.0.x` CRDs do not serve; the new operator cannot start until the updated CRDs are applied. See [Migrating to the `documentdb.io/v1` API](#migrating-to-the-documentdbiov1-api).
+!!! important "Upgrading from 1.1.x or earlier"
+    This step is **required** when upgrading to operator `1.2.0` or later from `1.1.x`, `1.0.x` or earlier. Starting with `1.2.0`, the operator uses the `documentdb.io/v1` API, which older CRDs do not serve; the new operator cannot start until the updated CRDs are applied. See [Migrating to the `documentdb.io/v1` API](#migrating-to-the-documentdbiov1-api).
 
 ### Step 4: Upgrade the Operator
 
@@ -115,11 +115,14 @@ helm rollback documentdb-operator -n documentdb-operator
 !!! note
     `helm rollback` reverts the operator deployment but does **not** revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do **not** revert CRDs unless the [release notes](https://github.com/documentdb/documentdb-kubernetes-operator/releases) explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.
 
+!!! note "Rolling back from 1.2.0 to 1.1.x"
+    Keep the `1.2.0` CRDs when rolling back. They still serve the deprecated `documentdb.io/preview` version that `1.1.x` operators use, so the older operator keeps working. Do not re-apply the `1.1.x` CRDs: they do not serve `documentdb.io/v1`, and the API server rejects them once objects are stored as `v1`.
+
 ---
 
 ### Migrating to the `documentdb.io/v1` API
 
-Operator `1.0.x` served the `DocumentDB`, `Backup` and `ScheduledBackup` resources only as `documentdb.io/preview`. Later releases graduate them to the stable `documentdb.io/v1` API:
+Operators before `1.2.0` (`1.0.x` and `1.1.x`) served the `DocumentDB`, `Backup` and `ScheduledBackup` resources only as `documentdb.io/preview`. Operator `1.2.0` graduates them to the stable `documentdb.io/v1` API:
 
 - `v1` is the storage version and the version the operator uses.
 - `preview` is **deprecated** but still served with an identical schema, so existing resources, manifests and GitOps pipelines keep working. Requests that use it return a deprecation warning.
