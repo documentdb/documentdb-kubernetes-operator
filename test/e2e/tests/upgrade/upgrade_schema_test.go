@@ -154,11 +154,6 @@ var _ = Describe("DocumentDB upgrade — schema",
 				timeouts.PollInterval(timeouts.DocumentDBReady),
 			).Should(Equal(oldVersion), "initial schema version should be %s", oldVersion)
 
-			Eventually(installedSchemaVersion,
-				timeouts.For(timeouts.DocumentDBReady),
-				timeouts.PollInterval(timeouts.DocumentDBReady),
-			).Should(Equal(oldVersion), "both extensions must start at %s", oldVersion)
-
 			By("seeding data on the old schema")
 			docs := seed.SmallDataset()
 			handle, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)
@@ -199,10 +194,6 @@ var _ = Describe("DocumentDB upgrade — schema",
 				30*time.Second, 5*time.Second,
 			).Should(Equal(oldVersion),
 				"schema must remain at %s until spec.schemaVersion is set (two-phase)", oldVersion)
-
-			Consistently(installedSchemaVersion,
-				15*time.Second, 5*time.Second,
-			).Should(Equal(oldVersion), "neither extension may migrate before schema finalization")
 
 			By("verifying seeded data survived the binary upgrade")
 			handle2, err := e2emongo.NewFromDocumentDB(ctx, env, ns, ddName)

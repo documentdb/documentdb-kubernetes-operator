@@ -99,15 +99,11 @@ whose PostgreSQL extension uses dotted semantic versions set
 `core.ExtensionVersionSemver`; automatic upgrades, explicit targets, comparison,
 events, and schema status then use that format without rewriting it.
 
-`PostgresProfile.ExtensionDependencies` lists only dependencies that share the
-main extension's version, in upgrade order. The reconciler upgrades them before
-the main extension in one transaction, using the same explicit target for all
-extensions, including in `auto` mode. DocumentDB configures `documentdb_core`;
-independently versioned dependencies such as PostGIS and pg_cron are not
-automatically upgraded. With `schemaVersion` set to `auto` or the installed main
-extension version, reconciliation also repairs dependencies left behind by an
-earlier operator, even if the main extension is already current. An unset
-`schemaVersion` still leaves all extension schemas untouched.
+`PostgresProfile.ExtensionDependencies` lists co-versioned dependencies to
+upgrade before the main extension, to the same target in one transaction.
+DocumentDB configures only `documentdb_core`, not independently versioned
+dependencies such as PostGIS or pg_cron. This applies when the main extension
+is upgraded; it does not repair existing version mismatches.
 
 The DocumentDB controllers and webhook in `internal/controller` and
 `internal/webhook` are now thin wrappers over these packages. They keep their

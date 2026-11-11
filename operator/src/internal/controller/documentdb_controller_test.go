@@ -840,10 +840,11 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 					sqlCalls = append(sqlCalls, sql)
-					if strings.Contains(sql, "pg_available_extensions") {
-						// Version checks: installed 0.109-0, default 0.110-0
+					if len(sqlCalls) == 1 {
+						// First call: version check — installed 0.109-0, default 0.110-0
 						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
 					}
+					// Second call: ALTER EXTENSION
 					return "ALTER EXTENSION", nil
 				},
 			}
@@ -851,11 +852,10 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Check both versions before upgrading core and DocumentDB atomically.
-			Expect(sqlCalls).To(HaveLen(3))
+			// Verify both SQL calls were made
+			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(ContainSubstring("name = 'documentdb_core'"))
-			Expect(sqlCalls[2]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
+			Expect(sqlCalls[1]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
 
 			// Status should reflect the upgraded version (default version as semver)
 			updatedDB := &dbv1.DocumentDB{}
@@ -905,12 +905,14 @@ var _ = Describe("DocumentDB Controller", func() {
 				WithStatusSubresource(&dbv1.DocumentDB{}).
 				Build()
 
+			callCount := 0
 			reconciler := &DocumentDBReconciler{
 				Client:   fakeClient,
 				Scheme:   scheme,
 				Recorder: recorder,
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
-					if strings.Contains(sql, "pg_available_extensions") {
+					callCount++
+					if callCount == 1 {
 						// Version check: upgrade needed
 						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
 					}
@@ -1212,7 +1214,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 					sqlCalls = append(sqlCalls, sql)
-					if strings.Contains(sql, "pg_available_extensions") {
+					if len(sqlCalls) == 1 {
 						// default > installed → triggers ALTER EXTENSION
 						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
 					}
@@ -1223,7 +1225,7 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("failed to update DocumentDB status after schema upgrade"))
-			Expect(sqlCalls).To(HaveLen(3))
+			Expect(sqlCalls).To(HaveLen(2))
 		})
 	})
 
@@ -1347,7 +1349,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 					sqlCalls = append(sqlCalls, sql)
-					if strings.Contains(sql, "pg_available_extensions") {
+					if len(sqlCalls) == 1 {
 						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
 					}
 					return "ALTER EXTENSION", nil
@@ -1357,11 +1359,10 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Check both versions before running the upgrade transaction.
-			Expect(sqlCalls).To(HaveLen(3))
+			// Both version-check and ALTER EXTENSION should have been called
+			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(ContainSubstring("name = 'documentdb_core'"))
-			Expect(sqlCalls[2]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
+			Expect(sqlCalls[1]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
 
 			// Status should reflect the upgraded version
 			updatedDB := &dbv1.DocumentDB{}
@@ -1419,7 +1420,7 @@ var _ = Describe("DocumentDB Controller", func() {
 				Recorder: recorder,
 				SQLExecutor: func(_ context.Context, _ *cnpgv1.Cluster, sql string) (string, error) {
 					sqlCalls = append(sqlCalls, sql)
-					if strings.Contains(sql, "pg_available_extensions") {
+					if len(sqlCalls) == 1 {
 						// Binary is 0.110-0, installed is 0.109-0
 						return " default_version | installed_version \n-----------------+-------------------\n 0.110-0         | 0.109-0           \n", nil
 					}
@@ -1430,11 +1431,10 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Both extensions must use the requested target version.
-			Expect(sqlCalls).To(HaveLen(3))
+			// Should run ALTER EXTENSION UPDATE TO specific version
+			Expect(sqlCalls).To(HaveLen(2))
 			Expect(sqlCalls[0]).To(ContainSubstring("pg_available_extensions"))
-			Expect(sqlCalls[1]).To(ContainSubstring("name = 'documentdb_core'"))
-			Expect(sqlCalls[2]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
+			Expect(sqlCalls[1]).To(Equal(`BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '0.110-0'; ALTER EXTENSION "documentdb" UPDATE TO '0.110-0'; COMMIT;`))
 
 			// Status should reflect the explicit version
 			updatedDB := &dbv1.DocumentDB{}
@@ -1570,9 +1570,8 @@ var _ = Describe("DocumentDB Controller", func() {
 			err := reconciler.handleExtensionUpgrade(ctx, cluster, documentdb)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Check both extensions, but do not migrate either one.
-			Expect(sqlCalls).To(HaveLen(2))
-			Expect(sqlCalls[1]).To(ContainSubstring("name = 'documentdb_core'"))
+			// Only version-check SQL should have been called (no ALTER EXTENSION)
+			Expect(sqlCalls).To(HaveLen(1))
 		})
 
 		It("should handle unparseable binary version gracefully", func() {
