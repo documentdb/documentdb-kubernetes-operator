@@ -1311,6 +1311,38 @@ spec:
                 maximum: 1
                 minimum: 1
                 type: integer
+              additionalCNPGPlugins:
+                description: |-
+                  The plugins configuration, containing
+                  any additional plugin to be loaded at the underlying CNPG cluster
+                  with the corresponding configuration
+                items:
+                  description: |-
+                    PluginConfiguration specifies a plugin that need to be loaded for this
+                    cluster to be reconciled
+                  properties:
+                    enabled:
+                      default: true
+                      description: Enabled is true if this plugin will be used
+                      type: boolean
+                    isWALArchiver:
+                      default: false
+                      description: |-
+                        Marks the plugin as the WAL archiver. At most one plugin can be
+                        designated as a WAL archiver.
+                      type: boolean
+                    name:
+                      description: Name is the plugin name
+                      type: string
+                    parameters:
+                      additionalProperties:
+                        type: string
+                      description: Parameters is the configuration of the plugin
+                      type: object
+                  required:
+                    - name
+                  type: object
+                type: array
               plugins:
                 description: |-
                   Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).

@@ -196,6 +196,32 @@ spec:
                 required:
                 - name
                 type: object
+              method:
+                default: volumeSnapshot
+                description: |-
+                  The backup method to be used, possible options are
+                  `volumeSnapshot` or `plugin`. Defaults to: `volumeSnapshot`.
+                enum:
+                  - volumeSnapshot
+                  - plugin
+                type: string
+              pluginConfiguration:
+                description: Configuration parameters passed to the plugin managing
+                  this backup
+                properties:
+                  name:
+                    description: Name is the name of the plugin managing this backup
+                    type: string
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Parameters are the configuration parameters passed to the backup
+                      plugin for this backup
+                    type: object
+                required:
+                  - name
+                type: object
               retentionDays:
                 description: |-
                   RetentionDays specifies how many days the backup should be retained.
