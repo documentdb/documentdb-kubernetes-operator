@@ -5,9 +5,22 @@
 ### Upgrade notes
 - **`documentdb.io/v1` API**: `DocumentDB`, `Backup` and `ScheduledBackup` graduate from `documentdb.io/preview` to the stable `documentdb.io/v1` API, which is now the storage version. `preview` remains served with an identical schema and returns a deprecation warning; it will be removed in a future release. **Apply the updated CRDs before running `helm upgrade`** (Helm does not upgrade CRDs), otherwise the new operator cannot start. Update manifests to `apiVersion: documentdb.io/v1`; no other field changes are needed. The Go API package moved from `operator/src/api/preview` to `operator/src/api/v1`, the validating webhook path is now `/validate-documentdb-io-v1-documentdb`, and `kubectl documentdb` uses `v1`. The public documentation moved from `.../preview/` to `.../v1/`; old URLs redirect. See [Migrating to the `documentdb.io/v1` API](docs/operator-public-documentation/v1/operations/upgrades.md#migrating-to-the-documentdbiov1-api).
 
+### Major Features
+- Add outbound proxy support for the OTel Collector sidecar.
+
+## [1.1.2] - 2026-11-12
+
+Operator, sidecar and Helm chart security patch release. The API remains `documentdb.io/preview`, and the default DocumentDB engine stays at `1.0.0`. The `documentdb.io/v1` API graduation and outbound proxy support are not included.
+
 ### Security
 - Upgrade the cert-manager Go dependency and pinned Arc/Fleet installations to `v1.19.6` to address [CVE-2026-62290](https://github.com/advisories/GHSA-8rvj-mm4h-c258). Existing clusters must upgrade their separately installed cert-manager controller to a patched release (`1.19.6` or `1.20.3`); upgrading the DocumentDB operator alone does not upgrade cert-manager.
 - Upgrade `github.com/klauspost/compress` to `v1.20.2` in the sidecar injector and shared, E2E, and long-haul test modules to address [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865).
+
+### Documentation
+- Port-forward getting-started connections to the gateway Service rather than a PostgreSQL pod.
+
+### Build Maintenance
+- Refresh Debian packages when building the gateway image. Gateway images are released separately; this operator release does not change the default gateway image tag.
 
 ## [1.1.1] - 2026-11-09
 
