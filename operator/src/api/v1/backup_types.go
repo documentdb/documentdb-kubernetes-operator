@@ -29,7 +29,7 @@ type BackupSpec struct {
 	// can either be 'volumeSnapshot' or 'plugin'
 	// defaults to 'volumeSnapshot'
 	// +kubebuilder:default=volumeSnapshot
-	Method BackupMethod `json:"method"`
+	Method BackupMethod `json:"method,omitempty"`
 
 	// PluginConfiguration defines additional parameters passed to the plugin
 	// only relevant if method=plugin
