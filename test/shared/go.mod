@@ -1,6 +1,6 @@
 module github.com/documentdb/documentdb-operator/test/shared
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/cloudnative-pg/cloudnative-pg v1.29.2
