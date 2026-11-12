@@ -28,18 +28,22 @@ This agent prepares the **operator** release. If the default DocumentDB engine v
 
 ### Step 0: Pre-flight
 
-```bash
-git fetch origin main --tags
-git status --porcelain            # must be clean, or work in a new worktree
-gh release list -L 5              # latest published releases
-```
+1. **Identify the remotes** with `git remote -v`. Don't assume `origin` is upstream; a clone of a fork has `origin` pointing at the fork.
+   - `<upstream>`: the remote whose URL is `documentdb/documentdb-kubernetes-operator` (often `origin` or `upstream`).
+   - `<fork-remote>`: the remote that points at the user's fork (for example `myfork`, or `origin` in a fork clone).
 
-1. **Last release tag**: the newest non-pre-release from `gh release list` (for example `1.1.1`). Tags are plain `X.Y.Z` with **no `v` prefix**.
-2. **Current version**: read `version:` from `operator/documentdb-helm-chart/Chart.yaml` on `origin/main`. It normally equals the last release tag.
-3. **Fork remote**: find the remote that points at the user's fork (`git remote -v`; any remote whose URL is not `documentdb/documentdb-kubernetes-operator`, for example `myfork`). Release branches are pushed to the fork, never to the upstream repository. If there is no fork remote, ask the user which remote to use.
-4. Create the release branch from `origin/main`, preferably in a separate worktree:
+   If either is missing, ask the user. Release branches are pushed to the fork, never to upstream, and **every comparison and the release branch base use `<upstream>/main`**, never a fork's `main`, which may be stale.
+2. Fetch and check the state:
    ```bash
-   git worktree add -b <github-user>/release-X.Y.Z ../release-X.Y.Z origin/main
+   git fetch <upstream> main --tags
+   git status --porcelain            # must be clean, or work in a new worktree
+   gh release list --repo documentdb/documentdb-kubernetes-operator -L 5
+   ```
+3. **Last release tag**: the newest non-pre-release from `gh release list` (for example `1.1.1`). Tags are plain `X.Y.Z` with **no `v` prefix**.
+4. **Current version**: read `version:` from `operator/documentdb-helm-chart/Chart.yaml` on `<upstream>/main`. It normally equals the last release tag.
+5. Create the release branch from `<upstream>/main`, preferably in a separate worktree:
+   ```bash
+   git worktree add -b <github-user>/release-X.Y.Z ../release-X.Y.Z <upstream>/main
    ```
 
 ### Step 1: Determine the New Version
@@ -58,7 +62,7 @@ gh release list -L 5              # latest published releases
 ### Step 2: Detect CRD Changes
 
 ```bash
-git diff --stat <last-tag> origin/main -- operator/documentdb-helm-chart/crds/
+git diff --stat <last-tag> <upstream>/main -- operator/documentdb-helm-chart/crds/
 ```
 
 If any CRD changed, this release **requires users to apply the new CRDs before `helm upgrade`** (Helm never upgrades CRDs). Remember this for Steps 5–7.
@@ -71,7 +75,7 @@ Ask the user: **"Does this release change the default DocumentDB engine version 
 - **Yes**: the database track must be released first:
   1. Run **RELEASE - Build DocumentDB Candidate Images** (`build_documentdb_images.yml`) with `version` set to the engine version (and `package_source` if needed).
   2. Run **RELEASE - Promote DocumentDB Images** (`release_documentdb_images.yml`) with `candidate_version`, `version` and `update_defaults: true`. It opens a PR on branch `auto/documentdb-<version>` that bumps `constants.go`, the sidecar `config.go`, `values.yaml`, Helm test env values, workflow defaults, `Dockerfile_gateway_public_image` and the E2E schema-upgrade default pair.
-  3. Merge that PR before the operator release PR, then rebase the release branch on `origin/main`.
+  3. Merge that PR before the operator release PR, then rebase the release branch on `<upstream>/main`.
   4. In the operator release PR, also update the engine column in `before-you-start.md` and `release-strategy.md`, and add an "Upgrading to DocumentDB X" section to `upgrades.md` if the schema needs migration.
 
 ### Step 4: Update Version References
@@ -111,7 +115,7 @@ Contributors add entries under `## [Unreleased]` as they merge. **Promote that s
 2. Add a one-paragraph summary under the new heading: the default DocumentDB engine version, the headline change, and, if CRDs changed, **"Apply the X.Y.Z CRDs before `helm upgrade`."** Follow the style of the `1.1.0` entry.
 3. **Check that every shipped change is listed.** Use the tag range, not `--since=<date>` (dates and squash merges make date ranges unreliable):
    ```bash
-   git log --oneline <last-tag>..origin/main
+   git log --oneline <last-tag>..<upstream>/main
    ```
    Every PR number must appear in the entry unless it is intentionally excluded:
    - release-preparation commits (`chore: release …`, `chore: prepare release …`)
@@ -155,20 +159,41 @@ Run all of these and report the results in the PR description.
    ```bash
    docker build -t localhost/documentdb-operator:X.Y.Z operator/src
    docker build -t localhost/documentdb-sidecar:X.Y.Z operator/cnpg-plugins/sidecar-injector
-   kind create cluster --name release-test --image kindest/node:<highest tested k8s version>
-   kind load docker-image localhost/documentdb-operator:X.Y.Z localhost/documentdb-sidecar:X.Y.Z --name release-test
-   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/<cert-manager version>/cert-manager.yaml
-   ```
-   Then follow the public upgrade guide step by step:
-   1. **Install the previous published chart**: `helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator --version <last-tag> -n documentdb-operator --create-namespace --wait`.
-   2. Create a `DocumentDB` (and a `ScheduledBackup`) using the API version that release served, and insert test data through the gateway with `mongosh` (`mongodb://…@documentdb-service-<name>.<ns>.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true`).
-   3. **Apply the new CRDs** with `kubectl apply --server-side --force-conflicts -f operator/documentdb-helm-chart/crds/`, and check that the old operator still works.
-   4. **`helm upgrade`** to the release-branch chart with `--set image.documentdbk8soperator.repository=localhost/documentdb-operator --set image.sidecarinjector.repository=localhost/documentdb-sidecar --set image.documentdbk8soperator.pullPolicy=Never --set image.sidecarinjector.pullPolicy=Never`.
-   5. **Verify**: the database pod UID is unchanged and has 0 restarts, the cluster is healthy, all data is intact, and the operator logs show no errors besides first-reconcile `object has been modified` retries. Create a new cluster with the current API version and do a read/write. If CRDs changed, check the webhook rejects an invalid change (for example a PVC shrink) through every served API version, and run any migration commands from the upgrade guide.
-   6. **Rollback**: `helm rollback documentdb-operator <first revision>` and check the previous operator still works against the new CRDs (existing clusters healthy, it can create a new cluster). Then roll forward again with `helm upgrade`.
-   7. **Fresh install**: on a new kind cluster, `helm install` the release-branch chart and create a cluster with the current API version.
 
-   Delete the kind clusters and local images afterwards.
+   # Helm overrides that point the release-branch chart at the local images
+   LOCAL_IMAGES=(--set image.documentdbk8soperator.repository=localhost/documentdb-operator
+                 --set image.sidecarinjector.repository=localhost/documentdb-sidecar
+                 --set image.documentdbk8soperator.pullPolicy=Never
+                 --set image.sidecarinjector.pullPolicy=Never)
+
+   # Cluster setup; run it for every kind cluster used below
+   setup_kind() {
+     kind create cluster --name "$1" --image kindest/node:<highest tested k8s version> --wait 120s
+     kind load docker-image localhost/documentdb-operator:X.Y.Z localhost/documentdb-sidecar:X.Y.Z --name "$1"
+     kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/<cert-manager version>/cert-manager.yaml
+     kubectl -n cert-manager rollout status deploy --timeout=180s
+   }
+   setup_kind release-upgrade
+   ```
+   Then follow the public upgrade guide step by step on `release-upgrade`:
+   1. **Install the previous published chart**: `helm install documentdb-operator oci://ghcr.io/documentdb/documentdb-operator --version <last-tag> -n documentdb-operator --create-namespace --wait`.
+   2. Create a `DocumentDB` (and a `ScheduledBackup`) using the API version that release served, and insert test data through the gateway with `mongosh` (`mongodb://…@documentdb-service-<name>.<ns>.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true`). Record the database pod UIDs.
+   3. **Apply the new CRDs** with `kubectl apply --server-side --force-conflicts -f operator/documentdb-helm-chart/crds/`, and check that the old operator still works.
+   4. **Upgrade**: `helm upgrade documentdb-operator operator/documentdb-helm-chart -n documentdb-operator "${LOCAL_IMAGES[@]}" --wait`.
+   5. **Verify**: the cluster is healthy, all data is intact, and the operator logs show no errors besides first-reconcile `object has been modified` retries. Then check pod behavior against what the release should do:
+      - **Database images and pod configuration unchanged** (the usual operator-only release): database pod UIDs are unchanged with 0 restarts.
+      - **Default engine version or pod configuration changed** (Step 3, or a release that changes rendered pod specs): unpinned clusters are expected to roll. Check the restart is a normal rolling restart onto the new images, each pod returns to ready, and data is intact. Clusters that pin `spec.documentDBVersion` must not change images.
+
+      Create a new cluster with the current API version and do a read/write. If CRDs changed, check the webhook rejects an invalid change (for example a PVC shrink) through every served API version, and run any migration commands from the upgrade guide.
+   6. **Rollback**: `helm history documentdb-operator -n documentdb-operator`, then `helm rollback documentdb-operator <first revision> -n documentdb-operator --wait`. Check the previous operator still works against the new CRDs: existing clusters stay healthy and it can create a new cluster. Then roll forward again with the `helm upgrade` command from step 4.
+   7. **Fresh install** on a new cluster:
+      ```bash
+      setup_kind release-fresh
+      helm install documentdb-operator operator/documentdb-helm-chart -n documentdb-operator --create-namespace "${LOCAL_IMAGES[@]}" --wait
+      ```
+      Create a cluster with the current API version and do a read/write.
+
+   Delete the kind clusters (`kind delete cluster --name release-upgrade`, `--name release-fresh`) and local images afterwards.
 
 ### Step 8: Commit and Open the PR
 
@@ -179,7 +204,7 @@ Run all of these and report the results in the PR description.
    git log -1 --format='%(trailers:key=Signed-off-by)'   # must print a trailer
    ```
    Include any trailers the user's tooling requires (for example `Co-authored-by:`).
-3. **Push to the fork remote** found in Step 0, not to `origin`:
+3. **Push to `<fork-remote>`** from Step 0, never to `<upstream>`:
    ```bash
    git push <fork-remote> <github-user>/release-X.Y.Z
    ```
@@ -210,7 +235,7 @@ Release from the **merge commit on `main`** (`<merge-sha>`), never from the PR b
    curl -sfo /dev/null -w '%{http_code}\n' \
      https://raw.githubusercontent.com/documentdb/documentdb-kubernetes-operator/X.Y.Z/operator/documentdb-helm-chart/crds/documentdb.io_dbs.yaml   # 200
    ```
-7. Set the repository variable `E2E_UPGRADE_PREVIOUS_VERSION` to `X.Y.Z`. The E2E control-plane upgrade spec (`test/e2e/tests/upgrade/upgrade_control_plane_test.go`) skips when it is unset; once set, it tests upgrades from this release.
+7. **Know what CI does and doesn't cover.** The E2E control-plane upgrade spec (`test/e2e/tests/upgrade/upgrade_control_plane_test.go`) needs `E2E_UPGRADE_PREVIOUS_VERSION` **and** `E2E_UPGRADE_CURRENT_CHART`, the chart built by that CI run. `test-e2e.yml` defaults `E2E_UPGRADE_CURRENT_CHART` to empty, and a fixed repository variable can't point at a per-run chart artifact, so the spec is **skipped** in CI. A green `TEST - E2E` run is therefore not chart-upgrade coverage; the Step 7 kind test is. Don't claim upgrade coverage from CI unless the job log shows this spec ran rather than skipped, and flag the gap to the user if it hasn't been wired up yet.
 
 ## Output Format
 
