@@ -69,6 +69,9 @@ spec:
                   Method defines with method should be used to create a backup
                   can either be 'volumeSnapshot' or 'plugin'
                   defaults to 'volumeSnapshot'
+                enum:
+                - volumeSnapshot
+                - plugin
                 type: string
               pluginConfiguration:
                 additionalProperties:
@@ -165,6 +168,9 @@ spec:
                   Method defines with method should be used to create a backup
                   can either be 'volumeSnapshot' or 'plugin'
                   defaults to 'volumeSnapshot'
+                enum:
+                - volumeSnapshot
+                - plugin
                 type: string
               pluginConfiguration:
                 additionalProperties:

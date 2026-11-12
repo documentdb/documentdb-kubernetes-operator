@@ -11,7 +11,7 @@ import (
 )
 
 // BackupMethod defines how a backup should be created, can be 'volumeSnapshot' or 'plugin'
-// +kubebuiilder:validation:Enum=volumeSnapshot;plugin
+// +kubebuilder:validation:Enum=volumeSnapshot;plugin
 type BackupMethod cnpgv1.BackupMethod
 
 const (
