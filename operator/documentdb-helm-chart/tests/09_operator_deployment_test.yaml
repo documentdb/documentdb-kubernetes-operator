@@ -536,3 +536,13 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/managed-by"]
           value: "Helm"
+
+  # -------------------------------------------------------------------
+  # Outbound proxy
+  # -------------------------------------------------------------------
+  - it: should not wire proxy envFrom when proxy is disabled
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+      - notExists:
+          path: spec.template.metadata.annotations["checksum/proxy-config"]

@@ -92,3 +92,64 @@ Usage:
 {{- .policy -}}
 {{- end -}}
 {{- end -}}
+{{/*
+documentdb.proxy returns the effective outbound proxy settings as JSON (decode
+with fromJson). The documented OSS key is `proxy`. `Azure.proxySettings` is
+accepted purely for Azure Arc extension compatibility (the Arc platform
+injects that key). Only one of the two may be enabled; enabling both fails.
+*/}}
+{{- define "documentdb.proxy" -}}
+{{- $p := .Values.proxy | default dict -}}
+{{- $a := dig "proxySettings" dict (.Values.Azure | default dict) -}}
+{{- if and $p.isProxyEnabled $a.isProxyEnabled -}}
+{{- fail "Set either proxy or Azure.proxySettings, not both" -}}
+{{- end -}}
+{{- $src := ternary $a $p (default false $a.isProxyEnabled) -}}
+{{- dict
+    "isProxyEnabled" (default false $src.isProxyEnabled)
+    "httpProxy" (default "" $src.httpProxy)
+    "httpsProxy" (default "" $src.httpsProxy)
+    "noProxy" (default "" $src.noProxy)
+    "bypassPrivateRanges" (ternary true (dig "bypassPrivateRanges" true $p) (default false $a.isProxyEnabled))
+  | toJson -}}
+{{- end -}}
+
+{{/*
+documentdb.proxySecretName is the name of the Secret that holds the outbound
+proxy routing configuration for the OTel Collector sidecar (DOCUMENTDB_OTEL_HTTP_PROXY /
+DOCUMENTDB_OTEL_HTTPS_PROXY / DOCUMENTDB_OTEL_NO_PROXY). It is created
+in the operator namespace when the proxy is enabled.
+*/}}
+{{- define "documentdb.proxySecretName" -}}
+documentdb-proxy-config
+{{- end -}}
+
+{{/*
+documentdb.noProxy composes the effective NO_PROXY value: the user-supplied
+noProxy (optional) followed by a standard bypass list. The loopback and
+cluster-local entries are always included. The RFC1918 private ranges are
+included unless proxy.bypassPrivateRanges is false; Azure.proxySettings has no
+such option and always keeps them. Duplicate/empty entries are dropped and the
+result is comma-joined.
+*/}}
+{{- define "documentdb.noProxy" -}}
+{{- $proxy := include "documentdb.proxy" . | fromJson -}}
+{{- $defaults := list "localhost" "127.0.0.1" "::1" ".svc" ".svc.cluster.local" "kubernetes.default.svc" -}}
+{{- if $proxy.bypassPrivateRanges -}}
+{{- $defaults = concat $defaults (list "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16") -}}
+{{- end -}}
+{{- $user := list -}}
+{{- with $proxy.noProxy -}}
+{{- $user = regexSplit "\\s*,\\s*" (trim .) -1 -}}
+{{- end -}}
+{{- $seen := dict -}}
+{{- $out := list -}}
+{{- range (concat $user $defaults) -}}
+{{- $e := trim . -}}
+{{- if and $e (not (hasKey $seen $e)) -}}
+{{- $_ := set $seen $e true -}}
+{{- $out = append $out $e -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $out -}}
+{{- end -}}
