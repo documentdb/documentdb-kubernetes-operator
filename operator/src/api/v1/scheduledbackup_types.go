@@ -15,6 +15,17 @@ type ScheduledBackupSpec struct {
 	// +kubebuilder:validation:Required
 	Cluster cnpgv1.LocalObjectReference `json:"cluster"`
 
+	// Method defines with method should be used to create a backup
+	// can either be 'volumeSnapshot' or 'plugin'
+	// defaults to 'volumeSnapshot'
+	// +kubebuilder:default=volumeSnapshot
+	Method BackupMethod `json:"method"`
+
+	// PluginConfiguration defines additional parameters passed to the plugin
+	// only relevant if method=plugin
+	// +optional
+	PluginConfiguration map[string]string `json:"pluginConfiguration,omitempty"`
+
 	// Schedule defines when backups should be created using cron expression format.
 	// See https://pkg.go.dev/github.com/robfig/cron#hdr-CRON_Expression_Format
 	// +kubebuilder:validation:Required

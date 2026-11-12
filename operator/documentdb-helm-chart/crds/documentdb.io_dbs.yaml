@@ -54,6 +54,30 @@ spec:
           spec:
             description: DocumentDBSpec defines the desired state of DocumentDB.
             properties:
+              additionalCNPGPlugins:
+                description: AdditionalCNPGPlugins defines which additional CNPG plugins
+                  should be loaded
+                items:
+                  description: AdditionalPluginSpec defines how to install an additional
+                    plugin.
+                  properties:
+                    enabled:
+                      default: true
+                      description: Enabled marks this plugin is enabled or not,
+                      type: boolean
+                    isWalArchiver:
+                      default: false
+                      description: |-
+                        IsWalArchiver ,arks the plugin as a WAL archiver
+                        at most one plugin can be designated as a WAL archiver.
+                      type: boolean
+                    parameters:
+                      additionalProperties:
+                        type: string
+                      description: Parameters is the configuration of the plugin
+                      type: object
+                  type: object
+                type: array
               affinity:
                 description: Affinity/Anti-affinity rules for Pods (cnpg passthrough)
                 properties:
@@ -1743,6 +1767,30 @@ spec:
           spec:
             description: DocumentDBSpec defines the desired state of DocumentDB.
             properties:
+              additionalCNPGPlugins:
+                description: AdditionalCNPGPlugins defines which additional CNPG plugins
+                  should be loaded
+                items:
+                  description: AdditionalPluginSpec defines how to install an additional
+                    plugin.
+                  properties:
+                    enabled:
+                      default: true
+                      description: Enabled marks this plugin is enabled or not,
+                      type: boolean
+                    isWalArchiver:
+                      default: false
+                      description: |-
+                        IsWalArchiver ,arks the plugin as a WAL archiver
+                        at most one plugin can be designated as a WAL archiver.
+                      type: boolean
+                    parameters:
+                      additionalProperties:
+                        type: string
+                      description: Parameters is the configuration of the plugin
+                      type: object
+                  type: object
+                type: array
               affinity:
                 description: Affinity/Anti-affinity rules for Pods (cnpg passthrough)
                 properties:

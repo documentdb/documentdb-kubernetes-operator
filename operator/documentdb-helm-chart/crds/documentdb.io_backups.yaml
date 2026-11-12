@@ -82,6 +82,20 @@ spec:
                 required:
                 - name
                 type: object
+              method:
+                default: volumeSnapshot
+                description: |-
+                  Method defines with method should be used to create a backup
+                  can either be 'volumeSnapshot' or 'plugin'
+                  defaults to 'volumeSnapshot'
+                type: string
+              pluginConfiguration:
+                additionalProperties:
+                  type: string
+                description: |-
+                  PluginConfiguration defines additional parameters passed to the plugin
+                  only relevant if method=plugin
+                type: object
               retentionDays:
                 description: |-
                   RetentionDays specifies how many days the backup should be retained.
@@ -89,6 +103,7 @@ spec:
                 type: integer
             required:
             - cluster
+            - method
             type: object
             x-kubernetes-validations:
             - message: BackupSpec is immutable once set
@@ -196,6 +211,20 @@ spec:
                 required:
                 - name
                 type: object
+              method:
+                default: volumeSnapshot
+                description: |-
+                  Method defines with method should be used to create a backup
+                  can either be 'volumeSnapshot' or 'plugin'
+                  defaults to 'volumeSnapshot'
+                type: string
+              pluginConfiguration:
+                additionalProperties:
+                  type: string
+                description: |-
+                  PluginConfiguration defines additional parameters passed to the plugin
+                  only relevant if method=plugin
+                type: object
               retentionDays:
                 description: |-
                   RetentionDays specifies how many days the backup should be retained.
@@ -203,6 +232,7 @@ spec:
                 type: integer
             required:
             - cluster
+            - method
             type: object
             x-kubernetes-validations:
             - message: BackupSpec is immutable once set

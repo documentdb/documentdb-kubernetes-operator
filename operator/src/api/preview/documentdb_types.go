@@ -73,6 +73,9 @@ type DocumentDBSpec struct {
 	// +optional
 	Postgres *PostgresSpec `json:"postgres,omitempty"`
 
+	// AdditionalCNPGPlugins defines which additional CNPG plugins should be loaded
+	// +optional
+	AdditionalCNPGPlugins []AdditionalPluginSpec `json:"additionalCNPGPlugins,omitempty"`
 	// Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
 	// All fields are optional; defaults are preserved when omitted.
 	// +optional
@@ -215,6 +218,21 @@ type PostgresSpec struct {
 	// Values specified here override computed and static defaults.
 	// Protected parameters (cron.database_name, max_replication_slots, max_wal_senders,
 	// max_prepared_transactions) cannot be overridden.
+	// +optional
+	Parameters map[string]string `json:"parameters,omitempty"`
+}
+
+// AdditionalPluginSpec defines how to install an additional plugin.
+type AdditionalPluginSpec struct {
+	// Enabled marks this plugin is enabled or not,
+	// +kubebuilder:default:=true
+	Enabled bool `json:"enabled,omitempty"`
+	// IsWalArchiver ,arks the plugin as a WAL archiver
+	// at most one plugin can be designated as a WAL archiver.
+	// +kubebuilder:default:=false
+	IsWalArchiver bool `json:"isWalArchiver,omitempty"`
+
+	// Parameters is the configuration of the plugin
 	// +optional
 	Parameters map[string]string `json:"parameters,omitempty"`
 }
