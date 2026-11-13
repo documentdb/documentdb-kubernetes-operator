@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% set version = config.extra.docs_version %}
+  {% if version == "dev" or "-" in version %}
+    <meta name="robots" content="noindex, follow">
+  {% endif %}
+  <link rel="describedby" href="{{ config.site_url.rstrip('/') ~ '/llms.txt' }}">
+  {% if page and page.file.src_uri != "index.md" %}
+    {% set software = {
+      "@type": "SoftwareApplication",
+      "name": "DocumentDB Kubernetes Operator",
+      "url": config.repo_url,
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Kubernetes",
+      "license": "https://opensource.org/license/mit/"
+    } %}
+    {% if version != "dev" %}
+      {% set _ = software.update({"softwareVersion": version}) %}
+    {% endif %}
+    <script type="application/ld+json">
+      {{ {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": page.title,
+        "description": page.meta.get("description", config.site_description),
+        "url": page.canonical_url,
+        "inLanguage": "en",
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": config.site_name,
+          "url": config.site_url.rstrip('/') ~ '/'
+        },
+        "about": software
+      } | tojson }}
+    </script>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {% set version = config.extra.docs_version %}
+  {% if version == "dev" or "-" in version %}
+    <div class="admonition warning">
+      <p class="admonition-title">{{ "Development" if version == "dev" else "Prerelease" }} documentation</p>
+      <p>This snapshot contains unreleased guidance. For stable installation instructions, use the <a href="https://documentdb.io/documentdb-kubernetes-operator/latest/">released documentation</a>.</p>
+    </div>
+  {% endif %}
+  {{ super() }}
+{% endblock %}

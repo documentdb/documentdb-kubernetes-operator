@@ -6,7 +6,8 @@ on:
       - README.md
       - mkdocs.yml
       - 'docs/operator-public-documentation/**'
-      - '.github/scripts/check_doc_links*.py'
+      - 'docs/overrides/**'
+      - '.github/scripts/check_doc_*.py'
       - '.github/workflows/*docs.yml'
   push:
     branches: [main]
@@ -14,7 +15,8 @@ on:
       - README.md
       - mkdocs.yml
       - 'docs/operator-public-documentation/**'
-      - '.github/scripts/check_doc_links*.py'
+      - 'docs/overrides/**'
+      - '.github/scripts/check_doc_*.py'
       - '.github/workflows/*docs.yml'
   workflow_dispatch:
 
@@ -37,6 +39,8 @@ jobs:
       - name: Test link checker
         run: python -m unittest discover -s .github/scripts -p '*_test.py'
       - name: Build and check candidate entrypoints
+        env:
+          MIKE_DOCS_VERSION: dev
         run: |
           mkdocs build
           python .github/scripts/check_doc_links.py --site-dir site
