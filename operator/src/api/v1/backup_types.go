@@ -8,6 +8,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// BackupMethod defines how a backup should be created, can be 'volumeSnapshot' or 'plugin'
+// +kubebuilder:validation:Enum=volumeSnapshot;plugin
+type BackupMethod cnpgv1.BackupMethod
+
+const (
+	BackupMethodVolumeSnapshot = "volumeSnapshot"
+	BackupMethodPlugin         = "plugin"
+)
+
 // BackupSpec defines the desired state of Backup.
 // +kubebuilder:validation:XValidation:rule="oldSelf == self",message="BackupSpec is immutable once set"
 type BackupSpec struct {
@@ -15,6 +24,17 @@ type BackupSpec struct {
 	// The cluster must exist in the same namespace as the Backup resource.
 	// +kubebuilder:validation:Required
 	Cluster cnpgv1.LocalObjectReference `json:"cluster"`
+
+	// Method defines with method should be used to create a backup
+	// can either be 'volumeSnapshot' or 'plugin'
+	// defaults to 'volumeSnapshot'
+	// +kubebuilder:default=volumeSnapshot
+	Method BackupMethod `json:"method,omitempty"`
+
+	// PluginConfiguration defines additional parameters passed to the plugin
+	// only relevant if method=plugin
+	// +optional
+	PluginConfiguration map[string]string `json:"pluginConfiguration,omitempty"`
 
 	// RetentionDays specifies how many days the backup should be retained.
 	// If not specified, the default retention period from the cluster's backup retention policy will be used.

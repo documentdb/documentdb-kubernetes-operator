@@ -91,6 +91,13 @@ func (in *BackupList) DeepCopyObject() runtime.Object {
 func (in *BackupSpec) DeepCopyInto(out *BackupSpec) {
 	*out = *in
 	in.Cluster.DeepCopyInto(&out.Cluster)
+	if in.PluginConfiguration != nil {
+		in, out := &in.PluginConfiguration, &out.PluginConfiguration
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.RetentionDays != nil {
 		in, out := &in.RetentionDays, &out.RetentionDays
 		*out = new(int)
@@ -293,6 +300,13 @@ func (in *DocumentDBSpec) DeepCopyInto(out *DocumentDBSpec) {
 		in, out := &in.Postgres, &out.Postgres
 		*out = new(PostgresSpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.AdditionalCNPGPlugins != nil {
+		in, out := &in.AdditionalCNPGPlugins, &out.AdditionalCNPGPlugins
+		*out = make([]apiv1.PluginConfiguration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.Plugins != nil {
 		in, out := &in.Plugins, &out.Plugins
@@ -733,6 +747,13 @@ func (in *ScheduledBackupList) DeepCopyObject() runtime.Object {
 func (in *ScheduledBackupSpec) DeepCopyInto(out *ScheduledBackupSpec) {
 	*out = *in
 	in.Cluster.DeepCopyInto(&out.Cluster)
+	if in.PluginConfiguration != nil {
+		in, out := &in.PluginConfiguration, &out.PluginConfiguration
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	if in.RetentionDays != nil {
 		in, out := &in.RetentionDays, &out.RetentionDays
 		*out = new(int)
