@@ -82,6 +82,28 @@ class DocumentationLinkTests(unittest.TestCase):
             self.assertEqual(main(), 1)
         self.assertIn("development", errors.getvalue())
 
+    def test_checks_links_in_llms_index_when_present(self):
+        readme = self.site / "README.md"
+        readme.write_text(f"[Docs]({DOCS_ROOT}latest/)", encoding="utf-8")
+        llms = self.site / "docs/operator-public-documentation/llms.txt"
+        llms.parent.mkdir(parents=True)
+        llms.write_text(f"[Guide]({DOCS_ROOT}latest/v1/#missing)", encoding="utf-8")
+
+        def response_for(request, timeout):
+            response = BytesIO(b"<h1>Released docs</h1>")
+            response.geturl = lambda: request.full_url
+            return response
+
+        errors = StringIO()
+        with (
+            patch("sys.argv", ["check_doc_links.py", "--readme", str(readme)]),
+            patch("check_doc_links.urlopen", side_effect=response_for),
+            patch("sys.stdout", new=StringIO()),
+            patch("sys.stderr", new=errors),
+        ):
+            self.assertEqual(main(), 1)
+        self.assertIn("missing anchor", errors.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

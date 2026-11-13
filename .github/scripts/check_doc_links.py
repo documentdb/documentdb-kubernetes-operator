@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check README release-doc links, including static-hosting redirects."""
+"""Check README and llms.txt release-doc links, including static-hosting redirects."""
 
 import argparse
 from html.parser import HTMLParser
@@ -88,10 +88,14 @@ def main():
     args = parser.parse_args()
     if args.attempts < 1:
         parser.error("--attempts must be positive")
+    sources = [args.readme]
+    llms = args.readme.parent / "docs/operator-public-documentation/llms.txt"
+    if llms.is_file():
+        sources.append(llms)
     links = set(
         re.findall(
             re.escape(DOCS_ROOT) + r"[^\s<>)]*",
-            args.readme.read_text(encoding="utf-8"),
+            "\n".join(source.read_text(encoding="utf-8") for source in sources),
         )
     )
     if not links:
