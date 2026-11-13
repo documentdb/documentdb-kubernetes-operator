@@ -48,6 +48,7 @@ nav:
           - TLS: v1/configuration/tls.md
           - PostgreSQL Tuning: postgresql-tuning.md
           - io_uring Async I/O: io-uring.md
+      - Security: v1/security.md
       - Operations:
           - Upgrades: v1/operations/upgrades.md
           - Failover: v1/operations/failover.md
