@@ -368,6 +368,10 @@ switched to db sample_mflix
 
 ## Configuration and advanced topics
 
+### Security
+
+TLS is always on and pods run with hardened security contexts by default. For the operator's permissions and a production hardening checklist, see [Security](security.md).
+
 ### Sidecar injector plugin configuration
 
 The operator uses a sidecar injector plugin to automatically inject the DocumentDB Gateway container into PostgreSQL pods. You can customize the gateway image, pod labels, and annotations.
