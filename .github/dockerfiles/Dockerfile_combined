@@ -33,7 +33,7 @@ LABEL org.opencontainers.image.title="DocumentDB PostgreSQL ${PG_MAJOR}" \
       org.opencontainers.image.authors="DocumentDB maintainers" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.url="https://documentdb.io" \
-      org.opencontainers.image.documentation="https://documentdb.io/documentdb-kubernetes-operator/latest/v1/"
+      org.opencontainers.image.documentation="https://documentdb.io/documentdb-kubernetes-operator/latest/"
 
 USER 0
 
