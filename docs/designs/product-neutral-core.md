@@ -99,6 +99,11 @@ whose PostgreSQL extension uses dotted semantic versions set
 `core.ExtensionVersionSemver`; automatic upgrades, explicit targets, comparison,
 events, and schema status then use that format without rewriting it.
 
+`ExtensionUpdateSQL` upgrades `documentdb_core` before `documentdb` in one
+transaction. Explicit schema versions apply to both extensions; `auto` uses
+each extension's packaged default. Other products and independently versioned
+dependencies are unchanged. Existing version mismatches are not repaired.
+
 The DocumentDB controllers and webhook in `internal/controller` and
 `internal/webhook` are now thin wrappers over these packages. They keep their
 types, method names, and `cmd/main.go` wiring. CRD schemas are unchanged;

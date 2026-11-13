@@ -58,6 +58,9 @@ func DocumentDBProfile() ProductProfile {
 // DocumentDBExtensionName is the PostgreSQL extension backing DocumentDB.
 const DocumentDBExtensionName = "documentdb"
 
+// DocumentDBCoreExtensionName is the co-versioned PostgreSQL core extension.
+const DocumentDBCoreExtensionName = "documentdb_core"
+
 // DocumentDBAdapter is the first product adapter. It maps the DocumentDB custom
 // resource onto the product-neutral model consumed by the reconciler.
 type DocumentDBAdapter struct{}

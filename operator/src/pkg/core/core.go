@@ -105,7 +105,8 @@ func ValidateResources(res Resources, monitoring bool, base *field.Path, cfg Spl
 func ExtensionVersionSQL(extension string) string { return cnpg.ExtensionVersionSQL(extension) }
 
 // ExtensionUpdateSQL upgrades extension, to targetVersion when set. Pass the
-// unquoted extension name; it is quoted as a SQL identifier.
+// unquoted extension name; it is quoted as a SQL identifier. For DocumentDB,
+// documentdb_core is upgraded first in the same transaction.
 func ExtensionUpdateSQL(extension, targetVersion string) string {
 	return cnpg.ExtensionUpdateSQL(extension, targetVersion)
 }

@@ -144,6 +144,9 @@ var _ = Describe("DocumentDB upgrade — schema",
 			// Consistently below: it caches the last good read so a transient
 			// API error can't fail the Consistently window (see helper doc).
 			schemaVersion := schemaVersionGetter(ctx, c, key)
+			installedSchemaVersion := func() (string, error) {
+				return primaryInstalledSchemaVersion(ctx, env, ns, ddName)
+			}
 
 			By("waiting for status.schemaVersion to settle on the old version")
 			Eventually(schemaVersion,
@@ -213,6 +216,11 @@ var _ = Describe("DocumentDB upgrade — schema",
 				timeouts.For(timeouts.DocumentDBUpgrade),
 				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
 			).Should(Equal(newVersion), "schema did not migrate to %s after finalize", newVersion)
+
+			Eventually(installedSchemaVersion,
+				timeouts.For(timeouts.DocumentDBUpgrade),
+				timeouts.PollInterval(timeouts.DocumentDBUpgrade),
+			).Should(Equal(newVersion), "both extensions must migrate to %s", newVersion)
 
 			Eventually(assertions.AssertDocumentDBReady(ctx, c, key),
 				timeouts.For(timeouts.DocumentDBUpgrade),

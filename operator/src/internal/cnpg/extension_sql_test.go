@@ -14,11 +14,14 @@ import (
 
 func TestExtensionLifecycleSQLUsesProductNames(t *testing.T) {
 	cases := map[string]string{
-		ExtensionVersionSQL("pgcosmos"):         "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'pgcosmos'",
-		ExtensionUpdateSQL("pgcosmos", ""):      `ALTER EXTENSION "pgcosmos" UPDATE`,
-		ExtensionUpdateSQL("pgcosmos", "1.2-0"): `ALTER EXTENSION "pgcosmos" UPDATE TO '1.2-0'`,
-		ReplicationRoleCheckSQL("cosmos_admin"): "SELECT 1 FROM pg_roles WHERE rolname = 'streaming_replica' AND pg_has_role('streaming_replica', 'cosmos_admin', 'USAGE');",
-		ReplicationRoleGrantSQL("cosmos_admin"): `GRANT "cosmos_admin" TO streaming_replica;`,
+		ExtensionVersionSQL("pgcosmos"):           "SELECT default_version, installed_version FROM pg_available_extensions WHERE name = 'pgcosmos'",
+		ExtensionUpdateSQL("pgcosmos", ""):        `ALTER EXTENSION "pgcosmos" UPDATE`,
+		ExtensionUpdateSQL("pgcosmos", "1.2-0"):   `ALTER EXTENSION "pgcosmos" UPDATE TO '1.2-0'`,
+		ExtensionUpdateSQL("documentdb", ""):      `BEGIN; ALTER EXTENSION "documentdb_core" UPDATE; ALTER EXTENSION "documentdb" UPDATE; COMMIT;`,
+		ExtensionUpdateSQL("documentdb", "1.2-0"): `BEGIN; ALTER EXTENSION "documentdb_core" UPDATE TO '1.2-0'; ALTER EXTENSION "documentdb" UPDATE TO '1.2-0'; COMMIT;`,
+		ExtensionUpdateSQL("documentdb_core", ""): `ALTER EXTENSION "documentdb_core" UPDATE`,
+		ReplicationRoleCheckSQL("cosmos_admin"):   "SELECT 1 FROM pg_roles WHERE rolname = 'streaming_replica' AND pg_has_role('streaming_replica', 'cosmos_admin', 'USAGE');",
+		ReplicationRoleGrantSQL("cosmos_admin"):   `GRANT "cosmos_admin" TO streaming_replica;`,
 	}
 	for got, want := range cases {
 		if got != want {

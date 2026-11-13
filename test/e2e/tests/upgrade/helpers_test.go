@@ -12,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive
 
+	cnpgclusterutils "github.com/cloudnative-pg/cloudnative-pg/tests/utils/clusterutils"
 	"github.com/cloudnative-pg/cloudnative-pg/tests/utils/environment"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -251,8 +252,23 @@ func replicaInstalledSchemaVersion(
 	return agreed, nil
 }
 
-// podInstalledSchemaVersion execs psql on a single pod and returns the
-// installed documentdb extension version normalized to semver.
+func primaryInstalledSchemaVersion(
+	ctx context.Context,
+	env *environment.TestingEnvironment,
+	ns, clusterName string,
+) (string, error) {
+	pod, err := cnpgclusterutils.GetPrimary(ctx, env.Client, ns, clusterName)
+	if err != nil {
+		return "", fmt.Errorf("get primary pod for cluster %s/%s: %w", ns, clusterName, err)
+	}
+	if pod == nil || pod.Name == "" {
+		return "", fmt.Errorf("no primary pod found for cluster %s/%s", ns, clusterName)
+	}
+	return podInstalledSchemaVersion(ctx, env, *pod)
+}
+
+// podInstalledSchemaVersion requires documentdb and documentdb_core to agree
+// and returns their installed version normalized to semver.
 func podInstalledSchemaVersion(
 	ctx context.Context,
 	env *environment.TestingEnvironment,
@@ -261,15 +277,20 @@ func podInstalledSchemaVersion(
 	timeout := time.Minute
 	stdout, stderr, err := env.EventuallyExecCommand(ctx, pod, "postgres", &timeout,
 		"psql", "-U", "postgres", "-d", "postgres", "-tAc",
-		"SELECT extversion FROM pg_extension WHERE extname='documentdb'")
+		"SELECT extversion FROM pg_extension WHERE extname IN ('documentdb', 'documentdb_core') ORDER BY extname")
 	if err != nil {
 		return "", fmt.Errorf("exec psql on pod %s: %w (stderr: %s)", pod.Name, err, stderr)
 	}
 
-	raw := strings.TrimSpace(stdout)
-	if raw == "" {
-		return "", fmt.Errorf("documentdb extension not installed on pod %s", pod.Name)
+	versions := strings.Fields(stdout)
+	if len(versions) != 2 {
+		return "", fmt.Errorf("expected documentdb and documentdb_core versions on pod %s, got %q", pod.Name, stdout)
 	}
+	if versions[0] != versions[1] {
+		return "", fmt.Errorf("extension versions differ on pod %s: documentdb=%s, documentdb_core=%s",
+			pod.Name, versions[0], versions[1])
+	}
+	raw := versions[0]
 	// "0.110-0" -> "0.110.0"; a value already in semver form is unchanged.
 	if i := strings.LastIndex(raw, "-"); i >= 0 {
 		raw = raw[:i] + "." + raw[i+1:]
