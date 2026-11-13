@@ -1,0 +1,95 @@
+# Long-running ExtendDB server, applied after manifests/init-job.yaml has
+# completed successfully.
+#
+# Templated by scripts/deploy.sh with envsubst: ${EXTENDDB_NAMESPACE},
+# ${EXTENDDB_IMAGE}.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: extenddb
+  namespace: ${EXTENDDB_NAMESPACE}
+  labels:
+    app: extenddb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: extenddb
+  template:
+    metadata:
+      labels:
+        app: extenddb
+    spec:
+      # The image runs as non-root UID/GID 10001; fsGroup ensures the
+      # mounted PVC is group-writable for that UID regardless of the CSI
+      # driver's default mount ownership.
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: extenddb
+          image: ${EXTENDDB_IMAGE}
+          command:
+            - extenddb
+            - serve
+            - --config
+            - /var/lib/extenddb/extenddb.toml
+            - --foreground
+          ports:
+            - containerPort: 18443
+              name: https
+          env:
+            - name: EXTENDDB__STORAGE__MONGODB__CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: extenddb-mongo-uri
+                  key: connection_string
+            # DocumentDB does not support snapshot read concern in transactions.
+            - name: EXTENDDB__STORAGE__MONGODB__TRANSACTION_READ_CONCERN
+              value: majority
+            # Must match the init Job's HOME so `~/.extenddb/tls/cert.pem`
+            # (referenced by the generated extenddb.toml's cert_path/key_path)
+            # resolves to the same PVC-backed location the cert was written
+            # to during init -- see manifests/init-job.yaml.
+            - name: HOME
+              value: /var/lib/extenddb
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/extenddb
+          # NOTE: `extenddb healthcheck` verifies the process/listener is up
+          # but (per upstream docs, for the PostgreSQL backend at least) does
+          # not verify backend-store connectivity after startup. A "Ready"
+          # pod is necessary but not sufficient -- treat scripts/test-
+          # connection.sh as the actual functional gate, not just pod
+          # readiness. Both probes intentionally share this command since no
+          # finer-grained check is exposed by the binary today.
+          readinessProbe:
+            exec:
+              command: ["extenddb", "healthcheck"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["extenddb", "healthcheck"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: extenddb-state
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: extenddb
+  namespace: ${EXTENDDB_NAMESPACE}
+spec:
+  selector:
+    app: extenddb
+  ports:
+    - name: https
+      port: 18443
+      targetPort: 18443
+  type: ClusterIP
