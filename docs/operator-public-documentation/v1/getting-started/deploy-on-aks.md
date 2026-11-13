@@ -33,7 +33,7 @@ For complete automation details, see the
 When using AKS, set the `DocumentDB` `spec.environment` field to `aks`.
 Supported values are `aks`, `eks`, and `gke`. If you omit this field, the
 operator does not apply cloud-specific service annotations. For field details,
-see the [API reference](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/api-reference/).
+see the [API reference](../api-reference.md).
 
 ```yaml
 spec:

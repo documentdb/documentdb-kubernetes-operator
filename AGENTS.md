@@ -465,7 +465,7 @@ The `documentdb-playground/` directory contains production-ready deployment exam
 ## Additional Resources
 
 - [Development Environment Guide](docs/developer-guides/development-environment.md)
-- [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/)
+- [Public Documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 

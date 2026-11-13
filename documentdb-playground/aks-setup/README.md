@@ -4,7 +4,7 @@ This directory contains comprehensive automation scripts for deploying DocumentD
 on Azure Kubernetes Service (AKS) with production-ready configurations.
 
 For general AKS guidance (architecture, configuration, troubleshooting, cost, and
-security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/getting-started/deploy-on-aks/)
+security), see our [public documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/deploy-on-aks/)
 
 ## 🚀 Quick Start
 

@@ -153,6 +153,6 @@ Interactive walkthrough that seeds jobs, watches scaling, drains jobs, and watch
 
 - [KEDA MongoDB scaler documentation](https://keda.sh/docs/2.19/scalers/mongodb/)
 - [KEDA ScaledObject specification](https://keda.sh/docs/2.19/concepts/scaling-deployments/)
-- [DocumentDB Kubernetes Operator documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/v1/)
+- [DocumentDB Kubernetes Operator documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/)
 - [Connecting to DocumentDB](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/getting-started/connecting-to-documentdb.md)
 - [DocumentDB TLS configuration](https://github.com/documentdb/documentdb-kubernetes-operator/blob/main/docs/operator-public-documentation/v1/configuration/tls.md)
