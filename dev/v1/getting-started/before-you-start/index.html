@@ -461,6 +461,21 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Version compatibility">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-version-does-a-link-or-command-refer-to" class="md-nav__link">
+    <span class="md-ellipsis">
+      Which version does a link or command refer to?
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -1606,6 +1621,21 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Version compatibility">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#which-version-does-a-link-or-command-refer-to" class="md-nav__link">
+    <span class="md-ellipsis">
+      Which version does a link or command refer to?
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
       </ul>
@@ -1838,6 +1868,34 @@
 </tbody>
 </table>
 <h3 id="version-compatibility">Version compatibility<a class="headerlink" href="#version-compatibility" title="Permanent link">&para;</a></h3>
+<h4 id="which-version-does-a-link-or-command-refer-to">Which version does a link or command refer to?<a class="headerlink" href="#which-version-does-a-link-or-command-refer-to" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Documentation snapshot</strong></td>
+<td>A numbered URL such as <code>/1.1.1/</code> contains documentation published for that operator release. <code>/latest/</code> selects the latest stable release; <code>/dev/</code> contains unreleased changes on <code>main</code>. Use a numbered snapshot for reproducible guidance.</td>
+</tr>
+<tr>
+<td><strong>Operator / Helm chart</strong></td>
+<td>The chart's <code>version</code> selects the release installed with <code>helm --version</code>. Its <code>appVersion</code> selects the operator and sidecar image versions.</td>
+</tr>
+<tr>
+<td><strong>DocumentDB engine</strong></td>
+<td>The chart's <code>documentDbVersion</code> selects the database and gateway release independently of the operator. <code>spec.documentDBVersion</code> can override it for a cluster.</td>
+</tr>
+<tr>
+<td><strong>CRD API</strong></td>
+<td><code>apiVersion: documentdb.io/v1</code> selects the Kubernetes resource schema, not an operator or engine release. The deprecated <code>documentdb.io/preview</code> API is still served for existing resources.</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>/v1/</code> and older <code>/preview/</code> documentation directories are page layouts, not numbered release snapshots. Compatibility redirects preserve older page links within the selected documentation snapshot; development documentation is not a fallback for missing released pages.</p>
 <p>The operator and the DocumentDB engine have separate version numbers. The Helm chart version is the operator version; each chart deploys a default engine version (the chart's <code>documentDbVersion</code>) that you can override per cluster with <code>spec.documentDBVersion</code>.</p>
 <table>
 <thead>
