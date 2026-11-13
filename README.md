@@ -19,6 +19,10 @@ The DocumentDB Kubernetes Operator extends Kubernetes with Custom Resource Defin
 
 For installation guides, configuration options, and examples, visit our [documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/).
 
+For an agent-readable documentation index, see [llms.txt](docs/operator-public-documentation/llms.txt).
+
+`latest` points to the latest stable release documentation; `dev` tracks unreleased changes on `main`. Numbered documentation snapshots match operator/Helm chart releases, not DocumentDB engine versions. Released deep links use the compatible `preview/` routes, which newer `v1/` snapshots retain through redirects. Use the released links below rather than substituting development documentation.
+
 ## 📦 Install
 
 The operator Helm chart is published as an OCI artifact to the GitHub Container Registry. Install the latest stable chart with:

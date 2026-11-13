@@ -76,6 +76,17 @@ Minimum resources for a basic DocumentDB deployment:
 
 ### Version compatibility
 
+#### Which version does a link or command refer to?
+
+| Version | Meaning |
+|---------|---------|
+| **Documentation snapshot** | A numbered URL such as `/1.1.1/` contains documentation published for that operator release. `/latest/` selects the latest stable release; `/dev/` contains unreleased changes on `main`. Use a numbered snapshot for reproducible guidance. |
+| **Operator / Helm chart** | The chart's `version` selects the release installed with `helm --version`. Its `appVersion` selects the operator and sidecar image versions. |
+| **DocumentDB engine** | The chart's `documentDbVersion` selects the database and gateway release independently of the operator. `spec.documentDBVersion` can override it for a cluster. |
+| **CRD API** | `apiVersion: documentdb.io/v1` selects the Kubernetes resource schema, not an operator or engine release. The deprecated `documentdb.io/preview` API is still served for existing resources. |
+
+The `/v1/` and older `/preview/` documentation directories are page layouts, not numbered release snapshots. Compatibility redirects preserve older page links within the selected documentation snapshot; development documentation is not a fallback for missing released pages.
+
 The operator and the DocumentDB engine have separate version numbers. The Helm chart version is the operator version; each chart deploys a default engine version (the chart's `documentDbVersion`) that you can override per cluster with `spec.documentDBVersion`.
 
 | Operator (Helm chart) | Default DocumentDB engine | Status |

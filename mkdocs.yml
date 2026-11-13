@@ -77,6 +77,8 @@ plugins:
   # folder moved to v1/ with the documentdb.io/v1 API graduation.
   - redirects:
       redirect_maps:
+        v1/getting-started/index.md: v1/getting-started/before-you-start.md
+        preview/getting-started/index.md: v1/getting-started/before-you-start.md
         preview/advanced-configuration/README.md: v1/advanced-configuration/README.md
         preview/api-reference.md: v1/api-reference.md
         preview/architecture/overview.md: v1/architecture/overview.md
