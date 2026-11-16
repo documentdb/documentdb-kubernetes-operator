@@ -73,9 +73,6 @@ type DocumentDBSpec struct {
 	// +optional
 	Postgres *PostgresSpec `json:"postgres,omitempty"`
 
-	// AdditionalCNPGPlugins defines which additional CNPG plugins should be loaded
-	// +optional
-	AdditionalCNPGPlugins []cnpgv1.PluginConfiguration `json:"additionalCNPGPlugins,omitempty"`
 	// Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
 	// All fields are optional; defaults are preserved when omitted.
 	// +optional
@@ -234,6 +231,10 @@ type PluginsSpec struct {
 	// cross-cluster replication.
 	// +optional
 	WalReplicaName string `json:"walReplicaName,omitempty"`
+
+	// Additional defines which additional CNPG plugins should be loaded
+	// +optional
+	Additional []cnpgv1.PluginConfiguration `json:"additional,omitempty"`
 }
 
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.

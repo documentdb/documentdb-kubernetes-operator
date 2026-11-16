@@ -54,37 +54,6 @@ spec:
           spec:
             description: DocumentDBSpec defines the desired state of DocumentDB.
             properties:
-              additionalCNPGPlugins:
-                description: AdditionalCNPGPlugins defines which additional CNPG plugins
-                  should be loaded
-                items:
-                  description: |-
-                    PluginConfiguration specifies a plugin that need to be loaded for this
-                    cluster to be reconciled
-                  properties:
-                    enabled:
-                      default: true
-                      description: Enabled is true if this plugin will be used
-                      type: boolean
-                    isWALArchiver:
-                      default: false
-                      description: |-
-                        Marks the plugin as the WAL archiver. At most one plugin can be
-                        designated as a WAL archiver. This cannot be enabled if the
-                        `.spec.backup.barmanObjectStore` configuration is present.
-                      type: boolean
-                    name:
-                      description: Name is the plugin name
-                      type: string
-                    parameters:
-                      additionalProperties:
-                        type: string
-                      description: Parameters is the configuration of the plugin
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
               affinity:
                 description: Affinity/Anti-affinity rules for Pods (cnpg passthrough)
                 properties:
@@ -1347,6 +1316,37 @@ spec:
                   Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
                   All fields are optional; defaults are preserved when omitted.
                 properties:
+                  additional:
+                    description: Additional defines which additional CNPG plugins
+                      should be loaded
+                    items:
+                      description: |-
+                        PluginConfiguration specifies a plugin that need to be loaded for this
+                        cluster to be reconciled
+                      properties:
+                        enabled:
+                          default: true
+                          description: Enabled is true if this plugin will be used
+                          type: boolean
+                        isWALArchiver:
+                          default: false
+                          description: |-
+                            Marks the plugin as the WAL archiver. At most one plugin can be
+                            designated as a WAL archiver. This cannot be enabled if the
+                            `.spec.backup.barmanObjectStore` configuration is present.
+                          type: boolean
+                        name:
+                          description: Name is the plugin name
+                          type: string
+                        parameters:
+                          additionalProperties:
+                            type: string
+                          description: Parameters is the configuration of the plugin
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
                   sidecarInjectorName:
                     description: |-
                       SidecarInjectorName is the name of the CNPG sidecar injector plugin
@@ -1774,37 +1774,6 @@ spec:
           spec:
             description: DocumentDBSpec defines the desired state of DocumentDB.
             properties:
-              additionalCNPGPlugins:
-                description: AdditionalCNPGPlugins defines which additional CNPG plugins
-                  should be loaded
-                items:
-                  description: |-
-                    PluginConfiguration specifies a plugin that need to be loaded for this
-                    cluster to be reconciled
-                  properties:
-                    enabled:
-                      default: true
-                      description: Enabled is true if this plugin will be used
-                      type: boolean
-                    isWALArchiver:
-                      default: false
-                      description: |-
-                        Marks the plugin as the WAL archiver. At most one plugin can be
-                        designated as a WAL archiver. This cannot be enabled if the
-                        `.spec.backup.barmanObjectStore` configuration is present.
-                      type: boolean
-                    name:
-                      description: Name is the plugin name
-                      type: string
-                    parameters:
-                      additionalProperties:
-                        type: string
-                      description: Parameters is the configuration of the plugin
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
               affinity:
                 description: Affinity/Anti-affinity rules for Pods (cnpg passthrough)
                 properties:
@@ -3067,6 +3036,37 @@ spec:
                   Plugins groups CNPG plugin configuration (sidecar injector name, WAL replica name).
                   All fields are optional; defaults are preserved when omitted.
                 properties:
+                  additional:
+                    description: Additional defines which additional CNPG plugins
+                      should be loaded
+                    items:
+                      description: |-
+                        PluginConfiguration specifies a plugin that need to be loaded for this
+                        cluster to be reconciled
+                      properties:
+                        enabled:
+                          default: true
+                          description: Enabled is true if this plugin will be used
+                          type: boolean
+                        isWALArchiver:
+                          default: false
+                          description: |-
+                            Marks the plugin as the WAL archiver. At most one plugin can be
+                            designated as a WAL archiver. This cannot be enabled if the
+                            `.spec.backup.barmanObjectStore` configuration is present.
+                          type: boolean
+                        name:
+                          description: Name is the plugin name
+                          type: string
+                        parameters:
+                          additionalProperties:
+                            type: string
+                          description: Parameters is the configuration of the plugin
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
                   sidecarInjectorName:
                     description: |-
                       SidecarInjectorName is the name of the CNPG sidecar injector plugin
