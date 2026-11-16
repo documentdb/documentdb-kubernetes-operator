@@ -24,7 +24,7 @@ type ScheduledBackupSpec struct {
 	// PluginConfiguration defines additional parameters passed to the plugin
 	// only relevant if method=plugin
 	// +optional
-	PluginConfiguration map[string]string `json:"pluginConfiguration,omitempty"`
+	PluginConfiguration *cnpgv1.BackupPluginConfiguration `json:"pluginConfiguration,omitempty"`
 
 	// Schedule defines when backups should be created using cron expression format.
 	// See https://pkg.go.dev/github.com/robfig/cron#hdr-CRON_Expression_Format

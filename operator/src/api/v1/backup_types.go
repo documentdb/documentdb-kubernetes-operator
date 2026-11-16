@@ -34,7 +34,7 @@ type BackupSpec struct {
 	// PluginConfiguration defines additional parameters passed to the plugin
 	// only relevant if method=plugin
 	// +optional
-	PluginConfiguration map[string]string `json:"pluginConfiguration,omitempty"`
+	PluginConfiguration *cnpgv1.BackupPluginConfiguration `json:"pluginConfiguration,omitempty"`
 
 	// RetentionDays specifies how many days the backup should be retained.
 	// If not specified, the default retention period from the cluster's backup retention policy will be used.
