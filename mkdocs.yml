@@ -1,4 +1,6 @@
 site_name: DocumentDB-Kubernetes-Operator
+site_url: https://documentdb.io/documentdb-kubernetes-operator/
+site_description: Deploy and manage DocumentDB clusters on Kubernetes with the DocumentDB operator and CloudNative-PG.
 repo_url: https://github.com/documentdb/documentdb-kubernetes-operator
 edit_uri: edit/main/docs/operator-public-documentation/
 docs_dir: docs/operator-public-documentation
@@ -7,6 +9,7 @@ docs_dir: docs/operator-public-documentation
 # the readthedocs theme does not support it.
 theme:
   name: material
+  custom_dir: docs/overrides
   features:
     - content.code.copy
     - content.code.annotate
@@ -22,6 +25,7 @@ theme:
 # to the most recent release. Unreleased changes on main deploy to /dev/ only.
 # See .github/workflows/deploy_docs.yml for the deployment logic.
 extra:
+  docs_version: !ENV [MIKE_DOCS_VERSION, dev]
   version:
     provider: mike
     default: latest
@@ -72,6 +76,9 @@ nav:
       - API Reference: v1/api-reference.md
 
 plugins:
+  # mike appends the deployed snapshot version to site_url. Keep numbered
+  # snapshots canonical to themselves; latest remains a release alias.
+  - mike
   - search
   # Keep links to the pre-1.1 docs layout (preview/...) working after the
   # folder moved to v1/ with the documentdb.io/v1 API graduation.

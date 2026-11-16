@@ -35,6 +35,16 @@ jobs:
       - name: Install dependencies
         run: pip install "mkdocs-material==9.5.19" "mike==2.1.3" "mkdocs-redirects==1.2.2"
 
+      - name: Select documentation snapshot for build checks
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "MIKE_DOCS_VERSION=$RELEASE_TAG" >> "$GITHUB_ENV"
+          else
+            echo "MIKE_DOCS_VERSION=dev" >> "$GITHUB_ENV"
+          fi
+
       - name: Configure Git for mike
         run: |
           git config user.name "github-actions[bot]"
