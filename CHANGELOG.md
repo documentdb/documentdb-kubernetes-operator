@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-11-11
+## [1.2.0] - 2026-11-17
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar, CRDs and Helm chart change. The `DocumentDB`, `Backup` and `ScheduledBackup` resources graduate to the stable `documentdb.io/v1` API. **Apply the 1.2.0 CRDs before `helm upgrade`**; existing `documentdb.io/preview` resources and manifests keep working and existing clusters are not restarted.
 
@@ -14,8 +14,15 @@ Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0
 - Upgrade the cert-manager Go dependency and pinned Arc/Fleet installations to `v1.19.6` to address [CVE-2026-62290](https://github.com/advisories/GHSA-8rvj-mm4h-c258). Existing clusters must upgrade their separately installed cert-manager controller to a patched release (`1.19.6` or `1.20.3`); upgrading the DocumentDB operator alone does not upgrade cert-manager.
 - Upgrade `github.com/klauspost/compress` to `v1.20.2` in the sidecar injector and shared, E2E, and long-haul test modules to address [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865).
 
+### Major Features
+- **Outbound proxy for the OTel Collector sidecar**: A new Helm `proxy` block (`isProxyEnabled`, `httpProxy`, `httpsProxy`, `noProxy`) routes the collector's OTLP export through a forward proxy such as Azure Arc Gateway. Cluster-local destinations always bypass the proxy, and private ranges do too unless `proxy.bypassPrivateRanges` is `false`. Off by default; proxy URLs with embedded credentials are not supported (#476).
+
+### Bug Fixes
+- Engine schema upgrades now update `documentdb_core` before `documentdb` in one transaction, for both `schemaVersion: "auto"` and explicit versions. Previously `documentdb_core` stayed at the old version. Clusters already upgraded by an earlier operator are not repaired automatically; run `ALTER EXTENSION documentdb_core UPDATE;` on the primary, or they catch up at the next engine upgrade (#507).
+
 ### Documentation
 - Connect to DocumentDB in the getting-started guides by port-forwarding the gateway Service (#467).
+- Point README and playground links at stable released documentation, add an `llms.txt` index, and check released documentation links in CI (#513, #514).
 
 ## [1.1.1] - 2026-11-09
 
