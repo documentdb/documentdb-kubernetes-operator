@@ -20,7 +20,7 @@ This page summarizes what the operator secures for you, what it needs access to,
 | **Database pods** | PostgreSQL containers use CloudNativePG's security context: non-root, read-only root filesystem, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp. |
 | **Gateway and OTel sidecars** | Non-root, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp. |
 | **Operator and plugins** | Non-root, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp. |
-| **Internal traffic** | CloudNativePG reaches the sidecar-injector and WAL-replica plugins over gRPC with mutual TLS. The validating webhook serves a cert-manager certificate. |
+| **Internal traffic** | CloudNativePG reaches the sidecar-injector plugin over gRPC with mutual TLS. The validating webhook serves a cert-manager certificate. |
 | **Monitoring** | When monitoring is enabled, the OTel Collector logs in as a dedicated role that is not a superuser and has no extra role memberships. |
 | **Images** | Operator, sidecar, DocumentDB, gateway and combined images are signed with [cosign](https://docs.sigstore.dev/) keyless signing from this repository's GitHub Actions workflows. |
 
@@ -45,14 +45,14 @@ The operator runs with a **cluster-wide** `ClusterRole`; it can't be limited to 
 | `nodes`: `get`, `list` | Detect the container runtime to choose the image mode. |
 | `persistentvolumes`: `update`, `patch` | Apply the reclaim policy and record schema-version annotations on volumes. |
 
-Treat the operator namespace (`documentdb-operator`) and the CloudNativePG namespace (`cnpg-system`) as privileged: limit who can create pods, read Secrets or exec in them.
+Treat the operator namespace (`documentdb-operator`) and the CloudNativePG namespace (`cnpg-system`) as privileged: limit who can create pods, read or watch Secrets, or exec in them.
 
 ## Hardening checklist
 
 - [ ] **Use a trusted certificate.** In production, set `spec.tls.gateway.mode` to `CertManager` or `Provided` and have clients verify the server certificate instead of passing `tlsAllowInvalidCertificates=true`. See [TLS](configuration/tls.md).
 - [ ] **Encrypt replication across clusters.** For multi-region deployments, set all four `spec.tls.postgres` Secrets (`replicationTLSSecret`, `clientCASecret`, `serverTLSSecret` and `serverCASecret`) so cross-cluster replication verifies the server with `sslmode=verify-full`. See [Multi-region setup](multi-region-deployment/setup.md) and [PostgreSQL certificates](configuration/tls.md#postgresql-certificates).
 - [ ] **Limit network exposure.** Prefer `serviceType: ClusterIP`. A `LoadBalancer` Service may be reachable from outside the cluster; restrict it with your cloud provider's firewall or load balancer settings. The operator doesn't create NetworkPolicies; see [Network Policies](configuration/networking.md#network-policies) for the traffic to allow.
-- [ ] **Protect credentials.** Use a strong password, enable [encryption at rest for Secrets](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/), and restrict `get`/`list` on Secrets in DocumentDB namespaces. Consider syncing the credential Secret from an external secret store. The Secret name can't be changed after the cluster is created.
+- [ ] **Protect credentials.** Use a strong password, enable [encryption at rest for Secrets](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/), and restrict `get`, `list` and `watch` on Secrets in DocumentDB namespaces (`watch` also returns Secret data). Consider syncing the credential Secret from an external secret store. The Secret name can't be changed after the cluster is created.
 - [ ] **Encrypt storage.** Encryption at rest and backup encryption come from your StorageClass and CSI driver; backups are VolumeSnapshots of the same volumes. Use an encrypted StorageClass and VolumeSnapshotClass.
 - [ ] **Set resource limits.** The operator and plugin Deployments set CPU and memory requests only. Add limits with the Helm values `operator.resources`, `sidecarInjector.resources` and `walReplicaPlugin.resources` if your policies require them.
 - [ ] **Enforce Pod Security Admission.** The chart doesn't label namespaces. Add `pod-security.kubernetes.io/warn: restricted` to DocumentDB namespaces first to find violations, then enforce the level your policy requires.
