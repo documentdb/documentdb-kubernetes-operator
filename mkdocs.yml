@@ -32,7 +32,6 @@ extra:
 nav:
   - Documentation:
       - Home: v1/index.md
-      - Supported Releases: v1/supported-releases.md
       - Getting Started:
           - Before You Start: v1/getting-started/before-you-start.md
           - "Quickstart: Kind": v1/getting-started/quickstart-kind.md
@@ -71,6 +70,7 @@ nav:
       - Tools:
           - Kubectl Plugin: v1/kubectl-plugin.md
       - API Reference: v1/api-reference.md
+      - Supported Releases: v1/supported-releases.md
 
 plugins:
   - search
