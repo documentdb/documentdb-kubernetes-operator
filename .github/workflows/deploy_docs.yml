@@ -7,6 +7,8 @@ on:
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
+      - '.github/scripts/*docs*.py'
+      - '.github/workflows/deploy_docs.yml'
   release:
     types: [published, released]
 
@@ -18,7 +20,8 @@ jobs:
     # A full release fires "published" and "released" and only "released" deploys it. Skipping the
     # other run keeps it out of the queue, where it would replace a pending deploy.
     if: github.event_name != 'release' || github.event.action == 'released' || github.event.release.prerelease
-    # Allow only one concurrent deployment
+    # Serialize reads of published release metadata with all Pages writes.
+    # The release helper also guards against out-of-order runs; this is not a FIFO queue.
     concurrency:
       group: "pages"
       cancel-in-progress: false
@@ -57,13 +60,14 @@ jobs:
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
           CHART_VERSION=$(sed -nE 's/^version:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/p' operator/documentdb-helm-chart/Chart.yaml)
-          find docs/operator-public-documentation -name '*.md' -exec sed -i "s|<release-version>|${CHART_VERSION}|g" {} +
+          python .github/scripts/deploy_docs.py stamp --version "$CHART_VERSION"
 
       - name: Stamp release version into docs
         if: github.event_name == 'release'
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
         run: |
-          VERSION=${{ github.event.release.tag_name }}
-          find docs/operator-public-documentation -name '*.md' -exec sed -i "s|<release-version>|${VERSION}|g" {} +
+          python .github/scripts/deploy_docs.py stamp --version "$VERSION"
 
       - name: Check documentation entrypoints before publishing
         run: |
@@ -76,22 +80,16 @@ jobs:
         if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: mike deploy dev --push --update-aliases
 
-      # On release: deploy versioned docs and update "latest" alias
-      # "released" also fires when a prerelease is later marked as a release.
+      # Stable releases update /major.minor/; install commands retain the full tag above.
+      # Prereleases use their full tag, never the stable minor or latest.
+      # "released" also fires on promotion, but a prerelease tag is not a stable chart version.
       - name: Deploy release docs
         if: github.event_name == 'release'
         env:
-          ACTION: ${{ github.event.action }}
+          TAG: ${{ github.event.release.tag_name }}
           PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          VERSION=${{ github.event.release.tag_name }}
-          # A prerelease must not take over the "latest" docs that external links point at.
-          if [[ "$ACTION" == "published" && "$PRERELEASE" == "true" ]]; then
-            mike deploy ${VERSION} --push
-          elif [[ "$ACTION" == "released" ]]; then
-            mike deploy ${VERSION} latest --push --update-aliases
-            mike set-default latest --push
-          fi
+          python .github/scripts/deploy_docs.py deploy --tag "$TAG" --prerelease "$PRERELEASE"
 
       - name: Verify published stable documentation links
         if: github.event_name == 'release' && github.event.action == 'released' && !github.event.release.prerelease
