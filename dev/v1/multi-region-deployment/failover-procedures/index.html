@@ -1985,16 +1985,17 @@ for an example.</p>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>new-primary<span class="w"> </span>port-forward<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>svc/documentdb-preview<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span><span class="p">&amp;</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Connect with mongosh</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Test write operation</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>db.testCollection.insertOne<span class="o">({</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span>message:<span class="w"> </span><span class="s2">"Write test after failover"</span>,
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span>timestamp:<span class="w"> </span>new<span class="w"> </span>Date<span class="o">()</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="o">})</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
-<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="c1"># Should succeed without errors</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Connect with your username and enter its password when prompted.</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span>--username<span class="w"> </span><span class="s2">"&lt;username&gt;"</span><span class="w"> </span>--password
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="c1"># Test write operation</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>db.testCollection.insertOne<span class="o">({</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span>message:<span class="w"> </span><span class="s2">"Write test after failover"</span>,
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">  </span>timestamp:<span class="w"> </span>new<span class="w"> </span>Date<span class="o">()</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="o">})</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="c1"># Should succeed without errors</span>
 </code></pre></div>
 <h3 id="step-5-verify-old-primary-as-replica">Step 5: Verify old primary as replica<a class="headerlink" href="#step-5-verify-old-primary-as-replica" title="Permanent link">&para;</a></h3>
 <p>Check that the old primary is now replicating from the new primary:</p>
@@ -2105,8 +2106,9 @@ and verify manually.</p>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>kubectl<span class="w"> </span>--context<span class="w"> </span>new-primary<span class="w"> </span>port-forward<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span>-n<span class="w"> </span>documentdb-preview-ns<span class="w"> </span>svc/documentdb-preview<span class="w"> </span><span class="m">10260</span>:10260<span class="w"> </span><span class="p">&amp;</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>
-<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://admin:password@localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>db.testCollection.insertOne<span class="o">({</span>message:<span class="w"> </span><span class="s2">"DR failover test"</span><span class="o">})</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://localhost:10260/?tls=true&amp;tlsAllowInvalidCertificates=true"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>--username<span class="w"> </span><span class="s2">"&lt;username&gt;"</span><span class="w"> </span>--password
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>db.testCollection.insertOne<span class="o">({</span>message:<span class="w"> </span><span class="s2">"DR failover test"</span><span class="o">})</span>
 </code></pre></div>
 <h3 id="step-5-monitor-recovery">Step 5: Monitor recovery<a class="headerlink" href="#step-5-monitor-recovery" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Application pod logs</span>

@@ -1816,12 +1816,13 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Get the connection string (contains embedded kubectl commands to resolve credentials)</span>
 <a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>kubectl<span class="w"> </span>get<span class="w"> </span>documentdb<span class="w"> </span>my-documentdb<span class="w"> </span>-n<span class="w"> </span>documentdb-ns<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">=</span><span class="s1">'{.status.connectionString}'</span>
 </code></pre></div>
-<p>Use <code>mongosh</code> with the resolved credentials:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span>
+<p>Use <code>mongosh</code> with your username, and enter the password from the credentials Secret when prompted:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span>--username<span class="w"> </span>dev_user<span class="w"> </span>--password
 </code></pre></div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>The <code>CONNECTION STRING</code> column in <code>kubectl get documentdb</code> output contains embedded <code>kubectl</code> commands that extract the username and password from the credentials Secret at runtime. You can copy and <code>eval</code> the full string, or substitute your known credentials directly as shown above.</p>
+<p>The <code>CONNECTION STRING</code> column in <code>kubectl get documentdb</code> output contains embedded <code>kubectl</code> commands that extract the username and password from the credentials Secret at runtime. The command above keeps the password out of the URI and shell history.</p>
 </div>
 <p>Try inserting and querying data:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nx">use</span><span class="w"> </span><span class="nx">testdb</span>

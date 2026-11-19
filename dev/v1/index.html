@@ -2016,13 +2016,15 @@
 <p><strong>Step 2:</strong> In a new terminal, connect with <a href="https://www.mongodb.com/docs/mongodb-shell/install/">mongosh</a>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>mongosh<span class="w"> </span><span class="m">127</span>.0.0.1:10260<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span>-u<span class="w"> </span>k8s_secret_user<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span>-p<span class="w"> </span>K8sSecret100<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span>--password<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">  </span>--authenticationMechanism<span class="w"> </span>SCRAM-SHA-256<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="w">  </span>--tls<span class="w"> </span>--tlsAllowInvalidCertificates
 </code></pre></div>
 <p>Or use a connection string:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mongosh<span class="w"> </span><span class="s2">"mongodb://127.0.0.1:10260/?directConnection=true&amp;authMechanism=SCRAM-SHA-256&amp;tls=true&amp;tlsAllowInvalidCertificates=true&amp;replicaSet=rs0"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>--username<span class="w"> </span>k8s_secret_user<span class="w"> </span>--password
 </code></pre></div>
+<p>Enter the password from your credentials Secret when prompted.</p>
 <h4 id="option-2-loadbalancer-service-for-cloud-deployments">Option 2: LoadBalancer service (for cloud deployments)<a class="headerlink" href="#option-2-loadbalancer-service-for-cloud-deployments" title="Permanent link">&para;</a></h4>
 <p>For direct external access in cloud environments (AKS, EKS, GKE), deploy with a <code>LoadBalancer</code> service type:</p>
 <p><strong>Step 1:</strong> Deploy DocumentDB with LoadBalancer:</p>
