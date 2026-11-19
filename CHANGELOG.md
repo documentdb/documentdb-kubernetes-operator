@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-19
+
+Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar, CRDs and Helm chart change. The `DocumentDB`, `Backup` and `ScheduledBackup` resources graduate to the stable `documentdb.io/v1` API. **Apply the 1.2.0 CRDs before `helm upgrade`**; existing `documentdb.io/preview` resources and manifests keep working and existing clusters are not restarted.
+
 ### Upgrade notes
 - **`documentdb.io/v1` API**: `DocumentDB`, `Backup` and `ScheduledBackup` graduate from `documentdb.io/preview` to the stable `documentdb.io/v1` API, which is now the storage version. `preview` remains served with an identical schema and returns a deprecation warning; it will be removed in a future release. **Apply the updated CRDs before running `helm upgrade`** (Helm does not upgrade CRDs), otherwise the new operator cannot start. Update manifests to `apiVersion: documentdb.io/v1`; no other field changes are needed. The Go API package moved from `operator/src/api/preview` to `operator/src/api/v1`, the validating webhook path is now `/validate-documentdb-io-v1-documentdb`, and `kubectl documentdb` uses `v1`. The public documentation moved from `.../preview/` to `.../v1/`; old URLs redirect. See [Migrating to the `documentdb.io/v1` API](docs/operator-public-documentation/v1/operations/upgrades.md#migrating-to-the-documentdbiov1-api).
 
@@ -10,6 +14,16 @@
 - Upgrade the cert-manager Go dependency and pinned Arc/Fleet installations to `v1.19.6` to address [CVE-2026-62290](https://github.com/advisories/GHSA-8rvj-mm4h-c258). Existing clusters must upgrade their separately installed cert-manager controller to a patched release (`1.19.6` or `1.20.3`); upgrading the DocumentDB operator alone does not upgrade cert-manager.
 - Upgrade `github.com/klauspost/compress` to `v1.20.2` in the sidecar injector and shared, E2E, and long-haul test modules to address [GO-2026-6865](https://pkg.go.dev/vuln/GO-2026-6865).
 
+### Major Features
+- **Outbound proxy for the OTel Collector sidecar**: A new Helm `proxy` block (`isProxyEnabled`, `httpProxy`, `httpsProxy`, `noProxy`) routes the collector's OTLP export through a forward proxy such as Azure Arc Gateway. Cluster-local destinations always bypass the proxy, and private ranges do too unless `proxy.bypassPrivateRanges` is `false`. Off by default; proxy URLs with embedded credentials are not supported (#476).
+
+### Bug Fixes
+- Engine schema upgrades now update `documentdb_core` before `documentdb` in one transaction, for both `schemaVersion: "auto"` and explicit versions. Previously `documentdb_core` stayed at the old version. Clusters already upgraded by an earlier operator are not repaired automatically; run `ALTER EXTENSION documentdb_core UPDATE;` on the primary, or they catch up at the next engine upgrade (#507).
+
+### Documentation
+- Connect to DocumentDB in the getting-started guides by port-forwarding the gateway Service (#467).
+- Point README and playground links at stable released documentation, add an `llms.txt` index, and check released documentation links in CI (#513, #514).
+
 ## [1.1.1] - 2026-11-09
 
 ### Security
@@ -17,14 +31,16 @@
 
 ### Bug Fixes
 - Refuse `walReplica: true` in the Helm chart until the WAL replica plugin works (#492).
+- Stop the combined image inheriting CloudNativePG's image labels (#493).
 
 ### Documentation
 - Update installation scripts and documentation to avoid missing or pre-1.0 versions (#479).
 
 ### Enhancements & Fixes
+- Add the `cloudnative-pg.enabled` Helm value to install the operator against an existing CloudNativePG installation. Set it to `false` and point `cloudnative-pg.namespaceOverride` at the namespace where CloudNativePG runs; the chart then skips the bundled CloudNativePG chart and does not create that namespace (#496).
 - Check loaded test images with `docker image inspect` instead of matching image-list output (#490).
 
-## [1.1.0] - 2026-11-17
+## [1.1.0] - 2026-11-04
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar and Helm chart change. Clusters on Kubernetes or container runtimes without image volume support (for example containerd 1.7, or Kubernetes 1.32) now run with a combined PostgreSQL + DocumentDB image instead of being rejected. Apply the 1.1.0 CRDs before `helm upgrade`; existing clusters keep their image layout and are not restarted.
 
