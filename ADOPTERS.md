@@ -31,4 +31,4 @@ This list is sorted in chronological order, based on the submission date.
 
 | Organization | Contact | Date | Description of Use |
 | ------------ | ------- | ---- | ------------------ |
-| [Microsoft](https://microsoft.com) | @xgerman | 2025-11-05 | TODO: fill in verbiage
+| [Microsoft](https://microsoft.com) | @xgerman | 2026-11-19 | [DocumentDB with Azure Arc](https://learn.microsoft.com/en-us/azure/documentdb/arc/overview) and [DocumentDB on Azure Local](https://learn.microsoft.com/en-us/azure/documentdb/azure-local/overview) are powered by this operator |
