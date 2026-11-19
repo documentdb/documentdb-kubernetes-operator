@@ -22,6 +22,7 @@ Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0
 
 ### Documentation
 - Connect to DocumentDB in the getting-started guides by port-forwarding the gateway Service (#467).
+- Read credentials at runtime in connection examples, quickstarts and playground diagnostics instead of embedding them in URIs or pod arguments (#518).
 - Point README and playground links at stable released documentation, add an `llms.txt` index, and check released documentation links in CI (#513, #514).
 
 ## [1.1.1] - 2026-11-09
