@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-11-17
+## [1.2.0] - 2026-11-19
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar, CRDs and Helm chart change. The `DocumentDB`, `Backup` and `ScheduledBackup` resources graduate to the stable `documentdb.io/v1` API. **Apply the 1.2.0 CRDs before `helm upgrade`**; existing `documentdb.io/preview` resources and manifests keep working and existing clusters are not restarted.
 
