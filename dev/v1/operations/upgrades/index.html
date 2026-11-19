@@ -1831,7 +1831,7 @@
 <p><a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">https://github.com/documentdb/documentdb-kubernetes-operator/releases</a></p>
 <p>Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Set this to the release tag you are upgrading to.</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">1</span>.1.1
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">1</span>.2.0
 </code></pre></div>
 <h3 id="step-2-review-the-release-notes">Step 2: Review the Release Notes<a class="headerlink" href="#step-2-review-the-release-notes" title="Permanent link">&para;</a></h3>
 <p>Open the GitHub release page for <code>${TARGET_VERSION}</code> to review breaking changes, new features, and any required migration steps before proceeding.</p>
@@ -1852,8 +1852,8 @@
 <p>Always use CRDs from the <strong>same version</strong> as the Helm chart you are installing. Using CRDs from <code>main</code> or a different release may introduce schema mismatches.</p>
 </div>
 <div class="admonition important">
-<p class="admonition-title">Upgrading from 1.0.x</p>
-<p>This step is <strong>required</strong> when upgrading from operator <code>1.0.x</code>. Newer operators use the <code>documentdb.io/v1</code> API, which the <code>1.0.x</code> CRDs do not serve; the new operator cannot start until the updated CRDs are applied. See <a href="#migrating-to-the-documentdbiov1-api">Migrating to the <code>documentdb.io/v1</code> API</a>.</p>
+<p class="admonition-title">Upgrading from 1.1.x or earlier</p>
+<p>This step is <strong>required</strong> when upgrading to operator <code>1.2.0</code> or later from <code>1.1.x</code>, <code>1.0.x</code> or earlier. Starting with <code>1.2.0</code>, the operator uses the <code>documentdb.io/v1</code> API, which older CRDs do not serve; the new operator cannot start until the updated CRDs are applied. See <a href="#migrating-to-the-documentdbiov1-api">Migrating to the <code>documentdb.io/v1</code> API</a>.</p>
 </div>
 <h3 id="step-4-upgrade-the-operator">Step 4: Upgrade the Operator<a class="headerlink" href="#step-4-upgrade-the-operator" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
@@ -1889,9 +1889,13 @@
 <p class="admonition-title">Note</p>
 <p><code>helm rollback</code> reverts the operator deployment but does <strong>not</strong> revert CRDs. This is usually safe — CRD changes are additive, and the older operator ignores fields it does not recognize. Do <strong>not</strong> revert CRDs unless the <a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">release notes</a> explicitly instruct you to, as removing fields from a CRD can invalidate existing resources.</p>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Rolling back from 1.2.0 to 1.1.x</p>
+<p>Keep the <code>1.2.0</code> CRDs when rolling back. They still serve the deprecated <code>documentdb.io/preview</code> version that <code>1.1.x</code> operators use, so the older operator keeps working. Do not re-apply the <code>1.1.x</code> CRDs: they do not serve <code>documentdb.io/v1</code>, and the API server rejects them once objects are stored as <code>v1</code>.</p>
+</div>
 <hr />
 <h3 id="migrating-to-the-documentdbiov1-api">Migrating to the <code>documentdb.io/v1</code> API<a class="headerlink" href="#migrating-to-the-documentdbiov1-api" title="Permanent link">&para;</a></h3>
-<p>Operator <code>1.0.x</code> served the <code>DocumentDB</code>, <code>Backup</code> and <code>ScheduledBackup</code> resources only as <code>documentdb.io/preview</code>. Later releases graduate them to the stable <code>documentdb.io/v1</code> API:</p>
+<p>Operators before <code>1.2.0</code> (<code>1.0.x</code> and <code>1.1.x</code>) served the <code>DocumentDB</code>, <code>Backup</code> and <code>ScheduledBackup</code> resources only as <code>documentdb.io/preview</code>. Operator <code>1.2.0</code> graduates them to the stable <code>documentdb.io/v1</code> API:</p>
 <ul>
 <li><code>v1</code> is the storage version and the version the operator uses.</li>
 <li><code>preview</code> is <strong>deprecated</strong> but still served with an identical schema, so existing resources, manifests and GitOps pipelines keep working. Requests that use it return a deprecation warning.</li>
