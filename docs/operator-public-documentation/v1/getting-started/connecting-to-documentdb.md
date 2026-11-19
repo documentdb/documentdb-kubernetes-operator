@@ -134,7 +134,9 @@ documentdb-service-my-documentdb.documentdb-ns.svc.cluster.local:10260
 ## Connect with mongosh
 
 ```bash
-mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+# Enter the password from your credentials Secret when prompted.
+mongosh "mongodb://127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0" \
+  --username dev_user --password
 ```
 
 Or use individual flags:
@@ -142,7 +144,7 @@ Or use individual flags:
 ```bash
 mongosh 127.0.0.1:10260 \
   -u dev_user \
-  -p DevPassword123 \
+  --password \
   --authenticationMechanism SCRAM-SHA-256 \
   --tls --tlsAllowInvalidCertificates
 ```
@@ -156,8 +158,10 @@ The [DocumentDB for VS Code](https://marketplace.visualstudio.com/items?itemName
 3. Select **Add Connection** and enter your connection string:
 
     ```text
-    mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
+    mongodb://<username>:<password>@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0
     ```
+
+    Replace the placeholders with credentials from your Secret, percent-encoding any reserved URI characters.
 
 4. Browse databases, collections, and documents. You can also use the built-in playground to run queries interactively.
 
@@ -169,10 +173,17 @@ The [DocumentDB for VS Code](https://marketplace.visualstudio.com/items?itemName
 All examples below assume:
 
 - DocumentDB is accessible at `127.0.0.1:10260` (via port-forward or LoadBalancer)
-- Credentials: username `dev_user`, password `DevPassword123`
+- Credentials supplied through `DOCUMENTDB_USERNAME` and `DOCUMENTDB_PASSWORD`
 - Self-signed TLS (certificate validation skipped)
 
 For production deployments with trusted certificates, see [TLS configuration](../configuration/tls.md).
+
+Read credentials from the same Secret used by your cluster rather than embedding them in the examples:
+
+```bash
+export DOCUMENTDB_USERNAME="$(kubectl get secret documentdb-credentials -n documentdb-ns -o jsonpath='{.data.username}' | base64 -d)"
+export DOCUMENTDB_PASSWORD="$(kubectl get secret documentdb-credentials -n documentdb-ns -o jsonpath='{.data.password}' | base64 -d)"
+```
 
 ### Python (PyMongo)
 
@@ -183,13 +194,15 @@ pip install pymongo
 ```
 
 ```python title="connect_documentdb.py"
+import os
+
 from pymongo import MongoClient
 
 client = MongoClient(
     host="127.0.0.1",
     port=10260,
-    username="dev_user",
-    password="DevPassword123",
+    username=os.environ["DOCUMENTDB_USERNAME"],
+    password=os.environ["DOCUMENTDB_PASSWORD"],
     authSource="admin",
     authMechanism="SCRAM-SHA-256",
     tls=True,
@@ -224,12 +237,20 @@ npm install mongodb
 ```javascript title="connect_documentdb.js"
 const { MongoClient } = require("mongodb");
 
+const username = process.env.DOCUMENTDB_USERNAME;
+const password = process.env.DOCUMENTDB_PASSWORD;
+if (!username || !password) {
+  throw new Error("DOCUMENTDB_USERNAME and DOCUMENTDB_PASSWORD are required");
+}
+
 const uri =
-  "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
-  "?directConnection=true&authMechanism=SCRAM-SHA-256" +
+  "mongodb://127.0.0.1:10260/" +
+  "?directConnection=true" +
   "&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0";
 
 const client = new MongoClient(uri, {
+  auth: { username, password },
+  authMechanism: "SCRAM-SHA-256",
   // Connection pool settings
   maxPoolSize: 50,
   minPoolSize: 5,
@@ -273,6 +294,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -284,8 +306,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	uri := "mongodb://dev_user:DevPassword123@127.0.0.1:10260/" +
-		"?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true"
+	username, password := os.Getenv("DOCUMENTDB_USERNAME"), os.Getenv("DOCUMENTDB_PASSWORD")
+	if username == "" || password == "" {
+		log.Fatal("DOCUMENTDB_USERNAME and DOCUMENTDB_PASSWORD are required")
+	}
+
+	uri := "mongodb://127.0.0.1:10260/" +
+		"?directConnection=true&tls=true"
 
 	// For self-signed certificates, skip verification.
 	// For trusted CAs, load the CA cert into a tls.Config instead.
@@ -293,6 +320,7 @@ func main() {
 
 	clientOpts := options.Client().
 		ApplyURI(uri).
+		SetAuth(options.Credential{AuthMechanism: "SCRAM-SHA-256", Username: username, Password: password, AuthSource: "admin"}).
 		SetTLSConfig(tlsConfig).
 		SetMaxPoolSize(50).    // Maximum connections in the pool
 		SetMinPoolSize(5).     // Minimum idle connections
@@ -345,6 +373,7 @@ Add the dependency to your `pom.xml`:
 ```java title="ConnectDocumentDB.java"
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoCredential;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
@@ -359,8 +388,14 @@ import java.util.concurrent.TimeUnit;
 
 public class ConnectDocumentDB {
     public static void main(String[] args) throws Exception {
-        String uri = "mongodb://dev_user:DevPassword123@127.0.0.1:10260/"
-            + "?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true";
+        String username = System.getenv("DOCUMENTDB_USERNAME");
+        String password = System.getenv("DOCUMENTDB_PASSWORD");
+        if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
+            throw new IllegalArgumentException("DOCUMENTDB_USERNAME and DOCUMENTDB_PASSWORD are required");
+        }
+
+        String uri = "mongodb://127.0.0.1:10260/"
+            + "?directConnection=true&tls=true";
 
         // For self-signed certificates, create a trust-all SSLContext.
         // For trusted CAs, configure a proper TrustStore instead.
@@ -376,6 +411,7 @@ public class ConnectDocumentDB {
 
         MongoClientSettings settings = MongoClientSettings.builder()
             .applyConnectionString(new ConnectionString(uri))
+            .credential(MongoCredential.createScramSha256Credential(username, "admin", password.toCharArray()))
             .applyToSslSettings(builder -> builder
                 .enabled(true)
                 .context(sslContext))
@@ -438,7 +474,8 @@ When using `CertManager` or `Provided` mode with a trusted CA, remove `tlsAllowI
 === "mongosh"
 
     ```bash
-    mongosh "mongodb://dev_user:DevPassword123@<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&replicaSet=rs0" \
+    mongosh "mongodb://<host>:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&replicaSet=rs0" \
+      --username "$DOCUMENTDB_USERNAME" --password \
       --tlsCAFile /path/to/ca.crt
     ```
 
@@ -448,8 +485,8 @@ When using `CertManager` or `Provided` mode with a trusted CA, remove `tlsAllowI
     client = MongoClient(
         host="<host>",
         port=10260,
-        username="dev_user",
-        password="DevPassword123",
+        username=os.environ["DOCUMENTDB_USERNAME"],
+        password=os.environ["DOCUMENTDB_PASSWORD"],
         authSource="admin",
         authMechanism="SCRAM-SHA-256",
         tls=True,

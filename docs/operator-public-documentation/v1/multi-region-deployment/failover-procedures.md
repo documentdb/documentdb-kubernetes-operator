@@ -182,8 +182,9 @@ Confirm the new primary accepts writes:
 kubectl --context new-primary port-forward \
   -n documentdb-preview-ns svc/documentdb-preview 10260:10260 &
 
-# Connect with mongosh
-mongosh "mongodb://admin:password@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
+# Connect with your username and enter its password when prompted.
+mongosh "mongodb://localhost:10260/?tls=true&tlsAllowInvalidCertificates=true" \
+  --username "<username>" --password
 
 # Test write operation
 db.testCollection.insertOne({
@@ -328,7 +329,8 @@ kubectl --context new-primary get documentdb documentdb-preview \
 kubectl --context new-primary port-forward \
   -n documentdb-preview-ns svc/documentdb-preview 10260:10260 &
 
-mongosh "mongodb://admin:password@localhost:10260/?tls=true&tlsAllowInvalidCertificates=true"
+mongosh "mongodb://localhost:10260/?tls=true&tlsAllowInvalidCertificates=true" \
+  --username "<username>" --password
 db.testCollection.insertOne({message: "DR failover test"})
 ```
 

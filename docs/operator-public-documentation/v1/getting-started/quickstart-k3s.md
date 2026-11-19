@@ -186,8 +186,9 @@ In another terminal, get the connection string and connect:
 # View the connection string from the DocumentDB cluster status
 kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.connectionString}'
 
-# Connect with mongosh (substitute your credentials)
-mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+# Enter the password from your credentials Secret when prompted.
+mongosh "mongodb://127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0" \
+  --username dev_user --password
 ```
 
 ### Option 2: K3s built-in load balancer
@@ -238,7 +239,8 @@ my-documentdb   Cluster in healthy state   mongodb://...@192.168.1.100:10260/...
 Connect with `mongosh` using the external IP:
 
 ```bash
-mongosh "mongodb://dev_user:DevPassword123@192.168.1.100:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://192.168.1.100:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0" \
+  --username dev_user --password
 ```
 
 For more connection options including application drivers, see [Connecting to DocumentDB](connecting-to-documentdb.md).

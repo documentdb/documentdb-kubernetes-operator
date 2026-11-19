@@ -176,14 +176,15 @@ In a new terminal, retrieve the connection string from the DocumentDB cluster st
 kubectl get documentdb my-documentdb -n documentdb-ns -o jsonpath='{.status.connectionString}'
 ```
 
-Use `mongosh` with the resolved credentials:
+Use `mongosh` with your username, and enter the password from the credentials Secret when prompted:
 
 ```bash
-mongosh "mongodb://dev_user:DevPassword123@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0" \
+  --username dev_user --password
 ```
 
 !!! tip
-    The `CONNECTION STRING` column in `kubectl get documentdb` output contains embedded `kubectl` commands that extract the username and password from the credentials Secret at runtime. You can copy and `eval` the full string, or substitute your known credentials directly as shown above.
+    The `CONNECTION STRING` column in `kubectl get documentdb` output contains embedded `kubectl` commands that extract the username and password from the credentials Secret at runtime. The command above keeps the password out of the URI and shell history.
 
 Try inserting and querying data:
 

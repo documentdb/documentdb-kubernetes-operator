@@ -201,7 +201,7 @@ kubectl port-forward svc/documentdb-service-documentdb-preview 10260:10260 -n do
 ```bash
 mongosh 127.0.0.1:10260 \
   -u k8s_secret_user \
-  -p K8sSecret100 \
+  --password \
   --authenticationMechanism SCRAM-SHA-256 \
   --tls --tlsAllowInvalidCertificates
 ```
@@ -209,8 +209,11 @@ mongosh 127.0.0.1:10260 \
 Or use a connection string:
 
 ```bash
-mongosh "mongodb://k8s_secret_user:K8sSecret100@127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0"
+mongosh "mongodb://127.0.0.1:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsAllowInvalidCertificates=true&replicaSet=rs0" \
+  --username k8s_secret_user --password
 ```
+
+Enter the password from your credentials Secret when prompted.
 
 #### Option 2: LoadBalancer service (for cloud deployments)
 
