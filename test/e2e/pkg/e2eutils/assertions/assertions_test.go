@@ -138,7 +138,7 @@ func TestAssertConnectionStringMatches(t *testing.T) {
 	s := newScheme(t)
 	dd := &dbv1.DocumentDB{
 		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "ns"},
-		Status:     dbv1.DocumentDBStatus{ConnectionString: "mongodb://user:pw@svc:10260/?tls=true"},
+		Status:     dbv1.DocumentDBStatus{ConnectionString: "mongodb://svc:10260/?tls=true"},
 	}
 	empty := &dbv1.DocumentDB{ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "ns"}}
 	c := fake.NewClientBuilder().WithScheme(s).WithObjects(dd, empty).Build()

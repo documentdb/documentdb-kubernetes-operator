@@ -532,7 +532,7 @@ All scripts provide detailed output:
 - **Error messages**: Detailed error information for debugging
 - **Connection strings**: Ready-to-use mongosh connection strings
 
-**Example output:**
+**Example output (credentials redacted):**
 ```
 2025-11-04 10:00:00 :: Creating AKS cluster
 ✅ Resource group created
@@ -553,7 +553,7 @@ All scripts provide detailed output:
 ✅ mongosh connection successful
 
 Connection string:
-mongodb://docdbuser:P@ssw0rd123@10.0.0.1:10260/?tls=true&tlsAllowInvalidCertificates=true
+mongodb://<username>:<password>@10.0.0.1:10260/?tls=true&tlsAllowInvalidCertificates=true
 ```
 
 ### Debugging Automated Tests
