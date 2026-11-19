@@ -201,8 +201,11 @@ mongosh "mongodb+srv://docdb:<password>@<zone-name>.<parent-zone>/?tls=true&tlsA
 
 Example:
 ```bash
-mongosh "mongodb+srv://docdb:mypassword@documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256"
+mongosh "mongodb+srv://documentdb-aks-fleet-rg.multi-cloud.pgmongo-dev.cosmos.windows-int.net/?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256" \
+  --username docdb --password
 ```
+
+Enter the password from the cluster's credentials Secret when prompted.
 
 ### Observability and Telemetry
 
