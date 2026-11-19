@@ -1,0 +1,30 @@
+# DocumentDB Kubernetes Operator
+
+> A Kubernetes operator for deploying and managing DocumentDB, a PostgreSQL-based document database with a MongoDB-compatible gateway, using CloudNative-PG.
+
+This index points to released documentation. `/latest/` selects the latest stable operator release; `/dev/` contains unreleased changes and is not a substitute for released installation guidance. The links below remain stable even when this index is read from a development snapshot.
+
+For reproducible deployments, pin the Helm chart version and use its numbered documentation snapshot. Operator/chart releases, DocumentDB engine releases, and the CRD API version are independent. The `/preview/` and `/v1/` documentation directories are page layouts, not release numbers; newer snapshots preserve the older links through redirects.
+
+Read the prerequisites before selecting a Kubernetes platform or image layout. Verify deployment health and database operations before reporting success. Cloud deployment commands can create billable resources; review their setup and cleanup instructions before execution.
+
+## Start here
+
+- [Released documentation](https://documentdb.io/documentdb-kubernetes-operator/latest/): Overview and navigation for the latest stable release.
+- [Prerequisites and version compatibility](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/before-you-start/): Required tools, Kubernetes/runtime requirements, image layouts, and operator versus engine versions.
+- [Local Kind quickstart](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/quickstart-kind/): Install the released operator and deploy a local DocumentDB cluster.
+- [Connecting to DocumentDB](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/getting-started/connecting-to-documentdb/): Credentials, connectivity, and MongoDB-compatible clients.
+
+## Configuration and operations
+
+- [Architecture](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/architecture/overview/): Operator, gateway, and PostgreSQL responsibilities.
+- [TLS configuration](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/configuration/tls/): Certificate and encrypted-connection configuration.
+- [Upgrades](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/operations/upgrades/): Operator and engine upgrade procedures, including schema migration.
+- [Backup and restore](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/operations/backup-and-restore/): Backup configuration and recovery procedures.
+- [API reference](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/api-reference/): DocumentDB Kubernetes resource fields.
+- [FAQ](https://documentdb.io/documentdb-kubernetes-operator/latest/preview/faq/): Common questions and troubleshooting.
+
+## Optional
+
+- [GitHub releases](https://github.com/documentdb/documentdb-kubernetes-operator/releases): Published operator/chart releases and release notes.
+- [Repository](https://github.com/documentdb/documentdb-kubernetes-operator): Source, playgrounds, contribution guidance, and issue tracking; `main` can contain unreleased changes.
