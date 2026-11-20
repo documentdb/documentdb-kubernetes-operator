@@ -76,7 +76,7 @@ Ask the user: **"Does this release change the default DocumentDB engine version 
   1. Run **RELEASE - Build DocumentDB Candidate Images** (`build_documentdb_images.yml`) with `version` set to the engine version (and `package_source` if needed).
   2. Run **RELEASE - Promote DocumentDB Images** (`release_documentdb_images.yml`) with `candidate_version`, `version` and `update_defaults: true`. It opens a PR on branch `auto/documentdb-<version>` that bumps `constants.go`, the sidecar `config.go`, `values.yaml`, Helm test env values, workflow defaults, `Dockerfile_gateway_public_image` and the E2E schema-upgrade default pair.
   3. Merge that PR before the operator release PR, then rebase the release branch on `<upstream>/main`.
-  4. In the operator release PR, also update the engine column in `before-you-start.md` and `release-strategy.md`, and add an "Upgrading to DocumentDB X" section to `upgrades.md` if the schema needs migration.
+  4. In the operator release PR, also update the engine column in the `before-you-start.md` version-compatibility table, and add an "Upgrading to DocumentDB X" section to `upgrades.md` if the schema needs migration.
 
 ### Step 4: Update Version References
 
@@ -90,20 +90,19 @@ Update every file in this table:
 | `operator/documentdb-helm-chart/tests/09_operator_deployment_test.yaml` | both operator image tags (`ghcr.io/...` and `mcr.microsoft.com/...`) | ✅ | ✅ |
 | `CHANGELOG.md` | new release entry ([Step 5](#step-5-changelog)) | ✅ | ✅ |
 | `docs/operator-public-documentation/v1/index.md` | "Operator `X.Y.Z` is generally available…" note | ✅ | ✅ |
-| `docs/operator-public-documentation/v1/getting-started/before-you-start.md` | version-compatibility table row and the "Use operator `X.Y.Z`…" sentence | sentence only | ✅ |
-| `docs/designs/release-strategy.md` | `vX.Y.x` rows in the support, Kubernetes compatibility, dependency and DocumentDB component tables | — | ✅ |
+| `docs/operator-public-documentation/v1/getting-started/before-you-start.md` | version-compatibility table row and the "Use operator `X.Y.Z`…" sentence. This table is the per-release compatibility record. | sentence only | ✅ |
 | `docs/operator-public-documentation/v1/operations/upgrades.md` | version ranges in upgrade notes, new migration or rollback notes | when CRDs or upgrade behavior change | when CRDs or upgrade behavior change |
 
 Then **search for anything the table missed**:
 
 ```bash
 # Old version everywhere except history files
-git grep -nF "<old-version>" -- . ':!CHANGELOG.md' ':!*go.sum' ':!*go.mod'
+git grep -nF "<old-version>" -- . ':!CHANGELOG.md' ':!*go.sum' ':!*go.mod' ':!docs/designs'
 # Docs often still name the previous minor (e.g. 1.1.0 after a 1.1.1 patch)
-git grep -nE '\b<old-major>\.<old-minor>\.[0-9]+\b' -- docs README.md
+git grep -nE '\b<old-major>\.<old-minor>\.[0-9]+\b' -- docs README.md ':!docs/designs'
 ```
 
-Review each hit. Version strings for unrelated tools (for example `helm-unittest --version v1.1.0`) and test fixtures must not be changed.
+Review each hit. Version strings for unrelated tools (for example `helm-unittest --version v1.1.0`) and test fixtures must not be changed. Design documents under `docs/designs/` (including `release-strategy.md`, which describes policy, not per-release versions) are not updated as part of a release.
 
 Do **not** edit: `values.yaml` image tags or `documentDbVersion` (the database workflows own them), generated CRDs, `zz_generated.*`, or `go.mod`.
 
