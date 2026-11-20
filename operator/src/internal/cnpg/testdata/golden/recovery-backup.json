@@ -59,7 +59,7 @@
         {
           "name": "documentdb",
           "image": {
-            "reference": "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:1.0.0"
+            "reference": "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:1.0.1"
           },
           "extension_control_path": [
             "share"
@@ -112,7 +112,7 @@
         "enabled": true,
         "parameters": {
           "documentDbCredentialSecret": "documentdb-credentials",
-          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0"
+          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.1"
         }
       }
     ]

@@ -91,13 +91,14 @@ The operator and the DocumentDB engine have separate version numbers. The Helm c
 
 | Operator (Helm chart) | Default DocumentDB engine | Status |
 |-----------------------|---------------------------|--------|
+| `1.2.1` | `1.0.1` (extension schema `1.0-0`) | Generally available; security update: default engine images rebuilt on patched Debian packages |
 | `1.2.0` | `1.0.0` (extension schema `1.0-0`) | Generally available; graduates the CRDs to the stable `documentdb.io/v1` API (`preview` is deprecated but still served) |
 | `1.1.0` | `1.0.0` (extension schema `1.0-0`) | Generally available; adds the combined-image fallback for clusters without image volume support |
 | `1.0.0` | `1.0.0` (extension schema `1.0-0`) | Generally available |
 | `1.0.0-rc1` | `1.0-RC2` | Release candidate |
 | `0.3.0` | `0.110.0` | Preview |
 
-Use operator `1.2.0` for DocumentDB 1.0. To move existing clusters to 1.0, see [Upgrading to DocumentDB 1.0](../operations/upgrades.md#upgrading-to-documentdb-10).
+Use operator `1.2.1` for DocumentDB 1.0. To move existing clusters to 1.0, see [Upgrading to DocumentDB 1.0](../operations/upgrades.md#upgrading-to-documentdb-10). Engine `1.0.1` is the `1.0.0` engine (same extension schema `1.0-0`) rebuilt with security fixes; see [Engine 1.0.1 security update](../operations/upgrades.md#engine-101-security-update).
 
 ## Terminology
 

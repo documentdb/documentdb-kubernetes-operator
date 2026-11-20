@@ -133,7 +133,7 @@
           "documentDbCredentialSecret": "documentdb-credentials",
           "gatewayCpuLimit": "1",
           "gatewayCpuRequest": "1",
-          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0",
+          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.1",
           "gatewayImagePullPolicy": "Never",
           "gatewayMemoryLimit": "1536Mi",
           "gatewayMemoryRequest": "1536Mi",
