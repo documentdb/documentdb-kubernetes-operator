@@ -41,8 +41,9 @@ The DocumentDB operator Helm chart is published as an OCI artifact at `oci://ghc
 Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:
 
 ```bash
-# Set this to the release tag you are upgrading to.
-TARGET_VERSION=<release-version>
+# Chart version to upgrade to, for example 1.2.0. Release tags use the same
+# value (no "v" prefix), so it also selects the CRDs in Step 3.
+TARGET_VERSION="<release-version>"
 ```
 
 ### Step 2: Review the Release Notes
@@ -80,6 +81,19 @@ helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
   --wait
 ```
 
+!!! warning "Pinned image tags are kept"
+    When you pass no new values, `helm upgrade` reuses the values from your previous install. If you set `image.documentdbk8soperator.tag` or `image.sidecarinjector.tag` (or other image overrides) at install time, the new chart deploys but the operator keeps running the old images. Add `--reset-values` to use the new chart's defaults, and pass again any settings you still need (for example `--set image.registry=...`):
+
+    ```bash
+    helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version ${TARGET_VERSION} \
+      --namespace documentdb-operator \
+      --reset-values \
+      --wait
+    ```
+
+    Run `helm get values documentdb-operator -n documentdb-operator` to see which values your release currently overrides.
+
 !!! tip
     Add `--atomic` to automatically roll back the release if the upgrade fails:
 
@@ -93,12 +107,30 @@ helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
 ### Step 5: Verify the Upgrade
 
 ```bash
-# Check operator deployment
-kubectl get deployment -n documentdb-operator
+# Wait for the operator and sidecar injector rollouts to finish
+kubectl rollout status deployment/documentdb-operator -n documentdb-operator --timeout=5m
+kubectl rollout status deployment/sidecar-injector -n cnpg-system --timeout=5m
+
+# Check the operator and sidecar run the new version's images
+kubectl get deployment documentdb-operator -n documentdb-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+kubectl get deployment sidecar-injector -n cnpg-system \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+
+# Check your DocumentDB clusters
+kubectl get documentdb -A
 
 # Check operator logs for errors
 kubectl logs -n documentdb-operator deployment/documentdb-operator --tail=50
 ```
+
+The upgrade succeeded when:
+
+- Both `rollout status` commands report `successfully rolled out`.
+- Both images end in `:${TARGET_VERSION}`. If they still show the old tag, your release pins image tags; see [Pinned image tags are kept](#step-4-upgrade-the-operator).
+- Every DocumentDB cluster reports `Cluster in healthy state`.
+- The operator logs show no repeated errors. A few `the object has been modified` messages right after the restart are retries and can be ignored.
+- Your application can read and write through the gateway, for example a `mongosh` insert and find.
 
 ### Operator Rollback
 
@@ -158,13 +190,13 @@ Upgrading a DocumentDB cluster has two dimensions: the **binary** (container ima
 
 | Field | What It Does | Reversible? |
 |-------|-------------|-------------|
-| `spec.documentDBVersion` | Updates the **binary** — the extension image and gateway sidecar are replaced via rolling restart. | ✅ Yes — revert the field to roll back. |
+| `spec.documentDBVersion` | Updates the **binary** — the extension image and gateway sidecar are replaced via rolling restart. | ✅ Yes, provided the target binary supports the current schema (it must be ≥ `status.schemaVersion`). See [Rollback and Recovery](#rollback-and-recovery). |
 | `spec.schemaVersion` | Runs `ALTER EXTENSION UPDATE` to migrate the **database schema** to match the binary. | ❌ No — schema changes are permanent. |
 
 Think of it as: **`documentDBVersion` installs the software, `schemaVersion` applies the database migration.**
 
 !!! info "Why two fields?"
-    The binary (container image) can be swapped freely — if something goes wrong, revert `documentDBVersion` and the pods roll back to the previous image. But `ALTER EXTENSION UPDATE` modifies database catalog tables and cannot be undone. Separating these two steps gives you a safe rollback window between deploying new code and committing the schema change.
+    The binary (container image) can be rolled back while the schema hasn't changed — revert `documentDBVersion` to a version that is ≥ `status.schemaVersion` and the pods roll back to that image. But `ALTER EXTENSION UPDATE` modifies database catalog tables and cannot be undone. Separating these two steps gives you a safe rollback window between deploying new code and committing the schema change.
 
 ### Schema Version Modes
 
@@ -187,7 +219,7 @@ Think of it as: **`documentDBVersion` installs the software, `schemaVersion` app
 
 ### Upgrade Walkthrough
 
-Choose the approach that matches your use case:
+Choose the approach that matches your use case. The YAML examples show only the fields to change: update them in your existing manifest and keep all other required configuration unchanged.
 
 === "Production (two-phase upgrade)"
 
@@ -267,7 +299,7 @@ Choose the approach that matches your use case:
     ```
 
     !!! info
-        This pattern keeps a permanent rollback window. The schema is always one version behind the binary, so you never commit a schema change until the *next* binary has proven stable with it.
+        This pattern preserves a rollback option to the previous binary only when that binary supports the resulting schema. The schema stays one version behind the binary, so you don't commit a schema change until the *next* binary has proven stable with it. Confirm compatibility in the release notes before each upgrade.
 
 === "Development (auto mode)"
 
@@ -349,7 +381,7 @@ Run DocumentDB 1.0 on operator `1.0.0`, the release tested with it. Before upgra
 | `0.117.0` or earlier `0.x` | Two-phase upgrade: set `documentDBVersion: "1.0.0"`, validate, then set `schemaVersion: "1.0.0"`. This runs `ALTER EXTENSION documentdb UPDATE TO '1.0-0'`, which cannot be undone. |
 | `1.0-RC2` (from chart `1.0.0-rc1`) | In-place upgrade is not supported: release-candidate clusters are for fresh instances only. Keep the cluster pinned to `1.0-RC2`, create a new `1.0.0` cluster, and move your data with `mongodump`/`mongorestore`. |
 
-For a `0.x` cluster (if it sets `spec.image.documentDB` or `spec.image.gateway`, remove them in the first patch; explicit images take precedence over `documentDBVersion`):
+For a `0.x` cluster:
 
 ```bash
 kubectl patch documentdb my-cluster -n default \
@@ -357,6 +389,13 @@ kubectl patch documentdb my-cluster -n default \
 # After validating the new binary:
 kubectl patch documentdb my-cluster -n default \
   --type merge -p '{"spec":{"schemaVersion":"1.0.0"}}'
+```
+
+If the cluster sets `spec.image.documentDB` or `spec.image.gateway`, explicit images take precedence over `documentDBVersion`. Remove them in the same first patch:
+
+```bash
+kubectl patch documentdb my-cluster -n default --type merge \
+  -p '{"spec":{"documentDBVersion":"1.0.0","image":{"documentDB":null,"gateway":null}}}'
 ```
 
 ---
