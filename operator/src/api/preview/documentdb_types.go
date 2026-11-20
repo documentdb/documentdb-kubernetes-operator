@@ -231,6 +231,10 @@ type PluginsSpec struct {
 	// cross-cluster replication.
 	// +optional
 	WalReplicaName string `json:"walReplicaName,omitempty"`
+
+	// Additional defines which additional CNPG plugins should be loaded
+	// +optional
+	Additional []cnpgv1.PluginConfiguration `json:"additional,omitempty"`
 }
 
 // BootstrapConfiguration defines how to bootstrap a DocumentDB cluster.
