@@ -18,9 +18,10 @@ theme:
     - search.highlight
 
 # mike (https://github.com/jimporter/mike) enables versioned docs on GitHub Pages.
-# Each release gets a frozen snapshot (e.g., /0.2.0/), and "latest" always points
-# to the most recent release. Unreleased changes on main deploy to /dev/ only.
-# See .github/workflows/deploy_docs.yml for the deployment logic.
+# Stable docs use /major.minor/ (e.g., /1.1/), updated by the newest published patch.
+# "latest" tracks the highest stable release; main uses /dev/ and prereleases
+# use their full tag. Existing patch snapshots remain available at their old URLs.
+# See docs/developer-guides/documentation-publishing.md for policy and migration.
 extra:
   version:
     provider: mike
