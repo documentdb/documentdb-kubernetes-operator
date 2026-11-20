@@ -977,6 +977,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#engine-101-security-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      Engine 1.0.1 security update
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#upgrading-to-documentdb-10" class="md-nav__link">
     <span class="md-ellipsis">
       Upgrading to DocumentDB 1.0
@@ -1741,6 +1750,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#engine-101-security-update" class="md-nav__link">
+    <span class="md-ellipsis">
+      Engine 1.0.1 security update
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#upgrading-to-documentdb-10" class="md-nav__link">
     <span class="md-ellipsis">
       Upgrading to DocumentDB 1.0
@@ -1831,7 +1849,7 @@
 <p><a href="https://github.com/documentdb/documentdb-kubernetes-operator/releases">https://github.com/documentdb/documentdb-kubernetes-operator/releases</a></p>
 <p>Pin the version you intend to upgrade to in a shell variable used by the rest of this guide:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Set this to the release tag you are upgrading to.</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">1</span>.2.0
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">TARGET_VERSION</span><span class="o">=</span><span class="m">1</span>.2.1
 </code></pre></div>
 <h3 id="step-2-review-the-release-notes">Step 2: Review the Release Notes<a class="headerlink" href="#step-2-review-the-release-notes" title="Permanent link">&para;</a></h3>
 <p>Open the GitHub release page for <code>${TARGET_VERSION}</code> to review breaking changes, new features, and any required migration steps before proceeding.</p>
@@ -2114,6 +2132,26 @@
 <p class="admonition-title">Tip</p>
 <p>This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting <code>schemaVersion</code>.</p>
 </div>
+<h3 id="engine-101-security-update">Engine 1.0.1 security update<a class="headerlink" href="#engine-101-security-update" title="Permanent link">&para;</a></h3>
+<p>DocumentDB engine <code>1.0.1</code> is the <code>1.0.0</code> engine rebuilt on patched Debian packages. It fixes the zlib vulnerabilities <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-85091">CVE-2026-85091</a> and <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-27171">CVE-2026-27171</a> in the <code>documentdb</code>, <code>gateway</code> and <code>documentdb-combined</code> <code>1.0.0</code> images. The extension schema is unchanged (<code>1.0-0</code>), so moving to <code>1.0.1</code> is a rolling restart with no schema migration.</p>
+<p>Operator <code>1.2.1</code> and later deploy <code>1.0.1</code> by default. Earlier operators (<code>1.0.x</code>, <code>1.1.x</code>, <code>1.2.0</code>) default to <code>1.0.0</code>; you can move to <code>1.0.1</code> without upgrading the operator:</p>
+<ul>
+<li>
+<p><strong>One cluster:</strong> set <code>spec.documentDBVersion</code> to <code>1.0.1</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"documentDBVersion":"1.0.1"}}'</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>Every cluster that doesn't pin <code>spec.documentDBVersion</code>:</strong> change the chart's default engine and keep your current chart version:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>helm<span class="w"> </span>upgrade<span class="w"> </span>documentdb-operator<span class="w"> </span>oci://ghcr.io/documentdb/documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span>--version<span class="w"> </span>&lt;your-current-chart-version&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">  </span>--namespace<span class="w"> </span>documentdb-operator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">  </span>--reuse-values<span class="w"> </span>--set<span class="w"> </span><span class="nv">documentDbVersion</span><span class="o">=</span><span class="m">1</span>.0.1<span class="w"> </span>--wait
+</code></pre></div>
+</li>
+</ul>
+<p>If a cluster sets <code>spec.image.documentDB</code> or <code>spec.image.gateway</code>, change those tags to <code>1.0.1</code> as well; explicit images take precedence. Don't set <code>spec.schemaVersion: "1.0.1"</code>: engine <code>1.0.1</code> has no schema change.</p>
 <h3 id="upgrading-to-documentdb-10">Upgrading to DocumentDB 1.0<a class="headerlink" href="#upgrading-to-documentdb-10" title="Permanent link">&para;</a></h3>
 <p>Run DocumentDB 1.0 on operator <code>1.0.0</code>, the release tested with it. Before upgrading the operator, pin <code>spec.documentDBVersion</code> on every cluster to the version it runs now (see the warning in <a href="#upgrading-the-operator">Upgrading the Operator</a>), and remove <code>schemaVersion: "auto"</code> so nothing migrates before you choose to. Then upgrade the operator and move each cluster:</p>
 <table>
@@ -2135,11 +2173,11 @@
 </tbody>
 </table>
 <p>For a <code>0.x</code> cluster (if it sets <code>spec.image.documentDB</code> or <code>spec.image.gateway</code>, remove them in the first patch; explicit images take precedence over <code>documentDBVersion</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"documentDBVersion":"1.0.0"}}'</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="c1"># After validating the new binary:</span>
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"schemaVersion":"1.0.0"}}'</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"documentDBVersion":"1.0.0"}}'</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="c1"># After validating the new binary:</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>kubectl<span class="w"> </span>patch<span class="w"> </span>documentdb<span class="w"> </span>my-cluster<span class="w"> </span>-n<span class="w"> </span>default<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="w">  </span>--type<span class="w"> </span>merge<span class="w"> </span>-p<span class="w"> </span><span class="s1">'{"spec":{"schemaVersion":"1.0.0"}}'</span>
 </code></pre></div>
 <hr />
 <h2 id="multi-region-upgrades">Multi-Region Upgrades<a class="headerlink" href="#multi-region-upgrades" title="Permanent link">&para;</a></h2>
@@ -2160,16 +2198,16 @@
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Extension Image Override</label><label for="__tabbed_3_2">Gateway Image Override</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
-<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">    </span><span class="nt">documentDB</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="w">    </span><span class="nt">documentDB</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:&lt;version&gt;"</span>
 </code></pre></div>
 <p>This overrides only the database extension image while keeping the gateway at the version set by <code>documentDBVersion</code>.</p>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="nt">spec</span><span class="p">:</span>
-<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">    </span><span class="nt">gateway</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="w">    </span><span class="nt">gateway</span><span class="p">:</span><span class="w"> </span><span class="s">"ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:&lt;version&gt;"</span>
 </code></pre></div>
 <p>This overrides only the gateway sidecar image while keeping the extension at the version set by <code>documentDBVersion</code>.</p>
 </div>
