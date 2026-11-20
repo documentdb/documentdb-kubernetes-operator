@@ -12,6 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net/url"
 	"strings"
 	"time"
 
@@ -41,11 +42,22 @@ func mintSelfSignedPEM() []byte {
 
 var _ = Describe("BuildURI", func() {
 	It("renders the basic mongodb URI form", func() {
-		got, err := BuildURI(ClientOptions{
-			Host: "gw.example", Port: "10260", User: "alice", Password: "secret",
-		})
+		opts := ClientOptions{
+			Host: "gw.example", Port: "10260", User: "placeholder-user", Password: "placeholder-password",
+		}
+		got, err := BuildURI(opts)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(got).To(Equal("mongodb://alice:secret@gw.example:10260/?tls=false&authSource=admin"))
+		parsed, err := url.Parse(got)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(parsed.Scheme).To(Equal("mongodb"))
+		Expect(parsed.User).NotTo(BeNil())
+		Expect(parsed.User.Username()).To(Equal(opts.User))
+		password, present := parsed.User.Password()
+		Expect(present).To(BeTrue())
+		Expect(password).To(Equal(opts.Password))
+		Expect(parsed.Host).To(Equal("gw.example:10260"))
+		Expect(parsed.Path).To(Equal("/"))
+		Expect(parsed.RawQuery).To(Equal("tls=false&authSource=admin"))
 	})
 
 	It("percent-encodes credential metacharacters", func() {

@@ -75,6 +75,10 @@ onto the cluster using a long-lived ServiceAccount-token kubeconfig stored in th
 
 **Manual path (one-off / local cluster):**
 
+Set `LONGHAUL_DOCUMENTDB_URI` to your deployment's in-cluster connection URI before
+step 2. Use the actual deployment credentials, percent-encode reserved URI
+characters, and keep the configured value out of source control.
+
 ```bash
 # Build from the REPOSITORY ROOT (not test/longhaul/) so the replace
 # paths in test/longhaul/go.mod (../shared and ../../operator/src) resolve.
@@ -84,9 +88,10 @@ cd <repo-root>
 docker build -t <your-registry>/longhaul-test:latest -f test/longhaul/Dockerfile .
 docker push <your-registry>/longhaul-test:latest
 
-# 2. Create the DocumentDB credentials secret
+# 2. Create the credentials secret from the deployment-specific URI
+: "${LONGHAUL_DOCUMENTDB_URI:?Set LONGHAUL_DOCUMENTDB_URI to the in-cluster connection URI}"
 kubectl create secret generic longhaul-documentdb-credentials \
-  --from-literal=uri='mongodb://docdb:YourPass@documentdb-service-documentdb-cluster.documentdb-test-ns.svc:10260/?directConnection=true&authMechanism=SCRAM-SHA-256&tls=true&tlsInsecure=true' \
+  --from-literal=uri="$LONGHAUL_DOCUMENTDB_URI" \
   -n documentdb-test-ns
 
 # 3. Deploy RBAC and Deployment. deployment.yaml has placeholders
