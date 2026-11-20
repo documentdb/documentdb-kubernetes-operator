@@ -749,6 +749,19 @@ jobs:
             fi
             # Pin the version so the operator resolves the released combined tag.
             SPEC_IMAGES="documentDBVersion: \"${VERSION}\""
+            # Expect the extension shipped in the same release's ImageVolume
+            # image. A release can rebuild an engine without changing its
+            # schema (1.0.1 ships extension 1.0-0), so the version string
+            # alone doesn't determine the extension version.
+            EXT_CTR=$(docker create --platform "linux/${ARCH}" \
+              "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:${VERSION}" /none)
+            EXT_VERSION=$(docker export "$EXT_CTR" | tar -xO share/extension/documentdb.control \
+              | sed -nE "s/^default_version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p")
+            docker rm "$EXT_CTR" >/dev/null
+            if [[ -z "$EXT_VERSION" ]]; then
+              echo "::error::could not read default_version from documentdb:${VERSION} (linux/${ARCH})"
+              exit 1
+            fi
           else
             VERSION="${EXT_IMAGE_TAG}"
             IMAGE="${REPO}:18-${EXT_IMAGE_TAG}-${ARCH}"
@@ -762,13 +775,13 @@ jobs:
             # The operator reuses the release tag of spec.image.documentDB for
             # the combined image, which resolves to the loaded image.
             SPEC_IMAGES="image: {documentDB: \"${DOCUMENTDB_IMAGE_RESOLVED}\", gateway: \"${GATEWAY_IMAGE_RESOLVED}\"}"
+            # PR-built images are built from this version, and the build job
+            # checks the packaged schema matches it (1.0.0 -> 1.0-0, RCs such
+            # as 1.0-RC2 -> 1.0-0). Strip the CI run suffix from per-run tags.
+            EXT_VERSION=$(RAW_VERSION="${VERSION%-test-*}" DOCUMENTDB_GATEWAY_IMAGE_REPO=unused \
+              bash .github/scripts/resolve-documentdb-version.sh | sed -n 's/^documentdb_version_dash=//p')
           fi
           echo "Expected combined image: ${IMAGE} (linux/${ARCH})"
-          # The pg_extension version is the resolver's documentdb_version_dash
-          # (1.0.0 -> 1.0-0, RCs such as 1.0-RC2 -> 1.0-0). Strip the CI run
-          # suffix from per-run tags first.
-          EXT_VERSION=$(RAW_VERSION="${VERSION%-test-*}" DOCUMENTDB_GATEWAY_IMAGE_REPO=unused \
-            bash .github/scripts/resolve-documentdb-version.sh | sed -n 's/^documentdb_version_dash=//p')
           {
             echo "EXPECTED_IMAGE=${IMAGE}"
             echo "SPEC_IMAGES=${SPEC_IMAGES}"
