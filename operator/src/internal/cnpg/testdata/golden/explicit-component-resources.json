@@ -59,7 +59,7 @@
         {
           "name": "documentdb",
           "image": {
-            "reference": "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:1.0.0"
+            "reference": "ghcr.io/documentdb/documentdb-kubernetes-operator/documentdb:1.0.1"
           },
           "extension_control_path": [
             "share"
@@ -128,7 +128,7 @@
           "documentDbCredentialSecret": "documentdb-credentials",
           "gatewayCpuLimit": "500m",
           "gatewayCpuRequest": "500m",
-          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.0",
+          "gatewayImage": "ghcr.io/documentdb/documentdb-kubernetes-operator/gateway:1.0.1",
           "gatewayMemoryLimit": "1Gi",
           "gatewayMemoryRequest": "1Gi",
           "otelCollectorImage": "otel/opentelemetry-collector-contrib:0.149.0",

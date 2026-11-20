@@ -340,6 +340,30 @@ Whether you can roll back depends on whether the schema has been updated:
 !!! tip
     This is why the default two-phase mode exists — it gives you a rollback-safe window before committing the schema change. Always back up before upgrading, and validate the new binary before setting `schemaVersion`.
 
+### Engine 1.0.1 security update
+
+DocumentDB engine `1.0.1` is the `1.0.0` engine rebuilt on patched Debian packages. It fixes the zlib vulnerabilities [CVE-2026-85091](https://nvd.nist.gov/vuln/detail/CVE-2026-85091) and [CVE-2026-27171](https://nvd.nist.gov/vuln/detail/CVE-2026-27171) in the `documentdb`, `gateway` and `documentdb-combined` `1.0.0` images. The extension schema is unchanged (`1.0-0`), so moving to `1.0.1` is a rolling restart with no schema migration.
+
+Operator `1.2.1` and later deploy `1.0.1` by default. Earlier operators (`1.0.x`, `1.1.x`, `1.2.0`) default to `1.0.0`; you can move to `1.0.1` without upgrading the operator:
+
+- **One cluster:** set `spec.documentDBVersion` to `1.0.1`:
+
+    ```bash
+    kubectl patch documentdb my-cluster -n default \
+      --type merge -p '{"spec":{"documentDBVersion":"1.0.1"}}'
+    ```
+
+- **Every cluster that doesn't pin `spec.documentDBVersion`:** change the chart's default engine and keep your current chart version:
+
+    ```bash
+    helm upgrade documentdb-operator oci://ghcr.io/documentdb/documentdb-operator \
+      --version <your-current-chart-version> \
+      --namespace documentdb-operator \
+      --reuse-values --set documentDbVersion=1.0.1 --wait
+    ```
+
+If a cluster sets `spec.image.documentDB` or `spec.image.gateway`, change those tags to `1.0.1` as well; explicit images take precedence. Don't set `spec.schemaVersion: "1.0.1"`: engine `1.0.1` has no schema change.
+
 ### Upgrading to DocumentDB 1.0
 
 Run DocumentDB 1.0 on operator `1.0.0`, the release tested with it. Before upgrading the operator, pin `spec.documentDBVersion` on every cluster to the version it runs now (see the warning in [Upgrading the Operator](#upgrading-the-operator)), and remove `schemaVersion: "auto"` so nothing migrates before you choose to. Then upgrade the operator and move each cluster:

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-20
+
+Security release. The default DocumentDB engine moves from `1.0.0` to `1.0.1`: the same engine (extension schema `1.0-0`) rebuilt on patched Debian packages. Unpinned clusters roll onto the new images when the operator is upgraded; there is no schema migration. The CRDs are unchanged from `1.2.0`; when upgrading from `1.1.x` or earlier, apply the `1.2.1` CRDs before `helm upgrade`.
+
+### Security
+- Default DocumentDB engine `1.0.1` fixes the zlib vulnerabilities [CVE-2026-85091](https://nvd.nist.gov/vuln/detail/CVE-2026-85091) (High) and [CVE-2026-27171](https://nvd.nist.gov/vuln/detail/CVE-2026-27171) (Medium) present in the `documentdb`, `gateway` and `documentdb-combined` `1.0.0` images (#504). Clusters on earlier operators can move to `1.0.1` without an operator upgrade by setting `spec.documentDBVersion: "1.0.1"`, or the chart value `documentDbVersion=1.0.1`. See [Engine 1.0.1 security update](docs/operator-public-documentation/v1/operations/upgrades.md#engine-101-security-update).
+
 ## [1.2.0] - 2026-11-19
 
 Operator release for DocumentDB 1.0; the default DocumentDB engine stays at `1.0.0` (extension schema `1.0-0`), so only the operator, sidecar, CRDs and Helm chart change. The `DocumentDB`, `Backup` and `ScheduledBackup` resources graduate to the stable `documentdb.io/v1` API. **Apply the 1.2.0 CRDs before `helm upgrade`**; existing `documentdb.io/preview` resources and manifests keep working and existing clusters are not restarted.
