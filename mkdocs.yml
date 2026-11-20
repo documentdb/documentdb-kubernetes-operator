@@ -70,6 +70,7 @@ nav:
       - Tools:
           - Kubectl Plugin: v1/kubectl-plugin.md
       - API Reference: v1/api-reference.md
+      - Supported Releases: v1/supported-releases.md
 
 plugins:
   - search
