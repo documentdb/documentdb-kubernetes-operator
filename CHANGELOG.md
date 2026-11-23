@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Security
-- The operator image moves from the Alpine dev container base to Azure Linux distroless, dropping OpenSSH, BusyBox, `apk`, `sudo` and `git` and clearing the SSHole (CVE-2026-123158) finding. Earlier images ship only the OpenSSH client and never run `sshd`, so they were not exploitable. The image no longer has a shell; use `kubectl debug` to troubleshoot the operator pod.
+- The operator image moves from the Alpine dev container base to Azure Linux distroless, so it no longer ships OpenSSH (SSHole, CVE-2026-123158), BusyBox, `apk`, `sudo` or `git`. Earlier images ship only the OpenSSH client and never run `sshd`, so they were not exploitable. The image no longer has a shell; use `kubectl debug` to troubleshoot the operator pod.
 
 ## [1.2.1] - 2026-11-20
 
