@@ -2,9 +2,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 #
-# Fails if a local image ships an SSH server or client, a shell, or a package
-# manager. Keeps the operator image distroless so distro OpenSSH CVEs
-# (e.g. SSHole, CVE-2026-123158) cannot reach it again.
+# Fails if a local image ships an SSH client or server, a shell, or a package
+# manager, so a distro base and its OpenSSH (SSHole, CVE-2026-123158) can't
+# return to the operator image unnoticed. Matches file names only.
 #
 # Usage: assert-minimal-image.sh <image>
 set -euo pipefail

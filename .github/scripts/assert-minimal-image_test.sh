@@ -25,7 +25,7 @@ make_image() {
   tar -C "$root" -c . | docker import - "$name" >/dev/null
 }
 
-# check <name> <path>... : a clean image must pass; with the path added, the
+# check <name> [path] : a clean image must pass; with the path added, the
 # check must fail and name that path, so an unrelated error can't count.
 check() {
   local name="$1" path="${2:-}" out
