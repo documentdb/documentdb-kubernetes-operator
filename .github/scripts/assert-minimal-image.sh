@@ -18,10 +18,10 @@ trap 'docker rm -f "$container" >/dev/null' EXIT
 files=$(docker export "$container" | tar -tf -)
 [[ -n "$files" ]] || { echo "::error::$IMAGE exported no files" >&2; exit 1; }
 
-# Directories end in "/", so only files and links can match.
-found=$(sed 's|^\./||' <<<"$files" | grep -E \
+# Directories end in "/", so only files and links can match; "(^|/)" also covers "./" prefixes.
+found=$(grep -E \
   '(^|/)(sshd?|sshd-session|sshd-auth|ssh-keygen|ssh-agent|scp|sftp|sftp-server|dropbear[a-z]*|sh|ash|bash|dash|zsh|busybox|apk|apt|apt-get|dpkg|rpm|dnf|tdnf|yum|microdnf)$' \
-  || true)
+  <<<"$files" || true)
 
 if [[ -n "$found" ]]; then
   echo "::error::$IMAGE ships files a distroless image must not have:" >&2

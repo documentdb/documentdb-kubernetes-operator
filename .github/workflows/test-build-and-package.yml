@@ -869,20 +869,22 @@ jobs:
     steps:
     - name: Generate Build Summary
       run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Configuration:" >> $GITHUB_STEP_SUMMARY
-        echo "- **Version**: ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Generated Tag**: ${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Build Mode**: Platform-specific artifacts with architecture suffixes" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### Built Artifacts:" >> $GITHUB_STEP_SUMMARY
-        echo "- **Operator Images**: Platform-specific (AMD64 + ARM64) with suffix tags" >> $GITHUB_STEP_SUMMARY
-        echo "- **Sidecar Images**: Platform-specific (AMD64 + ARM64) with suffix tags" >> $GITHUB_STEP_SUMMARY
-        echo "- **Helm Charts**: Platform-specific charts for AMD64 and ARM64" >> $GITHUB_STEP_SUMMARY
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Job Results:" >> $GITHUB_STEP_SUMMARY
-        echo "- **Consolidate Images**: ${{ needs.consolidate-images.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Create Charts**: ${{ needs.create-helm-chart.result }}" >> $GITHUB_STEP_SUMMARY
+        {
+          echo "## Build Summary"
+          echo ""
+          echo "### Configuration:"
+          echo "- **Version**: ${{ inputs.version }}"
+          echo "- **Generated Tag**: ${{ env.VERSION }}"
+          echo "- **Build Mode**: Platform-specific artifacts with architecture suffixes"
+          echo ""
+
+          echo "### Built Artifacts:"
+          echo "- **Operator Images**: Platform-specific (AMD64 + ARM64) with suffix tags"
+          echo "- **Sidecar Images**: Platform-specific (AMD64 + ARM64) with suffix tags"
+          echo "- **Helm Charts**: Platform-specific charts for AMD64 and ARM64"
+
+          echo ""
+          echo "### Job Results:"
+          echo "- **Consolidate Images**: ${{ needs.consolidate-images.result }}"
+          echo "- **Create Charts**: ${{ needs.create-helm-chart.result }}"
+        } >> "$GITHUB_STEP_SUMMARY"
