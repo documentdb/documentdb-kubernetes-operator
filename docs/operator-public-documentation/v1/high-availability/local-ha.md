@@ -206,6 +206,20 @@ The failover process occurs in two phases:
 !!! tip "Tuning for RTO vs RPO"
     Lower `stopDelay` values favor faster recovery (RTO) but may increase data loss risk (RPO). Higher values prioritize data safety but may delay recovery.
 
+### Gateway Container Restarts
+
+The `documentdb-gateway` container in each pod has a TCP liveness probe on the gateway port (10260):
+
+| Probe | Settings | Effect |
+|-------|----------|--------|
+| Liveness | First check 10 minutes after the container starts, then every 10 seconds, 5 second timeout, 6 failures | Restarts the gateway container after about one minute without accepting connections. The initial delay covers the gateway's wait for PostgreSQL at startup. |
+
+A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. Because the first check waits 10 minutes, a gateway that never starts listening, or stops within 10 minutes of starting, is restarted about 11 minutes after it started.
+
+The gateway has no readiness or startup probe. Pod readiness covers every container, and a container with a startup probe is not ready until that probe succeeds, so either probe would remove PostgreSQL from the CloudNativePG Services while the gateway is not listening and break replication.
+
+The probe only checks that the port accepts TCP connections; it doesn't perform a TLS handshake or send a request. A gateway that hangs with its port still open passes the probe. Each probe opens a connection and closes it without sending data, about six times per minute per pod. The gateway logs each probe as two `ERROR` lines: `Failed to create TLS connection` and `Gateway runtime connection failed … Connection closed`. Exclude these from error-based alerts. A request-level health check in the gateway is tracked in [documentdb/documentdb#834](https://github.com/documentdb/documentdb/issues/834).
+
 ## Monitoring and Failover Detection
 
 Understanding when a failover has occurred is essential for operations.

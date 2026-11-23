@@ -25,6 +25,9 @@ import (
 //	otel     = 48Mi request / 128Mi limit; cpu 50m req / 200m limit (monitoring on)
 //	postgres = 1024 − 192            = 832Mi   (monitoring off)
 //	postgres = 1024 − 192 − 128      = 704Mi   (monitoring on)
+//
+// The specs also check that the gateway has a TCP liveness probe and no
+// startup or readiness probe.
 const (
 	podEnvelope         = "1Gi"
 	wantGatewayMem      = "192Mi"
@@ -34,6 +37,12 @@ const (
 	wantOTelMemLimit    = "128Mi"
 	wantOTelCPURequest  = "50m"
 	wantOTelCPULimit    = "200m"
+
+	gatewayPort = 10260
+	// gatewayEntrypointWaitSeconds is how long the gateway entrypoint waits
+	// for PostgreSQL before it listens; the liveness probe's initial delay
+	// must cover it.
+	gatewayEntrypointWaitSeconds = 600
 )
 
 var _ = Describe("Sidecar memory carve-out",
@@ -59,6 +68,9 @@ var _ = Describe("Sidecar memory carve-out",
 				gw := containerByName(pod, gatewayContainerName)
 				Expect(gw).ToNot(BeNil(), "gateway container present")
 				assertGuaranteedMemory(gw, wantGatewayMem)
+
+				By("checking the gateway's TCP liveness probe")
+				assertGatewayProbes(gw)
 
 				pg := containerByName(pod, postgresContainerName)
 				Expect(pg).ToNot(BeNil(), "postgres container present")
@@ -148,4 +160,19 @@ func hasEnv(ctr *corev1.Container, name string) bool {
 		}
 	}
 	return false
+}
+
+// assertGatewayProbes asserts the gateway has a TCP liveness probe on its
+// listener port that waits out the entrypoint, and no startup or readiness
+// probe.
+func assertGatewayProbes(gw *corev1.Container) {
+	GinkgoHelper()
+	probe := gw.LivenessProbe
+	Expect(probe).ToNot(BeNil(), "gateway liveness probe present")
+	Expect(probe.TCPSocket).ToNot(BeNil(), "gateway liveness probe uses tcpSocket")
+	Expect(probe.TCPSocket.Port.IntValue()).To(Equal(gatewayPort), "gateway liveness probe port")
+	Expect(probe.InitialDelaySeconds).To(BeNumerically(">=", gatewayEntrypointWaitSeconds),
+		"gateway liveness probe must wait out the entrypoint's wait for PostgreSQL")
+	Expect(gw.StartupProbe).To(BeNil(), "gateway must not have a startup probe")
+	Expect(gw.ReadinessProbe).To(BeNil(), "gateway must not have a readiness probe")
 }

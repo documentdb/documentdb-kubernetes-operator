@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	pluginconfig "github.com/documentdb/cnpg-i-sidecar-injector/internal/config"
 	pluginmetadata "github.com/documentdb/cnpg-i-sidecar-injector/pkg/metadata"
@@ -616,6 +617,7 @@ func TestLifecycleHookCustomGatewayContract(t *testing.T) {
 	if gateway.Ports[0].ContainerPort != 8081 {
 		t.Errorf("port = %d, want 8081", gateway.Ports[0].ContainerPort)
 	}
+	assertTCPProbe(t, "liveness", gateway.LivenessProbe, 8081)
 	if !reflect.DeepEqual(gateway.Args, []string{"--port", "8081"}) {
 		t.Errorf("args = %v", gateway.Args)
 	}
@@ -637,4 +639,47 @@ func TestLifecycleHookCustomGatewayContract(t *testing.T) {
 	assertEnvValue(t, gateway.Env, "CERT_PATH", "/tls/tls.crt")
 	assertEnvValue(t, gateway.Env, "KEY_FILE", "/tls/tls.key")
 	assertEnvValue(t, gateway.Env, "OTEL_METRICS_ENABLED", "true")
+}
+
+// TestLifecycleHookAddsGatewayLivenessProbe checks the gateway liveness probe,
+// and that the gateway has no readiness or startup probe: either would keep the
+// pod unready, and so take PostgreSQL out of the CNPG Services, while the
+// gateway is not listening.
+func TestLifecycleHookAddsGatewayLivenessProbe(t *testing.T) {
+	containers := runCreateHook(t, map[string]string{})
+
+	gateway, ok := containers[gatewayContainerName]
+	if !ok {
+		t.Fatalf("gateway container missing from patch")
+	}
+	if gateway.ReadinessProbe != nil {
+		t.Errorf("gateway ReadinessProbe = %+v, want nil", gateway.ReadinessProbe)
+	}
+	if gateway.StartupProbe != nil {
+		t.Errorf("gateway StartupProbe = %+v, want nil", gateway.StartupProbe)
+	}
+
+	liveness := gateway.LivenessProbe
+	assertTCPProbe(t, "liveness", liveness, 10260)
+	if liveness != nil {
+		if liveness.PeriodSeconds != 10 || liveness.TimeoutSeconds != 5 || liveness.FailureThreshold != 6 {
+			t.Errorf("liveness period/timeout/failureThreshold = %d/%d/%d, want 10/5/6",
+				liveness.PeriodSeconds, liveness.TimeoutSeconds, liveness.FailureThreshold)
+		}
+		// The gateway entrypoint waits up to 600 s for PostgreSQL before it listens.
+		if liveness.InitialDelaySeconds < 600 {
+			t.Errorf("liveness initialDelaySeconds = %d, want at least 600", liveness.InitialDelaySeconds)
+		}
+	}
+}
+
+func assertTCPProbe(t *testing.T, name string, probe *corev1.Probe, port int32) {
+	t.Helper()
+	if probe == nil {
+		t.Errorf("gateway %s probe is nil", name)
+		return
+	}
+	if probe.TCPSocket == nil || probe.TCPSocket.Port != intstr.FromInt32(port) {
+		t.Errorf("gateway %s probe handler = %+v, want tcpSocket on %d", name, probe.ProbeHandler, port)
+	}
 }
