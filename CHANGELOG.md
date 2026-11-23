@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Security
+- The operator image moves from the Alpine dev container base to Azure Linux distroless, dropping OpenSSH, BusyBox, `apk`, `sudo` and `git` and clearing the SSHole (CVE-2026-123158) finding. Earlier images ship only the OpenSSH client and never run `sshd`, so they were not exploitable. The image no longer has a shell; use `kubectl debug` to troubleshoot the operator pod.
+
 ## [1.2.1] - 2026-11-20
 
 Security release. The default DocumentDB engine moves from `1.0.0` to `1.0.1`: the same engine (extension schema `1.0-0`) rebuilt on patched Debian packages. Unpinned clusters roll onto the new images when the operator is upgraded; there is no schema migration. The CRDs are unchanged from `1.2.0`; when upgrading from `1.1.x` or earlier, apply the `1.2.1` CRDs before `helm upgrade`.

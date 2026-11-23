@@ -147,9 +147,9 @@ operator:
     seccompProfile:
       type: RuntimeDefault
   containerSecurityContext:
-    # The operator image (operator/src/Dockerfile) runs as the Alpine `manager`
-    # user, which is uid 100. We pin runAsUser explicitly so Kubernetes can
-    # verify the user is non-root without depending on the image's USER directive.
+    # The operator image (operator/src/Dockerfile) runs as USER 100:101. We pin
+    # runAsUser explicitly so Kubernetes can verify the user is non-root
+    # without depending on the image's USER directive.
     # If the operator Dockerfile is changed to use a different uid, update this
     # value in lockstep with the appVersion bump.
     runAsUser: 100

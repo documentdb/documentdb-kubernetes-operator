@@ -202,6 +202,12 @@ jobs:
         
         echo "✓ Operator Docker image built successfully for ${{ matrix.arch }}"
 
+    - name: Check operator image has no SSH, shell or package manager
+      run: |
+        bash .github/scripts/assert-minimal-image_test.sh
+        bash .github/scripts/assert-minimal-image.sh \
+          ghcr.io/${{ github.repository_owner }}/documentdb-kubernetes-operator/operator:${{ env.IMAGE_TAG }}-${{ matrix.arch }}
+
     - name: Save operator Docker image as artifact
       run: |
         echo "Saving operator ${{ matrix.arch }} Docker image as tar file..."

@@ -28,13 +28,12 @@ COPY internal/ internal/
 # The ARCH build arg can be used to override the target architecture (e.g., amd64, arm64)
 RUN GOEXPERIMENT=nosystemcrypto CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${ARCH:-${TARGETARCH}} go build -a -o manager cmd/main.go
 
-# Use Microsoft official image from MCR as minimal base image to package the manager binary
-FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/devcontainers/base:alpine
+# The manager is static, so the runtime image needs no shell, package manager
+# or SSH, only CA certificates, tzdata and /tmp.
+FROM --platform=${TARGETOS:-linux}/${ARCH:-${TARGETARCH}} mcr.microsoft.com/azurelinux/distroless/minimal:3.0
 WORKDIR /
-# Pick up package fixes published since the base image was built.
-RUN apk upgrade --no-cache
 COPY --from=builder /workspace/manager .
-RUN addgroup -S manager && adduser -S manager -G manager
-USER manager
+# Same uid/gid as the old Alpine `manager` user; the chart pins runAsUser/runAsGroup to it.
+USER 100:101
 
 ENTRYPOINT ["/manager"]
