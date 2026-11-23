@@ -172,6 +172,7 @@ func (impl Implementation) reconcileMetadata(
 		},
 		Env:             envVars,
 		SecurityContext: gatewaySecurityContext(),
+		LivenessProbe:   gatewayLivenessProbe(configuration.GatewayPort),
 	}
 	if resources := buildResources(
 		configuration.GatewayCPURequest,
@@ -523,7 +524,29 @@ func injectGatewayOTelEnv(pod *corev1.Pod, containerName string) {
 // otelCollectorContainerName is the name of the injected OpenTelemetry
 // Collector sidecar.
 const otelCollectorContainerName = "otel-collector"
+
 const otelMonitorRoleName = "otel_monitor"
+
+// gatewayLivenessProbe restarts only the gateway container after it stops
+// accepting TCP connections on port for about a minute; PostgreSQL keeps
+// running. The first check waits 600 s because the gateway entrypoint waits up
+// to that long for PostgreSQL before it opens its port.
+//
+// The gateway deliberately has no readiness or startup probe. Pod readiness
+// covers every container, and a container with a startup probe is not ready
+// until that probe succeeds, so either probe would remove PostgreSQL from the
+// CNPG Services while the gateway is not listening and break replication.
+func gatewayLivenessProbe(port int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(port)},
+		},
+		InitialDelaySeconds: 600,
+		PeriodSeconds:       10,
+		TimeoutSeconds:      5,
+		FailureThreshold:    6,
+	}
+}
 
 // gatewaySecurityContext returns the SecurityContext for the documentdb-gateway
 // sidecar: the shared PSA-restricted hardening plus an explicit UID/GID of

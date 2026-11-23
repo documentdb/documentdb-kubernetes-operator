@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Behavioral Changes
+- **Gateway liveness probe**: The `documentdb-gateway` container now has a TCP liveness probe on the gateway port (10260 by default). If the gateway stops accepting connections for about a minute, the kubelet restarts the gateway container only: PostgreSQL keeps running and no failover occurs. The first check runs 10 minutes after the container starts, which covers the gateway's wait for PostgreSQL. The gateway has no readiness or startup probe, so a gateway that isn't listening doesn't mark the pod unready. The probe can't detect a gateway that hangs with its port open, and the gateway logs each probe connection as two `ERROR` lines (a failed TLS handshake and a closed connection). Pods get the probe when they are next created, for example during a rolling restart. See [Gateway Container Restarts](docs/operator-public-documentation/v1/high-availability/local-ha.md#gateway-container-restarts).
+
 ## [1.2.1] - 2026-11-20
 
 Security release. The default DocumentDB engine moves from `1.0.0` to `1.0.1`: the same engine (extension schema `1.0-0`) rebuilt on patched Debian packages. Unpinned clusters roll onto the new images when the operator is upgraded; there is no schema migration. The CRDs are unchanged from `1.2.0`; when upgrading from `1.1.x` or earlier, apply the `1.2.1` CRDs before `helm upgrade`.

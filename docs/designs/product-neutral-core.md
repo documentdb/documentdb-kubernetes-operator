@@ -147,7 +147,8 @@ them, so existing clusters see no parameter change and no rolling restart.
 `SyncCnpgCluster` adds, updates, and removes these parameters on existing
 clusters and requests a rolling restart when they change. When the gateway
 port changes, the client Service's ports follow it; the Service keeps its
-assigned cluster IPs and node ports. Its selector also converges, disabling
+assigned cluster IPs and node ports. The injector's TCP liveness probe checks
+the same port, so a product gateway must listen on `gatewayPort`. Its selector also converges, disabling
 traffic while promotion is pending and restoring it when promotion completes. See
 [the plugin configuration guide](../developer-guides/sidecar-injector-plugin-configuration.md).
 
