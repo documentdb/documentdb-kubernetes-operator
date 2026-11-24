@@ -214,7 +214,7 @@ The `documentdb-gateway` container in each pod has a TCP liveness probe on the g
 |-------|----------|--------|
 | Liveness | First check 10 minutes after the container starts, then every 10 seconds, 5 second timeout, 6 failures | Restarts the gateway container after about one minute without accepting connections. The initial delay covers the gateway's wait for PostgreSQL at startup. |
 
-A liveness restart affects only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. Because the first check waits 10 minutes, a gateway that never starts listening, or stops within 10 minutes of starting, is restarted about 11 minutes after it started.
+A liveness restart restarts only the gateway container: PostgreSQL keeps running and no failover occurs. Client connections to that pod fail until the gateway is back. While the gateway container restarts, usually a few seconds, the pod is not Ready, because pod readiness covers every container. The CloudNativePG Services drop the pod for that time, so standbys streaming from it reconnect. The same happens today when the gateway process exits on its own; the probe adds restarts only for a gateway that stops accepting connections. Because the first check waits 10 minutes, a gateway that never starts listening, or stops within 10 minutes of starting, is restarted about 11 minutes after it started.
 
 The gateway has no readiness or startup probe. Pod readiness covers every container, and a container with a startup probe is not ready until that probe succeeds, so either probe would remove PostgreSQL from the CloudNativePG Services while the gateway is not listening and break replication.
 
