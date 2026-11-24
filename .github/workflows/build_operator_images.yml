@@ -19,6 +19,7 @@ on:
       - 'operator/src/**'
       - 'operator/cnpg-plugins/**'
       - '.github/workflows/build_operator_images.yml'
+      - '.github/scripts/assert-minimal-image.sh'
 
 permissions:
   packages: write
@@ -75,6 +76,7 @@ jobs:
         docker build --pull --build-arg ARCH=${{ matrix.base_arch }} \
           -t $IMAGE \
           -f ${{ matrix.image.dockerfile }} ${{ matrix.image.context }}
+        bash .github/scripts/assert-minimal-image.sh "$IMAGE"
         docker push $IMAGE
 
   # ---------------------------------------------------------------------------

@@ -27,6 +27,8 @@ on:
       - '.github/actions/**'
       - '.github/dockerfiles/Dockerfile_combined'
       - '.github/scripts/assert-combined-image.sh'
+      - '.github/scripts/assert-minimal-image.sh'
+      - '.github/scripts/assert-minimal-image_test.sh'
       - '.github/scripts/resolve-documentdb-version.sh'
   workflow_dispatch:
     inputs:
