@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
-### Security
-- The operator image moves from the Alpine dev container base to Azure Linux distroless, so it no longer ships OpenSSH (SSHole, CVE-2026-123158), BusyBox, `apk`, `sudo` or `git`. Earlier images ship only the OpenSSH client and never run `sshd`, so they were not exploitable. The image no longer has a shell; use `kubectl debug` to troubleshoot the operator pod.
+## [1.2.2] - 2026-11-24
 
-## [1.2.1] - 2026-11-20
+Operator security-hardening release. The default DocumentDB engine stays at `1.0.1` (extension schema `1.0-0`). The operator image now uses Azure Linux distroless instead of the Alpine dev container base; the operator, sidecar and Helm chart are released together. The CRDs are unchanged from `1.2.0`; when upgrading from `1.1.x` or earlier, apply the `1.2.2` CRDs before `helm upgrade`.
+
+### Security
+- The operator image moves from the Alpine dev container base to Azure Linux distroless, so it no longer ships OpenSSH (SSHole, CVE-2026-123158), BusyBox, `apk`, `sudo` or `git`. Earlier images ship only the OpenSSH client and never run `sshd`, so they were not exploitable. The image no longer has a shell; use `kubectl debug` to troubleshoot the operator pod (#525).
+
+## [1.2.1] - 2026-11-21
 
 Security release. The default DocumentDB engine moves from `1.0.0` to `1.0.1`: the same engine (extension schema `1.0-0`) rebuilt on patched Debian packages. Unpinned clusters roll onto the new images when the operator is upgraded; there is no schema migration. The CRDs are unchanged from `1.2.0`; when upgrading from `1.1.x` or earlier, apply the `1.2.1` CRDs before `helm upgrade`.
 
