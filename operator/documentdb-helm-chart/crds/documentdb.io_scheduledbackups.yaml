@@ -63,6 +63,34 @@ spec:
                 required:
                 - name
                 type: object
+              method:
+                default: volumeSnapshot
+                description: |-
+                  Method defines with method should be used to create a backup
+                  can either be 'volumeSnapshot' or 'plugin'
+                  defaults to 'volumeSnapshot'
+                enum:
+                - volumeSnapshot
+                - plugin
+                type: string
+              pluginConfiguration:
+                description: |-
+                  PluginConfiguration defines additional parameters passed to the plugin
+                  only relevant if method=plugin
+                properties:
+                  name:
+                    description: Name is the name of the plugin managing this backup
+                    type: string
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Parameters are the configuration parameters passed to the backup
+                      plugin for this backup
+                    type: object
+                required:
+                - name
+                type: object
               retentionDays:
                 description: |-
                   RetentionDays specifies how many days the backups should be retained.
@@ -141,6 +169,34 @@ spec:
                   name:
                     description: Name of the referent.
                     type: string
+                required:
+                - name
+                type: object
+              method:
+                default: volumeSnapshot
+                description: |-
+                  Method defines with method should be used to create a backup
+                  can either be 'volumeSnapshot' or 'plugin'
+                  defaults to 'volumeSnapshot'
+                enum:
+                - volumeSnapshot
+                - plugin
+                type: string
+              pluginConfiguration:
+                description: |-
+                  PluginConfiguration defines additional parameters passed to the plugin
+                  only relevant if method=plugin
+                properties:
+                  name:
+                    description: Name is the name of the plugin managing this backup
+                    type: string
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Parameters are the configuration parameters passed to the backup
+                      plugin for this backup
+                    type: object
                 required:
                 - name
                 type: object
